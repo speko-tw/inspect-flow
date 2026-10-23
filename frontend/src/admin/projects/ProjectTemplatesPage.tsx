@@ -134,6 +134,7 @@ export default function ProjectTemplatesPage({
   const [loadedSystems, setLoadedSystems] = useState<Set<string>>(new Set())
   const [projectItems, setProjectItems] = useState<ProjectItemData[]>([])
   const [saveSource, setSaveSource] = useState<ProjectItemData | null>(null)
+  const [saveName, setSaveName] = useState('')
   const [applyConfirm, setApplyConfirm] = useState(false)
   const [applyError, setApplyError] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -471,6 +472,7 @@ export default function ProjectTemplatesPage({
 
   function startSave(item: ProjectItemData) {
     setSaveSource(item)
+    setSaveName(item.title)
     setSelected(null)
     setExpanded(new Set())
     setSaveError('')
@@ -523,7 +525,13 @@ export default function ProjectTemplatesPage({
     setSaveError('')
     setNotice('')
     try {
-      await saveProjectItemAsTemplate(projectId, saveSource.id, selected.id)
+      const name = saveName.trim()
+      await saveProjectItemAsTemplate(
+        projectId,
+        saveSource.id,
+        selected.id,
+        name,
+      )
       await refreshSystemTemplates(selected.id)
       const destination = systems.find((system) => system.id === selected.id)
       const category = categories.find(
@@ -531,13 +539,11 @@ export default function ProjectTemplatesPage({
       )
       const categoryName = category?.name ?? '範本庫'
       const systemName = destination?.name ?? '目標系統'
-      setNotice(
-        `已將「${saveSource.title}」存入「${categoryName} / ${systemName}」。`,
-      )
+      setNotice(`已將「${name}」存入「${categoryName} / ${systemName}」。`)
       setSaveSource(null)
       setSelected(null)
     } catch (caught) {
-      setSaveError(templateErrorMessage(caught, saveSource.title))
+      setSaveError(templateErrorMessage(caught, saveName.trim()))
       setSaveErrorCode(
         caught instanceof ProjectTemplatesApiError && caught.status === 409
           ? (caught.code ?? '')
@@ -736,13 +742,38 @@ export default function ProjectTemplatesPage({
                   <p>
                     範本庫 / {selectedCategory.name} / {selectedSystem.name}
                   </p>
+                  <div className="form-pattern-field">
+                    <label
+                      className="form-pattern-label"
+                      htmlFor="save-template-name"
+                    >
+                      範本名稱
+                    </label>
+                    <input
+                      id="save-template-name"
+                      aria-describedby={
+                        saveConflict ? 'save-template-name-error' : undefined
+                      }
+                      aria-invalid={saveConflict || undefined}
+                      maxLength={256}
+                      onChange={(event) => {
+                        setSaveName(event.target.value)
+                        setSaveError('')
+                        setSaveErrorCode('')
+                      }}
+                      required
+                      value={saveName}
+                    />
+                  </div>
                   <p>
-                    將新增「{saveSource?.title}
+                    將新增「{saveName.trim()}
                     」，保留原項目的查核項次與標準。
                   </p>
                   <button
                     className="btn-primary"
-                    disabled={!saveAllowed || saveDenied || busy}
+                    disabled={
+                      !saveAllowed || saveDenied || busy || !saveName.trim()
+                    }
                     onClick={() => void submitSave()}
                     type="button"
                   >
@@ -752,7 +783,11 @@ export default function ProjectTemplatesPage({
               )}
               {saveError && (
                 <div className="notice-error" role="alert">
-                  <p>{saveError}</p>
+                  <p
+                    id={saveConflict ? 'save-template-name-error' : undefined}
+                  >
+                    {saveError}
+                  </p>
                   <button
                     ref={saveConflictActionRef}
                     disabled={busy}

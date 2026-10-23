@@ -33,6 +33,8 @@ describe('templateErrorMessage', () => {
         new ProjectTemplatesApiError(409, 'template.name_conflict'),
         '管線查核',
       ),
-    ).toBe('這個系統已有「管線查核」，沒有存入範本。請改選其他系統。')
+    ).toBe(
+      '這個系統已有「管線查核」，沒有存入範本。請改名後重試，或改選其他系統。',
+    )
   })
 })

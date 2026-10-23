@@ -65,6 +65,14 @@
 |---|---|---|---|---|
 | T8 | 事件目錄補 `project.created` 的 `company_role`，以及 `project.updated` 的 `company_role`、`company_role_change_reason` 欄位；端到端驗收由 `domain-model` 任務 R 承接 | T6 | ALG-AC28 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
 
+## 範本庫寫入與套用（#382）
+
+依據：負責人指示補齊發版前檢查 #377 的 S1、S2、Q3；分類、系統、範本寫入與套用事件契約依 ALG-R32。模組權限授予與收回由 #538／ALG-R26 負責，本任務不重複登記。
+
+| 任務 | 內容 | 主要檔案 | 驗收 | Issue |
+|---|---|---|---|---|
+| 範本稽核 | 登記事件目錄並由範本庫與套用 Service 在同一交易寫入；整系統套用一筆帶實際項目數的事件；補 auditLabels 白話標籤。整系統覆蓋由逐項事件呈現，無差異與空系統不留事件 | `backend/app/services/audit.py`、`template_library.py`、`project_templates.py`、範本與套用 API 測試、`frontend/src/admin/audit-log/auditLabels.ts` 及測試、兩份規格 | ALG-AC31、TPL-AC28 | [#382](https://github.com/speko-tw/inspect-flow/issues/382) |
+
 ## 並行分組
 
 - 第 1 波：T1。
@@ -152,3 +160,10 @@ SQLite 得以 batch migration 設 NOT NULL 或移除欄位。交易失敗即
 | `entity_id` 設外鍵 | 被記錄的資料刪除時會被擋下或連帶刪掉紀錄（ALG-R03） |
 | 刪除角色時替每位成員各寫一筆 | 一次刪除可能寫出大量紀錄；`role.deleted` 的 `project_member_ids` 已能還原 |
 | 事件代碼存成資料表 | 事件由程式寫入，放程式裡的目錄就能在測試中檢查；存資料表還要多一支 migration 與管理入口 |
+
+
+## W-P1c 事件目錄對齊（#435）
+
+- spec 事件目錄補 `project_inspection_item.deleted`，保留刪除前 `project_id`、`title`，`after` 為空；與項目及變更紀錄刪除同交易。
+- `template_item.created_from_project` 的 `after` 補最終保存名稱 `title`，與 #434 實作及 TPL-R26 一致。
+- 依既有 `test_delete_unused_item_clears_changes_and_records_audit`、`test_save_as_template_uses_optional_trimmed_name_and_audits_it` 與完整 `make check` 驗收；不新增事件碼或 migration。

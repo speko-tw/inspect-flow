@@ -275,6 +275,8 @@ class ProjectInspectionItem(AuditMixin, TimestampedBase):
     title: Mapped[str] = mapped_column(String, nullable=False)
     instruction: Mapped[str] = mapped_column(String, nullable=False)
     source_template_name: Mapped[str] = mapped_column(String, nullable=False)
+    source_category_name: Mapped[str | None] = mapped_column(String)
+    source_system_name: Mapped[str | None] = mapped_column(String)
     applied_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     standard_revision: Mapped[int] = mapped_column(
         nullable=False, default=1, server_default="1"

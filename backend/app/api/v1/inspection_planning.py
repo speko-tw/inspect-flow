@@ -41,17 +41,11 @@ from app.auth.access import (
     require_project_permission,
 )
 from app.auth.dependencies import get_db, require_login
-from app.db.base import uuid7
 from app.models import (
     InspectionPlan,
     InspectionTask,
     Project,
-    ProjectEvidenceRequirement,
     ProjectInspectionItem,
-    ProjectInspectionPoint,
-    ProjectMeasurementField,
-    ProjectNumericStandard,
-    ProjectTextStandard,
     ProjectZone,
     TaskInspectionItem,
     TaskRequirementSnapshot,
@@ -64,7 +58,6 @@ from app.models import (
 )
 from app.permission_codes import permission_code_module
 from app.services.batch_load import load_by_id, load_grouped
-from app.services.inspection_details import project_inspection_item_detail
 from app.services.inspection_planning import (
     PlanningError,
     archive_inspection_plan,
@@ -75,8 +68,10 @@ from app.services.inspection_planning import (
     create_inspection_task,
     create_project_zone,
     delete_draft_inspection_task,
+    delete_project_inspection_item,
     delete_project_zone,
     dispatch_inspection_task,
+    edit_project_inspection_item,
     field_inspection_task_filters,
     get_field_inspection_task,
     get_inspection_plan,
@@ -90,17 +85,11 @@ from app.services.inspection_planning import (
     restore_inspection_task,
     start_inspection_task,
     update_draft_task_items,
-    update_project_item_usage,
     update_task_location,
 )
-from app.services.operator import get_current_operator
 from app.services.permissions import (
     calculate_effective_access,
     project_member_ids_with_permission,
-)
-from app.services.template_library import (
-    InvalidTemplateError,
-    validate_template_structure,
 )
 
 router = APIRouter(
@@ -1543,102 +1532,6 @@ def _project_exists(db: Session, project_id: UUID) -> None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
 
 
-def _project_item_patch_matches_current(
-    db: Session, item: ProjectInspectionItem, body: ProjectItemPatchBody
-) -> bool:
-    """判斷 PATCH 是否只重送目前內容，避免產生空白修訂。"""
-    if body.reinspect is not None:
-        return False
-    if body.title is not None and body.title.strip() != item.title:
-        return False
-    if body.instruction is not None and body.instruction != item.instruction:
-        return False
-    if body.inspection_points is None:
-        return True
-
-    current_points = project_inspection_item_detail(db, item)[
-        "inspection_points"
-    ]
-    if len(body.inspection_points) != len(current_points):
-        return False
-    for requested, current in zip(
-        body.inspection_points, current_points, strict=True
-    ):
-        if (
-            requested.id != current["id"]
-            or requested.sequence != current["sequence"]
-            or requested.title != current["title"]
-            or requested.instruction != current["instruction"]
-        ):
-            return False
-
-        text_standard = requested.text_standard
-        current_text = current["text_standard"]
-        if (text_standard is None) != (current_text is None):
-            return False
-        if (
-            text_standard is not None
-            and text_standard.text != current_text["text"]
-        ):
-            return False
-
-        fields = current["measurement_fields"]
-        requested_fields = requested.measurement_fields
-        if len(requested_fields) != len(fields):
-            return False
-        if any(
-            field.id != existing["id"]
-            or field.name != existing["name"]
-            or field.field_type != existing["field_type"]
-            or field.unit != existing["unit"]
-            for field, existing in zip(requested_fields, fields, strict=True)
-        ):
-            return False
-
-        numeric = requested.numeric_standard
-        current_numeric = current["numeric_standard"]
-        if (numeric is None) != (current_numeric is None):
-            return False
-        if numeric is not None:
-            bound_field = next(
-                (
-                    field.id
-                    for field in requested_fields
-                    if numeric.measurement_field_client_id
-                    in {field.id, field.client_id}
-                ),
-                None,
-            )
-            if bound_field != current_numeric["measurement_field_id"]:
-                return False
-            if numeric.model_dump(exclude={"measurement_field_client_id"}) != {
-                key: current_numeric[key]
-                for key in (
-                    "value",
-                    "condition",
-                    "unit",
-                    "tolerance",
-                    "range_form",
-                    "lower_bound",
-                    "upper_bound",
-                )
-            }:
-                return False
-
-        requested_evidence = requested.evidence_requirements
-        current_evidence = current["evidence_requirements"]
-        if len(requested_evidence) != len(current_evidence):
-            return False
-        if any(
-            required.min_count != existing["min_count"]
-            for required, existing in zip(
-                requested_evidence, current_evidence, strict=True
-            )
-        ):
-            return False
-    return True
-
-
 @router.patch(
     "/projects/{project_id}/inspection-items/{project_inspection_item_id}",
     dependencies=[
@@ -1658,500 +1551,39 @@ def patch_project_item(
     body: ProjectItemPatchBody,
     db: Session = _db_dependency,
 ):
-    """依 KD-55 修改專案項目；無變更時不建立新修訂或稽核。"""
-    # 依 IP-R03（#555），先鎖來源項目，再由服務層鎖 Plan／Task；
-    # 建立 Task 也遵守此順序，快照不會跨越標準修訂邊界。
-    item = db.scalar(
-        select(ProjectInspectionItem)
-        .where(
-            ProjectInspectionItem.id == project_inspection_item_id,
-            ProjectInspectionItem.project_id == project_id,
-        )
-        .with_for_update(key_share=True)
-        .execution_options(populate_existing=True)
-    )
-    if item is None:
-        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
-    associations = db.scalars(
-        select(TaskInspectionItem).where(
-            TaskInspectionItem.project_inspection_item_id == item.id
-        )
-    ).all()
-    if body.inspection_points is not None:
-        # reinspect=None 不會啟用結構鎖，先回報完整結構錯誤欄位。
-        _validate_project_points(
-            db,
-            item,
-            body.inspection_points,
-            has_tasks=bool(associations),
-            reinspect=body.reinspect,
-        )
-    if _project_item_patch_matches_current(db, item, body):
-        result = project_inspection_item_detail(db, item)
-        result["affected_tasks"] = []
-        result["reinspection_selected"] = body.reinspect
-        return result
-    if associations and body.reinspect is None:
-        raise APIError(
-            ErrorCode.PROJECT_ITEM_REINSPECTION_CHOICE_REQUIRED, 422
-        )
-
-    before_data = {
-        "title": item.title,
-        "instruction": item.instruction,
-        "standard_revision": item.standard_revision,
-    }
-    operator_id = get_current_operator(db).id
-    item.updated_by = operator_id
-    task_ids = {association.task_id for association in associations}
-    tasks_by_id = (
-        {
-            task.id: task
-            for task in db.scalars(
-                select(InspectionTask).where(InspectionTask.id.in_(task_ids))
-            ).all()
-        }
-        if task_ids
-        else {}
-    )
-    old_status = {
-        task_id: task.status for task_id, task in tasks_by_id.items()
-    }
-    if body.title is not None:
-        if not body.title.strip():
-            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-        item.title = body.title.strip()
-    if body.instruction is not None:
-        item.instruction = body.instruction
-    if body.inspection_points is not None:
-        _replace_project_points(db, item, body.inspection_points)
-    item.standard_revision += 1
-    _call(
-        update_project_item_usage,
+    """依 KD-55 修改專案項目；實際讀寫由服務層處理。"""
+    return _call(
+        edit_project_inspection_item,
         db,
-        item_id=item.id,
-        before_data=before_data,
-        reinspection_required=bool(body.reinspect),
-        after_data={
-            "title": item.title,
-            "instruction": item.instruction,
-            "standard_revision": item.standard_revision,
-        },
-    )
-    db.flush()
-    result = project_inspection_item_detail(db, item)
-    affected = []
-    for association in associations:
-        task = tasks_by_id.get(association.task_id)
-        if task is None:
-            continue
-        prior = old_status[task.id]
-        if prior == "CANCELLED":
-            action = "apply_current_standard_on_restore"
-        elif prior == "DRAFT":
-            action = "draft_updated"
-        elif prior == "COMPLETED" and task.status == "IN_PROGRESS":
-            action = "returned_to_in_progress"
-        elif association.needs_reinspection:
-            action = "needs_reinspection"
-        else:
-            action = "updated"
-        affected.append(
-            {
-                "task_id": task.id,
-                "prior_status": prior,
-                "status": task.status,
-                "action": action,
-                "needs_reinspection": association.needs_reinspection,
-            }
-        )
-    result["affected_tasks"] = affected
-    result["reinspection_selected"] = body.reinspect
-    return result
-
-
-def _validate_project_points(
-    db: Session,
-    item: ProjectInspectionItem,
-    points: list[ProjectPointBody],
-    *,
-    has_tasks: bool,
-    reinspect: bool | None,
-) -> None:
-    """依 IP-R13、IP-R14 先驗證完整結構，再動任何資料列。
-
-    有 Task 使用此項目且選擇不重查（`reinspect=false`）時，一律視為結構
-    變更而拒絕（422）：增減項次或實測欄位、改欄位類型、照片需求張數、
-    判定標準種類（數值／文字／無）、數值標準綁定的欄位與單位。草稿專用
-    的修改前端送 `reinspect=true`，依 IP-R04 在同一 Task 更新 Snapshot。
-    有任何 Task 使用時不得把項次清空（422）。
-    """
-    existing_points = db.scalars(
-        select(ProjectInspectionPoint).where(
-            ProjectInspectionPoint.project_inspection_item_id == item.id
-        )
-    ).all()
-    existing_point_ids = {point.id for point in existing_points}
-    existing_fields = db.scalars(
-        select(ProjectMeasurementField).where(
-            ProjectMeasurementField.project_inspection_item_id == item.id
-        )
-    ).all()
-    fields_by_point: dict[UUID, dict[UUID, ProjectMeasurementField]] = {}
-    for field in existing_fields:
-        fields_by_point.setdefault(field.inspection_point_id, {})[field.id] = (
-            field
-        )
-    numeric_by_point = {
-        row.inspection_point_id: row
-        for row in db.scalars(
-            select(ProjectNumericStandard).where(
-                ProjectNumericStandard.project_inspection_item_id == item.id
-            )
-        ).all()
-    }
-    text_point_ids = set(
-        db.scalars(
-            select(ProjectTextStandard.inspection_point_id).where(
-                ProjectTextStandard.project_inspection_item_id == item.id
-            )
-        ).all()
+        project_id=project_id,
+        project_inspection_item_id=project_inspection_item_id,
+        body=body,
     )
 
-    # 鎖結構路徑要逐點比對照片張數；整批先查，避免每點各打一次 DB
-    # （N+1，#643）。只有該路徑會用到，其餘情況不多花一次查詢。
-    min_count_by_point: dict[UUID, int] = {}
-    if has_tasks and reinspect is False:
-        min_count_by_point = {
-            row.inspection_point_id: row.min_count
-            for row in db.execute(
-                select(
-                    ProjectEvidenceRequirement.inspection_point_id,
-                    ProjectEvidenceRequirement.min_count,
-                ).where(
-                    ProjectEvidenceRequirement.project_inspection_item_id
-                    == item.id
-                )
-            )
-        }
 
-    point_identities: list[UUID | None] = []
-    normalized_points = []
-    seen_point_ids: set[UUID] = set()
-    for point in points:
-        point_id = point.id
-        if has_tasks and reinspect is False and point_id is None:
-            raise APIError(
-                ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
-            )
-        if point.id is not None and point.id not in existing_point_ids:
-            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-        if point_id is not None and point_id in seen_point_ids:
-            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-        if point_id is not None:
-            seen_point_ids.add(point_id)
-        point_identities.append(point_id)
-        existing_fields_for_point = (
-            fields_by_point.get(point_id, {}) if point_id is not None else {}
+@router.delete(
+    "/projects/{project_id}/inspection-items/{project_inspection_item_id}",
+    status_code=204,
+    dependencies=[
+        Depends(
+            require_project_permission(
+                "project_inspection_item.edit",
+                param_name="project_id",
+                uuid_path_params=("project_inspection_item_id",),
+            ),
+            scope="function",
         )
-        seen_field_ids: set[UUID] = set()
-        seen_field_client_ids: set[UUID] = set()
-        identity_owner: dict[UUID, int] = {}
-        for index, field in enumerate(point.measurement_fields):
-            field_id = field.id
-            if (
-                field.id is not None
-                and field.id not in existing_fields_for_point
-            ):
-                raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-            if field_id is not None and field_id in seen_field_ids:
-                raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-            if field_id is not None:
-                seen_field_ids.add(field_id)
-            if field.client_id in seen_field_client_ids:
-                raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-            seen_field_client_ids.add(field.client_id)
-            for token in (field.id, field.client_id):
-                if token is None:
-                    continue
-                owner = identity_owner.setdefault(token, index)
-                if owner != index:
-                    raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-
-        normalized = point.model_dump()
-        normalized_points.append(normalized)
-
-    try:
-        validate_template_structure({"inspection_points": normalized_points})
-    except InvalidTemplateError as exc:
-        raise APIError(
-            ErrorCode.REQUEST_VALIDATION_FAILED,
-            422,
-            fields=[
-                {"path": field.path, "code": field.code}
-                for field in exc.fields
-            ],
-        ) from exc
-
-    if has_tasks and not points:
-        raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_POINTS_REQUIRED, 422)
-    if has_tasks and reinspect is False:
-        if set(point_identities) != existing_point_ids:
-            raise APIError(
-                ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
-            )
-        for point, point_id in zip(points, point_identities, strict=True):
-            assert point_id is not None
-            old_fields = fields_by_point.get(point_id, {})
-            old_numeric = numeric_by_point.get(point_id)
-            if (point.numeric_standard is not None) != (
-                old_numeric is not None
-            ):
-                raise APIError(
-                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
-                )
-            if (point.text_standard is not None) != (
-                point_id in text_point_ids
-            ):
-                raise APIError(
-                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
-                )
-            old_photo_count = min_count_by_point.get(point_id)
-            if (
-                len(point.evidence_requirements) != 1
-                or point.evidence_requirements[0].min_count != old_photo_count
-            ):
-                raise APIError(
-                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
-                )
-            provided_field_ids = [
-                field.id for field in point.measurement_fields
-            ]
-            if any(field_id is None for field_id in provided_field_ids):
-                raise APIError(
-                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
-                )
-            if set(provided_field_ids) != set(old_fields):
-                raise APIError(
-                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
-                )
-            for field, field_id in zip(
-                point.measurement_fields, provided_field_ids, strict=True
-            ):
-                assert field_id is not None
-                existing = old_fields[field_id]
-                if field.field_type != existing.field_type:
-                    raise APIError(
-                        ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED,
-                        422,
-                    )
-                expected_unit = (
-                    None
-                    if old_numeric is not None
-                    and old_numeric.measurement_field_id == field_id
-                    else existing.unit
-                )
-                if field.unit != expected_unit:
-                    raise APIError(
-                        ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED,
-                        422,
-                    )
-            if point.numeric_standard is not None:
-                assert old_numeric is not None
-                standard = point.numeric_standard
-                bound_field_id = next(
-                    (
-                        field.id
-                        for field in point.measurement_fields
-                        if field.id == standard.measurement_field_client_id
-                        or field.client_id
-                        == standard.measurement_field_client_id
-                    ),
-                    None,
-                )
-                if (
-                    standard.unit != old_numeric.unit
-                    or bound_field_id != old_numeric.measurement_field_id
-                ):
-                    raise APIError(
-                        ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED,
-                        422,
-                    )
-
-
-def _replace_project_points(
-    db: Session, item: ProjectInspectionItem, points: list[ProjectPointBody]
+    ],
+)
+def delete_project_item(
+    project_id: UUID,
+    project_inspection_item_id: UUID,
+    db: Session = _db_dependency,
 ) -> None:
-    # 依 IP-R13 保留傳入的項次與欄位 id，讓 Task 舊快照仍可追溯來源。
-    old_points = db.scalars(
-        select(ProjectInspectionPoint).where(
-            ProjectInspectionPoint.project_inspection_item_id == item.id
-        )
-    ).all()
-    points_by_id = {point.id: point for point in old_points}
-    old_fields = db.scalars(
-        select(ProjectMeasurementField).where(
-            ProjectMeasurementField.project_inspection_item_id == item.id
-        )
-    ).all()
-    fields_by_point = {}
-    for field in old_fields:
-        fields_by_point.setdefault(field.inspection_point_id, {})[field.id] = (
-            field
-        )
-
-    old_numeric = db.scalars(
-        select(ProjectNumericStandard).where(
-            ProjectNumericStandard.project_inspection_item_id == item.id
-        )
-    ).all()
-    old_text = db.scalars(
-        select(ProjectTextStandard).where(
-            ProjectTextStandard.project_inspection_item_id == item.id
-        )
-    ).all()
-    old_evidence = db.scalars(
-        select(ProjectEvidenceRequirement).where(
-            ProjectEvidenceRequirement.project_inspection_item_id == item.id
-        )
-    ).all()
-    for row in [*old_numeric, *old_text, *old_evidence]:
-        db.delete(row)
-    db.flush()
-    # 暫置負序號以避開同一項目內的 unique sequence 衝突；
-    # 等新順序寫入後再完成結構替換。
-    for index, point in enumerate(old_points, start=1):
-        point.sequence = -index
-    db.flush()
-
-    retained_point_ids: set[UUID] = set()
-    for source in points:
-        point_identity = source.id
-        point = (
-            points_by_id.get(point_identity)
-            if point_identity is not None
-            else None
-        )
-        if point is None:
-            point = ProjectInspectionPoint(
-                project_inspection_item_id=item.id,
-                sequence=source.sequence,
-                title=source.title,
-                instruction=source.instruction,
-                created_by=item.updated_by,
-                updated_by=item.updated_by,
-            )
-            db.add(point)
-            db.flush()
-        else:
-            point.sequence = source.sequence
-            point.title = source.title
-            point.instruction = source.instruction
-            point.updated_by = item.updated_by
-        retained_point_ids.add(point.id)
-
-        field_map: dict[UUID, UUID] = {}
-        existing_fields = fields_by_point.get(point.id, {})
-        retained_field_ids: set[UUID] = set()
-        field_units: dict[UUID, str | None] = {}
-        numeric = source.numeric_standard
-        bound_client_id = (
-            numeric.measurement_field_client_id
-            if numeric is not None
-            else None
-        )
-        for index, source_field in enumerate(source.measurement_fields):
-            field_identity = source_field.id
-            field = (
-                existing_fields.get(field_identity)
-                if field_identity is not None
-                else None
-            )
-            unit = source_field.unit
-            if source_field.client_id == bound_client_id:
-                assert numeric is not None
-                unit = numeric.unit
-            if field is None:
-                field = ProjectMeasurementField(
-                    id=uuid7(),
-                    inspection_point_id=point.id,
-                    project_inspection_item_id=item.id,
-                    name=source_field.name,
-                    field_type=source_field.field_type,
-                    unit=unit,
-                    sort_order=index,
-                    created_by=item.updated_by,
-                    updated_by=item.updated_by,
-                )
-                db.add(field)
-            else:
-                field.name = source_field.name
-                field.field_type = source_field.field_type
-                field.unit = unit
-                field.sort_order = index
-                field.updated_by = item.updated_by
-            retained_field_ids.add(field.id)
-            field_map[source_field.client_id] = field.id
-            field_units[source_field.client_id] = unit
-
-        for field_id, field in existing_fields.items():
-            if field_id not in retained_field_ids:
-                db.delete(field)
-        db.flush()
-
-        if source.text_standard is not None:
-            db.add(
-                ProjectTextStandard(
-                    inspection_point_id=point.id,
-                    project_inspection_item_id=item.id,
-                    text=source.text_standard.text,
-                    created_by=item.updated_by,
-                    updated_by=item.updated_by,
-                )
-            )
-        if source.numeric_standard is not None:
-            standard = source.numeric_standard
-            field_identity = standard.measurement_field_client_id
-            field_id = field_map.get(field_identity)
-            if field_id is None:
-                raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-            db.add(
-                ProjectNumericStandard(
-                    inspection_point_id=point.id,
-                    project_inspection_item_id=item.id,
-                    value=standard.value,
-                    condition=standard.condition,
-                    unit=standard.unit,
-                    tolerance=standard.tolerance,
-                    range_form=standard.range_form,
-                    lower_bound=standard.lower_bound,
-                    upper_bound=standard.upper_bound,
-                    measurement_field_id=field_id,
-                    measurement_field_type=next(
-                        row.field_type
-                        for row in source.measurement_fields
-                        if row.client_id == field_identity
-                    ),
-                    measurement_field_unit=field_units[field_identity] or "",
-                    created_by=item.updated_by,
-                    updated_by=item.updated_by,
-                )
-            )
-        for requirement in source.evidence_requirements:
-            db.add(
-                ProjectEvidenceRequirement(
-                    inspection_point_id=point.id,
-                    project_inspection_item_id=item.id,
-                    evidence_type="photo",
-                    required=True,
-                    min_count=requirement.min_count,
-                    max_count=None,
-                    created_by=item.updated_by,
-                    updated_by=item.updated_by,
-                )
-            )
-
-    for point in old_points:
-        if point.id not in retained_point_ids:
-            db.delete(point)
-    db.flush()
+    """#435：刪除沒有任務明細引用的專案查核項目。"""
+    _call(
+        delete_project_inspection_item,
+        db,
+        project_id=project_id,
+        project_inspection_item_id=project_inspection_item_id,
+    )

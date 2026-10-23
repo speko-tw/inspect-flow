@@ -140,6 +140,44 @@ def test_downgrade_base_then_upgrade_head_round_trip(db_url):
     assert _stamped_version(db_url) == expected_head
 
 
+def test_project_item_source_path_migration_is_nullable_and_reversible(db_url):
+    cfg = _alembic_config()
+    previous_revision = "c5f1a2e7b903"
+    command.upgrade(cfg, previous_revision)
+    engine = create_engine(db_url)
+    try:
+        old_columns = {
+            column["name"]
+            for column in inspect(engine).get_columns(
+                "project_inspection_items"
+            )
+        }
+        assert "source_category_name" not in old_columns
+        assert "source_system_name" not in old_columns
+
+        command.upgrade(cfg, "head")
+        new_columns = {
+            column["name"]: column
+            for column in inspect(engine).get_columns(
+                "project_inspection_items"
+            )
+        }
+        assert new_columns["source_category_name"]["nullable"] is True
+        assert new_columns["source_system_name"]["nullable"] is True
+
+        command.downgrade(cfg, previous_revision)
+        downgraded_columns = {
+            column["name"]
+            for column in inspect(engine).get_columns(
+                "project_inspection_items"
+            )
+        }
+        assert "source_category_name" not in downgraded_columns
+        assert "source_system_name" not in downgraded_columns
+    finally:
+        engine.dispose()
+
+
 def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
     from datetime import UTC, datetime
     from uuid import UUID, uuid4
@@ -240,19 +278,24 @@ def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
         )
         session.add(project)
         session.flush()
-        project_item = ProjectInspectionItem(
-            project_id=project.id,
-            sequence=1,
-            title="Migration project item",
-            instruction="Project item instruction",
-            source_template_name="Migration template",
-            applied_at=pending_created,
-            **audit,
+        project_item_id = uuid4()
+        session.execute(
+            insert(ProjectInspectionItem).values(
+                id=project_item_id,
+                project_id=project.id,
+                sequence=1,
+                title="Migration project item",
+                instruction="Project item instruction",
+                source_template_name="Migration template",
+                applied_at=pending_created,
+                created_by=operator.id,
+                updated_by=operator.id,
+                created_at=pending_created,
+                updated_at=pending_created,
+            )
         )
-        session.add(project_item)
-        session.flush()
         project_point = ProjectInspectionPoint(
-            project_inspection_item_id=project_item.id,
+            project_inspection_item_id=project_item_id,
             sequence=1,
             title="Migration project point",
             instruction="Project point instruction",
@@ -262,7 +305,7 @@ def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
         session.flush()
         project_field = ProjectMeasurementField(
             inspection_point_id=project_point.id,
-            project_inspection_item_id=project_item.id,
+            project_inspection_item_id=project_item_id,
             name="Project measure",
             field_type="number",
             unit="mm",
@@ -273,7 +316,7 @@ def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
         session.flush()
         project_standard = ProjectNumericStandard(
             inspection_point_id=project_point.id,
-            project_inspection_item_id=project_item.id,
+            project_inspection_item_id=project_item_id,
             value="11",
             condition="<=",
             unit="mm",
@@ -323,7 +366,7 @@ def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
             association = TaskInspectionItem(
                 task_id=task_id,
                 project_id=project.id,
-                project_inspection_item_id=project_item.id,
+                project_inspection_item_id=project_item_id,
                 **audit,
             )
             session.add(association)
@@ -567,15 +610,19 @@ def test_planning_list_index_migration_adds_and_drops_only_indexes(db_url):
                 **{key: value.hex for key, value in audit.items()},
             },
         )
-        session.add(
-            ProjectInspectionItem(
+        session.execute(
+            insert(ProjectInspectionItem).values(
+                id=uuid4(),
                 project_id=project.id,
                 sequence=1,
                 title="Index migration item",
                 instruction="Instruction",
                 source_template_name="Template",
                 applied_at=now,
-                **audit,
+                created_by=operator.id,
+                updated_by=operator.id,
+                created_at=now,
+                updated_at=now,
             )
         )
         session.commit()
@@ -685,17 +732,22 @@ def test_evidence_unique_migration_keeps_largest_min_count_per_point(
         )
         session.add(project)
         session.flush()
-        project_item = ProjectInspectionItem(
-            project_id=project.id,
-            sequence=1,
-            title="Evidence project item",
-            instruction="Instruction",
-            source_template_name="Template",
-            applied_at=base,
-            **audit,
+        project_item_id = uuid4()
+        session.execute(
+            insert(ProjectInspectionItem).values(
+                id=project_item_id,
+                project_id=project.id,
+                sequence=1,
+                title="Evidence project item",
+                instruction="Instruction",
+                source_template_name="Template",
+                applied_at=base,
+                created_by=operator.id,
+                updated_by=operator.id,
+                created_at=base,
+                updated_at=base,
+            )
         )
-        session.add(project_item)
-        session.flush()
         for sequence, shape in enumerate(
             ("largest", "tie", "single"), start=1
         ):
@@ -707,7 +759,7 @@ def test_evidence_unique_migration_keeps_largest_min_count_per_point(
                 **audit,
             )
             project_point = ProjectInspectionPoint(
-                project_inspection_item_id=project_item.id,
+                project_inspection_item_id=project_item_id,
                 sequence=sequence,
                 title=f"Project point {shape}",
                 instruction="Instruction",
@@ -736,7 +788,7 @@ def test_evidence_unique_migration_keeps_largest_min_count_per_point(
                         ProjectEvidenceRequirement(
                             id=row_id,
                             inspection_point_id=project_point.id,
-                            project_inspection_item_id=project_item.id,
+                            project_inspection_item_id=project_item_id,
                             min_count=min_count,
                             created_at=stamp,
                             **audit,

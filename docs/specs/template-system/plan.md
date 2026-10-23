@@ -11,7 +11,7 @@
 | T1 | 定義並實作工程類別、系統、每筆帶 `system_id` 的查核項目範本、項次、文字與數值標準、實測欄位、照片需求、最小 `ProjectInspectionItem` 副本資料表，以及以固定角色代碼指派的 `SystemRoleAssignment`；名稱去除前後空白並忽略大小寫後在同一父層唯一；數值標準依 TPL-R11 綁定。角色清單以程式 enum／常數表示，不建角色定義表或 seed；指派／收回寫稽核。只存結構，不建 `Template Version`、interval、結果、實測值或照片資料 | `backend/app/models/`、`backend/alembic/versions/`、`backend/tests/db/` | `database-foundation` #110、`domain-model`、`audit-log` | TPL-AC02、TPL-AC03、TPL-AC04、TPL-AC07、TPL-AC08、TPL-AC09；DBF-AC12、DBF-AC13 | #325 |
 | T2 | 全系統範本管理員授權與指派：本規格新增的全系統角色機制沿用 `authentication` 授權入口，支援範本權限檢查、Admin 指派／收回範本管理員並寫稽核紀錄、查看所有專案與將專案項目存為範本；Admin 與範本管理員可管理範本庫及存成範本，專案編輯者可唯讀瀏覽範本並套用；不得把全系統角色併入 `is_admin` 或專案 `Role` | `backend/app/` 授權服務與相關測試（依 T1 實際路徑調整） | T1；`authentication`、`audit-log` | TPL-AC01、TPL-AC06、TPL-AC08 | #326；專案項目存成範本 API #365 |
 | T3 | 範本庫服務與 API：工程類別、系統新增／改名／刪除，以及單項範本 CRUD 與覆蓋更新；整個系統僅以 `system_id` 查詢或操作其項目集合；刪除有子系統／範本分別回 `template.category_not_empty`／`template.system_not_empty`（409）；依 api-conventions 實作錯誤、UUID 與分頁，讀取授權依 T2，所有範本寫入允許 Admin 或範本管理員；另以 `system_id` 提供分頁巢狀讀取與整系統覆蓋；Admin 依 AUT-Q2 可讀，請求內的實測欄位識別只用於綁定，持久 UUID 由後端產生 | `backend/app/api/`、`backend/app/auth/access.py`、`backend/app/services/`、`backend/app/main.py`、`backend/tests/api/`、`backend/tests/contract/`、`docs/specs/template-system/`、`docs/specs/authentication/spec.md` | T1、T2 | TPL-AC01、TPL-AC02、TPL-AC03、TPL-AC04、TPL-AC07、TPL-AC08、TPL-AC09、TPL-AC10 | #327、#389 |
-| T4 | 專案套用範本：依 `project_inspection_item.edit` 複製單項或指定 `system_id` 下全部項目結構至 `ProjectInspectionItem`，並保存 `project_id`、來源範本名稱與套用時間；系統套用來源名稱用系統名稱。提供專案成員、Admin、範本管理員讀取完整副本的 cursor 分頁 API。驗證來源覆蓋或刪除不影響副本。P4 得擴充副本欄位並定義作廢／重查／更正流程 | `backend/app/` 專案服務/API 與測試 | T1、T2、T3 | TPL-AC05、TPL-AC06、TPL-AC08 | #328；專案副本列表 API #365 |
+| T4 | 專案套用範本：依 `project_inspection_item.edit` 複製單項或指定 `system_id` 下全部項目結構至 `ProjectInspectionItem`，並保存 `project_id`、來源範本名稱、套用時間及套用當下來源類別／系統名稱；系統套用來源名稱用系統名稱。提供專案成員、Admin、範本管理員讀取完整副本的 cursor 分頁 API。驗證來源覆蓋、改名或刪除不影響副本與來源路徑快照；舊資料路徑未知時保留空值。P4 得擴充副本欄位並定義作廢／重查／更正流程 | `backend/app/` 專案服務/API 與測試 | T1、T2、T3 | TPL-AC05、TPL-AC06、TPL-AC08 | #328；專案副本列表 API #365 |
 | T5 | MVP 範本管理 UI：管理兩層分類、編輯範本結構、標準與實測欄位定義、管理照片需求、預覽單項與整個系統範本；入口掛載於既有 AdminPage，瀏覽連結位於 FieldPage，樣式沿用全域樣式表；Admin 與範本管理員皆可編輯 | `frontend/src/admin/templates/api.ts`、`frontend/src/admin/templates/api.test.ts`、`frontend/src/admin/templates/TemplatesPage.tsx`、`frontend/src/admin/templates/TemplatesPage.test.tsx`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/field/FieldPage.tsx`、`frontend/src/field/FieldPage.test.tsx`、`frontend/src/styles.css` | T2、T3 | TPL-AC02、TPL-AC03、TPL-AC04、TPL-AC07、TPL-AC09、TPL-AC10 | #329、#357、#389 |
 | T6 | 專案套用與存為範本 UI：由具 `project_inspection_item.edit` 權限者以 `template_id` 套用單項，或以 `system_id` 套用整個系統；Admin 與範本管理員可跨專案瀏覽並把專案項目存至指定系統；顯示副本記錄的來源名稱與時間 | `frontend/src/features/projects/`、`frontend/src/routes/`、`frontend/src/field/ProjectTemplatesPage.test.tsx`、`frontend/tests/` | T2、T3、T4 | TPL-AC05、TPL-AC06、TPL-AC08 | #330、#389 |
 | T7 | E2E／整合驗收與文件收尾：驗證權限、複製隔離、照片需求結構及不版本化；依規格確認範圍並更新索引，確保 TPL-AC01～TPL-AC12 都有證據 | `backend/tests/api/`、`backend/tests/contract/`、`frontend/` 範本相關測試、`docs/specs/template-system/spec.md`、`docs/specs/template-system/plan.md`、`docs/specs/README.md` | T1～T6、T8（#356）、#357、#365 | TPL-AC01～TPL-AC12 | #331 |
@@ -20,6 +20,8 @@
 | T10 | 依核可原型重設專案套用與存為範本流程：內業專案卡片入口、單項／整系統預覽與確認、同名出口、存為範本目的地選擇與衝突保留；Field 首頁移除範本入口；補上 1280px／360px 前端流程驗收並保留 API 權限行為 | `frontend/src/field/ProjectTemplatesPage.tsx`、`ProjectTemplatesPage.test.tsx`、`projectTemplatesApi.ts`、`projectTemplatesApi.test.ts`、`frontend/src/admin/templates/TemplateLibraryNav.tsx`、`frontend/src/admin/projects/ProjectsPage.tsx`、`ProjectsAdmin.test.tsx`、`ProjectItemLinks.tsx`、`AdminPage.tsx`、`AdminPage.test.tsx`、`frontend/src/App.tsx`、`frontend/src/field/FieldPage.tsx`、`FieldPage.test.tsx`、`frontend/src/styles.css`、`docs/specs/template-system/`、`docs/specs/field-ui/spec.md`、`docs/specs/template-system/ui-apply-prototype.html` | T2、T3、T4、T6、#441 | TPL-AC21、TPL-AC22、FUI-AC13 | #429 |
 | T11 | 範本 API 採用 `error.fields`（TPL-R24，[#432](https://github.com/speko-tw/inspect-flow/issues/432)）：服務層 `InvalidTemplateError` 改帶欄位路徑與資源專屬碼（每種結構違規各自對應，整系統覆蓋含 `/items/{k}`）；驗證函式（`validate_template_structure`、`validate_system_structures`）與專案查核項目 PATCH 的 `_validate_project_points` 都改為收集全部違規後一次回報，不在第一個錯誤就 raise；範本庫寫入端點與專案查核項目 PATCH 的 422 回 `fields`，資料庫約束造成的 422 維持只有 `error.code`；後端契約測試含 sentinel | `backend/app/services/template_library.py`、`backend/app/api/v1/template_library.py`、`backend/app/api/v1/inspection_planning.py`（只動 PATCH 點位驗證的呼叫）、`backend/tests/api/`（範本與專案項目 422 測試） | api-conventions T7 | TPL-AC26 | #432 |
 | T12 | 範本編輯器依 `error.fields` 顯示欄位錯誤（TPL-R18、TPL-R24）：把 `path` 對應到標題、項次、實測欄位、數值標準與照片數欄位，展開有錯誤的項次並聚焦第一個錯誤，對不到欄位的併入一般提示；待修正數量由畫面自己的欄位錯誤計算，不拿 `fields.length` 當總數（`fields` 不保證涵蓋全部錯誤，也可能被截在 100 筆）；沒有 `fields` 時維持現行一般提示與草稿保留；接真實 API | `frontend/src/admin/templates/TemplateItemEditor.tsx`、`InspectionPointCard.tsx`、`MeasurementFieldEditor.tsx`、`NumericStandardEditor.tsx`、`templateEditorUtils.ts`、`TemplatesPage.tsx`、`frontend/src/admin/projectItems/api.ts`、`frontend/src/admin/projectItems/api.test.ts` 與對應前端測試 | api-conventions T8；T11（真 API） | TPL-AC27、TPL-AC16 | #432 |
+| T13 | 套用來源路徑顯示（#667）：新增可空來源類別／系統快照欄位；單項與系統套用都在同一交易讀取來源並保存名稱；專案項目 API 回傳兩欄，前端統一顯示「類別／系統」，舊資料顯示未記錄、不從來源範本名稱推測；migration 可升降版 | `backend/app/models/template_system.py`、`backend/app/services/project_templates.py`、`backend/app/services/inspection_details.py`、`backend/app/api/v1/project_inspection_items.py`、`backend/alembic/versions/`、`backend/tests/api/test_project_template_application.py`、`backend/tests/db/test_migrations.py`、`frontend/src/admin/projectItems/`、`docs/specs/template-system/`、`docs/specs/inspection-planning/` | T1、T3、T4 | TPL-R08、TPL-AC05 | #667 |
+| T14 | 存為範本時可選擇名稱（#434）：API 接受 optional `name`，省略沿用來源名稱；依範本名稱規則 trim、限制 256 字元並由系統內唯一索引拒絕同名；稽核事件保存最終名稱；UI 預填來源名稱，衝突後可修改名稱重試 | `backend/app/api/v1/project_inspection_items.py`、`backend/app/services/project_templates.py`、`backend/app/services/audit.py`、`backend/tests/api/test_project_template_application.py`、`frontend/src/admin/projects/ProjectTemplatesPage.tsx`、`ProjectTemplatesPage.test.tsx`、`projectTemplatesApi.ts`、`docs/specs/template-system/spec.md`、`plan.md` | T3、T6；#382 稽核事件 | TPL-R26、TPL-AC22、TPL-AC29 | #434 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收；任務 issue 開立前應把表內概略檔案責任換成實際檔案清單。
 - 每條本規格 AC 至少由一個任務涵蓋；TPL-AC01、AC08 涵蓋權限及管理員指派稽核，AC02～AC04 涵蓋結構與不版本化，AC05～AC06 涵蓋複製與權限，AC07 涵蓋標準及照片需求，AC09 涵蓋實測欄位結構與單位。
@@ -33,6 +35,8 @@
 - #538（負責人裁定，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）：範本庫管理改為範本模組權限（`template.manage`、`template.use`；委派不附帶編輯能力，TPL-R09、TPL-AC25）；`template_admin` 與 `SystemRoleAssignment`（T1、T2）僅過渡期保留，改造時逐人轉換、不得失去權限，由 [`domain-model` 後續任務 M](../domain-model/plan.md#兩層權限模型後續實作) 與 `authentication` 任務 Q 接手；本計畫 T1～T10 已完成的內容不改寫。規格合併到程式完成前，T2 的行為維持不變。
 - #429 原型核可後，TPL-AC21～TPL-AC22 覆蓋套用、存為範本及內業專案工作台；互動與文案依原型，技術細節標為規格設計。正式套用網址為 `/projects/{id}/inspection-items/templates`；舊 `/admin/projects/{id}/inspection-items/templates` 與 `/admin/projects/{id}/templates` 回 404、不轉址（#705）。
 - #482（v0.3.0 走查缺陷修正）：套用頁依登入本體的 `has_template_access`（#484）顯示「存為範本」，並新增 TPL-AC23～TPL-AC24；#486 將 TPL-AC24 的格式化函式共用至範本編輯器與現場詳情。驗證由 `inspectionStandard.test.ts`、`TemplatesPage.test.tsx`、`ProjectTemplatesPage.test.tsx`、`ProjectItemChangePage.test.tsx`、`TaskDetail.test.tsx` 負責。
+- #434（負責人直接指示的範圍變更）：新增 T14，涵蓋存為範本 API 的可選名稱、重用範本標題 trim/長度/同系統不分大小寫唯一規則、UI 名稱預填與衝突後改名重試，以及 `template_item.created_from_project` 的最終名稱稽核。TPL-R23／TPL-AC22 先前「不得有名稱欄」由本項目修正；不需另開 spec-change issue。
+- #382（發版前稽核缺漏）：依 TPL-R25／TPL-AC28，在範本庫服務寫入分類、系統及查核項目事件，在專案套用服務以一筆 `project.template_applied` 記錄來源與實際項目數；整系統覆蓋沿用逐項事件。事件目錄、事件欄位與白話標籤同步見 `audit-log` ALG-R32／ALG-AC31；不含範本模組權限授予／收回（#538）。
 
 ## 並行分組
 
@@ -76,6 +80,7 @@
 | TPL-AC24（#486） | 共用格式化單元測試及範本編輯器、專案查核項目修改、套用預覽、現場任務詳情前端測試：區間、公差、單側、文字回退與未設定顯示一致；編輯器草稿的單側區間顯示未設定；桌面與 360px 登入後點擊走查，截圖附在 PR。 |
 | TPL-AC26（#432） | 後端 API 測試：各結構違規（含綁定欄位帶單位）與模型驗證的 422 回 `error.fields`（路徑含整系統覆蓋的 `/items/{k}`、重複者各一筆）；資料庫約束的 422 沒有 `fields`；sentinel 測試回應不含請求值；既有 409、403 不變。 |
 | TPL-AC27（#432） | 前端測試：帶 `fields` 時錯誤顯示在欄位旁、有錯誤項次展開並聚焦第一個錯誤；沒有 `fields` 或形狀錯誤時一般提示並保留草稿；路徑對不到欄位併入一般提示；對真實後端走查，桌面與 360px 截圖附在 PR。 |
+| TPL-AC28（#382） | `backend/tests/api/test_template_library.py`、`backend/tests/api/test_project_template_application.py`、`frontend/src/admin/audit-log/auditLabels.test.ts`：驗證分類／系統／項目 CRUD 與整系統覆蓋、單筆套用事件與項目數、空系統及冪等操作不寫、稽核失敗回滾與新事件白話對照。 |
 
 ## 考慮過但沒採用的做法
 
@@ -83,3 +88,22 @@
 - **把專案副本與任務需求快照合併**：KD-55 已把作廢／重查／更正流程交給 P4；本規格仍定義 0.3.x 最小 `ProjectInspectionItem`，避免範本覆蓋語意改寫任務既有需求。
 - **替查核範本保留版本表**：與 KD-03、PR-04 的現行裁定相反；專案套用副本承接快照，任務快照仍在建立任務時產生。
 - #432 新增 `error.fields`：T11、T12 與 TPL-AC26、TPL-AC27 只涵蓋範本 API 與範本編輯器；其他 API 與畫面之後逐步採用，不在本計畫。
+
+
+## Issue #435：專案查核項目移除與改名
+
+- 依負責人 2026-10-22 裁定，在既有 #622 worktree 接續；不建立停用或恢復功能。
+- 專案項目 DELETE 依編輯權限覆核，鎖來源項目後查所有 Task 明細（含草稿、取消），沒有引用才清除子結構與變更紀錄，並於同交易新增 `project_inspection_item.deleted`。回應帶任務數，操作紀錄加白話標籤。
+- PATCH 改名與套用範本共用名稱檢查鎖，trim／casefold、排除自身；409 保留 UI 編輯內容並提示換名。含非草稿引用時，只有純改名預設不要且保留確認；其他修改須明確選擇。只有草稿（含改名）不詢問、送 true，Snapshot 原位更新。
+- 實作範圍：`backend/app/services/inspection_planning.py`、`project_templates.py`、`backend/app/api/v1/inspection_planning.py`、`backend/app/api/errors.py`、前端 `projectItems/` 與 `audit-log/auditLabels.ts`；不需 migration。
+- 驗收：`tests/api/test_project_item_removal.py`、`tests/db/test_project_item_removal.py`（SQLite／PostgreSQL）、`tests/db/test_project_item_edit_concurrency.py`、`tests/services/test_audit.py`、`ProjectItemLinks.test.tsx`、`ProjectItemChangePage.test.tsx` 與 `auditLabels.test.ts`。
+- TPL-AC30：先取得新增測試紅燈，再執行 `make check`（專用 `inspectflow_test_622`、4 個前端 worker）、demo E2E 與 1280／390 真畫面截圖；報告保留命令、退出碼、需求與 commit 對照。
+
+
+### W-P1c 審查修正（#435）
+
+- IP-R22／TPL-R27 與 ADM-R28／AC27 一致：純改名才有隱含預設；其他內容改變時未選不可存；草稿不詢問。
+- 刪除提示明確說明保留紀錄與草稿刪除的解除方式，取消不解除引用。
+- 舊資料已有同名時，正規化標題未變的編輯仍可成功；新增 API 與 PostgreSQL 重用驗收。
+- 存為範本持來源 `FOR SHARE` 到複製及稽核完成；PostgreSQL 以固定交錯及 `pg_stat_activity` 驗證兩種先後均互斥：先存完整複製、先刪回 404。
+- 先紅後綠，補主線的未選阻擋測試；完整 `make check` 使用 `inspectflow_test_622` 與 4 個前端 worker。

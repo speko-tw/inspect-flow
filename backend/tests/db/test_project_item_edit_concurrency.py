@@ -23,11 +23,15 @@ from app.db.engine import (
 from app.main import create_app
 from app.models import (
     AuditLog,
+    ProjectEvidenceRequirement,
     ProjectInspectionItem,
     ProjectInspectionItemChange,
     ProjectInspectionPoint,
     TaskInspectionItem,
     TaskRequirementSnapshot,
+    TemplateCategory,
+    TemplateItem,
+    TemplateSystem,
 )
 from tests.api.test_inspection_planning_api import _planning_world
 
@@ -180,11 +184,8 @@ def test_concurrent_project_item_patches_preserve_revision_history(
     item_url = f"/api/v1/projects/{project.id}/inspection-items/{item.id}"
 
     def is_item_lock(statement: str) -> bool:
-        normalized = statement.lower()
-        return (
-            "project_inspection_items" in normalized
-            and "for no key update" in normalized
-        )
+        # #435 名稱檢查鎖先於來源項目鎖，仍驗證後到交易等待先到者提交。
+        return "pg_advisory_xact_lock" in statement.lower()
 
     def before_cursor_execute(
         connection, cursor, statement, parameters, context, executemany
@@ -855,3 +856,240 @@ def test_task_item_replacement_and_item_patch_serialize_snapshot_sources(
     # 不論誰先取得來源鎖，新快照都不得停在舊標準。
     assert snapshot.source_standard_revision == stored_item.standard_revision
     assert snapshot.title == stored_item.title == "並行後標準"
+
+
+@pytest.mark.parametrize("first_action", ["delete", "create"])
+def test_delete_and_task_creation_serialize_item_reference(
+    engine, db_session, make_client, first_action
+):
+    """#435：固定交錯，確認引用檢查與 Task 快照互斥。"""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL row locks")
+    world = _planning_world(db_session, make_client)
+    project_id = world["project"].id
+    item_id = world["item"].id
+    plan = world["admin"].post(
+        f"/api/v1/projects/{project_id}/inspection-plans",
+        json={"name": "刪除並行"},
+    )
+    assert plan.status_code == 201, plan.text
+    clients = _two_admin_clients(db_session, world, make_client)
+
+    def call(action, client):
+        if action == "delete":
+            return client.delete(
+                f"/api/v1/projects/{project_id}/inspection-items/{item_id}"
+            )
+        return client.post(
+            f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+            json={"name": "並行任務", "item_ids": [str(item_id)]},
+        )
+
+    def matches(statement):
+        return "project_inspection_items" in statement and (
+            "for update" in statement or "for share" in statement
+        )
+
+    other = "create" if first_action == "delete" else "delete"
+    with _LockGate(get_engine(), matches) as gate:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(call, first_action, clients[0])
+            try:
+                assert gate.acquired.wait(timeout=10)
+                second = executor.submit(call, other, clients[1])
+                gate.wait_until_waiter_blocked()
+            finally:
+                gate.release.set()
+            responses = [first.result(timeout=15), second.result(timeout=15)]
+    expected = [204, 422] if first_action == "delete" else [201, 409]
+    assert [r.status_code for r in responses] == expected, [
+        r.text for r in responses
+    ]
+    db_session.expire_all()
+    if first_action == "delete":
+        assert db_session.get(ProjectInspectionItem, item_id) is None
+        assert db_session.scalar(select(TaskInspectionItem)) is None
+    else:
+        assert db_session.get(ProjectInspectionItem, item_id) is not None
+        assert db_session.scalar(select(TaskInspectionItem)) is not None
+
+
+@pytest.mark.parametrize("other_action", ["rename", "apply"])
+@pytest.mark.parametrize("first_action", ["rename", "other"])
+def test_concurrent_item_name_writes_reject_duplicate(
+    engine, db_session, make_client, other_action, first_action
+):
+    """#435：改名與套用共用名稱鎖，名稱檢查不能同時通過。"""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL advisory locks")
+    world = _planning_world(db_session, make_client)
+    project_id = world["project"].id
+    operator_id = world["admin_user"].id
+    category = TemplateCategory(
+        name="並行分類", created_by=operator_id, updated_by=operator_id
+    )
+    db_session.add(category)
+    db_session.flush()
+    system = TemplateSystem(
+        category_id=category.id,
+        name="並行系統",
+        created_by=operator_id,
+        updated_by=operator_id,
+    )
+    db_session.add(system)
+    db_session.flush()
+    template = TemplateItem(
+        system_id=system.id,
+        sequence=1,
+        title=" Target Name ",
+        instruction="並行名稱",
+        created_by=operator_id,
+        updated_by=operator_id,
+    )
+    db_session.add(template)
+    db_session.commit()
+    template_id = template.id
+    item_id = world["item"].id
+    other_id = world["item_two"].id
+    clients = _two_admin_clients(db_session, world, make_client)
+
+    def call(action, client):
+        if action == "other" and other_action == "apply":
+            return client.post(
+                f"/api/v1/projects/{project_id}/inspection-items:"
+                "apply-template",
+                json={"template_id": str(template_id)},
+            )
+        target_id = item_id if action == "rename" else other_id
+        return client.patch(
+            f"/api/v1/projects/{project_id}/inspection-items/{target_id}",
+            json={"title": "target NAME"},
+        )
+
+    other = "other" if first_action == "rename" else "rename"
+    with _LockGate(
+        get_engine(), lambda stmt: "pg_advisory_xact_lock" in stmt
+    ) as gate:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(call, first_action, clients[0])
+            try:
+                assert gate.acquired.wait(timeout=10)
+                second = executor.submit(call, other, clients[1])
+                gate.wait_until_waiter_blocked()
+            finally:
+                gate.release.set()
+            responses = [first.result(timeout=15), second.result(timeout=15)]
+    assert responses[0].status_code in (200, 201), responses[0].text
+    assert responses[1].status_code == 409, responses[1].text
+    assert responses[1].json()["error"]["code"] == (
+        "project_inspection_item.duplicate_name"
+    )
+    titles = db_session.scalars(
+        select(ProjectInspectionItem.title).where(
+            ProjectInspectionItem.project_id == project_id
+        )
+    ).all()
+    assert (
+        sum(title.strip().casefold() == "target name" for title in titles) == 1
+    )
+
+
+@pytest.mark.parametrize("first_action", ["save", "delete"])
+def test_save_template_and_item_deletion_serialize_source(
+    engine, db_session, make_client, first_action
+):
+    """#435：完整複製先於刪除；刪除先到則存為範本回 404。"""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL source row locks")
+    world = _planning_world(db_session, make_client)
+    project_id = world["project"].id
+    item_id = world["item"].id
+    operator_id = world["admin_user"].id
+    point = db_session.scalar(
+        select(ProjectInspectionPoint).where(
+            ProjectInspectionPoint.project_inspection_item_id == item_id
+        )
+    )
+    assert point is not None
+    source_point_title = point.title
+    db_session.add(
+        ProjectEvidenceRequirement(
+            project_inspection_item_id=item_id,
+            inspection_point_id=point.id,
+            min_count=1,
+            created_by=operator_id,
+            updated_by=operator_id,
+        )
+    )
+    category = TemplateCategory(
+        name="來源讀取鎖",
+        created_by=operator_id,
+        updated_by=operator_id,
+    )
+    db_session.add(category)
+    db_session.flush()
+    system = TemplateSystem(
+        category_id=category.id,
+        name="存為範本與刪除",
+        created_by=operator_id,
+        updated_by=operator_id,
+    )
+    db_session.add(system)
+    db_session.commit()
+    system_id = system.id
+    clients = _two_admin_clients(db_session, world, make_client)
+
+    def call(action, client):
+        if action == "delete":
+            return client.delete(
+                f"/api/v1/projects/{project_id}/inspection-items/{item_id}"
+            )
+        return client.post(
+            f"/api/v1/projects/{project_id}/templates",
+            json={
+                "project_inspection_item_id": str(item_id),
+                "system_id": str(system_id),
+                "name": "競態存成範本",
+            },
+        )
+
+    def matches(statement):
+        return "from project_inspection_items" in statement and (
+            "for update" in statement or "for share" in statement
+        )
+
+    other = "delete" if first_action == "save" else "save"
+    with _LockGate(get_engine(), matches) as gate:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(call, first_action, clients[0])
+            try:
+                assert gate.acquired.wait(timeout=10)
+                second = executor.submit(call, other, clients[1])
+                gate.wait_until_waiter_blocked()
+            finally:
+                gate.release.set()
+            responses = [first.result(timeout=15), second.result(timeout=15)]
+    expected = [201, 204] if first_action == "save" else [204, 404]
+    assert [r.status_code for r in responses] == expected, [
+        r.text for r in responses
+    ]
+    db_session.expire_all()
+    assert db_session.get(ProjectInspectionItem, item_id) is None
+    templates = db_session.scalars(
+        select(TemplateItem).where(TemplateItem.system_id == system_id)
+    ).all()
+    if first_action == "save":
+        assert len(templates) == 1
+        saved = responses[0].json()
+        assert saved["instruction"] == "確認表面狀況"
+        assert len(saved["inspection_points"]) == 1
+        assert saved["inspection_points"][0]["title"] == source_point_title
+        assert (
+            saved["inspection_points"][0]["evidence_requirements"][0][
+                "min_count"
+            ]
+            == 1
+        )
+    else:
+        assert templates == []
+        assert responses[1].json()["error"]["code"] == "resource.not_found"

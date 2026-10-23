@@ -160,6 +160,8 @@ def project_inspection_item_details(
             "title": item.title,
             "instruction": item.instruction,
             "source_template_name": item.source_template_name,
+            "source_category_name": item.source_category_name,
+            "source_system_name": item.source_system_name,
             "applied_at": format_utc(item.applied_at),
             "inspection_points": points.get(item.id, []),
         }

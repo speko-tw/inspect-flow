@@ -611,17 +611,21 @@ def put_system_templates(
     by_id = {item.id: item for item in existing}
     if any(identifier not in by_id for identifier in ids):
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
-    template_write_call(park_template_names, db, existing)
+    audit_before = template_write_call(park_template_names, db, existing)
     for item in existing:
         if item.id not in ids:
-            delete_template(db, item)
+            delete_template(db, item, audit_before=audit_before[item.id])
     saved = []
     for entry, data in zip(entries, payloads, strict=True):
         if entry.id is None:
             item = template_write_call(create_template, db, data)
         else:
             item = template_write_call(
-                replace_template, db, by_id[entry.id], data
+                replace_template,
+                db,
+                by_id[entry.id],
+                data,
+                audit_before[entry.id],
             )
         saved.append(item)
     return {"items": template_item_details(db, saved)}

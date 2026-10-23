@@ -1,10 +1,11 @@
 """Copy template structures into project-owned inspection items."""
 
+import hashlib
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.base import uuid7
@@ -16,6 +17,7 @@ from app.models import (
     ProjectMeasurementField,
     ProjectNumericStandard,
     ProjectTextStandard,
+    TemplateCategory,
     TemplateEvidenceRequirement,
     TemplateInspectionPoint,
     TemplateItem,
@@ -37,9 +39,24 @@ class DuplicateProjectItemError(ValueError):
         super().__init__(", ".join(names))
 
 
+def lock_project_item_names(db: Session, project_id: UUID) -> None:
+    """#435：序列化套用與改名的名稱檢查，避免兩個請求同時通過。
+
+    不能先鎖專案列再鎖來源項目：Task 建立的鎖序為項目、Plan、專案。
+    PostgreSQL 以獨立的交易 advisory lock 協調名稱，SQLite 沿用寫交易鎖。
+    """
+    if db.get_bind().dialect.name == "postgresql":
+        digest = hashlib.sha256(
+            f"project-item-names:{project_id}".encode()
+        ).digest()
+        key = int.from_bytes(digest[:8], "big", signed=True)
+        db.execute(select(func.pg_advisory_xact_lock(key)))
+
+
 def _reject_duplicate_names(
     db: Session, project_id: UUID, templates: Sequence[TemplateItem]
 ) -> None:
+    lock_project_item_names(db, project_id)
     # Every path creating ProjectInspectionItem must take this same
     # project-row lock before checking names and writing copies.
     # PostgreSQL serializes applies here; SQLite does not row-lock.
@@ -69,6 +86,8 @@ def _copy_template_item(
     project_id: UUID,
     template: TemplateItem,
     source_name: str,
+    source_category_name: str,
+    source_system_name: str,
     applied_at: datetime,
     operator_id: UUID,
 ) -> ProjectInspectionItem:
@@ -78,6 +97,8 @@ def _copy_template_item(
         title=template.title,
         instruction=template.instruction,
         source_template_name=source_name,
+        source_category_name=source_category_name,
+        source_system_name=source_system_name,
         applied_at=applied_at,
         created_by=operator_id,
         updated_by=operator_id,
@@ -221,20 +242,47 @@ def apply_template(
         template = db.get(TemplateItem, template_id)
         if template is None:
             return None
+        system = db.get(TemplateSystem, template.system_id)
+        category = (
+            db.get(TemplateCategory, system.category_id)
+            if system is not None
+            else None
+        )
+        if system is None or category is None:
+            return None
         _reject_duplicate_names(db, project_id, [template])
-        return [
+        copies = [
             _copy_template_item(
                 db,
                 project_id=project_id,
                 template=template,
                 source_name=template.title,
+                source_category_name=category.name,
+                source_system_name=system.name,
                 applied_at=applied_at,
                 operator_id=operator.id,
             )
         ]
+        record_audit_event(
+            db,
+            "project.template_applied",
+            entity_id=project_id,
+            project_id=project_id,
+            before=None,
+            after={
+                "source_type": "item",
+                "source_id": template.id,
+                "source_name": template.title,
+                "item_count": len(copies),
+            },
+        )
+        return copies
 
     system = db.get(TemplateSystem, system_id)
     if system is None:
+        return None
+    category = db.get(TemplateCategory, system.category_id)
+    if category is None:
         return None
     templates = db.scalars(
         select(TemplateItem)
@@ -242,17 +290,34 @@ def apply_template(
         .order_by(TemplateItem.sequence, TemplateItem.id)
     ).all()
     _reject_duplicate_names(db, project_id, templates)
-    return [
+    copies = [
         _copy_template_item(
             db,
             project_id=project_id,
             template=template,
             source_name=system.name,
+            source_category_name=category.name,
+            source_system_name=system.name,
             applied_at=applied_at,
             operator_id=operator.id,
         )
         for template in templates
     ]
+    if copies:
+        record_audit_event(
+            db,
+            "project.template_applied",
+            entity_id=project_id,
+            project_id=project_id,
+            before=None,
+            after={
+                "source_type": "system",
+                "source_id": system.id,
+                "source_name": system.name,
+                "item_count": len(copies),
+            },
+        )
+    return copies
 
 
 def create_template_from_project_item(
@@ -260,17 +325,23 @@ def create_template_from_project_item(
     project_id: UUID,
     project_inspection_item_id: UUID,
     system_id: UUID,
+    name: str | None = None,
 ) -> TemplateItem | None:
     """Copy one project-owned inspection item into a template system.
 
     A source outside ``project_id`` is indistinguishable from a missing
     source, so callers cannot use this operation to copy across projects.
     """
+    # #435：持有來源共享鎖直到複製與稽核完成，避免刪除先清掉子結構，
+    # 造成存出不完整範本；與 Task 快照的來源讀取使用相同鎖語意。
     source = db.scalar(
-        select(ProjectInspectionItem).where(
+        select(ProjectInspectionItem)
+        .where(
             ProjectInspectionItem.id == project_inspection_item_id,
             ProjectInspectionItem.project_id == project_id,
         )
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
     )
     system = db.get(TemplateSystem, system_id)
     if source is None or system is None:
@@ -355,10 +426,11 @@ def create_template_from_project_item(
         {
             "system_id": system_id,
             "sequence": source.sequence,
-            "title": source.title,
+            "title": source.title if name is None else name,
             "instruction": source.instruction,
             "inspection_points": points_data,
         },
+        audit_created=False,
     )
     record_audit_event(
         db,
@@ -370,6 +442,7 @@ def create_template_from_project_item(
             "project_id": project_id,
             "project_inspection_item_id": project_inspection_item_id,
             "system_id": system_id,
+            "title": template.title,
         },
     )
     return template

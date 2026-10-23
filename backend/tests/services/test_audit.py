@@ -309,6 +309,7 @@ def test_project_scoped_catalog_covers_all_project_event_families():
     expected = {
         "project.created",
         "project.updated",
+        "project.template_applied",
         "project_member.roles_changed",
         "project_member.removed",
         "project_member.assignment_denied",
@@ -322,6 +323,7 @@ def test_project_scoped_catalog_covers_all_project_event_families():
         "inspection_task.renamed",
         "inspection_task.items_updated",
         "project_inspection_item.updated",
+        "project_inspection_item.deleted",
         "template_item.created_from_project",
     }
     project_entities = {

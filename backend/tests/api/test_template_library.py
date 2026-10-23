@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.models import (
+    AuditLog,
     Project,
     ProjectMember,
     ProjectMemberRole,
@@ -1557,3 +1558,225 @@ def test_category_and_system_lists_carry_child_counts(clients):
         f"/api/v1/template-categories/{category_id}", json={"name": "Civil 2"}
     )
     assert renamed.json()["system_count"] == 2
+
+
+def test_template_library_writes_are_audited(db_session, clients):
+    category_response = clients["manager"].post(
+        "/api/v1/template-categories", json={"name": "Civil"}
+    )
+    category_id = category_response.json()["id"]
+    system_response = clients["manager"].post(
+        f"/api/v1/template-categories/{category_id}/systems",
+        json={"name": "Walls"},
+    )
+    system_id = system_response.json()["id"]
+    template_response = clients["manager"].post(
+        "/api/v1/templates", json=_template(system_id, "Foundation")
+    )
+    template_id = template_response.json()["id"]
+
+    category_rename = clients["manager"].patch(
+        f"/api/v1/template-categories/{category_id}",
+        json={"name": "Civil Works"},
+    )
+    system_rename = clients["manager"].patch(
+        f"/api/v1/template-systems/{system_id}",
+        json={"name": "Exterior Walls"},
+    )
+    template_update = clients["manager"].put(
+        f"/api/v1/templates/{template_id}",
+        json=_template(system_id, "Foundation Revised"),
+    )
+    assert category_rename.status_code == 200
+    assert system_rename.status_code == 200
+    assert template_update.status_code == 200
+    assert (
+        clients["manager"]
+        .patch(
+            f"/api/v1/template-categories/{category_id}",
+            json={"name": "Civil Works"},
+        )
+        .status_code
+        == 200
+    )
+    assert (
+        clients["manager"]
+        .patch(
+            f"/api/v1/template-systems/{system_id}",
+            json={"name": "Exterior Walls"},
+        )
+        .status_code
+        == 200
+    )
+    assert (
+        clients["manager"]
+        .put(
+            f"/api/v1/templates/{template_id}",
+            json=_template(system_id, "Foundation Revised"),
+        )
+        .status_code
+        == 200
+    )
+
+    assert (
+        clients["manager"]
+        .delete(f"/api/v1/templates/{template_id}")
+        .status_code
+        == 204
+    )
+    assert (
+        clients["manager"]
+        .delete(f"/api/v1/template-systems/{system_id}")
+        .status_code
+        == 204
+    )
+    assert (
+        clients["manager"]
+        .delete(f"/api/v1/template-categories/{category_id}")
+        .status_code
+        == 204
+    )
+
+    events = db_session.scalars(select(AuditLog)).all()
+    by_type = {}
+    for event in events:
+        by_type.setdefault(event.event_type, []).append(event)
+
+    assert by_type["template_category.created"][0].after == {"name": "Civil"}
+    assert by_type["template_category.updated"][0].before == {"name": "Civil"}
+    assert by_type["template_category.updated"][0].after == {
+        "name": "Civil Works"
+    }
+    assert by_type["template_category.deleted"][0].before == {
+        "name": "Civil Works"
+    }
+    assert by_type["template_category.created"][0].entity_id == UUID(
+        category_id
+    )
+    assert by_type["template_system.created"][0].after == {
+        "category_id": category_id,
+        "name": "Walls",
+    }
+    assert by_type["template_system.updated"][0].before == {"name": "Walls"}
+    assert by_type["template_system.updated"][0].after == {
+        "name": "Exterior Walls"
+    }
+    assert by_type["template_system.deleted"][0].before == {
+        "category_id": category_id,
+        "name": "Exterior Walls",
+    }
+    assert {
+        key: by_type["template_item.created"][0].after[key]
+        for key in ("system_id", "sequence", "title", "instruction")
+    } == {
+        "system_id": system_id,
+        "sequence": 1,
+        "title": "Foundation",
+        "instruction": "Inspect carefully",
+    }
+    assert by_type["template_item.created"][0].after["inspection_points"]
+    assert by_type["template_item.updated"][0].before["title"] == "Foundation"
+    assert by_type["template_item.updated"][0].after["title"] == (
+        "Foundation Revised"
+    )
+    assert len(by_type["template_category.updated"]) == 1
+    assert len(by_type["template_system.updated"]) == 1
+    assert len(by_type["template_item.updated"]) == 1
+    assert by_type["template_item.deleted"][0].before["title"] == (
+        "Foundation Revised"
+    )
+
+
+def test_failed_template_audit_rolls_back_template_mutation(
+    db_session, clients, monkeypatch
+):
+    import app.services.template_library as template_library
+
+    category_id, system_id = _tree(clients["manager"])
+    before = db_session.scalar(select(func.count()).select_from(AuditLog))
+
+    def reject_event(*args, **kwargs):
+        raise RuntimeError("injected audit write failure")
+
+    monkeypatch.setattr(template_library, "record_audit_event", reject_event)
+    with pytest.raises(RuntimeError, match="injected audit write failure"):
+        clients["manager"].post(
+            "/api/v1/templates",
+            json=_template(system_id, "Must Roll Back"),
+        )
+    db_session.expire_all()
+
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(TemplateItem)
+            .where(TemplateItem.title == "Must Roll Back")
+        )
+        == 0
+    )
+    assert (
+        db_session.scalar(select(func.count()).select_from(AuditLog)) == before
+    )
+    assert db_session.get(TemplateCategory, UUID(category_id)) is not None
+
+
+def test_system_replacement_audits_only_actual_item_changes(
+    db_session, clients
+):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    first = manager.post(
+        "/api/v1/templates", json=_template(system_id, "Alpha")
+    )
+    removed = manager.post(
+        "/api/v1/templates",
+        json={**_template(system_id, "Beta"), "sequence": 2},
+    )
+    assert first.status_code == removed.status_code == 201
+
+    response = manager.put(
+        f"/api/v1/template-systems/{system_id}/templates",
+        json={
+            "items": [
+                {
+                    **_template(system_id, "Alpha Revised"),
+                    "id": first.json()["id"],
+                },
+                {**_template(system_id, "Gamma"), "sequence": 2},
+            ]
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    events = db_session.scalars(select(AuditLog)).all()
+    assert (
+        len([e for e in events if e.event_type == "template_item.created"])
+        == 3
+    )
+    updated = [e for e in events if e.event_type == "template_item.updated"]
+    deleted = [e for e in events if e.event_type == "template_item.deleted"]
+    assert len(updated) == len(deleted) == 1
+    assert updated[0].before["title"] == "Alpha"
+    assert updated[0].after["title"] == "Alpha Revised"
+    assert deleted[0].before["title"] == "Beta"
+
+
+def test_template_noop_overwrite_does_not_write_audit_event(
+    db_session, clients
+):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    body = _template(system_id, "Stable")
+    created = manager.post("/api/v1/templates", json=body)
+    assert created.status_code == 201, created.text
+
+    updated = manager.put(
+        f"/api/v1/templates/{created.json()['id']}", json=body
+    )
+    assert updated.status_code == 200, updated.text
+    count = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.event_type == "template_item.updated")
+    )
+    assert count == 0

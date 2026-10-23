@@ -21,6 +21,7 @@
 | T11 | 專案流程摘要的 `project` 物件加 `company_role`（IP-R11（流程摘要）），供專案首頁顯示本公司角色；補 API 測試與契約 fixture | `backend/app/services/project_workflow_summary.py`、`backend/app/api/v1/projects.py`、`backend/tests/api/test_project_workflow_summary.py`、`frontend/src/admin/` 摘要型別（依當時程式碼盤點） | `domain-model` 任務 R | IP-AC12 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
 | T12 | 序列化 Task 建立快照與專案項目修改，固定項目／Plan 鎖順序，並以 PostgreSQL 並行 API 測試驗證快照一致與鎖序一致 | `backend/app/services/inspection_planning.py`、`backend/tests/db/test_project_item_edit_concurrency.py`、`backend/tests/services/test_inspection_planning.py`、`docs/specs/inspection-planning/plan.md` | T2、T3 | IP-R03、IP-AC03 | #555 |
 | T14 | 專案進度區段所需的後端：專案 Task 清單的 `status`、`needs_reinspection=true` 篩選、排序與每筆 `plan`／`item_summary`（IP-R18），單筆 Task 讀取加 `plan`、`started_by_user`、`completed_by_user`（IP-R19）；以資料庫與批次載入完成；補 API 測試與前後端契約 fixture | 依當時程式碼盤點，預計 `backend/app/api/v1/inspection_planning.py`、`backend/app/services/inspection_planning.py`、`backend/tests/api/` | T3、T7 | IP-AC18、IP-AC19 | 待開 task（母 issue [#452](https://github.com/speko-tw/inspect-flow/issues/452)；先於 `admin-dashboard` T21 合併） |
+| T15 | 將專案查核項目 PATCH 的查詢、驗證、寫入與受影響 Task 組裝移入 Service 層；同一來源項目的 Task 以批次查詢載入，每個受影響 Plan 只重算一次；以服務層委派契約、既有 PATCH 行為測試及多 Plan／多 Task 回歸測試驗證行為不變 | `backend/app/api/v1/inspection_planning.py`、`backend/app/services/inspection_planning.py`、`backend/tests/contract/test_project_item_edit_service_boundary.py`、`backend/tests/services/test_inspection_planning.py` | T2、T3、T12 | IP-AC03～IP-AC05 | #622 |
 | T13 | 草稿 Task 修改查核項目（IP-R20）：新增 `PUT /api/v1/inspection-tasks/{task_id}/items` 與服務層；入口先預檢封存 Plan 與 Task 狀態、鎖後複檢，依來源項目、Plan、Task 的鎖序在同一交易重建明細與 Snapshot，持鎖後重讀舊項目集合，並寫入 `inspection_task.items_updated`；計畫頁草稿任務加「修改查核項目」原地表單（含取消、未儲存提醒、錯誤在欄位旁），缺查核項目的派出阻擋捷徑改開此表單；補後端、PostgreSQL 並行與前端測試 | `backend/app/services/inspection_planning.py`、`backend/app/api/v1/inspection_planning.py`、`backend/tests/services/test_inspection_planning.py`、`backend/tests/api/test_inspection_planning_api.py`、`backend/tests/db/test_project_item_edit_concurrency.py`、`backend/tests/services/test_audit.py`、`frontend/src/admin/planning/` | T3、T4、T12 | IP-AC20、ADM-AC42 | [#615](https://github.com/speko-tw/inspect-flow/issues/615) |
 
 - 每個 task issue 開立前，應將路徑清單縮到具體檔案，並依共用 migration、model registry、router、API client 等實際重疊情況調整責任界線。
@@ -45,6 +46,12 @@
 - `GET /api/v1/inspection-tasks/{task_id}` 的讀取權限及 DRAFT 規則只改規格；以既有 API 權限測試核對。
 - 專案項目 PATCH 相同內容回 200，不新增修訂、變更列或 audit；實作與 `backend/tests/api/test_inspection_planning_api.py` 驗收。
 - 依據：維護者決定（#624，2026-10-16）。
+
+## Issue #667 來源路徑快照
+
+- `ProjectInspectionItem` 增加可空的來源工程類別／系統名稱快照，單項與整系統套用時保存當下值；舊資料不回填，避免從可能不唯一的 `source_template_name` 猜測。
+- 專案項目 API 回傳這兩欄，畫面顯示類別／系統；歷史路徑未知時明示未記錄。來源日後改名或刪除不改寫既有快照。
+- migration 可升級與降級；以 API、DB migration 和前端測試驗收。
 
 ## 風險
 
@@ -93,3 +100,22 @@ Issue #406 補齊以下測試對應，不變更產品行為：
 - **以目前專案／範本資料即時組裝舊任務內容**：違反 PR-04 的任務需求快照；每個 Task 必須保有建立當時的 Snapshot。
 - **直接覆寫已建立任務的 Snapshot**：KD-55 只允許「不要重新查核」時更正任務文字，並保留結果、照片與狀態；此例外需留下操作者、時間與內容紀錄。
 - **已完成 Task 重新開啟**：KD-56 不允許重新開啟已完成 Task。KD-55 標準變更是明確的系統例外：受影響的已完成 Task 自動回到 `IN_PROGRESS`，只使相關項目的結果／照片作廢以重新查核；不提供一般人工重開 Task 的端點。此規則依負責人補充裁定 5970063986，並已反映於合併的 `state-machines` SM-Q03。
+
+
+## Issue #435：專案查核項目移除與改名
+
+- 依負責人 2026-10-22 裁定，在既有 #622 worktree 接續；不建立停用或恢復功能。
+- 專案項目 DELETE 依編輯權限覆核，鎖來源項目後查所有 Task 明細（含草稿、取消），沒有引用才清除子結構與變更紀錄，並於同交易新增 `project_inspection_item.deleted`。回應帶任務數，操作紀錄加白話標籤。
+- PATCH 改名與套用範本共用名稱檢查鎖，trim／casefold、排除自身；409 保留 UI 編輯內容並提示換名。含非草稿引用時，只有純改名預設不要且保留確認；其他修改須明確選擇。只有草稿（含改名）不詢問、送 true，Snapshot 原位更新。
+- 實作範圍：`backend/app/services/inspection_planning.py`、`project_templates.py`、`backend/app/api/v1/inspection_planning.py`、`backend/app/api/errors.py`、前端 `projectItems/` 與 `audit-log/auditLabels.ts`；不需 migration。
+- 驗收：`tests/api/test_project_item_removal.py`、`tests/db/test_project_item_removal.py`（SQLite／PostgreSQL）、`tests/db/test_project_item_edit_concurrency.py`、`tests/services/test_audit.py`、`ProjectItemLinks.test.tsx`、`ProjectItemChangePage.test.tsx` 與 `auditLabels.test.ts`。
+- IP-AC21～IP-AC22：先取得新增測試紅燈，再執行 `make check`（專用 `inspectflow_test_622`、4 個前端 worker）、demo E2E 與 1280／390 真畫面截圖；報告保留命令、退出碼、需求與 commit 對照。
+
+
+### W-P1c 審查修正（#435）
+
+- IP-R22／TPL-R27 與 ADM-R28／AC27 一致：純改名才有隱含預設；其他內容改變時未選不可存；草稿不詢問。
+- 刪除提示明確說明保留紀錄與草稿刪除的解除方式，取消不解除引用。
+- 舊資料已有同名時，正規化標題未變的編輯仍可成功；新增 API 與 PostgreSQL 重用驗收。
+- 存為範本持來源 `FOR SHARE` 到複製及稽核完成；PostgreSQL 以固定交錯及 `pg_stat_activity` 驗證兩種先後均互斥：先存完整複製、先刪回 404。
+- 先紅後綠，補主線的未選阻擋測試；完整 `make check` 使用 `inspectflow_test_622` 與 4 個前端 worker。

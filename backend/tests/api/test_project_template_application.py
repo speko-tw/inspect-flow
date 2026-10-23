@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import create_engine, func, inspect, select, text
 
 from alembic import command
 from app.api.errors import ErrorCode
@@ -544,6 +544,10 @@ def test_apply_system_copies_nested_data_and_detaches_source(
     assert {item["source_template_name"] for item in applied} == {
         "Apply system"
     }
+    assert {
+        (item["source_category_name"], item["source_system_name"])
+        for item in applied
+    } == {("Apply category", "Apply system")}
     assert len({item["applied_at"] for item in applied}) == 1
     copies = db_session.scalars(
         select(ProjectInspectionItem)
@@ -648,6 +652,10 @@ def test_apply_system_copies_nested_data_and_detaches_source(
         ("First item", "Apply system"),
         ("Second item", "Apply system"),
     ]
+    assert {
+        (item.source_category_name, item.source_system_name)
+        for item in retained
+    } == {("Apply category", "Apply system")}
     assert (
         db_session.scalar(
             select(ProjectNumericStandard).where(
@@ -682,6 +690,8 @@ def test_apply_single_uses_title_and_requires_exactly_one_source(
     applied = world["editor"].post(url, json={"template_id": template_ids[0]})
     assert applied.status_code == 201, applied.text
     assert applied.json()[0]["source_template_name"] == "First item"
+    assert applied.json()[0]["source_category_name"] == "Apply category"
+    assert applied.json()[0]["source_system_name"] == "Apply system"
     existing_ids = set(
         db_session.scalars(
             select(ProjectInspectionItem.id).where(
@@ -733,6 +743,34 @@ def test_apply_single_uses_title_and_requires_exactly_one_source(
         )
         == existing_ids
     )
+
+
+def test_historic_project_item_without_source_path_is_returned_as_unknown(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    project = db_session.get(Project, world["project"].id)
+    assert project is not None
+    item = ProjectInspectionItem(
+        project_id=project.id,
+        sequence=1,
+        title="Legacy item",
+        instruction="Legacy instruction",
+        source_template_name="Repeated source name",
+        applied_at=project.created_at,
+        created_by=project.created_by,
+        updated_by=project.updated_by,
+    )
+    db_session.add(item)
+    db_session.commit()
+    response = world["editor"].get(
+        f"/api/v1/projects/{world['project'].id}/inspection-items"
+    )
+    assert response.status_code == 200, response.text
+    stored = response.json()["items"][0]
+    assert stored["source_template_name"] == "Repeated source name"
+    assert stored["source_category_name"] is None
+    assert stored["source_system_name"] is None
 
 
 def test_apply_empty_system_returns_successful_empty_list(
@@ -1000,12 +1038,14 @@ def test_project_item_can_be_saved_as_template_and_audited(
         "project_id": str(world["project"].id),
         "project_inspection_item_id": project_item_id,
         "system_id": target_system.json()["id"],
+        "title": "First item",
     }
 
-    conflict = world["template_admin"].post(url, json=body)
+    conflict = world["template_admin"].post(
+        url, json={**body, "name": "  fIrSt ItEm  "}
+    )
     assert conflict.status_code == 409
     assert conflict.json() == {"error": {"code": "template.name_conflict"}}
-
     normalized_system = world["template_admin"].post(
         f"/api/v1/template-categories/{target_category.json()['id']}/systems",
         json={"name": "Normalized conflict system"},
@@ -1077,6 +1117,77 @@ def test_project_item_can_be_saved_as_template_and_audited(
     )
     assert project_text is not None
     assert project_text.text == "As approved"
+
+
+def test_save_as_template_uses_optional_trimmed_name_and_audits_it(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    source_system_id, _ = _create_templates(world["admin"])
+    applied = world["editor"].post(
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template",
+        json={"system_id": source_system_id},
+    )
+    assert applied.status_code == 201, applied.text
+
+    category = world["admin"].post(
+        "/api/v1/template-categories", json={"name": "Save as category"}
+    )
+    system = world["admin"].post(
+        f"/api/v1/template-categories/{category.json()['id']}/systems",
+        json={"name": "Save as system"},
+    )
+    response = world["admin"].post(
+        f"/api/v1/projects/{world['project'].id}/templates",
+        json={
+            "project_inspection_item_id": applied.json()[0]["id"],
+            "system_id": system.json()["id"],
+            "name": "  Renamed template  ",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["title"] == "Renamed template"
+
+    event = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "template_item.created_from_project",
+            AuditLog.entity_id == UUID(response.json()["id"]),
+        )
+    )
+    assert event is not None
+    assert event.after["title"] == "Renamed template"
+
+
+@pytest.mark.parametrize("name", ["   ", "x" * 257])
+def test_save_as_template_rejects_blank_or_overlong_name(
+    db_session, make_client, name
+):
+    world = _world(db_session, make_client)
+    source_system_id, _ = _create_templates(world["admin"])
+    applied = world["editor"].post(
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template",
+        json={"system_id": source_system_id},
+    )
+    assert applied.status_code == 201, applied.text
+    category = world["admin"].post(
+        "/api/v1/template-categories", json={"name": "Invalid name category"}
+    )
+    system = world["admin"].post(
+        f"/api/v1/template-categories/{category.json()['id']}/systems",
+        json={"name": "Invalid name system"},
+    )
+    response = world["admin"].post(
+        f"/api/v1/projects/{world['project'].id}/templates",
+        json={
+            "project_inspection_item_id": applied.json()[0]["id"],
+            "system_id": system.json()["id"],
+            "name": name,
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "request.validation_failed"
 
 
 def test_project_item_list_authorization_and_cursor_pagination(
@@ -1249,3 +1360,115 @@ def test_save_as_template_rejects_a_source_with_two_photo_requirements(
     )
     assert listed.status_code == 200, listed.text
     assert listed.json()["items"] == []
+
+
+def test_apply_records_one_audit_event_with_item_count(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    system_id, template_ids = _create_templates(world["admin"])
+    url = (
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template"
+    )
+
+    single = world["editor"].post(url, json={"template_id": template_ids[0]})
+    assert single.status_code == 201, single.text
+    other_url = (
+        f"/api/v1/projects/{world['other_project'].id}"
+        "/inspection-items:apply-template"
+    )
+    system = world["admin"].post(other_url, json={"system_id": system_id})
+    assert system.status_code == 201, system.text
+
+    events = db_session.scalars(
+        select(AuditLog).where(
+            AuditLog.event_type == "project.template_applied"
+        )
+    ).all()
+    assert len(events) == 2
+    assert {
+        (
+            event.entity_id,
+            event.project_id,
+            event.after["source_type"],
+            event.after["item_count"],
+        )
+        for event in events
+    } == {
+        (world["project"].id, world["project"].id, "item", 1),
+        (world["other_project"].id, world["other_project"].id, "system", 2),
+    }
+    assert {event.after["source_id"] for event in events} == {
+        template_ids[0],
+        system_id,
+    }
+
+
+def test_empty_system_apply_does_not_write_audit_event(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    category = world["admin"].post(
+        "/api/v1/template-categories", json={"name": "Empty category"}
+    )
+    system = world["admin"].post(
+        f"/api/v1/template-categories/{category.json()['id']}/systems",
+        json={"name": "Empty system"},
+    )
+    before = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.event_type == "project.template_applied")
+    )
+
+    response = world["editor"].post(
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template",
+        json={"system_id": system.json()["id"]},
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.event_type == "project.template_applied")
+        )
+        == before
+    )
+
+
+def test_failed_apply_audit_rolls_back_project_item_copies(
+    db_session, make_client, monkeypatch
+):
+    world = _world(db_session, make_client)
+    system_id, _ = _create_templates(world["admin"])
+    before_audit_count = db_session.scalar(
+        select(func.count()).select_from(AuditLog)
+    )
+
+    def reject_event(*args, **kwargs):
+        raise RuntimeError("injected apply audit failure")
+
+    monkeypatch.setattr(project_templates, "record_audit_event", reject_event)
+    with pytest.raises(RuntimeError, match="injected apply audit failure"):
+        world["editor"].post(
+            f"/api/v1/projects/{world['project'].id}"
+            "/inspection-items:apply-template",
+            json={"system_id": system_id},
+        )
+
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(ProjectInspectionItem).where(
+                ProjectInspectionItem.project_id == world["project"].id
+            )
+        )
+        is None
+    )
+    assert (
+        db_session.scalar(select(func.count()).select_from(AuditLog))
+        == before_audit_count
+    )

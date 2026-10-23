@@ -15,6 +15,8 @@ export interface ProjectItemData {
   title: string
   instruction: string
   source_template_name: string
+  source_category_name?: string | null
+  source_system_name?: string | null
   applied_at: string
   inspection_points: InspectionPoint[]
 }
@@ -101,6 +103,16 @@ export function listProjectItems(
   projectId: string,
 ): Promise<ProjectItemData[]> {
   return listAllPages(`/projects/${projectId}/inspection-items`)
+}
+
+/** #435：由後端覆核任務引用，僅刪除未使用項目。 */
+export function deleteProjectItem(
+  projectId: string,
+  itemId: string,
+): Promise<void> {
+  return request(`/projects/${projectId}/inspection-items/${itemId}`, {
+    method: 'DELETE',
+  })
 }
 
 /** 保留既有識別，並讓新欄位與數值標準以穩定 client_id 綁定。 */

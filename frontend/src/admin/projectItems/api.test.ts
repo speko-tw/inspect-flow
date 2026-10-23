@@ -19,6 +19,8 @@ const item = {
   title: '混凝土表面',
   instruction: '檢查表面',
   source_template_name: '範本',
+  source_category_name: '土建工程',
+  source_system_name: '混凝土系統',
   applied_at: '2026-10-05T00:00:00Z',
   inspection_points: [
     {
