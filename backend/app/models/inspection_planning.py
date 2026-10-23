@@ -184,6 +184,8 @@ class InspectionTask(AuditMixin, TimestampedBase):
             "id",
         ),
         Index("ix_inspection_tasks_assignee_id", "assignee_id"),
+        Index("ix_inspection_tasks_started_by_id", "started_by"),
+        Index("ix_inspection_tasks_completed_by_id", "completed_by"),
         ForeignKeyConstraint(
             ["plan_id", "project_id"],
             ["inspection_plans.id", "inspection_plans.project_id"],

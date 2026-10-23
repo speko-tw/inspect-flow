@@ -45,6 +45,10 @@ interface FixtureOptions {
   }>
   testNavigation?: boolean
   onTemporaryPassword?: (username: string, password: string) => void
+  onTemporaryPasswordVisible?: (visible: boolean) => void
+  onRequestTemporaryPasswordLeave?: (action: () => void) => void
+  onWizardBackToList?: () => void
+  onWizardViewUser?: (id: string) => void
   failCreate?: boolean
   createUserResponse?: Promise<Response>
   failUserAccess?: boolean
@@ -56,6 +60,8 @@ interface FixtureOptions {
   accessResponse?: (userId: string) => Promise<Response>
   participationResponse?: (path: string) => Promise<Response>
   bundleApplyResponse?: (path: string) => Promise<Response>
+  projectCatalogResponse?: () => Promise<Response>
+  bundleCatalogResponse?: () => Promise<Response>
 }
 
 function permissionPage(options: FixtureOptions = {}) {
@@ -79,6 +85,7 @@ function permissionPage(options: FixtureOptions = {}) {
     name_zh: '林沐青',
     name_en: null,
     company_id: null,
+    company_name: null,
     department: null,
     location: null,
     employee_no: null,
@@ -235,6 +242,17 @@ function permissionPage(options: FixtureOptions = {}) {
         }
         return Response.json({ items: [member], next_cursor: null })
       }
+      if (method === 'GET' && path === `/users/${member.id}`) {
+        return Response.json(member)
+      }
+      if (method === 'GET' && path === '/users/other') {
+        return Response.json({
+          ...member,
+          id: 'other',
+          username: 'other.user',
+          name_zh: '另一帳號',
+        })
+      }
       if (method === 'GET' && path === '/module-delegate/users') {
         if (failUserCatalogOnce) {
           failUserCatalogOnce = false
@@ -318,6 +336,8 @@ function permissionPage(options: FixtureOptions = {}) {
         })
       }
       if (method === 'GET' && path === '/permission-bundles') {
+        if (options.bundleCatalogResponse)
+          return options.bundleCatalogResponse()
         return Response.json({
           items: options.missingBundle ? [] : bundles,
           next_cursor: null,
@@ -335,6 +355,8 @@ function permissionPage(options: FixtureOptions = {}) {
         return Response.json({ role_id: 'office-role' })
       }
       if (method === 'GET' && path === '/projects') {
+        if (options.projectCatalogResponse)
+          return options.projectCatalogResponse()
         return Response.json({
           items: [{ id: 'project-1', name: '示範工程' }],
           next_cursor: null,
@@ -582,6 +604,12 @@ function permissionPage(options: FixtureOptions = {}) {
           openWizardRequest={options.openWizardRequest}
           selectedUserId={selectedUserId}
           onTemporaryPassword={options.onTemporaryPassword}
+          onTemporaryPasswordVisible={options.onTemporaryPasswordVisible}
+          onRequestTemporaryPasswordLeave={
+            options.onRequestTemporaryPasswordLeave
+          }
+          onWizardBackToList={options.onWizardBackToList}
+          onWizardViewUser={options.onWizardViewUser}
         />
         {options.testNavigation && <Link to="/other">離開精靈</Link>}
       </>
@@ -614,7 +642,9 @@ async function chooseProfile(profile: string, projectId?: string) {
   fireEvent.click(screen.getByRole('radio', { name: new RegExp(profile) }))
   fireEvent.click(screen.getByRole('button', { name: '下一步' }))
   if (projectId) {
-    fireEvent.change(screen.getByLabelText('加入專案（可略過）'), {
+    const projectSelect = screen.getByLabelText('加入專案（可略過）')
+    await within(projectSelect).findByRole('option', { name: '示範工程' })
+    fireEvent.change(projectSelect, {
       target: { value: projectId },
     })
   }
@@ -655,6 +685,64 @@ function assignCandidateRole(roleName: string) {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ModulePermissionsPage', () => {
+  it('帳號能力頁只載入該帳號，診斷出現即載入專案選項', async () => {
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      selectedUserId: 'person',
+    })
+    await screen.findByRole('heading', { name: '能做什麼' })
+
+    expect(calls.some((call) => call.path === '/users/person')).toBe(true)
+    expect(calls.some((call) => call.path === '/users')).toBe(false)
+    expect(calls.some((call) => call.path === '/companies')).toBe(false)
+    expect(calls.some((call) => call.path === '/roles')).toBe(false)
+    await waitFor(() =>
+      expect(calls.filter((call) => call.path === '/projects')).toHaveLength(
+        1,
+      ),
+    )
+  })
+
+  it('新增精靈依步驟載入公司、專案與職務選項', async () => {
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      openWizardRequest: 1,
+    })
+    await screen.findByRole('heading', { name: '設定帳號' })
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === '/companies')).toBe(true),
+    )
+    expect(calls.some((call) => call.path === '/users')).toBe(false)
+    expect(calls.some((call) => call.path === '/roles')).toBe(false)
+    expect(calls.some((call) => call.path === '/projects')).toBe(false)
+    expect(calls.some((call) => call.path === '/permission-bundles')).toBe(
+      false,
+    )
+
+    await fillIdentity('lazy.options')
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === '/projects')).toBe(true),
+    )
+    expect(calls.some((call) => call.path === '/roles')).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === '/roles')).toBe(true),
+    )
+    expect(calls.some((call) => call.path === '/roles/creator-role')).toBe(
+      true,
+    )
+    expect(calls.some((call) => call.path === '/permission-bundles')).toBe(
+      true,
+    )
+    expect(calls.some((call) => call.path === '/users')).toBe(false)
+  })
+
   it('resets and opens the wizard for each external add-account request', async () => {
     const page = (request: number) => (
       <DataMemoryRouter>
@@ -1117,7 +1205,9 @@ describe('ModulePermissionsPage', () => {
     )
     fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
-    fireEvent.change(screen.getByLabelText('加入專案（可略過）'), {
+    const projectSelect = screen.getByLabelText('加入專案（可略過）')
+    await within(projectSelect).findByRole('option', { name: '示範工程' })
+    fireEvent.change(projectSelect, {
       target: { value: 'project-1' },
     })
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
@@ -1474,7 +1564,11 @@ describe('ModulePermissionsPage', () => {
   })
 
   it('retries only unfinished setup steps after account creation', async () => {
-    const { calls } = permissionPage({ failBundleOnce: true })
+    const onTemporaryPasswordVisible = vi.fn()
+    const { calls } = permissionPage({
+      failBundleOnce: true,
+      onTemporaryPasswordVisible,
+    })
     await screen.findByRole('heading', { name: '新增帳號' })
     await fillIdentity('retry.only')
     await chooseProfile('內業規劃')
@@ -1483,6 +1577,10 @@ describe('ModulePermissionsPage', () => {
     expect(
       await screen.findByRole('button', { name: '重試未完成的步驟' }),
     ).toBeVisible()
+    expect(onTemporaryPasswordVisible).toHaveBeenLastCalledWith(true)
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'temporary-secret',
+    )
     expect(
       calls.filter((call) => call.path === '/users' && call.method === 'POST'),
     ).toHaveLength(1)
@@ -1498,6 +1596,93 @@ describe('ModulePermissionsPage', () => {
     expect(calls.filter((call) => call.path.includes(':apply'))).toHaveLength(
       2,
     )
+  })
+
+  it('新增另一個帳號要先確認，取消保留密碼，確認後才重設精靈', async () => {
+    let confirmedAction: (() => void) | undefined
+    const requestLeave = vi.fn((action: () => void) => {
+      confirmedAction = action
+    })
+    permissionPage({ onRequestTemporaryPasswordLeave: requestLeave })
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('another.staff')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+    expect(
+      await screen.findByRole('heading', { name: '帳號已建立' }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '新增另一個帳號' }))
+    expect(requestLeave).toHaveBeenCalledOnce()
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'temporary-secret',
+    )
+    expect(screen.getByRole('heading', { name: '帳號已建立' })).toBeVisible()
+
+    confirmedAction?.()
+    expect(
+      await screen.findByRole('heading', { name: '新增帳號' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText('臨時密碼')).toBeNull()
+  })
+
+  it('回清單要先確認，取消保留密碼，確認後才離開精靈', async () => {
+    let confirmedAction: (() => void) | undefined
+    const requestLeave = vi.fn((action: () => void) => {
+      confirmedAction = action
+    })
+    const onWizardBackToList = vi.fn()
+    permissionPage({
+      onRequestTemporaryPasswordLeave: requestLeave,
+      onWizardBackToList,
+    })
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('back.to.list')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+    expect(
+      await screen.findByRole('heading', { name: '帳號已建立' }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    expect(requestLeave).toHaveBeenCalledOnce()
+    expect(onWizardBackToList).not.toHaveBeenCalled()
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'temporary-secret',
+    )
+
+    confirmedAction?.()
+    expect(onWizardBackToList).toHaveBeenCalledOnce()
+  })
+
+  it('查看能力要先確認，取消保留密碼，確認後才導向帳號能力', async () => {
+    let confirmedAction: (() => void) | undefined
+    const requestLeave = vi.fn((action: () => void) => {
+      confirmedAction = action
+    })
+    const onWizardViewUser = vi.fn()
+    permissionPage({
+      onRequestTemporaryPasswordLeave: requestLeave,
+      onWizardViewUser,
+    })
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('view.account')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+    expect(
+      await screen.findByRole('heading', { name: '帳號已建立' }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '查看這個帳號的能力' }))
+    expect(requestLeave).toHaveBeenCalledOnce()
+    expect(onWizardViewUser).not.toHaveBeenCalled()
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'temporary-secret',
+    )
+
+    confirmedAction?.()
+    expect(onWizardViewUser).toHaveBeenCalledOnce()
+    expect(onWizardViewUser).toHaveBeenCalledWith('created-person')
   })
 
   it('reconciles a member conflict after the add response is lost', async () => {
@@ -1820,7 +2005,11 @@ describe('ModulePermissionsPage', () => {
     expect(
       await screen.findByRole('heading', { name: '新增帳號' }),
     ).toBeVisible()
-    expect(screen.getByRole('status')).toHaveTextContent('步驟 1／4：帳號資料')
+    expect(
+      screen.getByText('步驟 1／4：帳號資料', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
     expect(screen.queryByText('帳號清單')).toBeNull()
   })
 
@@ -1828,7 +2017,11 @@ describe('ModulePermissionsPage', () => {
     permissionPage()
     await screen.findByRole('heading', { name: '新增帳號' })
 
-    expect(screen.getByRole('status')).toHaveTextContent('步驟 1／4：帳號資料')
+    expect(
+      screen.getByText('步驟 1／4：帳號資料', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
     expect(screen.queryByText('尚未開始')).toBeNull()
   })
 
@@ -2369,7 +2562,11 @@ describe('ModulePermissionsPage', () => {
       await screen.findByRole('heading', { name: '新增帳號' }),
     ).toBeVisible()
     expect(screen.queryByText('帳號清單')).toBeNull()
-    expect(screen.getByRole('status')).toHaveTextContent('步驟 1／4：帳號資料')
+    expect(
+      screen.getByText('步驟 1／4：帳號資料', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
   })
 
   it('compares candidate and current project permissions', async () => {
@@ -2384,7 +2581,10 @@ describe('ModulePermissionsPage', () => {
     fireEvent.change(screen.getByLabelText('要檢查的操作'), {
       target: { value: 'members' },
     })
-    fireEvent.change(await screen.findByLabelText('專案'), {
+    const projectSelect = await screen.findByLabelText('專案')
+    fireEvent.focus(projectSelect)
+    await within(projectSelect).findByRole('option', { name: '示範工程' })
+    fireEvent.change(projectSelect, {
       target: { value: 'project-1' },
     })
     fireEvent.click(screen.getByRole('button', { name: '檢查' }))
@@ -2430,7 +2630,8 @@ describe('ModulePermissionsPage', () => {
       embedded: true,
       selectedUserId: 'person',
     })
-    await screen.findByRole('heading', { name: '套用權限組合' })
+    fireEvent.click(screen.getByText('進階設定', { exact: true }))
+    await screen.findAllByRole('button', { name: '套用' })
 
     const bundleButton = screen.getAllByRole('button', { name: '套用' })[0]
     expect(bundleButton.closest('li')).toHaveClass('permission-bundle-row')
@@ -2442,5 +2643,239 @@ describe('ModulePermissionsPage', () => {
     await screen.findByRole('heading', { name: '帳號權限' })
     expect(screen.queryByRole('button', { name: '林沐青' })).toBeNull()
     expect(screen.getByRole('button', { name: '候選人' })).toBeVisible()
+  })
+})
+
+describe('帳號審查修正（#414）', () => {
+  it('同一帳號重新套用職務後查看能力會重新載入並可檢查', async () => {
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      selectedUserId: 'person',
+      permissionCodes: ['project.use'],
+    })
+    await screen.findByText(/能使用：使用專案功能/)
+    const accessCalls = () =>
+      calls.filter((c) => c.path === '/users/person/module-permissions').length
+    const beforeApply = accessCalls()
+    fireEvent.click(screen.getByRole('button', { name: '重新套用職務' }))
+    fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(
+      screen.getAllByRole('button', { name: '套用職務' }).at(-1)!,
+    )
+    await screen.findByText('林沐青 的職務與權限設定已完成。')
+    await waitFor(() => expect(accessCalls()).toBe(beforeApply + 1))
+    const beforeView = accessCalls()
+    fireEvent.click(screen.getByRole('button', { name: '查看這個帳號的能力' }))
+    const summary = await screen.findByRole('region', { name: '帳號能力摘要' })
+    await waitFor(() => expect(summary).not.toHaveTextContent('載入中'))
+    expect(summary).toHaveTextContent('使用專案功能')
+    const select = within(summary).getByLabelText('專案')
+    await within(select).findByRole('option', { name: '示範工程' })
+    fireEvent.change(select, { target: { value: 'project-1' } })
+    expect(within(summary).getByRole('button', { name: '檢查' })).toBeEnabled()
+    expect(accessCalls()).toBe(beforeView + 1)
+  })
+
+  it('建立成功但組合失敗時以已知帳號顯示能力，不無限載入', async () => {
+    permissionPage({
+      embedded: true,
+      openWizard: false,
+      openWizardRequest: 1,
+      failBundleOnce: true,
+    })
+    await screen.findByRole('heading', { name: '設定帳號' })
+    await fillIdentity('partial.summary')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+    await screen.findByText(/帳號已建立；後續權限/)
+    const summary = screen.getByRole('region', { name: '帳號能力摘要' })
+    expect(await within(summary).findByText(/尚未開通功能/)).toBeVisible()
+    expect(summary).not.toHaveTextContent('載入中')
+    expect(
+      screen.getByRole('button', { name: '重試未完成的步驟' }),
+    ).toBeVisible()
+  })
+
+  it('診斷出現即載入一次專案，等候時有停用的載入選項', async () => {
+    const projects = deferred<Response>()
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      selectedUserId: 'person',
+      projectCatalogResponse: () => projects.promise,
+    })
+    const select = screen.getByLabelText('專案')
+    expect(
+      await within(select).findByRole('option', { name: '載入專案中…' }),
+    ).toBeDisabled()
+    expect(select).toBeDisabled()
+    await act(async () =>
+      projects.resolve(
+        Response.json({
+          items: [{ id: 'project-1', name: '示範工程' }],
+          next_cursor: null,
+        }),
+      ),
+    )
+    expect(
+      await within(select).findByRole('option', { name: '示範工程' }),
+    ).toBeVisible()
+    expect(select).toBeEnabled()
+    fireEvent.focus(select)
+    fireEvent.blur(select)
+    fireEvent.focus(select)
+    expect(calls.filter((c) => c.path === '/projects')).toHaveLength(1)
+  })
+
+  it('進階設定載入時有提示，重新展開沿用第一次的資料', async () => {
+    const bundles = deferred<Response>()
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      selectedUserId: 'person',
+      bundleCatalogResponse: () => bundles.promise,
+    })
+    const toggle = screen.getByText('進階設定', { exact: true })
+    const details = toggle.closest('details')!
+    fireEvent.click(toggle)
+    expect(
+      await within(details).findByText('載入中…', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
+    fireEvent.click(toggle)
+    fireEvent.click(toggle)
+    await act(async () =>
+      bundles.resolve(
+        Response.json({
+          items: [
+            {
+              id: 'cached',
+              name: '快取組合',
+              permission_codes: ['project.use'],
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+    )
+    expect(await within(details).findByText('快取組合')).toBeVisible()
+    await waitFor(() =>
+      expect(within(details).queryByText('載入中…')).toBeNull(),
+    )
+    fireEvent.click(toggle)
+    await waitFor(() => expect(details).not.toHaveAttribute('open'))
+    fireEvent.click(toggle)
+    await waitFor(() => expect(details).toHaveAttribute('open'))
+    expect(within(details).queryByText('載入中…')).toBeNull()
+    expect(calls.filter((c) => c.path === '/permission-bundles')).toHaveLength(
+      1,
+    )
+  })
+})
+
+describe('第二輪審查的區塊錯誤恢復（#414）', () => {
+  it.each([1, 2])(
+    '專案選項失敗 %i 次後重試成功會清除區塊錯誤',
+    async (failures) => {
+      let attempts = 0
+      permissionPage({
+        embedded: true,
+        openWizard: false,
+        selectedUserId: 'person',
+        projectCatalogResponse: async () => {
+          attempts += 1
+          return attempts <= failures
+            ? Response.json({ error: { code: 'x' } }, { status: 500 })
+            : Response.json({
+                items: [{ id: 'project-1', name: '示範工程' }],
+                next_cursor: null,
+              })
+        },
+      })
+      const summary = await screen.findByRole('region', {
+        name: '帳號能力摘要',
+      })
+      for (let attempt = 0; attempt < failures; attempt += 1) {
+        expect(await within(summary).findByRole('alert')).toHaveTextContent(
+          '專案選項載入失敗',
+        )
+        expect(screen.getAllByRole('alert')).toHaveLength(1)
+        fireEvent.click(
+          within(summary).getByRole('button', {
+            name: '重新載入專案選項',
+          }),
+        )
+      }
+      expect(
+        await within(summary).findByRole('option', {
+          name: '示範工程',
+        }),
+      ).toBeVisible()
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(attempts).toBe(failures + 1)
+    },
+  )
+
+  it('進階設定失敗後可在區塊內重試，成功清除錯誤', async () => {
+    let attempts = 0
+    permissionPage({
+      embedded: true,
+      openWizard: false,
+      selectedUserId: 'person',
+      bundleCatalogResponse: async () => {
+        attempts += 1
+        return attempts === 1
+          ? Response.json({ error: { code: 'x' } }, { status: 500 })
+          : Response.json({ items: [], next_cursor: null })
+      },
+    })
+    const toggle = screen.getByText('進階設定', { exact: true })
+    const details = toggle.closest('details')!
+    fireEvent.click(toggle)
+    expect(await within(details).findByRole('alert')).toHaveTextContent(
+      '進階設定載入失敗',
+    )
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    fireEvent.click(
+      within(details).getByRole('button', {
+        name: '重新載入進階設定',
+      }),
+    )
+    await waitFor(() => {
+      expect(within(details).queryByRole('alert')).toBeNull()
+      expect(within(details).queryByText('載入中…')).toBeNull()
+    })
+    expect(attempts).toBe(2)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('專案選項失敗不會阻止 embedded 進階設定載入', async () => {
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      selectedUserId: 'person',
+      projectCatalogResponse: async () =>
+        Response.json({ error: { code: 'x' } }, { status: 500 }),
+    })
+    const summary = await screen.findByRole('region', { name: '帳號能力摘要' })
+    await within(summary).findByRole('alert')
+    const toggle = screen.getByText('進階設定', { exact: true })
+    const details = toggle.closest('details')!
+    fireEvent.click(toggle)
+    expect(await within(details).findByText('專案工程師常用')).toBeVisible()
+    expect(within(details).queryByRole('alert')).toBeNull()
+    expect(within(details).queryByText('載入中…')).toBeNull()
+    fireEvent.click(toggle)
+    await waitFor(() => expect(details).not.toHaveAttribute('open'))
+    fireEvent.click(toggle)
+    await waitFor(() => expect(details).toHaveAttribute('open'))
+    expect(calls.filter((c) => c.path === '/permission-bundles')).toHaveLength(
+      1,
+    )
+    expect(calls.filter((c) => c.path === '/projects')).toHaveLength(1)
   })
 })

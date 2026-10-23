@@ -77,6 +77,11 @@ export interface ProjectMember {
   module_status: ModuleStatus
 }
 
+export interface BatchProjectMemberRolesItem {
+  user_id: string
+  role_ids: string[]
+}
+
 /** ADM-R34：可指派角色及外部協作者可用狀態。 */
 export interface Role {
   id: string
@@ -182,6 +187,17 @@ export function setProjectMemberRoles(
   return request(`/projects/${projectId}/members/${userId}/roles`, {
     method: 'PUT',
     body: JSON.stringify({ role_ids: roleIds }),
+  })
+}
+
+/** ADM-R13：以一個原子請求替換多位成員的專案角色。 */
+export function setProjectMemberRolesBatch(
+  projectId: string,
+  items: BatchProjectMemberRolesItem[],
+): Promise<{ items: ProjectMember[] }> {
+  return request(`/projects/${projectId}/members:batch-roles`, {
+    method: 'POST',
+    body: JSON.stringify({ items }),
   })
 }
 

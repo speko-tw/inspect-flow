@@ -15,6 +15,7 @@ export interface User {
   name_zh: string | null
   name_en: string | null
   company_id: string | null
+  company_name?: string | null
   department: string | null
   location: string | null
   employee_no: string | null
@@ -30,6 +31,11 @@ export interface User {
   is_system: boolean
   is_external_collaborator?: boolean
   account_expires_on?: string | null
+}
+
+/** ADM-R47：詳情與單筆修改回應保證包含公司名稱，未連結時為 null。 */
+export interface UserDetail extends User {
+  company_name: string | null
 }
 
 export interface RestorePreview {
@@ -75,6 +81,12 @@ export interface Company {
   is_active: boolean
 }
 
+export interface BatchCompanyStatusItem {
+  company_id: string
+  is_active: boolean
+  disable_user_ids: string[]
+}
+
 export interface Page<T> {
   items: T[]
   next_cursor: string | null
@@ -107,6 +119,31 @@ export type UserInput = {
 
 export interface CreatedUser extends User {
   temporary_password: string
+}
+
+export interface TemporaryPasswordReset {
+  user_id: string
+  username: string
+  temporary_password: string
+  must_change_password: true
+}
+
+export interface UserRestoreSelection {
+  permission_codes: string[]
+  delegated_modules: string[]
+  project_ids: string[]
+  task_ids: string[]
+}
+
+export interface BatchUserStatusItem {
+  user_id: string
+  restore: UserRestoreSelection
+}
+
+export interface BatchUserStatusInput {
+  user_ids: string[]
+  is_active: boolean
+  restore?: BatchUserStatusItem[]
 }
 
 /** API 管理錯誤的 code 是錯誤 envelope 內的 `error.code`。 */
@@ -154,7 +191,7 @@ export function createUser(input: UserInput): Promise<CreatedUser> {
 export function updateUser(
   id: string,
   input: Partial<UserInput>,
-): Promise<User> {
+): Promise<UserDetail> {
   return request(`/users/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
@@ -165,25 +202,48 @@ export function linkUserCompany(
   id: string,
   companyId: string | null,
   fields: Pick<UserInput, 'department' | 'location' | 'employee_no'> = {},
-): Promise<User> {
+): Promise<UserDetail> {
   return request(`/users/${id}/company`, {
     method: 'PUT',
     body: JSON.stringify({ company_id: companyId, ...fields }),
   })
 }
 
-export function setUserAdmin(id: string, isAdmin: boolean): Promise<User> {
+export function setUserAdmin(
+  id: string,
+  isAdmin: boolean,
+): Promise<UserDetail> {
   return request(`/users/${id}/admin`, {
     method: 'PUT',
     body: JSON.stringify({ is_admin: isAdmin }),
   })
 }
 
-export function setUserActive(id: string, isActive: boolean): Promise<User> {
+export function setUserActive(
+  id: string,
+  isActive: boolean,
+): Promise<UserDetail> {
   return request(`/users/${id}/active`, {
     method: 'PUT',
     body: JSON.stringify({ is_active: isActive }),
   })
+}
+
+/** ADM-R13：原子批次更新帳號狀態；啟用時需附每個帳號的恢復選擇。 */
+export function setUsersActiveStatus(
+  input: BatchUserStatusInput,
+): Promise<{ items: User[] }> {
+  return request('/users:batch-active-status', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+/** ADM-R13：Admin 重設既有帳號的臨時密碼，只回傳一次。 */
+export function resetUserTemporaryPassword(
+  id: string,
+): Promise<TemporaryPasswordReset> {
+  return request(`/users/${id}/temporary-password`, { method: 'POST' })
 }
 
 export function getDeactivationCheck(id: string): Promise<DeactivationCheck> {
@@ -255,6 +315,16 @@ export function setCompanyActive(
   })
 }
 
+/** ADM-R13：原子批次更新公司狀態與明確選取的帳號。 */
+export function setCompaniesStatus(
+  items: BatchCompanyStatusItem[],
+): Promise<{ items: Company[] }> {
+  return request('/companies:batch-status', {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  })
+}
+
 export function listActiveCompanyUsers(
   id: string,
 ): Promise<ActiveCompanyUsers> {
@@ -282,5 +352,15 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 export function managementErrorMessage(error: unknown): string {
+  const batchLimitMessage = '一次最多選取 200 筆，請減少數量後再試。'
+  // ADM-R13、#414：只轉達已知的批次提示，不顯示其他原始錯誤細節。
+  if (
+    error instanceof ManagementApiError &&
+    error.code === 'request.validation_failed' &&
+    Array.isArray(error.details) &&
+    error.details.includes(batchLimitMessage)
+  ) {
+    return batchLimitMessage
+  }
   return httpErrorMessage(error, { codes: ERROR_MESSAGES })
 }

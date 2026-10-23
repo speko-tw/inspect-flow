@@ -15,10 +15,12 @@ const ignoreDirtyChange = (): void => undefined
 
 export default function UserForm({
   companies,
+  onCompanyOptionsRequested,
   onCreated,
   onDirtyChange = ignoreDirtyChange,
 }: {
   companies: Company[]
+  onCompanyOptionsRequested?: () => void
   onCreated: (user: CreatedUser) => void
   /** 回報草稿狀態；不需離頁保護的設定流程可省略。 */
   onDirtyChange?: (dirty: boolean) => void
@@ -289,6 +291,7 @@ export default function UserForm({
             <select
               {...control}
               onChange={(event) => changeCompany(event.target.value)}
+              onFocus={onCompanyOptionsRequested}
               value={companyId}
             >
               <option value="">未連結公司</option>

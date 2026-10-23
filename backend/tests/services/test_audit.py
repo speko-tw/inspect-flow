@@ -81,7 +81,20 @@ _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
 def test_alg_ac14_ac15_management_event_catalog():
     username_event = _EVENT_CATALOG["user.username_changed"]
     company_event = _EVENT_CATALOG["user.company_changed"]
+    email_event = _EVENT_CATALOG["user.email_changed"]
+    expiry_event = _EVENT_CATALOG["user.account_expiry_changed"]
+    created_event = _EVENT_CATALOG["user.created"]
     assert username_event.fields == {"username"}
+    assert email_event.fields == {"email"}
+    assert expiry_event.fields == {"account_expires_on"}
+    assert expiry_event.nullable_fields == {"account_expires_on"}
+    assert created_event.fields == {
+        "username",
+        "name_zh",
+        "email",
+        "is_external_collaborator",
+        "auth_source",
+    }
     assert company_event.fields == {
         "company_id",
         "employee_no",
@@ -90,7 +103,13 @@ def test_alg_ac14_ac15_management_event_catalog():
     }
     assert company_event.always_recorded == company_event.fields
     assert company_event.nullable_fields == company_event.fields
-    for definition in (username_event, company_event):
+    for definition in (
+        username_event,
+        company_event,
+        email_event,
+        expiry_event,
+        created_event,
+    ):
         assert _EVENT_TYPE_RE.match(definition.event_type)
         assert definition.entity_type == "user"
         for field_name in definition.fields:
@@ -258,6 +277,15 @@ def test_alg_ac19_to_ac24_two_layer_event_catalog():
             "reason",
         },
         "user.external_flag_changed": {"is_external_collaborator"},
+        "user.email_changed": {"email"},
+        "user.account_expiry_changed": {"account_expires_on"},
+        "user.created": {
+            "username",
+            "name_zh",
+            "email",
+            "is_external_collaborator",
+            "auth_source",
+        },
     }
     for event_type, fields in expected.items():
         definition = _EVENT_CATALOG[event_type]

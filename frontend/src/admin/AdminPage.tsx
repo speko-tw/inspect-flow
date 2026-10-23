@@ -18,6 +18,8 @@ import {
 } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import ChangePasswordPage from '../auth/ChangePasswordPage'
+import { ConfirmBox } from '../ui/ConfirmBox'
+import { useUnsavedNavigationGuard } from '../ui/navigation'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import AccessDeniedPage from '../components/layout/AccessDeniedPage'
 import { NAV_LABELS, PAGE_TITLES } from '../layout/navigationLabels'
@@ -233,6 +235,42 @@ export default function AdminPage() {
   )
 }
 
+/** ADM-R15、#499：結果出現時才掛載 blocker，避免與帳號精靈重疊。 */
+function TemporaryPasswordResult({
+  children,
+  onDone,
+}: {
+  children: ReactNode
+  onDone: () => void
+}) {
+  const guard = useUnsavedNavigationGuard(true, '臨時密碼抄下了嗎？')
+  return (
+    <>
+      {guard.pending && (
+        <ConfirmBox
+          cancelLabel="留在此頁"
+          confirmLabel="離開此頁"
+          onCancel={guard.stay}
+          onConfirm={guard.leave}
+          title="臨時密碼抄下了嗎？"
+        >
+          <p>離開後就無法再次查看臨時密碼。</p>
+        </ConfirmBox>
+      )}
+      <section
+        aria-labelledby="temporary-password-heading"
+        className="temporary-password-result notice-success"
+        role="status"
+      >
+        {children}
+        <button onClick={() => guard.allowNavigation(onDone)} type="button">
+          已抄下，回到帳號清單
+        </button>
+      </section>
+    </>
+  )
+}
+
 function AdminPageContent() {
   const { user } = useCurrentUser()
   const location = useLocation()
@@ -241,6 +279,8 @@ function AdminPageContent() {
     username: string
     password: string
     locationKey: string
+    path: string
+    source: 'created' | 'reset'
   } | null>(null)
   const resultHeadingRef = useRef<HTMLHeadingElement>(null)
   const hasGlobalAccess = hasGlobalDashboardAccess(user)
@@ -254,8 +294,7 @@ function AdminPageContent() {
 
   if (
     temporaryPassword &&
-    (location.pathname !==
-      ROUTES.adminPeople.path.replace('/:personId?', '') ||
+    (location.pathname !== temporaryPassword.path ||
       location.key !== temporaryPassword.locationKey)
   ) {
     setTemporaryPassword(null)
@@ -288,12 +327,9 @@ function AdminPageContent() {
             <h1 className="topbar-badge">Admin</h1>
           )
         }
-        locked={temporaryPassword !== null}
-        lockedNote="請先抄下臨時密碼，才能離開這一頁。"
         navItems={adminNavigationItems(user, dashboardAccess)}
         managementItems={MANAGEMENT_ITEMS}
         navLabel="管理功能"
-        onNavigate={() => setTemporaryPassword(null)}
         user={user}
       />
       <main>
@@ -303,36 +339,29 @@ function AdminPageContent() {
           </p>
         )}
         {temporaryPassword &&
-        location.pathname ===
-          ROUTES.adminPeople.path.replace('/:personId?', '') &&
+        location.pathname === temporaryPassword.path &&
         location.key === temporaryPassword.locationKey ? (
-          <section
-            aria-labelledby="temporary-password-heading"
-            className="temporary-password-result notice-success"
-            role="status"
+          <TemporaryPasswordResult
+            onDone={() => {
+              setTemporaryPassword(null)
+              navigate(ROUTES.adminPeople.path.replace('/:personId?', ''), {
+                replace: true,
+              })
+            }}
           >
             <h2
               id="temporary-password-heading"
               ref={resultHeadingRef}
               tabIndex={-1}
             >
-              帳號已新增
+              {temporaryPassword.source === 'created'
+                ? '帳號已新增'
+                : '臨時密碼已重設'}
             </h2>
             <p>帳號：{temporaryPassword.username}</p>
             <p>離開此頁後無法再次查看，首次登入必須變更密碼。</p>
             <TemporaryPassword password={temporaryPassword.password} />
-            <button
-              onClick={() => {
-                setTemporaryPassword(null)
-                navigate(ROUTES.adminPeople.path.replace('/:personId?', ''), {
-                  replace: true,
-                })
-              }}
-              type="button"
-            >
-              已抄下，回到帳號列表
-            </button>
-          </section>
+          </TemporaryPasswordResult>
         ) : (
           <Routes>
             <Route
@@ -353,11 +382,13 @@ function AdminPageContent() {
               path={nestedRoutePath(ROUTES.adminPeople, ROUTES.adminShell)}
               element={
                 <PeoplePage
-                  onTemporaryPassword={(username, password) =>
+                  onTemporaryPassword={(username, password, source) =>
                     setTemporaryPassword({
                       username,
                       password,
                       locationKey: location.key,
+                      path: location.pathname,
+                      source: source ?? 'created',
                     })
                   }
                 />

@@ -30,7 +30,9 @@ import {
   listUnmanagedProjects,
   request,
   reactivateUser,
+  resetUserTemporaryPassword,
   setUserActive,
+  setUsersActiveStatus,
   setUserAdmin,
   updateUser,
   type Company,
@@ -38,11 +40,28 @@ import {
   type RestorePreview,
   type UnmanagedProject,
   type User,
+  type UserDetail,
 } from './api'
 import { useCursorList } from './useCursorList'
 import UserForm from './UserForm'
 import { ACCOUNT_LABEL } from '../layout/navigationLabels'
 import './UsersPage.css'
+
+type RestorePreviewSelection = {
+  permission_codes: string[]
+  delegated_modules: string[]
+  project_ids: string[]
+  task_ids: string[]
+}
+
+function emptyRestorePreviewSelection(): RestorePreviewSelection {
+  return {
+    permission_codes: [],
+    delegated_modules: [],
+    project_ids: [],
+    task_ids: [],
+  }
+}
 
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
@@ -86,7 +105,11 @@ export default function UsersPage({
   onDirtyChange,
   onSelectUser,
 }: {
-  onTemporaryPassword: (username: string, password: string) => void
+  onTemporaryPassword: (
+    username: string,
+    password: string,
+    source?: 'created' | 'reset',
+  ) => void
   detailUserId?: string | null
   initialQuery?: string
   hideCreateForm?: boolean
@@ -114,12 +137,21 @@ export default function UsersPage({
     loadMore,
   } = userList
   const [companies, setCompanies] = useState<Company[]>([])
+  const companyListLoaded = useRef(false)
+  const companyListRequest = useRef<Promise<void> | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
   const [detailError, setDetailError] = useState('')
+  const [passwordResetError, setPasswordResetError] = useState<{
+    userId: string
+    message: string
+  } | null>(null)
   const [externalNoProject, setExternalNoProject] = useState<User[]>([])
   const [unmanagedProjects, setUnmanagedProjects] = useState<
     UnmanagedProject[]
   >([])
+  const [lifecycleLoaded, setLifecycleLoaded] = useState(false)
+  const [lifecycleLoading, setLifecycleLoading] = useState(false)
+  const [lifecycleError, setLifecycleError] = useState('')
   const [companyListError, setCompanyListError] = useState('')
   // 修改資料與公司連結的存檔錯誤：顯示在那一列的表單裡並聚焦。放在頁頂
   // 的話，列表一長就在視窗外，螢幕閱讀器使用者也不會被帶過去（F-O02）。
@@ -146,6 +178,29 @@ export default function UsersPage({
     DeactivationCheck | RestorePreview | null
   >(null)
   const [previewError, setPreviewError] = useState('')
+  const [selectedBatchUserIds, setSelectedBatchUserIds] = useState<string[]>(
+    [],
+  )
+  const [batchDeactivationLoading, setBatchDeactivationLoading] =
+    useState(false)
+  const [batchDeactivationBusy, setBatchDeactivationBusy] = useState(false)
+  const [batchDeactivationError, setBatchDeactivationError] = useState('')
+  const [batchDeactivationNotice, setBatchDeactivationNotice] = useState('')
+  const [batchDeactivationPreview, setBatchDeactivationPreview] = useState<{
+    users: User[]
+    projects: DeactivationCheck['last_manager_projects']
+  } | null>(null)
+  const [batchActivationLoading, setBatchActivationLoading] = useState(false)
+  const [batchActivationBusy, setBatchActivationBusy] = useState(false)
+  const [batchActivationError, setBatchActivationError] = useState('')
+  const [batchActivationNotice, setBatchActivationNotice] = useState('')
+  const [batchActivationPreview, setBatchActivationPreview] = useState<{
+    users: User[]
+    previews: RestorePreview[]
+  } | null>(null)
+  const [batchRestoreSelections, setBatchRestoreSelections] = useState<
+    Record<string, RestorePreviewSelection>
+  >({})
   const [restoreSelection, setRestoreSelection] = useState({
     permission_codes: [] as string[],
     delegated_modules: [] as string[],
@@ -193,7 +248,7 @@ export default function UsersPage({
     let active = true
     setDetailUser(null)
     setDetailError('')
-    void request<User>(`/users/${encodeURIComponent(detailUserId)}`)
+    void request<UserDetail>(`/users/${encodeURIComponent(detailUserId)}`)
       .then((user) => active && setDetailUser(user))
       .catch((caught: unknown) => {
         if (active) setDetailError(managementErrorMessage(caught))
@@ -247,18 +302,32 @@ export default function UsersPage({
   }, [pendingAction])
 
   const loadCompanies = useCallback(async () => {
+    if (companyListLoaded.current) return
+    if (companyListRequest.current) return companyListRequest.current
     const id = ++companyRequestId.current
     setCompanyListError('')
-    try {
-      const nextCompanies = await listCompanies()
-      if (id === companyRequestId.current) setCompanies(nextCompanies)
-    } catch (caught) {
-      if (id === companyRequestId.current)
-        setCompanyListError(managementErrorMessage(caught))
-    }
+    const companyOptionsRequest = listCompanies()
+      .then((nextCompanies) => {
+        if (id === companyRequestId.current) {
+          setCompanies(nextCompanies)
+          companyListLoaded.current = true
+        }
+      })
+      .catch((caught: unknown) => {
+        if (id === companyRequestId.current)
+          setCompanyListError(managementErrorMessage(caught))
+      })
+      .finally(() => {
+        if (id === companyRequestId.current) companyListRequest.current = null
+      })
+    companyListRequest.current = companyOptionsRequest
+    return companyOptionsRequest
   }, [])
 
   const loadLifecycleLists = useCallback(async () => {
+    if (lifecycleLoading) return
+    setLifecycleLoading(true)
+    setLifecycleError('')
     try {
       const [externalUsers, projects] = await Promise.all([
         listExternalUsersWithoutProject(),
@@ -266,19 +335,19 @@ export default function UsersPage({
       ])
       setExternalNoProject(externalUsers)
       setUnmanagedProjects(projects)
-    } catch {
-      setExternalNoProject([])
-      setUnmanagedProjects([])
+      setLifecycleLoaded(true)
+    } catch (caught) {
+      setLifecycleError(managementErrorMessage(caught))
+    } finally {
+      setLifecycleLoading(false)
     }
-  }, [])
+  }, [lifecycleLoading])
 
   useEffect(() => {
-    void loadCompanies()
-    void loadLifecycleLists()
     return () => {
       companyRequestId.current += 1
     }
-  }, [loadCompanies, loadLifecycleLists])
+  }, [loadCompanies])
 
   async function act(
     userId: string,
@@ -309,6 +378,163 @@ export default function UsersPage({
       actionGuard.leave()
       setBusyUser(null)
     }
+  }
+
+  async function resetTemporaryPassword(user: User) {
+    if (busyUser !== null || user.id === currentUser.id) return
+    setPasswordResetError(null)
+    setBusyUser(user.id)
+    try {
+      const result = await resetUserTemporaryPassword(user.id)
+      onTemporaryPassword(user.username, result.temporary_password, 'reset')
+    } catch (caught) {
+      setPasswordResetError({
+        userId: user.id,
+        message: managementErrorMessage(caught),
+      })
+    } finally {
+      setBusyUser(null)
+    }
+  }
+
+  async function prepareBatchDeactivation() {
+    const selected = users.filter(
+      (user) =>
+        selectedBatchUserIds.includes(user.id) && user.id !== currentUser.id,
+    )
+    if (selected.length === 0 || batchDeactivationLoading) return
+    setBatchDeactivationError('')
+    setBatchDeactivationNotice('')
+    setBatchDeactivationLoading(true)
+    try {
+      const checks = await Promise.all(
+        selected.map((user) => getDeactivationCheck(user.id)),
+      )
+      const projects = new Map<
+        string,
+        DeactivationCheck['last_manager_projects'][number]
+      >()
+      checks.forEach((check) => {
+        check.last_manager_projects.forEach((project) =>
+          projects.set(project.id, project),
+        )
+      })
+      setBatchDeactivationPreview({
+        users: selected,
+        projects: [...projects.values()],
+      })
+    } catch (caught) {
+      setBatchDeactivationError(managementErrorMessage(caught))
+    } finally {
+      setBatchDeactivationLoading(false)
+    }
+  }
+
+  async function confirmBatchDeactivation() {
+    if (!batchDeactivationPreview || batchDeactivationBusy) return
+    setBatchDeactivationBusy(true)
+    setBatchDeactivationError('')
+    try {
+      await setUsersActiveStatus({
+        user_ids: batchDeactivationPreview.users.map((user) => user.id),
+        is_active: false,
+      })
+      setBatchDeactivationNotice(
+        `已停用 ${batchDeactivationPreview.users.length} 個帳號。`,
+      )
+      setSelectedBatchUserIds([])
+      setBatchDeactivationPreview(null)
+      await reload()
+    } catch (caught) {
+      setBatchDeactivationError(managementErrorMessage(caught))
+    } finally {
+      setBatchDeactivationBusy(false)
+    }
+  }
+
+  async function prepareBatchActivation() {
+    const selected = users.filter((user) =>
+      selectedBatchUserIds.includes(user.id),
+    )
+    if (
+      selected.length === 0 ||
+      selected.some((user) => user.is_active || user.is_system) ||
+      batchActivationLoading
+    )
+      return
+    setBatchActivationError('')
+    setBatchActivationNotice('')
+    setBatchActivationLoading(true)
+    try {
+      const previews = await Promise.all(
+        selected.map((user) => getReactivationPreview(user.id)),
+      )
+      setBatchActivationPreview({ users: selected, previews })
+      setBatchRestoreSelections(
+        Object.fromEntries(
+          previews.map((preview) => [
+            preview.user_id,
+            emptyRestorePreviewSelection(),
+          ]),
+        ),
+      )
+    } catch (caught) {
+      setBatchActivationError(managementErrorMessage(caught))
+    } finally {
+      setBatchActivationLoading(false)
+    }
+  }
+
+  async function confirmBatchActivation() {
+    if (!batchActivationPreview || batchActivationBusy) return
+    const { users: selected } = batchActivationPreview
+    const restore = selected.map((user) => ({
+      user_id: user.id,
+      restore:
+        batchRestoreSelections[user.id] ?? emptyRestorePreviewSelection(),
+    }))
+    setBatchActivationBusy(true)
+    setBatchActivationError('')
+    try {
+      await setUsersActiveStatus({
+        user_ids: selected.map((user) => user.id),
+        is_active: true,
+        restore,
+      })
+      setBatchActivationNotice(`已啟用 ${selected.length} 個帳號。`)
+      setSelectedBatchUserIds([])
+      setBatchActivationPreview(null)
+      await reload()
+    } catch (caught) {
+      setBatchActivationError(managementErrorMessage(caught))
+    } finally {
+      setBatchActivationBusy(false)
+    }
+  }
+
+  function toggleBatchRestoreSelection(
+    userId: string,
+    category: keyof RestorePreviewSelection,
+    value: string,
+  ) {
+    setBatchRestoreSelections((current) => {
+      const selection = current[userId] ?? emptyRestorePreviewSelection()
+      const values = selection[category]
+      return {
+        ...current,
+        [userId]: {
+          ...selection,
+          [category]: values.includes(value)
+            ? values.filter((item) => item !== value)
+            : [...values, value],
+        },
+      }
+    })
+  }
+
+  function cancelBatchDeactivation() {
+    setBatchDeactivationPreview(null)
+    setBatchDeactivationError('')
   }
 
   // 收回「自己」的管理者權限：先確認；成功後不能再重新載入列表
@@ -369,7 +595,7 @@ export default function UsersPage({
       setEditingUser(null)
       setEditingCompany(null)
       await reload()
-      await loadLifecycleLists()
+      if (lifecycleLoaded) await loadLifecycleLists()
     } catch (caught) {
       setActionError(managementErrorMessage(caught))
     } finally {
@@ -424,7 +650,7 @@ export default function UsersPage({
 
   function created(user: { username: string; temporary_password: string }) {
     setDirtyForms({})
-    onTemporaryPassword(user.username, user.temporary_password)
+    onTemporaryPassword(user.username, user.temporary_password, 'created')
     void reload()
     void loadCompanies()
   }
@@ -434,7 +660,7 @@ export default function UsersPage({
   // 在「帳號」頁（有 onSelectUser）裡，頁面標題已是「帳號」，清單不再
   // 重複標題；連結到詳情的列也沒有操作欄，只有四欄（#713）。
   const embeddedList = Boolean(onSelectUser)
-  const listColumnCount = embeddedList ? 4 : 6
+  const listColumnCount = embeddedList ? 5 : 7
 
   return (
     <section
@@ -451,6 +677,165 @@ export default function UsersPage({
     >
       {!externalNavigationGuard && (
         <UsersNavigationGuard hasUnsavedChanges={hasDirtyForms} />
+      )}
+      {batchDeactivationError && <p role="alert">{batchDeactivationError}</p>}
+      {batchDeactivationNotice && (
+        <p role="status">{batchDeactivationNotice}</p>
+      )}
+      {batchActivationError && <p role="alert">{batchActivationError}</p>}
+      {batchActivationNotice && <p role="status">{batchActivationNotice}</p>}
+      {batchActivationPreview && (
+        <ConfirmBox
+          busy={batchActivationBusy}
+          confirmDisabled={batchActivationPreview.previews.some(
+            (preview) => preview.account_expired,
+          )}
+          confirmLabel={batchActivationBusy ? '正在啟用帳號…' : '確認啟用帳號'}
+          label="批次啟用確認"
+          onCancel={() => setBatchActivationPreview(null)}
+          onConfirm={confirmBatchActivation}
+          role="region"
+        >
+          <p>請逐一確認每個帳號要恢復的權限、成員身分與未完成任務。</p>
+          {batchActivationPreview.previews.map((preview) => (
+            <fieldset key={preview.user_id}>
+              <legend>{preview.username}</legend>
+              {preview.permission_codes.length === 0 &&
+                preview.delegated_modules.length === 0 &&
+                preview.project_memberships.length === 0 &&
+                preview.tasks.length === 0 && (
+                  <p>這個帳號沒有需要恢復的權限或專案。</p>
+                )}
+              {preview.account_expired && (
+                <p role="alert">外部帳號已到期，無法啟用。</p>
+              )}
+              {preview.permission_codes.map((code) => (
+                <label key={`permission-${code}`}>
+                  <input
+                    aria-label={code}
+                    checked={
+                      batchRestoreSelections[
+                        preview.user_id
+                      ]?.permission_codes.includes(code) ?? false
+                    }
+                    disabled={batchActivationBusy || preview.account_expired}
+                    onChange={() =>
+                      toggleBatchRestoreSelection(
+                        preview.user_id,
+                        'permission_codes',
+                        code,
+                      )
+                    }
+                    type="checkbox"
+                  />
+                  {code}
+                </label>
+              ))}
+              {preview.delegated_modules.map((module) => (
+                <label key={`module-${module}`}>
+                  <input
+                    aria-label={module}
+                    checked={
+                      batchRestoreSelections[
+                        preview.user_id
+                      ]?.delegated_modules.includes(module) ?? false
+                    }
+                    disabled={batchActivationBusy || preview.account_expired}
+                    onChange={() =>
+                      toggleBatchRestoreSelection(
+                        preview.user_id,
+                        'delegated_modules',
+                        module,
+                      )
+                    }
+                    type="checkbox"
+                  />
+                  {module}
+                </label>
+              ))}
+              {preview.project_memberships.map((membership) => (
+                <label key={`project-${membership.project_id}`}>
+                  <input
+                    aria-label={`${membership.project_code}／${membership.project_name}`}
+                    checked={
+                      batchRestoreSelections[
+                        preview.user_id
+                      ]?.project_ids.includes(membership.project_id) ?? false
+                    }
+                    disabled={batchActivationBusy || preview.account_expired}
+                    onChange={() =>
+                      toggleBatchRestoreSelection(
+                        preview.user_id,
+                        'project_ids',
+                        membership.project_id,
+                      )
+                    }
+                    type="checkbox"
+                  />
+                  {membership.project_code}／{membership.project_name}
+                </label>
+              ))}
+              {preview.tasks.map((task) => (
+                <label key={`task-${task.task_id}`}>
+                  <input
+                    aria-label={task.name}
+                    checked={
+                      batchRestoreSelections[
+                        preview.user_id
+                      ]?.task_ids.includes(task.task_id) ?? false
+                    }
+                    disabled={batchActivationBusy || preview.account_expired}
+                    onChange={() =>
+                      toggleBatchRestoreSelection(
+                        preview.user_id,
+                        'task_ids',
+                        task.task_id,
+                      )
+                    }
+                    type="checkbox"
+                  />
+                  {task.name}
+                </label>
+              ))}
+            </fieldset>
+          ))}
+        </ConfirmBox>
+      )}
+      {batchDeactivationPreview && (
+        <ConfirmBox
+          busy={batchDeactivationBusy}
+          confirmLabel={
+            batchDeactivationBusy ? '正在停用帳號…' : '確認停用帳號'
+          }
+          label="批次停用確認"
+          onCancel={cancelBatchDeactivation}
+          onConfirm={confirmBatchDeactivation}
+          role="region"
+          variant="danger"
+        >
+          <p>停用後，這些帳號的登入工作階段會立即失效，且無法再次登入。</p>
+          <ul>
+            {batchDeactivationPreview.users.map((user) => (
+              <li key={user.id}>
+                {user.name_zh || user.username}（{user.username}）
+              </li>
+            ))}
+          </ul>
+          {batchDeactivationPreview.projects.length > 0 && (
+            <div>
+              <p>停用後下列專案將沒有啟用中的管理成員；請先安排接手者。</p>
+              <ul>
+                {batchDeactivationPreview.projects.map((project) => (
+                  <li key={project.id}>
+                    <Link to={`/projects/${project.id}/planning`}>
+                      {project.project_code}／{project.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </ConfirmBox>
       )}
       {detailUserId ? (
         <section aria-labelledby="person-basic-heading">
@@ -476,7 +861,10 @@ export default function UsersPage({
                 </button>
                 <button
                   disabled={detail.is_system || detail.auth_source !== 'local'}
-                  onClick={() => setEditingCompany(detail.id)}
+                  onClick={() => {
+                    setEditingCompany(detail.id)
+                    void loadCompanies()
+                  }}
                   type="button"
                 >
                   修改公司連結
@@ -501,7 +889,27 @@ export default function UsersPage({
                 >
                   {detail.is_active ? '停用帳號' : '啟用帳號'}
                 </button>
+                <button
+                  disabled={
+                    detail.is_system ||
+                    detail.id === currentUser.id ||
+                    detail.auth_source !== 'local' ||
+                    busyUser !== null
+                  }
+                  onClick={() => void resetTemporaryPassword(detail)}
+                  type="button"
+                >
+                  {busyUser === detail.id
+                    ? '正在重設臨時密碼…'
+                    : '重設臨時密碼'}
+                </button>
               </div>
+              {detail.id === currentUser.id && (
+                <p className="field-hint">請到設定變更自己的密碼。</p>
+              )}
+              {passwordResetError?.userId === detail.id && (
+                <p role="alert">{passwordResetError.message}</p>
+              )}
               {actionNotice?.userId === detail.id && (
                 <p className="notice-success" role="status">
                   {actionNotice.message}
@@ -559,24 +967,37 @@ export default function UsersPage({
                 />
               )}
               {editingCompany === detail.id && (
-                <CompanyLinkForm
-                  busy={busyUser !== null}
-                  companies={companies}
-                  error={rowError(detail.id, 'company')}
-                  errorFocusRequest={saveError?.request}
-                  onCancel={() => setEditingCompany(null)}
-                  onDirtyChange={(dirty) =>
-                    reportDirty(`company:${detail.id}`, dirty)
-                  }
-                  onSave={(companyId, fields) =>
-                    act(detail.id, 'company', () =>
-                      companyId === detail.company_id
-                        ? updateUser(detail.id, fields)
-                        : linkUserCompany(detail.id, companyId, fields),
-                    )
-                  }
-                  user={detail}
-                />
+                <>
+                  {companyListError && (
+                    <div>
+                      <p role="alert">公司清單載入失敗：{companyListError}</p>
+                      <button
+                        onClick={() => void loadCompanies()}
+                        type="button"
+                      >
+                        重新載入公司清單
+                      </button>
+                    </div>
+                  )}
+                  <CompanyLinkForm
+                    busy={busyUser !== null}
+                    companies={companies}
+                    error={rowError(detail.id, 'company')}
+                    errorFocusRequest={saveError?.request}
+                    onCancel={() => setEditingCompany(null)}
+                    onDirtyChange={(dirty) =>
+                      reportDirty(`company:${detail.id}`, dirty)
+                    }
+                    onSave={(companyId, fields) =>
+                      act(detail.id, 'company', () =>
+                        companyId === detail.company_id
+                          ? updateUser(detail.id, fields)
+                          : linkUserCompany(detail.id, companyId, fields),
+                      )
+                    }
+                    user={detail}
+                  />
+                </>
               )}
             </>
           )}
@@ -627,6 +1048,30 @@ export default function UsersPage({
               )}
             </details>
           )}
+          <button
+            disabled={lifecycleLoading}
+            onClick={() => void loadLifecycleLists()}
+            type="button"
+          >
+            {lifecycleLoading ? '正在檢查提醒…' : '檢查帳號與專案提醒'}
+          </button>
+          {lifecycleError && (
+            <div>
+              <FormError>{lifecycleError}</FormError>
+              <button
+                disabled={lifecycleLoading}
+                onClick={() => void loadLifecycleLists()}
+                type="button"
+              >
+                重試檢查
+              </button>
+            </div>
+          )}
+          {lifecycleLoaded &&
+            externalNoProject.length === 0 &&
+            unmanagedProjects.length === 0 && (
+              <p role="status">沒有需要處理的帳號或專案提醒。</p>
+            )}
           {loading ? <p>載入中…</p> : null}
           <div>
             {!embeddedList && <h1 id="users-heading">{ACCOUNT_LABEL}清單</h1>}
@@ -636,6 +1081,7 @@ export default function UsersPage({
               onQueryChange={setQuery}
               onSearch={(event) => {
                 event.preventDefault()
+                setSelectedBatchUserIds([])
                 void search(query).then(() => onQueryApplied?.(query.trim()))
               }}
               query={query}
@@ -647,7 +1093,10 @@ export default function UsersPage({
                   找不到符合「{appliedQuery}」的帳號。{' '}
                   <button
                     onClick={() =>
-                      void clearSearch().then(() => onQueryApplied?.(''))
+                      void clearSearch().then(() => {
+                        setSelectedBatchUserIds([])
+                        onQueryApplied?.('')
+                      })
                     }
                     type="button"
                   >
@@ -670,6 +1119,9 @@ export default function UsersPage({
                 >
                   <thead>
                     <tr>
+                      <th scope="col">
+                        <span className="visually-hidden">選取</span>
+                      </th>
                       <th scope="col">姓名</th>
                       <th scope="col">帳號</th>
                       <th scope="col">公司</th>
@@ -686,6 +1138,40 @@ export default function UsersPage({
                     {users.map((user) => (
                       <Fragment key={user.id}>
                         <tr>
+                          <td data-label="選取">
+                            <input
+                              aria-label={`選取 ${user.username}`}
+                              checked={selectedBatchUserIds.includes(user.id)}
+                              disabled={
+                                user.is_system ||
+                                user.id === currentUser.id ||
+                                batchDeactivationBusy ||
+                                batchActivationBusy
+                              }
+                              onChange={(event) =>
+                                setSelectedBatchUserIds((current) =>
+                                  event.target.checked
+                                    ? [...current, user.id]
+                                    : current.filter((id) => id !== user.id),
+                                )
+                              }
+                              type="checkbox"
+                              value={user.id}
+                              aria-describedby={
+                                user.id === currentUser.id
+                                  ? `self-batch-${user.id}`
+                                  : undefined
+                              }
+                            />
+                            {user.id === currentUser.id && (
+                              <p
+                                className="field-hint"
+                                id={`self-batch-${user.id}`}
+                              >
+                                不能批次停用自己的帳號。
+                              </p>
+                            )}
+                          </td>
                           <th scope="row">
                             {onSelectUser ? (
                               <Link
@@ -740,6 +1226,8 @@ export default function UsersPage({
                                       ? null
                                       : user.id,
                                   )
+                                  if (editingCompany !== user.id)
+                                    void loadCompanies()
                                 }}
                                 type="button"
                               >
@@ -912,10 +1400,45 @@ export default function UsersPage({
                 {loadingMore ? '載入中…' : '載入更多'}
               </button>
             )}
+            {users.length > 0 && !detailUserId && (
+              <div aria-label="批次帳號操作">
+                <p>已選取 {selectedBatchUserIds.length} 個帳號。</p>
+                <button
+                  disabled={
+                    selectedBatchUserIds.length === 0 ||
+                    users
+                      .filter((user) => selectedBatchUserIds.includes(user.id))
+                      .some((user) => !user.is_active || user.is_system) ||
+                    batchDeactivationLoading ||
+                    batchDeactivationBusy ||
+                    batchActivationBusy
+                  }
+                  onClick={() => void prepareBatchDeactivation()}
+                  type="button"
+                >
+                  {batchDeactivationLoading ? '正在檢查帳號…' : '批次停用帳號'}
+                </button>
+                {selectedBatchUserIds.length > 0 &&
+                  users
+                    .filter((user) => selectedBatchUserIds.includes(user.id))
+                    .every((user) => !user.is_active && !user.is_system) && (
+                    <button
+                      disabled={batchActivationLoading || batchActivationBusy}
+                      onClick={() => void prepareBatchActivation()}
+                      type="button"
+                    >
+                      {batchActivationLoading
+                        ? '正在載入恢復項目…'
+                        : '批次啟用帳號'}
+                    </button>
+                  )}
+              </div>
+            )}
           </div>
           {!hideCreateForm && (
             <UserForm
               companies={companies}
+              onCompanyOptionsRequested={() => void loadCompanies()}
               onCreated={created}
               onDirtyChange={(dirty) => reportDirty('create', dirty)}
             />
@@ -927,12 +1450,13 @@ export default function UsersPage({
 }
 
 function companyLabel(user: User, companies: Company[]): string {
-  const name = companies.find(
-    (company) => company.id === user.company_id,
-  )?.name
-  if (!name) {
+  const name =
+    user.company_name ??
+    companies.find((company) => company.id === user.company_id)?.name
+  if (!user.company_id) {
     return '未連結'
   }
+  if (!name) return '已連結公司'
   return user.department ? `${name}／${user.department}` : name
 }
 

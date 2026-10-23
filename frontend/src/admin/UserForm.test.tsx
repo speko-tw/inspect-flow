@@ -58,6 +58,23 @@ describe('UserForm 必填標示（#284 第 4 項）', () => {
   })
 })
 
+describe('UserForm 延後載入公司選項（#712）', () => {
+  it('聚焦公司欄位時請求公司選項', () => {
+    const onCompanyOptionsRequested = vi.fn()
+    render(
+      <UserForm
+        companies={companies}
+        onCompanyOptionsRequested={onCompanyOptionsRequested}
+        onCreated={() => {}}
+      />,
+    )
+
+    fireEvent.focus(screen.getByLabelText(/^公司/))
+
+    expect(onCompanyOptionsRequested).toHaveBeenCalledOnce()
+  })
+})
+
 describe('UserForm 反灰欄位說明（#284 第 5 項）', () => {
   it('未連結公司時，部門、地點、工號反灰並各自說明原因', () => {
     renderForm()

@@ -21,6 +21,7 @@ export interface UnsavedNavigationGuard {
  */
 export function useUnsavedNavigationGuard(
   hasUnsavedChanges: boolean,
+  popMessage = '有尚未儲存的變更。確定要離開嗎？',
 ): UnsavedNavigationGuard {
   const location = useLocation()
   const [blockedAction, setBlockedAction] = useState<
@@ -107,12 +108,12 @@ export function useUnsavedNavigationGuard(
     // Back／Forward 用原生確認；站內連結由頁內確認框處理。
     if (blockedAction !== 'POP') return
     handledPop.current = blocker.location.key
-    if (window.confirm('有尚未儲存的變更。確定要離開嗎？')) {
+    if (window.confirm(popMessage)) {
       blocker.proceed()
     } else {
       blocker.reset()
     }
-  }, [blocker, blockedAction, hasUnsavedChanges, location.key])
+  }, [blocker, blockedAction, hasUnsavedChanges, location.key, popMessage])
 
   return {
     pending: blocker.state === 'blocked' && blockedAction !== 'POP',
