@@ -9,8 +9,9 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
+from app.api.batch import require_batch_size
 from app.api.errors import APIError, ErrorCode, FieldErrorCode
 from app.api.pagination import ilike_contains, page, page_by_text_key
 from app.auth.access import (
@@ -28,6 +29,7 @@ from app.models import (
     RolePermission,
     User,
 )
+from app.services.account_status import effectively_active_user_clause
 from app.services.inspection_planning import PlanningError
 from app.services.module_permissions import (
     ExternalRoleAssignmentError,
@@ -53,6 +55,7 @@ from app.services.projects import (
     InvalidCompanyRoleError,
     InvalidProjectFieldError,
     ProjectUnchangedError,
+    count_active_project_members,
     create_project,
     find_projects_by_code,
     update_project,
@@ -89,6 +92,12 @@ class ProjectResponse(BaseModel):
     planned_start_date: date | None
     planned_completion_date: date | None
     warnings: list[ProjectWarning] = Field(default_factory=list)
+
+
+class ProjectListItemResponse(ProjectResponse):
+    """ADM-AC09 專案清單列出的欄位與啟用成員數。"""
+
+    member_count: int
 
 
 class ProjectPlanningResponse(BaseModel):
@@ -139,7 +148,7 @@ class ProjectWorkflowSummaryResponse(BaseModel):
 
 
 class ProjectListResponse(BaseModel):
-    items: list[ProjectResponse]
+    items: list[ProjectListItemResponse]
     next_cursor: str | None
 
 
@@ -188,11 +197,24 @@ class SetProjectMemberRolesRequest(BaseModel):
     role_ids: list[UUID] = Field(max_length=64)
 
 
+class BatchProjectMemberRoleItem(BaseModel):
+    user_id: UUID
+    role_ids: list[UUID] = Field(max_length=64)
+
+
+class BatchProjectMemberRolesRequest(BaseModel):
+    items: list[BatchProjectMemberRoleItem]
+
+
 class ProjectMemberResponse(BaseModel):
     id: UUID
     user_id: UUID
     username: str
     role_ids: list[UUID]
+
+
+class BatchProjectMemberRolesResponse(BaseModel):
+    items: list[ProjectMemberResponse]
 
 
 class ModuleStatusResponse(BaseModel):
@@ -213,6 +235,7 @@ class ProjectMemberDetailResponse(ProjectMemberResponse):
     company_id: UUID | None
     company_name: str | None
     is_active: bool
+    is_effectively_active: bool
     is_external_collaborator: bool
     module_status: ModuleStatusResponse
 
@@ -300,6 +323,25 @@ def _project_response(project: Project, is_duplicate: bool) -> ProjectResponse:
     )
 
 
+def _project_list_responses(
+    db: Session,
+    projects: Sequence[Project],
+    duplicate_codes: set[str],
+) -> list[ProjectListItemResponse]:
+    counts = count_active_project_members(
+        db, {project.id for project in projects}
+    )
+    return [
+        ProjectListItemResponse(
+            **_project_response(
+                project, project.project_code in duplicate_codes
+            ).model_dump(),
+            member_count=counts[project.id],
+        )
+        for project in projects
+    ]
+
+
 def _single_project_response(db: Session, project: Project) -> ProjectResponse:
     duplicates = find_projects_by_code(db, project.project_code)
     return _project_response(project, len(duplicates) > 1)
@@ -325,6 +367,7 @@ def _member_detail_response(
     member: ProjectMember,
     user: User,
     company: Company | None,
+    is_effectively_active: bool,
     module_permissions: frozenset[str],
 ) -> ProjectMemberDetailResponse:
     ordered_assignments = sorted(
@@ -341,6 +384,7 @@ def _member_detail_response(
         company_id=user.company_id,
         company_name=company.name if company is not None else None,
         is_active=user.is_active,
+        is_effectively_active=is_effectively_active,
         is_external_collaborator=user.is_external_collaborator,
         module_status=_module_status(module_permissions),
     )
@@ -449,8 +493,8 @@ def list_projects(
         key_name="name",
         cursor=cursor,
         limit=limit,
-        serialize=lambda project: _project_response(
-            project, project.project_code in duplicate_codes
+        serialize_batch=lambda projects: _project_list_responses(
+            db, projects, duplicate_codes
         ),
         filters=filters,
     )
@@ -604,11 +648,18 @@ def list_members(
     if not members:
         return []
     user_rows = db.execute(
-        select(User, Company)
+        select(
+            User,
+            Company,
+            effectively_active_user_clause().label("is_effectively_active"),
+        )
         .outerjoin(Company, Company.id == User.company_id)
         .where(User.id.in_(member.user_id for member in members))
     ).all()
-    users = {user.id: (user, company) for user, company in user_rows}
+    users = {
+        user.id: (user, company, is_effectively_active)
+        for user, company, is_effectively_active in user_rows
+    }
     if any(member.user_id not in users for member in members):
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     access_by_user = query_people_access(
@@ -793,8 +844,105 @@ def edit_member_roles(
         raise APIError(ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE, 422) from exc
     except LastProjectManagerError as exc:
         raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
+    except InactiveProjectMemberError as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     _require_roles(body.role_ids)
     return _member_response(db, member)
+
+
+@router.post(
+    "/{project_id}/members:batch-roles",
+    response_model=BatchProjectMemberRolesResponse,
+)
+def batch_edit_member_roles(
+    project_id: UUID,
+    body: BatchProjectMemberRolesRequest,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    caller: User = _PROJECT_MEMBER_ACCESS,
+) -> BatchProjectMemberRolesResponse:
+    """Replace selected member role sets atomically (ADM-R13)."""
+    require_batch_size(len(body.items))
+    _get_project(db, project_id)
+    user_ids = [item.user_id for item in body.items]
+    if not body.items or len(set(user_ids)) != len(user_ids):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    for item in body.items:
+        if len(set(item.role_ids)) != len(item.role_ids):
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+        _require_roles(item.role_ids)
+
+    members = list(
+        db.scalars(
+            select(ProjectMember)
+            .options(selectinload(ProjectMember.role_assignments))
+            .where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id.in_(user_ids),
+            )
+            .order_by(ProjectMember.user_id)
+            .with_for_update()
+        )
+    )
+    members_by_user_id = {member.user_id: member for member in members}
+    if set(members_by_user_id) != set(user_ids):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    role_ids = {role_id for item in body.items for role_id in item.role_ids}
+    existing_role_ids = set(
+        db.scalars(select(Role.id).where(Role.id.in_(role_ids))).all()
+    )
+    if existing_role_ids != role_ids:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+
+    try:
+        for item in sorted(body.items, key=lambda row: str(row.user_id)):
+            set_project_member_roles(
+                db,
+                members_by_user_id[item.user_id],
+                item.role_ids,
+                actor_user_id=caller.id,
+            )
+    except ExternalRoleAssignmentError as exc:
+        raise APIError(
+            ErrorCode.PROJECT_EXTERNAL_ROLE_NOT_ALLOWED, 422
+        ) from exc
+    except RoleNotAssignableError as exc:
+        raise APIError(ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE, 422) from exc
+    except SelfRoleChangeError as exc:
+        raise APIError(ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE, 422) from exc
+    except LastProjectManagerError as exc:
+        raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
+    except InactiveProjectMemberError as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+
+    updated_members = list(
+        db.scalars(
+            select(ProjectMember)
+            .options(selectinload(ProjectMember.role_assignments))
+            .where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id.in_(user_ids),
+            )
+        )
+    )
+    users = list(db.scalars(select(User).where(User.id.in_(user_ids))))
+    usernames = {user.id: user.username for user in users}
+    updated_by_user_id = {member.user_id: member for member in updated_members}
+    return BatchProjectMemberRolesResponse(
+        items=[
+            ProjectMemberResponse(
+                id=updated_by_user_id[user_id].id,
+                user_id=user_id,
+                username=usernames[user_id],
+                role_ids=sorted(
+                    assignment.role_id
+                    for assignment in updated_by_user_id[
+                        user_id
+                    ].role_assignments
+                ),
+            )
+            for user_id in user_ids
+        ]
+    )
 
 
 @router.delete(

@@ -10,18 +10,18 @@
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T0 | 修改既有 users、companies、projects 清單契約，加入 `q` 與 cursor paging，將陣列回應改為 `{items,next_cursor}`；更新後端、前端呼叫端、測試與受影響規格。`member_count` 依 T6a／#286 另行處理 | `docs/specs/authentication/spec.md`、`docs/specs/domain-model/spec.md`（介面表）、`docs/specs/admin-dashboard/spec.md`、`backend/app/api/pagination.py`、`backend/app/api/v1/users.py`、`companies.py`、`projects.py`、相關 API tests、`frontend/src/admin/api.ts`、`UsersPage.tsx`、`CompaniesPage.tsx`、`projects/api.ts`、`ProjectsPage.tsx`、`ProjectDetailPage.tsx` 與相關測試 | [#407 維護者留言](https://github.com/speko-tw/inspect-flow/issues/407#issuecomment-5979672050) 確認同 PR 同步規格與前後端；此變更不包含 #286 的 `member_count` | ADM-AC10、13 的前置 | #407 |
+| T0 | 修改既有 users、companies、projects 清單契約，加入 `q` 與 cursor paging，將陣列回應改為 `{items,next_cursor}`；更新後端、前端呼叫端、測試與受影響規格。`member_count` 依 DOM-R77；本分支不變更 `/admin/projects/unmanaged` 或 `users.py`，該清單計數由 #414 先行處理 | `docs/specs/authentication/spec.md`、`docs/specs/domain-model/spec.md`（介面表）、`docs/specs/admin-dashboard/spec.md`、`backend/app/api/pagination.py`、`backend/app/api/v1/users.py`、`companies.py`、`projects.py`、相關 API tests、`frontend/src/admin/api.ts`、`UsersPage.tsx`、`CompaniesPage.tsx`、`projects/api.ts`、`ProjectsPage.tsx`、`ProjectDetailPage.tsx` 與相關測試 | [#407 維護者留言](https://github.com/speko-tw/inspect-flow/issues/407#issuecomment-5979672050) 確認同 PR 同步規格與前後端；本任務不實作 #286 的 `member_count`；該口徑已於 DOM-R77 凍結 | ADM-AC10、13 的前置 | #407 |
 | T1 | Dashboard summary、projects、engineers API；落實狀態計數、權限範圍、游標分頁、錯誤及工程師三種歸屬數 | `backend/app/api/v1/`、`backend/app/services/`、`backend/tests/api/`、`backend/tests/services/` | #361（Plan／Task API）；`inspection-planning`、`state-machines` | ADM-AC01～05、13 | #408 |
 | T2 | Dashboard 總覽 UI；依授權呈現單一專案或全部專案範圍，完成率與零資料狀態沿用 T1 契約；全部專案範圍需 `all_project_progress.read` 或系統管理者，只呈現進度與任務明細，不含照片與查核結果 | `frontend/src/admin/dashboard/`（新增）、`frontend/src/admin/AdminPage.tsx`（僅新增入口）、`frontend/tests/` | T1；#361；與 #104 Field UI 分開路由及檔案；先以 mock 接版型，再替換為 API | ADM-AC01～05、12 | #409 |
 | T3 | 工程師工作量視圖，分別顯示 assignee、started_by、completed_by 統計，不混用人員歸屬 | `backend/app/services/`、`backend/tests/services/`、`frontend/src/admin/dashboard/`、`frontend/tests/` | T1；`inspection-planning` 的指派及實際操作者欄位 | ADM-AC03、12 | #410 |
 | T4 | 模組權限管理與影響確認：人員頁的模組權限勾選、收回與刪除前的確認（ADM-R10；含收回前的影響查詢 `revoke-impact`）、委派指派與收回、被委派者的受限畫面、被委派者用的最小欄位人員查詢、權限組合維護與套用（逐項驗權）、建立者角色設定、角色頁的可指派角色核准（`is_assignable`）與外部可用標記（`is_external_allowed`）；選項從權限登記表取得 | `frontend/src/admin/module-permissions/`（新增）、`frontend/src/admin/AdminPage.tsx`（僅新增入口）、`backend/app/api/v1/`、`backend/app/services/`、`backend/tests/`、`frontend/tests/` | `domain-model` 任務 L（模組權限資料、Service 介面、登記表）與 `authentication` 任務 P（存取層級與檢查）合併；Admin 權限依 AUT-R48、AUT-R49 | ADM-AC08、13、28、29 | #581、#582 |
 | T5a | 將負責人已裁定的 ALG-Q2 選項 C 獨立同步到 `audit-log` 的需求、介面與驗收；只修改 audit-log 規格與其 plan，不與實作同 PR | `docs/specs/audit-log/spec.md`、`docs/specs/audit-log/plan.md` | 已裁定：[#107 負責人留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)；先依規格變更流程開獨立 issue／PR，同步 `audit-log` 規格 | ADM-AC06、07 的前置 | 待開 task |
 | T5b | Admin 唯讀稽核查詢 API 與頁面；按專案、操作者、時間、事件類型篩選並 cursor 分頁；不存在的合法 `project_id` 篩選回 200 空頁 | `backend/app/api/v1/`、`backend/app/services/`、`backend/tests/api/`、`backend/tests/services/`、`frontend/src/admin/audit-log/`（新增）、`frontend/src/admin/AdminPage.tsx`（僅新增入口）、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/testing/preloadRoutes.ts`、`frontend/tests/` | ALG-Q2 已裁定 C；T5a 合併同步 `audit-log` 契約後實作；`authentication` Admin 存取檢查 | ADM-AC06、07、13 | #412 |
-| T6a | 依 #286 變更 `domain-model` 的專案列表契約，定義 `member_count` 欄位及停用成員口徑 | `docs/specs/domain-model/spec.md`、`docs/specs/domain-model/plan.md` | T0 已先更新專案列表 cursor 契約；#286；規格變更 issue／流程 | ADM-AC09 前置 | #286 後續規格變更 task |
-| T6b | 專案列表 API cursor 分頁、搜尋與成員數欄位，更新專案列表 UI | `backend/app/api/v1/projects.py`、`backend/app/services/projects.py`、相關測試、`frontend/src/admin/projects/ProjectsPage.tsx` 及測試 | T0 既有列表契約變更與 T6a `member_count` 規格變更均合併；#275／#277 既有專案列表 | ADM-AC09、10、13 | #413 |
-| T7 | 進階管理：既有 user/company list 增加搜尋及 cursor 分頁，加入全批原子狀態操作、專案成員批次角色操作、既有使用者臨時密碼重設；不重做 0.2.x 基本 CRUD | `backend/app/api/v1/users.py`、`companies.py`、必要 services／測試；`frontend/src/admin/UsersPage.tsx`、`CompaniesPage.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx` 及測試 | T0 的 user/company/project 既有列表 cursor 契約變更合併；#263、#265、#274、#275、#277 已完成；AUT-R36／R37；與 T4 共用人員頁時錯開（T4 依賴 `domain-model` 任務 L） | ADM-AC10、11、13 | #414 |
+| T6a | 已由 #286 完成：依 DOM-R77 定義專案清單與首頁摘要共用的有效啟用成員計數 | `docs/specs/domain-model/spec.md` | 已裁定並合併後由 413 實作；未管理專案清單計數由 414 負責 | ADM-AC09 | #286 |
+| T6b | 專案列表 API cursor 分頁、搜尋與 DOM-R77 成員數，並同步專案首頁摘要與成員有效狀態呈現 | `backend/app/api/v1/projects.py`、共用計數服務、相關測試、`frontend/src/admin/projects/` 及測試 | T0 與 DOM-R77 契約已合併；#275／#277 既有專案列表；#414 先合併後未管理清單沿用共用計數 | ADM-AC09、10、13 | #413 |
+| T7 | 進階管理：既有 user/company list 增加搜尋及 cursor 分頁，加入全批原子狀態操作（啟用須每帳號各帶 `restore`）、專案成員批次角色操作（`project_member.manage` 與 `project.use`，Admin 放行）、既有使用者臨時密碼重設；三個批次端點上限 200 筆並以白話回 422，批次停用與重設密碼排除操作者自己，角色批次排除停用成員；既有帳號重設結果依 ADM-R15 加入離頁確認與一次性密碼清除；不重做 0.2.x 基本 CRUD | `backend/app/api/v1/users.py`、`companies.py`、必要 services／測試；`frontend/src/admin/UsersPage.tsx`、`CompaniesPage.tsx`、`frontend/src/admin/AdminPage.tsx`、`AdminPage.test.tsx`、`TemporaryPassword.tsx` 及測試、`frontend/src/admin/projects/ProjectDetailPage.tsx` 及測試 | T0 的 user/company/project 既有列表 cursor 契約變更合併；#263、#265、#274、#275、#277 已完成；AUT-R36／R37；#499 離頁確認；與 T4 共用人員頁時錯開（T4 依賴 `domain-model` 任務 L） | ADM-AC10、11、13、14 | #414、#499 |
 | T8 | 0.7.x 完成驗證上線後，將 Dashboard 的完成數與完成率這兩個既有指標改採伺服器驗證完成，維持欄位與指標名稱並補測試 | `backend/app/services/`、相關 API／service tests、Dashboard UI／tests | `completion-validation` 完成驗證契約與實作；依 [KD-66](../../intents/03-decisions-and-stack.md#kd-66)；0.5.x seed 的完成 Task 由 ADM-AC12 對應 task 準備 | ADM-AC02 | 0.7.x 前置規格完成後開 task |
-| T9 | U1 使用者建立結果畫面、U2 管理者指派／收回與停用的列內確認，以及 P1 專案表單未儲存轉場提示 | `frontend/src/admin/AdminPage.tsx`、`UsersPage.tsx`、`projects/ProjectsPage.tsx`、`frontend/src/styles.css`、相關前端測試 | 負責人直接指示（#430，2026-10-04 核可範圍）；使用者建立沿用 AUT-R46，變更既有列表能力不得回退 | ADM-AC14 | #430 |
+| T9 | 新帳號建立結果畫面及新增帳號精靈完成頁的離頁確認、留在頁面狀態保留；管理者指派／收回與停用的列內確認；專案表單未儲存轉場提示 | `frontend/src/admin/AdminPage.tsx`、`AdminPage.test.tsx`、`UsersPage.tsx`、`frontend/src/admin/people/PeoplePage.tsx` 及測試、`TemporaryPassword.tsx` 及測試、`projects/ProjectsPage.tsx`、`frontend/src/styles.css` | 負責人直接指示（#430，2026-10-04 核可範圍）；使用者建立沿用 AUT-R46；#499 離開前確認適用新增帳號精靈完成頁及其他臨時密碼結果；變更既有列表能力不得回退 | ADM-AC14 | #430、#499 |
 | T10 | 建立專案首頁、流程摘要顯示、依有效權限過濾區段及現場專屬路由；專案建立成功後導向新首頁並保留重複代號警告。`AdminPage` 移除專用 `MemberProjectItems` 元件，管理者與非管理者共用 `ProjectSectionPage` 區段殼；非管理者 planning 路由移入同一殼層，調整區段頁標題階層及唯一回清單連結；#470 讓首頁與第一個區段共用同一份短效摘要，離開專案／切換使用者時不沿用；補前端契約測試、瀏覽器走查及真後端驗證 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`frontend/src/admin/projectHome/`（新增與測試）、`frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/admin/projectHome/ProjectHomePage.test.tsx`、`frontend/src/admin/projects/ProjectsPage.tsx`、`frontend/src/admin/projects/ProjectsAdmin.test.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx`、`frontend/src/admin/projectItems/ProjectItemChangePage.tsx`、`frontend/src/admin/planning/PlanningPage.tsx`、`frontend/src/styles.css` | #454 workflow summary API；#470；原型由負責人操作核可；Field/內業分類及各區段可見性依摘要 `viewer_permission_codes` 與各區段讀取權限 | ADM-AC15～19 | #447、#470 |
 | T11 | 專案成員區段：加入成員必選至少一個角色並附白話說明、成員卡片清單、修改角色獨立畫面、移出確認；後端專案成員 API 零角色回 422 專用錯誤碼；補 API 測試、前端 UI 測試與前後端契約 fixture、真後端瀏覽器走查 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`docs/specs/domain-model/spec.md`、`backend/app/api/errors.py`、`backend/app/api/v1/projects.py`、`backend/tests/api/test_projects.py`、`frontend/src/admin/projects/ProjectDetailPage.tsx`、`frontend/src/admin/projects/MemberRoleFields.tsx`、`frontend/src/admin/projects/roleDescriptions.ts`、`frontend/src/admin/projects/ProjectMembers.css`、`frontend/src/admin/projects/fixtures/`、`frontend/src/admin/projects/ProjectsAdmin.test.tsx` | T10（專案區段殼）；原型由負責人操作核可（#445） | ADM-AC20～22 | #449 |
 | T12 | 非 Admin 內業的成員頁：後端新增專案範圍候選使用者與可指派角色端點（權限同 `project_member.manage`、不限公司、不 N+1）；前端成員頁改用候選端點並讓各 API 各自處理錯誤；沒有管理權限者不顯示成員操作；補 API 測試、前端測試、契約 fixture 與真後端內業走查 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`docs/specs/domain-model/spec.md`、`backend/app/api/v1/projects.py`、`backend/tests/api/test_projects.py`、`backend/tests/contract/test_route_access.py`、`frontend/src/admin/projects/ProjectDetailPage.tsx`、`frontend/src/admin/projects/api.ts`、`frontend/src/admin/projects/ProjectMembers.css`、`frontend/src/admin/projects/fixtures/`、`frontend/src/admin/projects/ProjectsAdmin.test.tsx` | T11（成員區段）；不新增 migration | ADM-AC26 | #481 |
@@ -39,8 +39,8 @@
 
 - 每個 task 一個 PR 即可單獨驗收；每個 AC 至少由一個 task 涵蓋。
 - T5a 是已裁定選項 C 的 audit-log 契約同步，T5b 是依同步契約進行實作；兩者不得合併成同一 PR。決議已完成，T5b 只等待 T5a 合併。
-- T0 已同步 user/company/project 清單契約、後端與前端；T6a（#286）依賴 T0，T6b 依賴 T0 與 T6a，T7 依賴 T0。T0 不包含 #286 的 `member_count`。
-- T6a 先完成規格變更，再開 T6b；不得直接在本規格或實作 PR 修改已凍結的 `domain-model`。
+- T0 已同步 user/company/project 清單契約、後端與前端；DOM-R77 已由 #286 裁定，T6b 依賴 T0 與該契約，T7 依賴 T0。
+- T6b 依 DOM-R77 實作 API 回傳值；`/admin/projects/unmanaged` 的計數由 #414 先合併，本分支不修改 `users.py` 或該端點，後續分支再共用計數服務。
 - T7 根據本規格的 0.2.x 現況表執行；實作前若現況改變，更新該表及對應 task。已交付基本管理不得重做。
 - T10 首頁與區段導覽依賴 #454 的 workflow summary 欄位；未合併前只依其最新已核定回應契約建置 mock，合併後必須 merge 最新 `main` 再完成真後端走查。現場專屬帳號的權限分類依 `viewer_permission_codes`，不得從 `task_counts_visible` 或零計數推斷。
 
@@ -49,7 +49,7 @@
 依改動檔案分波；有相同 API router、`AdminPage.tsx`、Dashboard 前端區域或規格檔的工作須錯開。
 
 - 第 1 波：T0、T1、T5a 可分別進行；T0 是先行 spec-change，T4、T15 等 `domain-model` 任務 L 與 `authentication` 任務 P，T5a 只負責把已裁定 C 同步到 audit-log。若 T1／T4 等需共用 `backend/app/main.py` 註冊，依 README 的共用檔案規則錯開。
-- 第 2 波：T2、T3 依賴 T1；兩者共用 Dashboard 前端區域，應同一責任人串接或錯開。T5b 在 T5a 合併後開始。T6a 在 T0 合併後開始；T6b 等 T0、T6a 都合併後開始。
+- 第 2 波：T2、T3 依賴 T1；兩者共用 Dashboard 前端區域，應同一責任人串接或錯開。T5b 在 T5a 合併後開始。T6b 在 T0 與 DOM-R77 契約可用後開始；未管理專案列表計數等 #414 合併後再共用。
 - 第 3 波：T7 等 T0 合併後開始；與 T4 若共用角色／使用者路由，錯開實作；其餘檔案不重疊時可並行。
 - 0.7.x 後續版本：T8 等 `completion-validation` 契約與實作完成後執行，僅切換既有完成數與完成率的計算來源。
 - T21 依賴 `inspection-planning` T13 的 API；先以 mock 開工時，合併前須接真 client 並重跑真後端走查（mock 與真 API 的欄位以契約 fixture 對齊）。
@@ -62,7 +62,7 @@
 
 - 模組權限與委派模型依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)；T4、T15 必須等待 `domain-model` 任務 L／N／O 與 `authentication` 任務 P 把資料、Service 介面與存取層級合併。發現衝突先同步文件，不以本計畫推論覆蓋。
 - PR-18 確認需在寫入前取得最新對象與後果；測試收回模組權限、收回委派、刪除權限組合的確認與取消，以及被委派者不能越過自己被委派的模組。
-- T0 與 T6a 是已凍結清單端點的規格變更，必須在 `authentication`／`domain-model` spec-change PR 合併後才可實作；#286 的 `member_count` 另需 T6a 合併。未合併 T6a 前不得呈現前端推算的成員數。
+- T0 依賴既有規格變更合併；#286 的 `member_count` 已由 DOM-R77 凍結，UI 必須使用 API 值。未管理專案清單計數由 #414 先合併，本分支不改 `users.py` 或該端點。
 - Dashboard 彙總可能讀取大量 Task；先受授權範圍及 cursor 查詢限制，效能門檻依實際量測訂定。
 - Project home 的內業／現場路由依賴摘要 API 回傳呼叫者的有效 `viewer_permission_codes`；契約缺欄時須先補 API，不得由前端自行猜測專案角色。
 - 0.5.x Field 不提供完成 Task；若 seed 沒有 `COMPLETED` 資料，完成數、完成率與實際查核人數為 0，應在 demo fixture 中準備可重現案例。
@@ -77,8 +77,8 @@
 | ADM-AC06、07 | API／UI 測試非 Admin 拒絕、四類篩選 AND 組合、同 timestamp 的 cursor 穩定性及唯讀資料庫行為 |
 | ADM-AC08 | 前後端測試覆蓋模組權限授予／收回、委派指派／收回、被委派者受限畫面與直接呼叫 403、收回與刪除前的確認門檻、取消不送出 |
 | ADM-AC28～35 | 前後端測試與真後端走查：權限組合套用與失敗處理、被委派者畫面、加入成員的未開通提示、開設專案與建立者（Admin 不自動成為成員、可選填建立者角色人選）、可指派角色與外部協作人員（候選的所屬公司與外部標籤）、外部協作人員標記與改標記、無專案的外部人員與無人管理的專案清單、停用提醒與重新啟用預覽；桌面與 360px 截圖附在 PR |
-| ADM-AC09 | #286 契約合併後 API 測試多專案及零成員筆數；UI 使用 API 值，不在契約尚未完成時推算 |
-| ADM-AC10、11 | user/company 搜尋、cursor、原子批次 rollback、臨時密碼一次性回傳、舊 session 失效、計數與稽核，以及專案成員批次角色操作的 API/UI 測試 |
+| ADM-AC09 | API 測試涵蓋多專案、零值、清單與首頁同值，以及角色指派前後不變；UI 使用 DOM-R77 API 值 |
+| ADM-AC10、11 | user/company 搜尋、cursor、原子批次 rollback、臨時密碼一次性回傳、舊 session 失效、計數與稽核，以及專案成員批次角色操作的 API/UI 測試；既有帳號密碼結果頁另測離開確認、留頁保留狀態與確認離開後清除 |
 | ADM-AC12 | demo seed／API fixture 建立已完成、進行中及取消 Task；走通派出、現場開始、Dashboard 查看，並驗證沒有完成資料時指標為 0 |
 | ADM-AC15、16 | 前端摘要 mock 驗證五種 `primary_step`、全完成狀態、各數字、未指派草稿數與 `task_counts_visible=false`；#454 合併後再用真後端確認；首頁連結的目標（進度區段、`?status=reinspection`、無權限時退回「計畫與任務」）與數字可點條件見 ADM-AC43 |
 | ADM-AC17 | Testing Library 驗證每個區段恰一個目前頁、缺少各區段權限時導覽隱藏、頁面單一 `<h1>` 與唯一「返回專案清單」連結、手機選單展開及 Escape 關閉；真實 Vite 與無頭瀏覽器分別走查 1280px、360px，截圖附在 PR |
@@ -89,7 +89,7 @@
 | ADM-AC22 | `ProjectsAdmin.test.tsx`：修改角色、未儲存確認、移出確認與 Esc、卡片清單與舊成員提示；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態與截圖 |
 | ADM-AC26 | `backend/tests/api/test_projects.py`：不限公司、已加入與停用者排除、外部協作人員顯示所屬公司與標籤、Admin 看全部、欄位與契約 fixture 一致、cursor、權限（401／403／他專案 403／404）、全域 `/users`、`/roles` 仍 403、非 Admin 違反可指派角色、外部協作人員只能被指派外部可用的角色、不能改自己時回 422 與專用錯誤碼，Admin 不受白名單限制（對外部協作人員仍受外部可用限制）、查詢數不隨資料增加；`test_route_access.py` 登記兩條新路由；`ProjectsAdmin.test.tsx`：內業以點擊加入（必選角色）、修改角色、移出，全程不呼叫全域 `/users`、`/roles`，伺服器 422（不可指派角色、外部可用限制、不能改自己）對應到角色欄或使用者欄；候選或角色失敗時成員列表仍顯示並可重新載入，無權限者看不到操作；SQLite 真後端、Vite 與無頭瀏覽器以內業帳號走查 1280px／360px，記錄 HTTP 狀態與截圖 |
 | ADM-AC27 | 各畫面的前端測試：入口名稱、非管理者外殼與計畫任務頁的成功提示（`role="status"`、舊提示清除）、項目修改確認的兩種說法（草稿只有確認儲存、已派出才有選項與說明）、成員頁無候選時隱藏表單、存為範本後項目數更新、變更密碼頁規則；SQLite 真後端、Vite 與無頭瀏覽器從登入開始只靠點擊走查內業、現場、混合三種帳號並保存桌面與 360px 截圖 |
-| ADM-AC14 | UI 測試驗證一次性密碼結果／離頁清除、三種高風險操作的取消不送出與確認送出、專案未儲存時保留或捨棄；以 SQLite 真後端、Vite 與無頭瀏覽器走通流程並記錄 HTTP 狀態與桌面／360px 截圖 |
+| ADM-AC14 | 前端測試分別驗證新帳號精靈完成頁及既有帳號重設結果畫面的離頁提示、留在頁面時保留帳號／密碼／錯誤重試狀態、確認離開後清除密碼並執行導覽；驗證三種高風險操作取消不送出與確認送出、專案未儲存時保留或捨棄；以 SQLite 真後端、Vite 與無頭瀏覽器走通兩種密碼流程並記錄 HTTP 狀態與桌面／360px 截圖 |
 | ADM-AC36～38 | 前端元件與頁面測試：確認框的顏色變體、按鈕順序、初始焦點與 Esc（`ConfirmBox.test.tsx`、`UsersCompaniesGuards.test.tsx`）、狀態標籤對照（`Badge.test.tsx`）；程式於 v0.3.1 已有這些測試，本規格只補對照，截圖需要時附在 PR |
 | ADM-AC39～41 | 前端元件測試：新增專案表單的欄位位置、預設值、提示與明確送出的請求本體；專案首頁顯示角色與資料來源；改角色確認框的按鈕、取消不送出、缺原因擋下、無權限者唯讀；SQLite 真後端、Vite 與無頭瀏覽器走查 1280px 與 360px，截圖附在 PR |
 | ADM-AC43、44 | 前端元件測試：七個篩選與數字取自摘要、「全部」為合計、網址 `status` 的保留與不認得值、首頁連結（含「待開始」「進行中」並列）與不可點條件、卡片欄位與標記、載入更多、失敗重新載入、詳情欄位、返回保留篩選／頁數／捲動、找不到與無權限；契約 fixture 與 `inspection-planning` T13 一致；SQLite 真後端、Vite 與無頭瀏覽器走查 1280px 與 360px，截圖附在 PR |

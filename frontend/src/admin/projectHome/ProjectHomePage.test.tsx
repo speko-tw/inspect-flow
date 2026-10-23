@@ -557,6 +557,7 @@ describe('project home', () => {
         name: '前往完成草稿任務並派出',
       }),
     ).toHaveAttribute('href', '/projects/project-1/planning')
+    expect(screen.getByText('啟用成員', { selector: 'dt' })).toBeVisible()
     expect(screen.getByText('2 人')).toBeVisible()
     expect(screen.getByText('3 項')).toBeVisible()
     expect(screen.getByText('4 件')).toBeVisible()

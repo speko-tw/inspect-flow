@@ -13,7 +13,7 @@
 | T3 | 初始化指令不寫稽核紀錄的測試 | `backend/tests/cli/test_init_system_audit.py`（新增） | T1；[#134](https://github.com/speko-tw/inspect-flow/issues/134)（初始化指令，會建立 `backend/tests/cli/`） | ALG-AC08 | #217 |
 | T4 | 寫入時機的驗收測試：只寫測試，透過 `domain-model` T7 的入口做 ALG-AC11 的操作序列，檢查紀錄 | `backend/tests/services/test_audit_write_timing.py`（新增） | T2；[#135](https://github.com/speko-tw/inspect-flow/issues/135)（DOM T7） | ALG-AC11 | #218 |
 
-- 每個任務一個 PR 就能完成，並能單獨驗收；ALG-AC01～ALG-AC12 每條都被一個任務涵蓋。本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）新增的 ALG-AC13～ALG-AC16 由下方[本次變更後續實作](#本次變更後續實作)涵蓋；ALG-AC17、ALG-AC18 與 `project_id` 擴充由 [Admin 唯讀查詢後續實作](#admin-唯讀查詢後續實作)涵蓋；T1～T4 的內容保持當時的樣子。
+- 每個任務一個 PR 就能完成，並能單獨驗收；ALG-AC01～ALG-AC12 每條都被一個任務涵蓋。本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）新增的 ALG-AC13～ALG-AC16 由下方[本次變更後續實作](#本次變更後續實作)涵蓋；ALG-AC17、ALG-AC18 與 `project_id` 擴充由 [Admin 唯讀查詢後續實作](#admin-唯讀查詢後續實作)涵蓋；ALG-AC30 的帳號事件覆蓋由 [#712 稽核覆蓋補充](#issue-712-稽核覆蓋補充-2026-10-20) 涵蓋；T1～T4 的內容保持當時的樣子。
 - 規格凍結後才依本表開 task issue；本 PR 只寫文件。
 - T3 開工時若 T2 還沒合併，也可以併進 T2（只要 #134 已合併），在 T2 的 PR 更新本表。
 - **和 `domain-model` T7（[#135](https://github.com/speko-tw/inspect-flow/issues/135)）的分工**：T7 依賴本計畫 T2，在 `Role`、角色指派、移出專案、`is_admin` 的入口呼叫寫入入口；DOM-R22 寫明由本規格驗收，所以驗收測試放在本計畫 T4，排在 #135 之後。T4 若發現 T7 漏寫或寫錯，開 `Bug` 修 `domain-model` 的 Service 檔，T4 本身不改 Service 檔（一個任務不跨兩份規格）。
@@ -67,11 +67,11 @@
 
 ## 範本庫寫入與套用（#382）
 
-依據：負責人指示補齊發版前檢查 #377 的 S1、S2、Q3；分類、系統、範本寫入與套用事件契約依 ALG-R31。模組權限授予與收回由 #538／ALG-R26 負責，本任務不重複登記。
+依據：負責人指示補齊發版前檢查 #377 的 S1、S2、Q3；分類、系統、範本寫入與套用事件契約依 ALG-R32。模組權限授予與收回由 #538／ALG-R26 負責，本任務不重複登記。
 
 | 任務 | 內容 | 主要檔案 | 驗收 | Issue |
 |---|---|---|---|---|
-| 範本稽核 | 登記事件目錄並由範本庫與套用 Service 在同一交易寫入；整系統套用一筆帶實際項目數的事件；補 auditLabels 白話標籤。整系統覆蓋由逐項事件呈現，無差異與空系統不留事件 | `backend/app/services/audit.py`、`template_library.py`、`project_templates.py`、範本與套用 API 測試、`frontend/src/admin/audit-log/auditLabels.ts` 及測試、兩份規格 | ALG-AC30、TPL-AC28 | [#382](https://github.com/speko-tw/inspect-flow/issues/382) |
+| 範本稽核 | 登記事件目錄並由範本庫與套用 Service 在同一交易寫入；整系統套用一筆帶實際項目數的事件；補 auditLabels 白話標籤。整系統覆蓋由逐項事件呈現，無差異與空系統不留事件 | `backend/app/services/audit.py`、`template_library.py`、`project_templates.py`、範本與套用 API 測試、`frontend/src/admin/audit-log/auditLabels.ts` 及測試、兩份規格 | ALG-AC31、TPL-AC28 | [#382](https://github.com/speko-tw/inspect-flow/issues/382) |
 
 ## 並行分組
 
@@ -100,6 +100,22 @@ audit_log_snapshot_backfill_allowed execution option。此選項僅允許
 TRUNCATE 仍由 append-only guard 拒絕。PostgreSQL 原表設 NOT NULL；
 SQLite 得以 batch migration 設 NOT NULL 或移除欄位。交易失敗即
 回滾。ALG-R30 禁止重建表的範圍限定為建立或移除索引的 migration。
+
+## Issue #712 稽核覆蓋補充（2026-10-20）
+
+依 #712 評估補齊三類帳號事件：帳號管理 API 建立帳號時寫
+`user.created`；email 與帳號到期日只有在值改變時才各寫一筆事件。
+新增事件沿用現有 `AuditLog` schema，不需 migration。`user.created`
+只保存 username、中文姓名、email、外部協作標記與 auth source；不得
+保存密碼或臨時密碼。事件欄位與 no-op、拒絕及交易回滾行為見
+[ALG-R31、ALG-AC30](spec.md#alg-r31)。
+
+實作與驗收檔案：`backend/app/services/audit.py`、
+`backend/app/services/users.py`、`backend/app/api/v1/users.py`、
+`backend/tests/services/test_users.py`、
+`backend/tests/services/test_audit.py`、
+`backend/tests/api/test_management.py`、
+`frontend/src/admin/audit-log/auditLabels.ts` 與其測試。
 
 ## 風險
 
@@ -131,6 +147,7 @@ SQLite 得以 batch migration 設 NOT NULL 或移除欄位。交易失敗即
 | ALG-AC16 | `backend/tests/cli/test_reset_admin_password_audit.py`（C，新增）：執行重設指令兩次（一次成功、一次輸入不同），斷言一筆 `user.password_set` 與目錄沒有新增事件代碼 |
 | ALG-AC17 | #412（T5b）：以未登入、非 Admin、Admin 呼叫查詢 API 並操作頁面；核對 401／403 與成功查詢前後 `audit_logs` 不變 |
 | ALG-AC18 | #412（T5b）：以 migration 前歷史事件、新的有專案與無專案事件（含刪除／修改時 `before`／`after` 無 `project_id`）驗證欄位填值、空值及索引；組合 `project_id`、`actor_id`、`event_type`、時間範圍並跨 cursor 翻頁，核對 AND、精確比對、降冪排序、無重複遺漏、無專案事件及歷史事件在專案篩選時被排除、不帶專案時仍可查、不存在專案 200 空頁、反向時間範圍與無效輸入 422；與 ADM-AC07、ADM-AC13 共用驗證。專案事件守門證據（#572）：`backend/tests/services/test_audit.py` 的 `test_project_scoped_catalog_covers_all_project_event_families`、`test_events_declaring_project_id_field_are_project_scoped`（遍歷事件目錄）、`test_project_event_without_project_id_is_rejected_before_write`（一般寫入）、`test_project_denial_without_project_id_is_rejected_before_queue`（延後寫入）、`test_project_event_without_project_id_is_rejected_without_queue`（無佇列的即時獨立寫入） |
+| ALG-AC30 | `backend/tests/services/test_users.py` 與 `backend/tests/api/test_management.py`：email、到期日變更前後值、created_by、entity_id、no-op 與建立帳號；建立事件不含密碼；`frontend/src/admin/audit-log/auditLabels.test.ts` 驗證三個新事件均有白話標籤 |
 
 ## 考慮過但沒採用的做法
 

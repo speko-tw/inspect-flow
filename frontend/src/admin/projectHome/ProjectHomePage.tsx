@@ -218,7 +218,7 @@ export default function ProjectHomePage() {
                 寫入入口與規劃頁連結由 canActOnPrimary 把關（ADM-R49）。 */}
             <dl aria-label="專案關鍵數字" className="project-key-numbers">
               <div>
-                <dt className="muted-text">成員</dt>
+                <dt className="muted-text">啟用成員</dt>
                 <dd>{summary.member_count} 人</dd>
               </div>
               <div>

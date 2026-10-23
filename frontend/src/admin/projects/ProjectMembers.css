@@ -31,12 +31,41 @@
   margin: 0;
 }
 
+.member-card-inactive .member-card-main,
+.member-card-inactive .member-card-name a {
+  color: var(--text-muted);
+}
+
 .member-card-name {
   font-weight: 700;
 }
 
 .member-card-roles {
   margin-top: var(--space-1);
+}
+
+.member-batch-select {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.member-batch-roles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.member-batch-roles p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.member-batch-roles select {
+  min-height: 44px;
 }
 
 .member-card-actions {

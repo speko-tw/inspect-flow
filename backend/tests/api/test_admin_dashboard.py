@@ -1,6 +1,6 @@
 """ADM-AC01～05、13：驗證後台 Dashboard API 契約與權限範圍。"""
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, event, select
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.models import (
@@ -13,6 +13,11 @@ from app.models import (
     Role,
     RolePermission,
     UserModulePermission,
+)
+from app.services import permissions as permission_service
+from app.services.admin_dashboard import (
+    list_dashboard_engineers,
+    list_dashboard_tasks,
 )
 from tests.api.test_inspection_planning_api import _planning_world
 from tests.db.conftest import create_root_user_with_company
@@ -162,6 +167,180 @@ def test_dashboard_counts_and_engineer_attribution(db_session, make_client):
             "started_in_progress_count",
         }
         for row in engineers.json()["items"]
+    )
+
+
+def test_engineer_workload_aggregates_task_rows_in_the_database(
+    db_session, make_client, monkeypatch
+):
+    world = _dashboard_fixture(db_session, make_client)
+    plan = db_session.scalar(
+        select(InspectionPlan).where(InspectionPlan.name == "使用中")
+    )
+    admin = world["admin_user"]
+    tasks = []
+    for index in range(24):
+        tasks.extend(
+            [
+                InspectionTask(
+                    plan_id=plan.id,
+                    project_id=world["project"].id,
+                    name=f"待開始 {index}",
+                    status="PENDING",
+                    assignee_id=world["field_user"].id,
+                    created_by=admin.id,
+                    updated_by=admin.id,
+                ),
+                InspectionTask(
+                    plan_id=plan.id,
+                    project_id=world["project"].id,
+                    name=f"進行中 {index}",
+                    status="IN_PROGRESS",
+                    assignee_id=world["field_user"].id,
+                    started_by=world["field_user_two"].id,
+                    created_by=admin.id,
+                    updated_by=admin.id,
+                ),
+                InspectionTask(
+                    plan_id=plan.id,
+                    project_id=world["project"].id,
+                    name=f"已完成 {index}",
+                    status="COMPLETED",
+                    completed_by=world["field_reader_user"].id,
+                    created_by=admin.id,
+                    updated_by=admin.id,
+                ),
+            ]
+        )
+    db_session.add_all(tasks)
+    db_session.commit()
+
+    result_row_counts: list[int] = []
+    original_execute = db_session.execute
+
+    class ObservedResult:
+        def __init__(self, result):
+            self._result = result
+
+        def all(self):
+            rows = self._result.all()
+            result_row_counts.append(len(rows))
+            return rows
+
+        def __getattr__(self, name):
+            return getattr(self._result, name)
+
+    def observe_execute(statement, *args, **kwargs):
+        result = original_execute(statement, *args, **kwargs)
+        sql = str(statement).lower()
+        if all(
+            f"inspection_tasks.{column}" in sql
+            for column in ("assignee_id", "started_by", "completed_by")
+        ):
+            return ObservedResult(result)
+        return result
+
+    monkeypatch.setattr(db_session, "execute", observe_execute)
+    result = list_dashboard_engineers(
+        db_session,
+        user_id=admin.id,
+        project_id=world["project"].id,
+        cursor=None,
+        limit=100,
+        query=None,
+    )
+
+    assert result_row_counts
+    assert isinstance(result["items"], list)
+    assert result["items"]
+    assert max(result_row_counts) <= len(result["items"]), (
+        "the workload query returned one row per task instead of one row "
+        f"per engineer: observed {result_row_counts}, "
+        f"engineers={len(result['items'])}"
+    )
+    by_id = {item["user_id"]: item for item in result["items"]}
+    assert by_id[world["field_user"].id]["assigned_pending_count"] == 25
+    assert by_id[world["field_user_two"].id]["started_in_progress_count"] == 25
+    assert by_id[world["field_reader_user"].id]["completed_by_count"] == 25
+
+
+def test_dashboard_task_list_query_count_does_not_grow_with_page_size(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin_user"]
+    project = world["project"]
+    plan = InspectionPlan(
+        project_id=project.id,
+        name="任務批次測試",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db_session.add(plan)
+    db_session.flush()
+
+    def add_tasks(start: int, stop: int) -> None:
+        for index in range(start, stop):
+            zone = ProjectZone(
+                project_id=project.id,
+                name=f"分區 {index}",
+                created_by=admin.id,
+                updated_by=admin.id,
+            )
+            db_session.add(zone)
+            db_session.flush()
+            db_session.add(
+                InspectionTask(
+                    plan_id=plan.id,
+                    project_id=project.id,
+                    zone_id=zone.id,
+                    name=f"任務 {index}",
+                    status="PENDING",
+                    assignee_id=world["field_user"].id,
+                    created_by=admin.id,
+                    updated_by=admin.id,
+                )
+            )
+        db_session.commit()
+
+    add_tasks(0, 3)
+
+    def read_with_select_count():
+        statements: list[str] = []
+
+        def before_cursor_execute(
+            _connection, _cursor, statement, _parameters, _context, _many
+        ):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        engine = db_session.get_bind()
+        event.listen(engine, "before_cursor_execute", before_cursor_execute)
+        try:
+            db_session.expire_all()
+            result = list_dashboard_tasks(
+                db_session,
+                user_id=admin.id,
+                project_id=project.id,
+                cursor=None,
+                limit=100,
+            )
+        finally:
+            event.remove(
+                engine, "before_cursor_execute", before_cursor_execute
+            )
+        return result, len(statements)
+
+    small_result, small_query_count = read_with_select_count()
+    assert isinstance(small_result["items"], list)
+    assert len(small_result["items"]) == 3
+    add_tasks(3, 18)
+    large_result, large_query_count = read_with_select_count()
+    assert isinstance(large_result["items"], list)
+    assert len(large_result["items"]) == 18
+    assert large_query_count == small_query_count, (
+        f"SELECT count grew from {small_query_count} to "
+        f"{large_query_count} for dashboard task details"
     )
 
 
@@ -394,6 +573,33 @@ def test_dashboard_tasks_require_global_permission_and_revoke_immediately(
     assert world["plain"].get(f"{base}/{task.id}").status_code == 403
 
 
+def test_effective_access_is_cached_only_for_one_request(
+    db_session, make_client, monkeypatch
+):
+    world = _dashboard_fixture(db_session, make_client)
+    original_query_person_access = permission_service.query_person_access
+    calls = 0
+
+    def count_person_access_queries(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original_query_person_access(*args, **kwargs)
+
+    monkeypatch.setattr(
+        permission_service,
+        "query_person_access",
+        count_person_access_queries,
+    )
+
+    first = world["admin"].get("/api/v1/admin/dashboard/summary")
+    assert first.status_code == 200, first.text
+    assert calls == 1
+
+    second = world["admin"].get("/api/v1/admin/dashboard/summary")
+    assert second.status_code == 200, second.text
+    assert calls == 2, "a later request must calculate the current access anew"
+
+
 def test_dashboard_tasks_allow_admin_and_deny_unentitled_members(
     db_session, make_client
 ):
@@ -500,3 +706,54 @@ def test_dashboard_tasks_exclude_draft(db_session, make_client):
     assert "DRAFT" not in {item["status"] for item in items}
     assert "CANCELLED" in {item["status"] for item in items}
     assert world["admin"].get(f"{base}/{draft.id}").status_code == 404
+
+
+def test_effective_access_cache_reads_writes_and_rollback_in_one_request(
+    db_session, make_client
+):
+    """DOM-R69、#712：真實請求中的 flush 與 rollback 都不能沿用舊權限。"""
+    from fastapi import Depends
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import Session
+
+    from app.auth.dependencies import get_db
+    from app.main import create_app
+
+    user = create_root_user_with_company(db_session, "CACHEHTTP712")
+    db_session.commit()
+    user_id = user.id
+    app = create_app()
+
+    @app.post("/test/request-cache")
+    def read_after_write_and_rollback(
+        db: Session = Depends(get_db, scope="function"),  # noqa
+    ):
+        before = permission_service.calculate_effective_access(
+            db, user_id=user_id
+        )
+        db.add(
+            UserModulePermission(
+                user_id=user_id, permission_code="project.use", source="manual"
+            )
+        )
+        db.flush()
+        changed = permission_service.calculate_effective_access(
+            db, user_id=user_id
+        )
+        db.rollback()
+        restored = permission_service.calculate_effective_access(
+            db, user_id=user_id
+        )
+        return {
+            "before": "project.use" in before.module_permissions,
+            "changed": "project.use" in changed.module_permissions,
+            "restored": "project.use" in restored.module_permissions,
+        }
+
+    response = TestClient(app).post("/test/request-cache")
+    assert response.status_code == 200
+    assert response.json() == {
+        "before": False,
+        "changed": True,
+        "restored": False,
+    }

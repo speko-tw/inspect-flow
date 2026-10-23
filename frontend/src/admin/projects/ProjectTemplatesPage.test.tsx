@@ -631,6 +631,12 @@ describe('專案範本套用與存為範本（#429）', () => {
     const retry = screen.getByRole('button', {
       name: '重新載入專案項目',
     })
+    // #429：先完成衝突提示的焦點效果，再驗證重試同步移焦的行為。
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: '改選其他範本' }),
+      ).toHaveFocus(),
+    )
     fireEvent.click(retry)
     expect(
       screen.getByRole('heading', {

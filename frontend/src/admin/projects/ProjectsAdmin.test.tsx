@@ -370,6 +370,7 @@ function projectFetch({
           company_id: null,
           company_name: null,
           is_active: true,
+          is_effectively_active: true,
           is_external_collaborator: user?.is_external_collaborator ?? false,
           module_status: { project_use: true, inspection_use: true },
         }
@@ -857,6 +858,37 @@ describe('admin projects page', () => {
       screen.getByRole('heading', { name: /目標工程/ }),
     ).toBeInTheDocument()
     expect(screen.queryByText('示範工程0')).not.toBeInTheDocument()
+  })
+
+  it('renders the API member count, including zero, after cursor paging', async () => {
+    const projects = Array.from({ length: 51 }, (_, index) => ({
+      ...makeProject({
+        id: `count-project-${index}`,
+        project_code: `COUNT-${String(index).padStart(3, '0')}`,
+        name: index === 50 ? '第二頁工程' : `計數工程${index}`,
+      }),
+      member_count: index === 0 ? 0 : index === 50 ? 7 : 2,
+    }))
+    const fetchMock = projectFetch({ projects })
+    renderAt('/projects')
+
+    await screen.findByRole('heading', { name: /計數工程0/ })
+    const firstCard = screen
+      .getByRole('heading', { name: /計數工程0/ })
+      .closest('article')
+    expect(firstCard).not.toBeNull()
+    expect(within(firstCard!).getByText('啟用成員 0 人')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    const secondPageHeading = await screen.findByRole('heading', {
+      name: /第二頁工程/,
+    })
+    const secondPageCard = secondPageHeading.closest('article')
+    expect(secondPageCard).not.toBeNull()
+    expect(within(secondPageCard!).getByText('啟用成員 7 人')).toBeVisible()
+    expect(calls(fetchMock, 'GET', /\/projects\?[^ ]*cursor=50/)).toHaveLength(
+      1,
+    )
   })
 
   it('shows planned completion on the card and hides empty lines', async () => {
@@ -1976,6 +2008,7 @@ const memberAnna: ProjectMember = {
   company_id: 'company-1',
   company_name: '示範公司',
   is_active: true,
+  is_effectively_active: true,
   is_external_collaborator: false,
   module_status: { project_use: true, inspection_use: true },
 }
@@ -2070,11 +2103,50 @@ describe('admin project members', () => {
   })
 
   it('labels an inactive project member', async () => {
-    projectFetch({ members: [{ ...memberAnna, is_active: false }] })
+    projectFetch({
+      members: [
+        { ...memberAnna, is_active: false, is_effectively_active: false },
+      ],
+    })
     renderAt('/projects/project-1/members')
 
     const card = await screen.findByRole('listitem')
     expect(within(card).getByText('（已停用）')).toBeVisible()
+    expect(card).toHaveClass('member-card-inactive')
+  })
+
+  it('labels an expired external member without changing its active flag', async () => {
+    projectFetch({
+      members: [
+        {
+          ...memberAnna,
+          is_external_collaborator: true,
+          is_effectively_active: false,
+        },
+      ],
+    })
+    renderAt('/projects/project-1/members')
+
+    const card = await screen.findByRole('listitem')
+    expect(within(card).getByText('（已到期）')).toBeVisible()
+    expect(card).toHaveClass('member-card-inactive')
+  })
+
+  it('keeps an external member whose expiry is today active', async () => {
+    projectFetch({
+      members: [
+        {
+          ...memberAnna,
+          is_external_collaborator: true,
+          is_effectively_active: true,
+        },
+      ],
+    })
+    renderAt('/projects/project-1/members')
+
+    const card = await screen.findByRole('listitem')
+    expect(within(card).queryByText('（已到期）')).not.toBeInTheDocument()
+    expect(card).not.toHaveClass('member-card-inactive')
   })
 
   it('links an Admin from project members to that person detail', async () => {

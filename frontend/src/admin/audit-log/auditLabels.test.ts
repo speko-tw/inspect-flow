@@ -20,6 +20,9 @@ describe('稽核事件白話對照', () => {
     ['template_item.deleted', null, '刪除範本項目'],
     ['project.template_applied', null, '套用範本'],
     ['project_inspection_item.deleted', null, '刪除查核項目'],
+    ['user.created', null, '建立帳號'],
+    ['user.email_changed', null, '修改帳號電子郵件'],
+    ['user.account_expiry_changed', null, '修改帳號到期日'],
   ])('把 %s 顯示成「%s」', (eventType, after, label) => {
     expect(
       eventLabel(auditLogEntryFixture({ event_type: eventType, after })),
@@ -97,6 +100,9 @@ describe('稽核事件白話對照', () => {
     'user.admin_changed',
     'user.company_changed',
     'user.external_flag_changed',
+    'user.email_changed',
+    'user.account_expiry_changed',
+    'user.created',
     'user.locked',
     'user.password_set',
     'user.username_changed',

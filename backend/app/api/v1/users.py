@@ -13,6 +13,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.batch import require_batch_size
 from app.api.errors import APIError, ErrorCode
 from app.api.pagination import (
     encode_page_cursor,
@@ -49,6 +50,8 @@ from app.permission_codes import (
     permission_code_module,
     permission_code_scope,
 )
+from app.services.account_status import effectively_active_user_clause
+from app.services.audit import record_audit_event
 from app.services.module_permissions import (
     CreatorRolePermissionsError,
     ExternalCollaboratorPermissionError,
@@ -68,6 +71,7 @@ from app.services.module_permissions import (
     revoke_module_permission,
     update_permission_bundle,
 )
+from app.services.operator import get_current_operator
 from app.services.user_lifecycle import (
     AccountExpiredError,
     InvalidRestoreSelectionError,
@@ -144,8 +148,14 @@ class UserResponse(BaseModel):
     account_expires_on: date | None
 
 
+class UserListItemResponse(UserResponse):
+    """ADM-R13、ADM-R47：清單與詳情共用公司名稱，避免依賴公司目錄。"""
+
+    company_name: str | None
+
+
 class UserListResponse(BaseModel):
-    items: list[UserResponse]
+    items: list[UserListItemResponse]
     next_cursor: str | None
 
 
@@ -185,6 +195,13 @@ class CreateUserRequest(BaseModel):
 
 class CreatedUserResponse(UserResponse):
     temporary_password: str
+
+
+class TemporaryPasswordResetResponse(BaseModel):
+    user_id: UUID
+    username: str
+    temporary_password: str
+    must_change_password: bool
 
 
 class UpdateUserRequest(BaseModel):
@@ -230,6 +247,21 @@ class RestoreSelection(BaseModel):
 
 class ReactivateRequest(BaseModel):
     restore: RestoreSelection
+
+
+class BatchUserRestoreItem(BaseModel):
+    user_id: UUID
+    restore: RestoreSelection
+
+
+class BatchActiveStatusRequest(BaseModel):
+    user_ids: list[UUID]
+    is_active: bool
+    restore: list[BatchUserRestoreItem] = Field(default_factory=list)
+
+
+class BatchUserStatusResponse(BaseModel):
+    items: list[UserResponse]
 
 
 class LifecycleListResponse(BaseModel):
@@ -469,6 +501,35 @@ def _check_company_exists(db: Session, company_id: UUID | None) -> None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
 
 
+def _serialize_user_page(
+    db: Session, users: Sequence[User]
+) -> list[UserListItemResponse]:
+    """Load page company labels in one query so list size adds no queries."""
+    company_ids = {user.company_id for user in users if user.company_id}
+    company_names = (
+        dict(
+            db.execute(
+                select(Company.id, Company.name).where(
+                    Company.id.in_(company_ids)
+                )
+            ).all()
+        )
+        if company_ids
+        else {}
+    )
+    return [
+        UserListItemResponse(
+            **UserResponse.model_validate(user).model_dump(),
+            company_name=(
+                company_names.get(user.company_id)
+                if user.company_id is not None
+                else None
+            ),
+        )
+        for user in users
+    ]
+
+
 @router.get("", response_model=UserListResponse)
 def list_users(
     q: str | None = Query(default=None, max_length=256),
@@ -495,7 +556,7 @@ def list_users(
         key_name="username",
         cursor=cursor,
         limit=limit,
-        serialize=lambda user: UserResponse.model_validate(user),
+        serialize_batch=partial(_serialize_user_page, db),
         filters=filters,
     )
     return UserListResponse(**result)
@@ -562,12 +623,13 @@ def get_module_delegate_user(
     )
 
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/{user_id}", response_model=UserListItemResponse)
 def get_user(
     user_id: UUID,
     db: Session = Depends(get_db, scope="function"),  # noqa
-) -> User:
-    return _get_user(db, user_id)
+) -> UserListItemResponse:
+    """ADM-R47：單帳號也帶公司名稱，使用同一批次序列化入口防止口徑分歧。"""
+    return _serialize_user_page(db, [_get_user(db, user_id)])[0]
 
 
 @router.post("", response_model=CreatedUserResponse, status_code=201)
@@ -580,6 +642,20 @@ def add_user(
 
     def create_user_and_password() -> tuple[User, str]:
         user = create_user(db, **body.model_dump(exclude={"is_admin"}))
+        # ALG-R31：與帳號、角色及臨時密碼同交易寫入，且不含密碼資料。
+        record_audit_event(
+            db,
+            "user.created",
+            entity_id=user.id,
+            before=None,
+            after={
+                "username": user.username,
+                "name_zh": user.name_zh,
+                "email": user.email,
+                "is_external_collaborator": user.is_external_collaborator,
+                "auth_source": user.auth_source,
+            },
+        )
         if body.is_admin:
             set_is_admin(db, user, True)
         password = secrets.token_urlsafe(24)
@@ -600,12 +676,47 @@ def add_user(
     )
 
 
-@router.patch("/{user_id}", response_model=UserResponse)
+@router.post(
+    "/{user_id}/temporary-password",
+    response_model=TemporaryPasswordResetResponse,
+)
+def reset_temporary_password(
+    user_id: UUID,
+    response: Response,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> TemporaryPasswordResetResponse:
+    """Reset one local account password through AUT-R36 exactly once."""
+    user = _get_user(db, user_id)
+    # ADM-R13、#414：沿用 router 已驗證的操作者，避免重複授權宣告。
+    if user.id == get_current_operator(db).id:
+        raise APIError(
+            ErrorCode.REQUEST_VALIDATION_FAILED,
+            422,
+            details=["請到設定變更自己的密碼。"],
+        )
+    if user.is_system or user.auth_source != "local":
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    password = secrets.token_urlsafe(24)
+    write_call(
+        lambda: set_password(db, user, password, is_temporary=True),
+        error_mapper=management_api_error,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return TemporaryPasswordResetResponse(
+        user_id=user.id,
+        username=user.username,
+        temporary_password=password,
+        must_change_password=True,
+    )
+
+
+@router.patch("/{user_id}", response_model=UserListItemResponse)
 def edit_user(
     user_id: UUID,
     body: UpdateUserRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
-) -> User:
+) -> UserListItemResponse:
+    """ADM-R47：寫入成功也回公司名稱，詳情可直接採用回應。"""
     user = _get_user(db, user_id)
     fields = body.model_dump(exclude_unset=True)
     desired_external = fields.pop("is_external_collaborator", None)
@@ -639,7 +750,8 @@ def edit_user(
         return update_user_manual(db, user, **fields)
 
     try:
-        return write_call(update_user, error_mapper=management_api_error)
+        updated = write_call(update_user, error_mapper=management_api_error)
+        return _serialize_user_page(db, [updated])[0]
     except _USER_BUSINESS_ERRORS as exc:
         if isinstance(exc, ExternalFlagConfirmationRequiredError):
             raise APIError(
@@ -656,55 +768,60 @@ def edit_user(
         raise _user_error(exc) from exc
 
 
-@router.put("/{user_id}/company", response_model=UserResponse)
+@router.put("/{user_id}/company", response_model=UserListItemResponse)
 def link_company(
     user_id: UUID,
     body: CompanyLinkRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
-) -> User:
+) -> UserListItemResponse:
+    """ADM-R47：寫入成功也回公司名稱，詳情可直接採用回應。"""
     user = _get_user(db, user_id)
     fields = body.model_dump(exclude_unset=True)
     _check_company_exists(db, body.company_id)
     if user.is_system and body.company_id != user.company_id:
         raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422)
     try:
-        return write_call(
+        updated = write_call(
             lambda: update_user_manual(db, user, **fields),
             error_mapper=management_api_error,
         )
+        return _serialize_user_page(db, [updated])[0]
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
 
 
-@router.put("/{user_id}/admin", response_model=UserResponse)
+@router.put("/{user_id}/admin", response_model=UserListItemResponse)
 def change_admin_status(
     user_id: UUID,
     body: AdminStatusRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
-) -> User:
+) -> UserListItemResponse:
+    """ADM-R47：寫入成功也回公司名稱，詳情可直接採用回應。"""
     user = _get_user(db, user_id)
     if user.is_admin == body.is_admin:
-        return user
+        return _serialize_user_page(db, [user])[0]
 
     def update_admin_status() -> User:
         updated_user = set_is_admin(db, user, body.is_admin)
         return updated_user
 
     try:
-        return write_call(
+        updated = write_call(
             update_admin_status,
             error_mapper=management_api_error,
         )
+        return _serialize_user_page(db, [updated])[0]
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
 
 
-@router.put("/{user_id}/active", response_model=UserResponse)
+@router.put("/{user_id}/active", response_model=UserListItemResponse)
 def change_active_status(
     user_id: UUID,
     body: ActiveStatusRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
-) -> User:
+) -> UserListItemResponse:
+    """ADM-R47：寫入成功也回公司名稱，詳情可直接採用回應。"""
     user = _get_user(db, user_id)
 
     def update_active_status() -> User:
@@ -716,12 +833,80 @@ def change_active_status(
             pass
         elif body.is_active and not user.is_active:
             raise APIError(ErrorCode.USER_REACTIVATION_REQUIRED, 422)
-        return write_call(
+        updated = write_call(
             update_active_status,
             error_mapper=management_api_error,
         )
+        return _serialize_user_page(db, [updated])[0]
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
+
+
+@router.post(":batch-active-status", response_model=BatchUserStatusResponse)
+def batch_change_active_status(
+    body: BatchActiveStatusRequest,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> BatchUserStatusResponse:
+    """Apply one account status to a batch in one transaction (ADM-R13)."""
+    ids = body.user_ids
+    require_batch_size(len(ids))
+    # ADM-R13、#414：整批預檢，不能先停用其他人再發現選到了自己。
+    if not body.is_active and get_current_operator(db).id in ids:
+        raise APIError(
+            ErrorCode.REQUEST_VALIDATION_FAILED,
+            422,
+            details=["不能批次停用自己的帳號。"],
+        )
+    if not ids or len(set(ids)) != len(ids):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    if not body.is_active and body.restore:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    targets = list(
+        db.scalars(
+            select(User)
+            .where(User.id.in_(ids))
+            .order_by(User.id)
+            .with_for_update()
+        )
+    )
+    if {user.id for user in targets} != set(ids):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+
+    restore_by_user = {item.user_id: item.restore for item in body.restore}
+    if body.is_active and (
+        len(restore_by_user) != len(body.restore)
+        or set(restore_by_user) != set(ids)
+        or any(user.is_active for user in targets)
+    ):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+
+    try:
+        if body.is_active:
+            changed = [
+                reactivate_user(
+                    db,
+                    user_id=user.id,
+                    **restore_by_user[user.id].model_dump(),
+                )
+                for user in targets
+            ]
+        else:
+            changed = [set_is_active(db, user, False) for user in targets]
+        return BatchUserStatusResponse(
+            items=[UserResponse.model_validate(user) for user in changed]
+        )
+    except BuiltInAccountModificationError as exc:
+        raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422) from exc
+    except LastActiveAdminRemovalError as exc:
+        raise APIError(ErrorCode.USER_LAST_ADMIN, 422) from exc
+    except AccountExpiredError as exc:
+        raise APIError(ErrorCode.USER_ACCOUNT_EXPIRY_PASSED, 422) from exc
+    except InvalidRestoreSelectionError as exc:
+        raise APIError(
+            ErrorCode.USER_RESTORE_SELECTION_INVALID,
+            422,
+            details=exc.details,
+        ) from exc
 
 
 @router.get("/{user_id}/deactivation-check")
@@ -1398,7 +1583,11 @@ def list_unmanaged_projects(
         dict(
             db.execute(
                 select(ProjectMember.project_id, func.count(ProjectMember.id))
-                .where(ProjectMember.project_id.in_(project_ids))
+                .join(User, User.id == ProjectMember.user_id)
+                .where(
+                    ProjectMember.project_id.in_(project_ids),
+                    effectively_active_user_clause(),
+                )
                 .group_by(ProjectMember.project_id)
             ).all()
         )

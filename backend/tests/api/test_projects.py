@@ -3,6 +3,7 @@
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date, timedelta
 from pathlib import Path
 from typing import TypedDict
 from uuid import UUID, uuid4
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import ErrorCode
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.db import clock
 from app.db.engine import get_engine
 from app.models import (
     AuditLog,
@@ -547,6 +549,84 @@ def test_project_list_query_count_does_not_grow(
     assert sum(bool(row["warnings"]) for row in rows["items"]) == 2
     assert baseline
     assert len(expanded) == len(baseline)
+    assert all("member_count" in row for row in rows["items"])
+
+
+def test_project_list_counts_only_active_members(project_api, db_session):
+    project = project_api["project"]
+    other_project = project_api["other_project"]
+    target = project_api["target"]
+    role = project_api["role"]
+    assert isinstance(target, User)
+    assert isinstance(role, Role)
+
+    inactive = create_user(
+        db_session,
+        is_external_collaborator=True,
+        account_expires_on=date(2099, 12, 31),
+        username="inactive.project.member",
+        email="inactive.project.member@demo.example",
+        name_zh="停用專案成員",
+    )
+    external = create_user(
+        db_session,
+        is_external_collaborator=True,
+        username="active.external.member",
+        email="active.external.member@demo.example",
+        name_zh="啟用外部成員",
+    )
+    expires_today = create_user(
+        db_session,
+        is_external_collaborator=True,
+        account_expires_on=clock.utc_now().date(),
+        username="today.external.member",
+        email="today.external.member@demo.example",
+        name_zh="到期日外部成員",
+    )
+    expired_external = create_user(
+        db_session,
+        is_external_collaborator=True,
+        account_expires_on=date(2000, 1, 1),
+        username="expired.external.member",
+        email="expired.external.member@demo.example",
+        name_zh="到期外部成員",
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=target.id,
+        role_ids=[role.id],
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=inactive.id,
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=external.id,
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=expires_today.id,
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=expired_external.id,
+    )
+    inactive.is_active = False
+    db_session.commit()
+
+    response = project_api["admin_client"].get("/api/v1/projects")
+    assert response.status_code == 200
+    counts = {
+        row["id"]: row["member_count"] for row in response.json()["items"]
+    }
+    assert counts[str(project.id)] == 4
+    assert counts[str(other_project.id)] == 0
 
 
 def test_project_list_search_cursor_and_validation(project_api):
@@ -1344,6 +1424,185 @@ def test_non_admin_cannot_change_own_project_roles(
     assert denied is not None
 
 
+def test_batch_member_role_replacement_is_atomic_and_checks_self_and_whitelist(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    target = project_api["target"]
+    actor = project_api["actor"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    assert isinstance(actor, User)
+    second = create_user(
+        db_session,
+        is_external_collaborator=False,
+        username="batch.project.member",
+        email="batch.project.member@example.test",
+        name_zh="批次成員",
+    )
+    assignable = create_role(
+        db_session,
+        name="批次可指派角色",
+        permission_codes=["project.read"],
+    )
+    assignable.is_assignable = True
+    forbidden = create_role(
+        db_session,
+        name="批次不可指派角色",
+        permission_codes=["project.read"],
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=target.id,
+        role_ids=[project_api["role"].id],
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=second.id,
+        role_ids=[project_api["role"].id],
+    )
+    db_session.commit()
+    path = f"/api/v1/projects/{project.id}/members:batch-roles"
+
+    restricted = project_api["actor_client"].post(
+        path,
+        json={
+            "items": [
+                {"user_id": str(target.id), "role_ids": [str(assignable.id)]},
+                {"user_id": str(second.id), "role_ids": [str(forbidden.id)]},
+            ]
+        },
+    )
+    assert restricted.status_code == 422
+    assert restricted.json()["error"]["code"] == (
+        ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE.value
+    )
+    db_session.expire_all()
+    for user_id in (target.id, second.id):
+        member = db_session.scalar(
+            select(ProjectMember).where(
+                ProjectMember.project_id == project.id,
+                ProjectMember.user_id == user_id,
+            )
+        )
+        assert member is not None
+        assert {item.role_id for item in member.role_assignments} == {
+            project_api["role"].id
+        }
+
+    self_change = project_api["actor_client"].post(
+        path,
+        json={
+            "items": [
+                {"user_id": str(target.id), "role_ids": [str(assignable.id)]},
+                {"user_id": str(actor.id), "role_ids": [str(assignable.id)]},
+            ]
+        },
+    )
+    assert self_change.status_code == 422
+    assert self_change.json()["error"]["code"] == (
+        ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE.value
+    )
+    db_session.expire_all()
+    target_member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == target.id,
+        )
+    )
+    assert target_member is not None
+    assert {item.role_id for item in target_member.role_assignments} == {
+        project_api["role"].id
+    }
+
+    changed = project_api["actor_client"].post(
+        path,
+        json={
+            "items": [
+                {"user_id": str(target.id), "role_ids": [str(assignable.id)]},
+                {"user_id": str(second.id), "role_ids": [str(assignable.id)]},
+            ]
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    assert {item["user_id"] for item in changed.json()["items"]} == {
+        str(target.id),
+        str(second.id),
+    }
+
+
+def test_batch_member_roles_can_revoke_some_roles_but_not_all(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    target = project_api["target"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    retained = create_role(
+        db_session,
+        name="批次保留角色",
+        permission_codes=["project.read"],
+    )
+    removed = create_role(
+        db_session,
+        name="批次撤銷角色",
+        permission_codes=["project.read"],
+    )
+    retained.is_assignable = True
+    removed.is_assignable = True
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=target.id,
+        role_ids=[retained.id, removed.id],
+    )
+    db_session.commit()
+    path = f"/api/v1/projects/{project.id}/members:batch-roles"
+
+    rejected = project_api["actor_client"].post(
+        path,
+        json={"items": [{"user_id": str(target.id), "role_ids": []}]},
+    )
+    assert rejected.status_code == 422
+    assert rejected.json()["error"]["code"] == (
+        ErrorCode.PROJECT_MEMBER_ROLES_REQUIRED.value
+    )
+    db_session.expire_all()
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == target.id,
+        )
+    )
+    assert member is not None
+    assert {item.role_id for item in member.role_assignments} == {
+        retained.id,
+        removed.id,
+    }
+
+    changed = project_api["actor_client"].post(
+        path,
+        json={
+            "items": [
+                {"user_id": str(target.id), "role_ids": [str(retained.id)]}
+            ]
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["items"][0]["role_ids"] == [str(retained.id)]
+    db_session.expire_all()
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == target.id,
+        )
+    )
+    assert member is not None
+    assert {item.role_id for item in member.role_assignments} == {retained.id}
+
+
 def test_member_nested_malformed_user_ids_return_validation_error(project_api):
     project = project_api["project"]
     assert isinstance(project, Project)
@@ -1746,6 +2005,7 @@ def test_list_members_returns_user_fields_roles_and_join_order(
         assert rows[0]["company_id"] is None
         assert rows[0]["company_name"] is None
         assert rows[0]["is_active"] is True
+        assert rows[0]["is_effectively_active"] is True
         assert rows[0]["role_ids"] == [str(role.id)]
         assert rows[1]["role_ids"] == []
 
@@ -1780,6 +2040,57 @@ def test_list_members_includes_company_and_inactive_user(
     assert row["company_id"] == str(company.id)
     assert row["company_name"] == company.name
     assert row["is_active"] is False
+    assert row["is_effectively_active"] is False
+
+
+def test_list_members_marks_expired_account_without_writing_inactive(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    admin = project_api["admin"]
+    assert isinstance(project, Project)
+    assert isinstance(admin, User)
+    expired = create_user(
+        db_session,
+        username="expired.member",
+        email="expired.member@demo.example",
+        name_zh="到期未停用成員",
+        is_external_collaborator=True,
+        account_expires_on=clock.utc_now().date() - timedelta(days=1),
+    )
+    expires_today = create_user(
+        db_session,
+        username="expires.today.member",
+        email="expires.today.member@demo.example",
+        name_zh="今日到期成員",
+        is_external_collaborator=True,
+        account_expires_on=clock.utc_now().date(),
+    )
+    add_project_member(db_session, project_id=project.id, user_id=expired.id)
+    add_project_member(
+        db_session, project_id=project.id, user_id=expires_today.id
+    )
+    db_session.commit()
+
+    response = project_api["admin_client"].get(
+        f"/api/v1/projects/{project.id}/members"
+    )
+    row = next(
+        item for item in response.json() if item["user_id"] == str(expired.id)
+    )
+    today_row = next(
+        item
+        for item in response.json()
+        if item["user_id"] == str(expires_today.id)
+    )
+
+    assert response.status_code == 200
+    assert row["is_active"] is True
+    assert row["is_effectively_active"] is False
+    assert today_row["is_active"] is True
+    assert today_row["is_effectively_active"] is True
+    db_session.refresh(expired)
+    assert expired.is_active is True
 
 
 def test_list_members_marks_external_collaborators(
@@ -2213,3 +2524,56 @@ def test_admin_can_add_users_of_any_company(project_api, db_session: Session):
         },
     )
     assert added.status_code == 201
+
+
+def test_batch_roles_reject_inactive_member_atomically(
+    project_api, db_session
+):
+    """ADM-R13、#414：停用成員錯誤回 422，整批角色維持原狀。"""
+    project = project_api["project"]
+    target = project_api["target"]
+    role = project_api["role"]
+    member = add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=target.id,
+        role_ids=[role.id],
+    )
+    replacement = create_role(
+        db_session, name="新角色", permission_codes=["project.read"]
+    )
+    target.is_active = False
+    db_session.commit()
+    response = project_api["admin_client"].post(
+        f"/api/v1/projects/{project.id}/members:batch-roles",
+        json={
+            "items": [
+                {"user_id": str(target.id), "role_ids": [str(replacement.id)]}
+            ]
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "request.validation_failed"
+    db_session.expire_all()
+    assert {item.role_id for item in member.role_assignments} == {role.id}
+
+
+def test_batch_roles_reject_more_than_200_items(project_api):
+    """ADM-R13、#414：角色批次與帳號、公司採相同數量限制。"""
+    from uuid import uuid4
+
+    project = project_api["project"]
+    role = project_api["role"]
+    response = project_api["admin_client"].post(
+        f"/api/v1/projects/{project.id}/members:batch-roles",
+        json={
+            "items": [
+                {"user_id": str(uuid4()), "role_ids": [str(role.id)]}
+                for _ in range(201)
+            ]
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == [
+        "一次最多選取 200 筆，請減少數量後再試。"
+    ]

@@ -935,6 +935,31 @@ register_audit_event(
     fields=("username",),
 )
 register_audit_event(
+    "user.email_changed",
+    entity_type="user",
+    kind=AuditEventKind.UPDATED,
+    fields=("email",),
+)
+register_audit_event(
+    "user.account_expiry_changed",
+    entity_type="user",
+    kind=AuditEventKind.UPDATED,
+    fields=("account_expires_on",),
+    nullable_fields=("account_expires_on",),
+)
+register_audit_event(
+    "user.created",
+    entity_type="user",
+    kind=AuditEventKind.CREATED,
+    fields=(
+        "username",
+        "name_zh",
+        "email",
+        "is_external_collaborator",
+        "auth_source",
+    ),
+)
+register_audit_event(
     "user.company_changed",
     entity_type="user",
     kind=AuditEventKind.UPDATED,

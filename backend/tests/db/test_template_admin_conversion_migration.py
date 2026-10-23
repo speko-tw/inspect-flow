@@ -29,6 +29,7 @@ from tests.db.conftest import create_root_user_with_company
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
 _PARENT_REVISION = "6eaaafbe0ef2"
+_CONVERSION_REVISION = "b72e4c19f6a3"
 _CONVERSION_PARENT = "9b7a6c2d1e45"
 
 
@@ -236,9 +237,8 @@ def _assert_downgrade_rejected_without_changes(
     user_id,
     expected_permission: tuple[str, str],
 ) -> None:
-    command.downgrade(_cfg(), "b72e4c19f6a3")
-    assert _current_revision(db_url) == "b72e4c19f6a3"
-
+    revision_before = _current_revision(db_url)
+    assert revision_before == _CONVERSION_REVISION
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:
@@ -289,9 +289,7 @@ def _assert_downgrade_rejected_without_changes(
         engine.dispose()
     assert after == before
     assert expected_permission in after
-    # Start at the conversion revision so the guard is isolated from a later
-    # child migration on both SQLite and PostgreSQL.
-    assert _current_revision(db_url) == "b72e4c19f6a3"
+    assert _current_revision(db_url) == revision_before
 
 
 def test_empty_template_permissions_allow_empty_legacy_table(db_url):
@@ -328,6 +326,7 @@ def test_downgrade_rejects_internal_backfill_without_changes(db_url):
         old_engine.dispose()
 
     command.upgrade(_cfg(), "head")
+    command.downgrade(_cfg(), _CONVERSION_REVISION)
     _assert_downgrade_rejected_without_changes(
         db_url, manager_id, ("template.manage", "backfill")
     )
@@ -354,6 +353,7 @@ def test_downgrade_rejects_external_manual_use_without_changes(db_url):
         old_engine.dispose()
 
     command.upgrade(_cfg(), "head")
+    command.downgrade(_cfg(), _CONVERSION_REVISION)
     _assert_downgrade_rejected_without_changes(
         db_url, external_id, ("template.use", "manual")
     )

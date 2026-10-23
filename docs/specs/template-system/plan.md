@@ -36,7 +36,7 @@
 - #429 原型核可後，TPL-AC21～TPL-AC22 覆蓋套用、存為範本及內業專案工作台；互動與文案依原型，技術細節標為規格設計。正式套用網址為 `/projects/{id}/inspection-items/templates`；舊 `/admin/projects/{id}/inspection-items/templates` 與 `/admin/projects/{id}/templates` 回 404、不轉址（#705）。
 - #482（v0.3.0 走查缺陷修正）：套用頁依登入本體的 `has_template_access`（#484）顯示「存為範本」，並新增 TPL-AC23～TPL-AC24；#486 將 TPL-AC24 的格式化函式共用至範本編輯器與現場詳情。驗證由 `inspectionStandard.test.ts`、`TemplatesPage.test.tsx`、`ProjectTemplatesPage.test.tsx`、`ProjectItemChangePage.test.tsx`、`TaskDetail.test.tsx` 負責。
 - #434（負責人直接指示的範圍變更）：新增 T14，涵蓋存為範本 API 的可選名稱、重用範本標題 trim/長度/同系統不分大小寫唯一規則、UI 名稱預填與衝突後改名重試，以及 `template_item.created_from_project` 的最終名稱稽核。TPL-R23／TPL-AC22 先前「不得有名稱欄」由本項目修正；不需另開 spec-change issue。
-- #382（發版前稽核缺漏）：依 TPL-R25／TPL-AC28，在範本庫服務寫入分類、系統及查核項目事件，在專案套用服務以一筆 `project.template_applied` 記錄來源與實際項目數；整系統覆蓋沿用逐項事件。事件目錄、事件欄位與白話標籤同步見 `audit-log` ALG-R31／ALG-AC30；不含範本模組權限授予／收回（#538）。
+- #382（發版前稽核缺漏）：依 TPL-R25／TPL-AC28，在範本庫服務寫入分類、系統及查核項目事件，在專案套用服務以一筆 `project.template_applied` 記錄來源與實際項目數；整系統覆蓋沿用逐項事件。事件目錄、事件欄位與白話標籤同步見 `audit-log` ALG-R32／ALG-AC31；不含範本模組權限授予／收回（#538）。
 
 ## 並行分組
 
