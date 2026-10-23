@@ -710,12 +710,13 @@ def reset_temporary_password(
     )
 
 
-@router.patch("/{user_id}", response_model=UserResponse)
+@router.patch("/{user_id}", response_model=UserListItemResponse)
 def edit_user(
     user_id: UUID,
     body: UpdateUserRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
-) -> User:
+) -> UserListItemResponse:
+    """ADM-R47：寫入成功也回公司名稱，詳情可直接採用回應。"""
     user = _get_user(db, user_id)
     fields = body.model_dump(exclude_unset=True)
     desired_external = fields.pop("is_external_collaborator", None)
@@ -749,7 +750,8 @@ def edit_user(
         return update_user_manual(db, user, **fields)
 
     try:
-        return write_call(update_user, error_mapper=management_api_error)
+        updated = write_call(update_user, error_mapper=management_api_error)
+        return _serialize_user_page(db, [updated])[0]
     except _USER_BUSINESS_ERRORS as exc:
         if isinstance(exc, ExternalFlagConfirmationRequiredError):
             raise APIError(
@@ -766,55 +768,60 @@ def edit_user(
         raise _user_error(exc) from exc
 
 
-@router.put("/{user_id}/company", response_model=UserResponse)
+@router.put("/{user_id}/company", response_model=UserListItemResponse)
 def link_company(
     user_id: UUID,
     body: CompanyLinkRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
-) -> User:
+) -> UserListItemResponse:
+    """ADM-R47：寫入成功也回公司名稱，詳情可直接採用回應。"""
     user = _get_user(db, user_id)
     fields = body.model_dump(exclude_unset=True)
     _check_company_exists(db, body.company_id)
     if user.is_system and body.company_id != user.company_id:
         raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422)
     try:
-        return write_call(
+        updated = write_call(
             lambda: update_user_manual(db, user, **fields),
             error_mapper=management_api_error,
         )
+        return _serialize_user_page(db, [updated])[0]
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
 
 
-@router.put("/{user_id}/admin", response_model=UserResponse)
+@router.put("/{user_id}/admin", response_model=UserListItemResponse)
 def change_admin_status(
     user_id: UUID,
     body: AdminStatusRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
-) -> User:
+) -> UserListItemResponse:
+    """ADM-R47：寫入成功也回公司名稱，詳情可直接採用回應。"""
     user = _get_user(db, user_id)
     if user.is_admin == body.is_admin:
-        return user
+        return _serialize_user_page(db, [user])[0]
 
     def update_admin_status() -> User:
         updated_user = set_is_admin(db, user, body.is_admin)
         return updated_user
 
     try:
-        return write_call(
+        updated = write_call(
             update_admin_status,
             error_mapper=management_api_error,
         )
+        return _serialize_user_page(db, [updated])[0]
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
 
 
-@router.put("/{user_id}/active", response_model=UserResponse)
+@router.put("/{user_id}/active", response_model=UserListItemResponse)
 def change_active_status(
     user_id: UUID,
     body: ActiveStatusRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
-) -> User:
+) -> UserListItemResponse:
+    """ADM-R47：寫入成功也回公司名稱，詳情可直接採用回應。"""
     user = _get_user(db, user_id)
 
     def update_active_status() -> User:
@@ -826,10 +833,11 @@ def change_active_status(
             pass
         elif body.is_active and not user.is_active:
             raise APIError(ErrorCode.USER_REACTIVATION_REQUIRED, 422)
-        return write_call(
+        updated = write_call(
             update_active_status,
             error_mapper=management_api_error,
         )
+        return _serialize_user_page(db, [updated])[0]
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
 

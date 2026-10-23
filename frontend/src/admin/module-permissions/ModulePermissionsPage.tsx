@@ -335,10 +335,12 @@ function ModulePermissionsPageContent({
   const [projectOptionsStatus, setProjectOptionsStatus] = useState<
     'idle' | 'loading' | 'ready' | 'error'
   >('idle')
+  const [projectOptionsError, setProjectOptionsError] = useState('')
   const projectOptionsRequest = useRef<Promise<void> | null>(null)
   const [advancedStatus, setAdvancedStatus] = useState<
     'idle' | 'loading' | 'ready' | 'error'
   >('idle')
+  const [advancedError, setAdvancedError] = useState('')
   const advancedRequest = useRef<Promise<void> | null>(null)
   const advancedLoaded = useRef(false)
   const [participationResult, setParticipationResult] = useState<{
@@ -548,6 +550,7 @@ function ModulePermissionsPageContent({
     if (wizardOptionsLoaded.current.projects) return Promise.resolve()
     if (projectOptionsRequest.current) return projectOptionsRequest.current
     setProjectOptionsStatus('loading')
+    setProjectOptionsError('')
     // ADM-R45：診斷與精靈共用一次載入，滑鼠首次開啟選單前即有明確狀態。
     const pending = listAllPages<Project>('/projects')
       .then((rows) => {
@@ -557,6 +560,7 @@ function ModulePermissionsPageContent({
       })
       .catch((caught: unknown) => {
         setProjectOptionsStatus('error')
+        setProjectOptionsError(message(caught))
         throw caught
       })
       .finally(() => {
@@ -749,6 +753,7 @@ function ModulePermissionsPageContent({
   const refresh = useCallback((): Promise<void> => {
     if (advancedRequest.current) return advancedRequest.current
     setAdvancedStatus('loading')
+    setAdvancedError('')
     const pending = (async () => {
       const bundleRows = currentUser.is_admin
         ? await listPermissionBundles()
@@ -757,7 +762,7 @@ function ModulePermissionsPageContent({
         ? await Promise.all([
             listCompanies(),
             listRoles(),
-            loadProjectOptions(),
+            embedded ? Promise.resolve() : loadProjectOptions(),
             getCreatorRole(),
           ])
         : [[], [], undefined, { role_id: '' }]
@@ -770,6 +775,7 @@ function ModulePermissionsPageContent({
     })()
       .catch((caught: unknown) => {
         setAdvancedStatus('error')
+        setAdvancedError(message(caught))
         throw caught
       })
       .finally(() => {
@@ -777,7 +783,7 @@ function ModulePermissionsPageContent({
       })
     advancedRequest.current = pending
     return pending
-  }, [currentUser.is_admin, loadProjectOptions])
+  }, [currentUser.is_admin, embedded, loadProjectOptions])
 
   const diagnosticVisible =
     Boolean(selectedUser) &&
@@ -785,9 +791,7 @@ function ModulePermissionsPageContent({
     !(wizardOpen && step === 4)
   useEffect(() => {
     if (!diagnosticVisible) return
-    void loadProjectOptions().catch((caught: unknown) =>
-      setError(message(caught)),
-    )
+    void loadProjectOptions().catch(() => undefined)
   }, [diagnosticVisible, loadProjectOptions])
 
   useEffect(() => {
@@ -799,7 +803,7 @@ function ModulePermissionsPageContent({
           return
         }
         if (embedded && currentUser.is_admin && selectedUserId) return
-        await refresh()
+        await refresh().catch(() => undefined)
       } catch (caught) {
         if (active) setError(message(caught))
       }
@@ -1307,7 +1311,7 @@ function ModulePermissionsPageContent({
       }
       // 補上角色後，「參與專案與角色」清單要跟著更新，
       // 否則畫面會一直顯示補上前的角色（#708）。
-      setParticipationReload((request) => request + 1)
+      setParticipationReload((current) => current + 1)
       await diagnose()
     } catch (caught) {
       setError(message(caught))
@@ -1820,13 +1824,19 @@ function ModulePermissionsPageContent({
             // #712：展開進階設定時才載入組合、角色與其他管理選項。
             // 原生 toggle 可能早於 React 提交 ready，成功快取以 ref 同步判斷。
             if (!event.currentTarget.open || advancedLoaded.current) return
-            void refresh().catch((caught: unknown) =>
-              setError(message(caught)),
-            )
+            void refresh().catch(() => undefined)
           }}
         >
           <summary>進階設定</summary>
           {advancedStatus === 'loading' && <p role="status">載入中…</p>}
+          {advancedStatus === 'error' && (
+            <div>
+              <p role="alert">進階設定載入失敗：{advancedError}</p>
+              <Button onClick={() => void refresh().catch(() => undefined)}>
+                重新載入進階設定
+              </Button>
+            </div>
+          )}
           <Card>
             <h2>已設定的權限</h2>
             <p>
@@ -2188,7 +2198,7 @@ function ModulePermissionsPageContent({
             {participationForSelectedUser?.error && (
               <Button
                 onClick={() =>
-                  setParticipationReload((request) => request + 1)
+                  setParticipationReload((current) => current + 1)
                 }
               >
                 重新載入參與專案
@@ -2268,15 +2278,16 @@ function ModulePermissionsPageContent({
               </label>
             )}
             {projectOptionsStatus === 'error' && (
-              <Button
-                onClick={() =>
-                  void loadProjectOptions().catch((caught: unknown) =>
-                    setError(message(caught)),
-                  )
-                }
-              >
-                重新載入專案選項
-              </Button>
+              <div>
+                <p role="alert">專案選項載入失敗：{projectOptionsError}</p>
+                <Button
+                  onClick={() =>
+                    void loadProjectOptions().catch(() => undefined)
+                  }
+                >
+                  重新載入專案選項
+                </Button>
+              </div>
             )}
             <Button
               disabled={

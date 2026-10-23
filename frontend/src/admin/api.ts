@@ -33,7 +33,7 @@ export interface User {
   account_expires_on?: string | null
 }
 
-/** ADM-R47：直接網址的詳情回應保證包含公司名稱，未連結時為 null。 */
+/** ADM-R47：詳情與單筆修改回應保證包含公司名稱，未連結時為 null。 */
 export interface UserDetail extends User {
   company_name: string | null
 }
@@ -191,7 +191,7 @@ export function createUser(input: UserInput): Promise<CreatedUser> {
 export function updateUser(
   id: string,
   input: Partial<UserInput>,
-): Promise<User> {
+): Promise<UserDetail> {
   return request(`/users/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
@@ -202,21 +202,27 @@ export function linkUserCompany(
   id: string,
   companyId: string | null,
   fields: Pick<UserInput, 'department' | 'location' | 'employee_no'> = {},
-): Promise<User> {
+): Promise<UserDetail> {
   return request(`/users/${id}/company`, {
     method: 'PUT',
     body: JSON.stringify({ company_id: companyId, ...fields }),
   })
 }
 
-export function setUserAdmin(id: string, isAdmin: boolean): Promise<User> {
+export function setUserAdmin(
+  id: string,
+  isAdmin: boolean,
+): Promise<UserDetail> {
   return request(`/users/${id}/admin`, {
     method: 'PUT',
     body: JSON.stringify({ is_admin: isAdmin }),
   })
 }
 
-export function setUserActive(id: string, isActive: boolean): Promise<User> {
+export function setUserActive(
+  id: string,
+  isActive: boolean,
+): Promise<UserDetail> {
   return request(`/users/${id}/active`, {
     method: 'PUT',
     body: JSON.stringify({ is_active: isActive }),

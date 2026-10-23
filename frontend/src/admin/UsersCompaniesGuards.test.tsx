@@ -1594,3 +1594,29 @@ describe('帳號詳情與批次的審查修正（#414）', () => {
     expect(screen.queryByText(/公司清單載入失敗/)).toBeNull()
   })
 })
+
+describe('第二輪審查的帳號錯誤隔離（#414）', () => {
+  it('切換詳情帳號後不顯示上一個帳號的重設密碼錯誤', async () => {
+    const second = { ...regularUser, id: 'user-2', name_zh: '另一個帳號' }
+    stubBackend({
+      users: [regularUser, second],
+      fail: (c) => c.path.endsWith('/temporary-password'),
+    })
+    const view = renderUsers({ detailUserId: regularUser.id })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: '重設臨時密碼',
+      }),
+    )
+    await screen.findByRole('alert')
+    view.rerender(
+      <DataMemoryRouter>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <UsersPage detailUserId="user-2" onTemporaryPassword={vi.fn()} />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+    await screen.findByRole('heading', { name: '另一個帳號' })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})

@@ -141,7 +141,10 @@ export default function UsersPage({
   const companyListRequest = useRef<Promise<void> | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
   const [detailError, setDetailError] = useState('')
-  const [passwordResetError, setPasswordResetError] = useState('')
+  const [passwordResetError, setPasswordResetError] = useState<{
+    userId: string
+    message: string
+  } | null>(null)
   const [externalNoProject, setExternalNoProject] = useState<User[]>([])
   const [unmanagedProjects, setUnmanagedProjects] = useState<
     UnmanagedProject[]
@@ -379,13 +382,16 @@ export default function UsersPage({
 
   async function resetTemporaryPassword(user: User) {
     if (busyUser !== null || user.id === currentUser.id) return
-    setPasswordResetError('')
+    setPasswordResetError(null)
     setBusyUser(user.id)
     try {
       const result = await resetUserTemporaryPassword(user.id)
       onTemporaryPassword(user.username, result.temporary_password, 'reset')
     } catch (caught) {
-      setPasswordResetError(managementErrorMessage(caught))
+      setPasswordResetError({
+        userId: user.id,
+        message: managementErrorMessage(caught),
+      })
     } finally {
       setBusyUser(null)
     }
@@ -901,7 +907,9 @@ export default function UsersPage({
               {detail.id === currentUser.id && (
                 <p className="field-hint">請到設定變更自己的密碼。</p>
               )}
-              {passwordResetError && <p role="alert">{passwordResetError}</p>}
+              {passwordResetError?.userId === detail.id && (
+                <p role="alert">{passwordResetError.message}</p>
+              )}
               {actionNotice?.userId === detail.id && (
                 <p className="notice-success" role="status">
                   {actionNotice.message}

@@ -1636,3 +1636,23 @@ def test_user_detail_includes_company_name_without_loading_the_list(
     assert response.json()["company_name"] == (
         "詳情的公司" if linked else None
     )
+
+
+def test_company_link_write_returns_the_new_company_name(
+    admin_client, db_session
+):
+    """#414：修改公司後直接採用寫入回應也能顯示新公司名稱。"""
+    client, _ = admin_client
+    user = create_root_user_with_company(db_session, "WRITE414")
+    db_session.commit()
+    company = client.post("/api/v1/companies", json={"name": "新連結公司"})
+    assert company.status_code == 201
+
+    response = client.put(
+        f"/api/v1/users/{user.id}/company",
+        json={"company_id": company.json()["id"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["company_name"] == "新連結公司"
+    assert response.json()["company_id"] == company.json()["id"]

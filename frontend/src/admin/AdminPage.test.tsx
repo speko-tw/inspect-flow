@@ -447,7 +447,11 @@ function managementFetch({
         if (row) {
           Object.assign(row, body)
         }
-        return Response.json(row)
+        return Response.json({
+          ...row,
+          company_name:
+            companies.find((c) => c.id === row?.company_id)?.name ?? null,
+        })
       }
       if (url.endsWith('/users/user-1/admin')) {
         if (failAdminAction) {
@@ -462,7 +466,11 @@ function managementFetch({
             (JSON.parse(String(init?.body)) as { is_admin: boolean }).is_admin,
           )
         }
-        return Response.json(row)
+        return Response.json({
+          ...row,
+          company_name:
+            companies.find((c) => c.id === row?.company_id)?.name ?? null,
+        })
       }
       if (url.endsWith('/users/user-1/active')) {
         const row = rows.find((user) => user.id === 'user-1')
@@ -472,7 +480,11 @@ function managementFetch({
               .is_active,
           )
         }
-        return Response.json(row)
+        return Response.json({
+          ...row,
+          company_name:
+            companies.find((c) => c.id === row?.company_id)?.name ?? null,
+        })
       }
       if (url.endsWith('/users/user-1/deactivation-check')) {
         return Response.json({ user_id: 'user-1', last_manager_projects: [] })
@@ -503,7 +515,11 @@ function managementFetch({
         if (row) {
           Object.assign(row, JSON.parse(String(init.body)) as Partial<User>)
         }
-        return Response.json(row)
+        return Response.json({
+          ...row,
+          company_name:
+            companies.find((c) => c.id === row?.company_id)?.name ?? null,
+        })
       }
       if (parsed.pathname.endsWith('/audit-logs') && method === 'GET') {
         return Response.json({ items: [], next_cursor: null })
