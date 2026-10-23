@@ -9,6 +9,7 @@ import {
 } from '../../components/layout/LayoutPatterns'
 import { STATUS_BADGES } from '../../ui/statusBadge'
 import { ROUTES } from '../../routes'
+import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import {
   getDashboardTask,
   listDashboardProjects,
@@ -195,15 +196,7 @@ export default function DashboardTaskPage() {
   }
 
   if (currentList.state === 'denied' || currentDetail.state === 'denied') {
-    return (
-      <section className="dashboard-task-page" aria-labelledby="task-denied">
-        <h1 id="task-denied">目前無法查看專案進度</h1>
-        <p role="alert">你目前沒有查看此專案任務的權限。</p>
-        <Link className="dashboard-task-back" to={ROUTES.dashboardIndex.path}>
-          返回專案進度總覽
-        </Link>
-      </section>
-    )
+    return <AccessDeniedPage />
   }
 
   return (

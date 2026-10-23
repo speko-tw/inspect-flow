@@ -5,12 +5,14 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { Link, Route, Routes } from 'react-router'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { describe, expect, it, vi } from 'vitest'
 
 import { deferred, expectImeEnterIgnored } from '../../testing/submitGuard'
+import { currentUserFixture } from '../../testing/contractFixtures'
+import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { ManagementApiError } from '../api'
 import type { InspectionTask, PlanningClient } from './api'
 import { createMockPlanningClient } from './api.mock'
@@ -30,7 +32,18 @@ function validationError(fixture: {
 }
 
 function render(ui: ReactElement) {
-  return renderWithoutRouter(ui, { wrapper: DataMemoryRouter })
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <DataMemoryRouter>
+        <CurrentUserProvider
+          value={{ user: currentUserFixture(), clear: vi.fn() }}
+        >
+          {children}
+        </CurrentUserProvider>
+      </DataMemoryRouter>
+    )
+  }
+  return renderWithoutRouter(ui, { wrapper: Wrapper })
 }
 
 async function expectNotice(text: string) {
@@ -216,7 +229,13 @@ describe('planning management page', () => {
     client.createPlan = async () => {
       throw new ManagementApiError(403, 'permission.denied')
     }
-    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    render(
+      <CurrentUserProvider
+        value={{ user: currentUserFixture(), clear: vi.fn() }}
+      >
+        <PlanningPage client={client} initialProjectId="project-demo-1" />
+      </CurrentUserProvider>,
+    )
 
     await screen.findByRole('heading', { name: '查核計畫' })
     fireEvent.change(screen.getByLabelText(/計畫名稱/), {
@@ -236,17 +255,24 @@ describe('planning management page', () => {
     client.listPlans = async () => {
       throw new ManagementApiError(403, 'permission.denied')
     }
-    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    render(
+      <CurrentUserProvider
+        value={{ user: currentUserFixture(), clear: vi.fn() }}
+      >
+        <PlanningPage client={client} initialProjectId="project-demo-1" />
+      </CurrentUserProvider>,
+    )
 
     expect(
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      '沒有這個專案的查核計畫讀取權限',
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限',
     )
-    expect(screen.getByRole('link', { name: '返回專案清單' })).toHaveAttribute(
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
-      '/projects',
+      '/settings',
     )
   })
 
@@ -2221,22 +2247,26 @@ describe('planning forms guard (#507)', () => {
         .fn()
         .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
       renderWithoutRouter(
-        <DataMemoryRouter
-          initialEntries={['/projects/project-demo-1/planning']}
+        <CurrentUserProvider
+          value={{ user: currentUserFixture(), clear: vi.fn() }}
         >
-          <Routes>
-            <Route
-              element={
-                <PlanningPage
-                  client={client}
-                  initialProjectId="project-demo-1"
-                />
-              }
-              path="/projects/:projectId/planning"
-            />
-            <Route element={<p>專案清單頁</p>} path="/projects" />
-          </Routes>
-        </DataMemoryRouter>,
+          <DataMemoryRouter
+            initialEntries={['/projects/project-demo-1/planning']}
+          >
+            <Routes>
+              <Route
+                element={
+                  <PlanningPage
+                    client={client}
+                    initialProjectId="project-demo-1"
+                  />
+                }
+                path="/projects/:projectId/planning"
+              />
+              <Route element={<p>我的首頁</p>} path="/settings" />
+            </Routes>
+          </DataMemoryRouter>
+        </CurrentUserProvider>,
       )
       fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
         target: { value: '尚未儲存的計畫' },
@@ -2246,9 +2276,9 @@ describe('planning forms guard (#507)', () => {
       )
       await screen.findByRole('heading', { name: '無權限' })
 
-      fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))
+      fireEvent.click(screen.getByRole('link', { name: '回到我的首頁' }))
 
-      expect(await screen.findByText('專案清單頁')).toBeVisible()
+      expect(await screen.findByText('我的首頁')).toBeVisible()
       expect(screen.queryByRole('group')).toBeNull()
     })
 

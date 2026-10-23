@@ -529,10 +529,6 @@ async function openAccountDetails(username: string, displayName: string) {
   return row
 }
 
-function openAccountMoreActions() {
-  fireEvent.click(screen.getByText('更多'))
-}
-
 afterEach(() => {
   vi.unstubAllGlobals()
 })
@@ -791,7 +787,6 @@ describe('admin user and company pages', () => {
     fireEvent.click(within(adminRow).getByRole('link', { name: 'admin' }))
     await screen.findByRole('heading', { name: 'admin', level: 1 })
     expect(screen.getByRole('button', { name: '修改資料' })).toBeDisabled()
-    openAccountMoreActions()
     expect(screen.getByRole('button', { name: '修改公司連結' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '收回管理者' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '停用帳號' })).toBeDisabled()
@@ -1141,7 +1136,6 @@ describe('admin user and company pages', () => {
     expect(screen.getByLabelText('帳號名稱')).toHaveValue('anna.deng')
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
 
-    openAccountMoreActions()
     fireEvent.click(screen.getByRole('button', { name: '修改公司連結' }))
     const companyForm = screen
       .getByRole('heading', { name: '連結公司' })
@@ -1216,7 +1210,6 @@ describe('admin user and company pages', () => {
     })
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
-    openAccountMoreActions()
     fireEvent.click(screen.getByRole('button', { name: '修改公司連結' }))
     const form = within(
       screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
@@ -1248,7 +1241,6 @@ describe('admin user and company pages', () => {
     const fetchMock = managementFetch()
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
-    openAccountMoreActions()
     fireEvent.click(screen.getByRole('button', { name: '修改公司連結' }))
     const form = within(
       screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
@@ -1289,7 +1281,6 @@ describe('admin user and company pages', () => {
     managementFetch({ failAdminAction: true })
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
-    openAccountMoreActions()
     fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
     const confirmation = screen.getByRole('region', { name: '操作確認' })
     // 確認與取消固定排成 [取消][確認]，只有最終確認是危險色（#500）。
@@ -1345,7 +1336,6 @@ describe('admin user and company pages', () => {
       ).not.toBeInTheDocument()
     })
     expect(screen.getByText('帳號：anna.new')).toBeInTheDocument()
-    openAccountMoreActions()
     fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
     const assignment = screen.getByRole('region', { name: '操作確認' })
     expect(assignment).toHaveTextContent('anna.new')
@@ -1363,7 +1353,9 @@ describe('admin user and company pages', () => {
     ;(document.activeElement as HTMLElement).blur()
     fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
     const switched = screen.getByRole('region', { name: '操作確認' })
-    expect(switched).toHaveTextContent('停用 anna.new')
+    expect(switched).toHaveTextContent(
+      '停用鄧安娜（anna.new）後，他將無法登入',
+    )
     await waitFor(() =>
       expect(
         within(switched).getByRole('button', { name: '取消' }),
@@ -1517,7 +1509,6 @@ describe('admin user and company pages', () => {
     const fetchMock = managementFetch()
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
-    openAccountMoreActions()
     fireEvent.click(screen.getByRole('button', { name: '修改公司連結' }))
     const linkForm = screen
       .getByRole('heading', { name: '連結公司' })
@@ -1551,10 +1542,27 @@ describe('admin user and company pages', () => {
     })
   })
 
-  it('shows a clear no-permission page to non-admin users', () => {
+  it('shows a neutral no-permission page with the user landing link', () => {
     managementFetch()
-    renderAdmin('/accounts', false)
+    renderAdmin('/accounts', false, {
+      can_create_project: false,
+      has_project_access: false,
+      can_inspect_tasks: false,
+      has_field_access: false,
+    })
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
+    const permissionNotice = screen.getByText('你沒有使用這個頁面的權限', {
+      selector: 'p',
+    })
+    expect(permissionNotice).toHaveTextContent('你沒有使用這個頁面的權限')
+    expect(permissionNotice).toHaveAttribute('role', 'status')
+    expect(permissionNotice).toHaveClass('notice-info')
+    expect(permissionNotice).not.toHaveClass('notice-error')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/settings',
+    )
   })
 
   it.each(['/accounts', '/accounts/user-1', '/companies', '/roles', '/logs'])(
@@ -1564,6 +1572,15 @@ describe('admin user and company pages', () => {
       renderAdmin(path, false)
       expect(
         screen.getByRole('heading', { name: '無權限' }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText('你沒有使用這個頁面的權限', {
+          selector: 'p',
+        }),
+      ).toHaveAttribute('role', 'status')
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(
+        screen.getByRole('link', { name: '回到我的首頁' }),
       ).toBeInTheDocument()
       expect(screen.queryByRole('link', { name: '紀錄' })).toBeNull()
     },
@@ -1863,9 +1880,11 @@ describe('admin user and company pages', () => {
     })
 
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      '你沒有權限瀏覽範本庫。',
-    )
+    expect(
+      screen.getByText('你沒有使用這個頁面的權限', {
+        selector: 'p',
+      }),
+    ).toHaveAttribute('role', 'status')
     expect(screen.queryByRole('link', { name: '範本' })).toBeNull()
     expect(
       fetchMock.mock.calls.some(([input]) =>
@@ -2078,13 +2097,11 @@ describe('admin user and company pages', () => {
       expect(
         await screen.findByRole('heading', { name: '帳號', level: 1 }),
       ).toBeVisible()
-      expect(
-        await screen.findByRole('button', { name: '鄧安娜' }),
-      ).toBeVisible()
+      expect(await screen.findByRole('link', { name: '鄧安娜' })).toBeVisible()
       expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
       expect(screen.queryByRole('heading', { name: '基本資料' })).toBeNull()
 
-      fireEvent.click(screen.getByRole('button', { name: '鄧安娜' }))
+      fireEvent.click(screen.getByRole('link', { name: '鄧安娜' }))
       expect(
         await screen.findByRole('heading', { name: '鄧安娜', level: 1 }),
       ).toBeVisible()
@@ -2141,9 +2158,11 @@ describe('admin user and company pages', () => {
         has_template_access: false,
       })
 
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        '你沒有權限瀏覽範本庫。',
-      )
+      expect(
+        screen.getByText('你沒有使用這個頁面的權限', {
+          selector: 'p',
+        }),
+      ).toHaveAttribute('role', 'status')
     })
 
     it('does not route to template management without access', () => {

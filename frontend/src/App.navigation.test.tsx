@@ -568,14 +568,18 @@ describe('依後端存取摘要決定落點（#480）', () => {
     stubBackend(TEMPLATE_ONLY)
     renderApp('/tasks')
 
-    const taskAccessHeading = await screen.findByRole('heading', {
-      name: '目前無法查看現場任務',
-    })
-    expect(taskAccessHeading).toBeVisible()
-    const templatesLink = screen.getByRole('link', {
-      name: '前往查核範本',
-    })
-    expect(templatesLink).toHaveAttribute('href', '/templates')
+    expect(
+      await screen.findByRole('heading', { name: '無權限' }),
+    ).toBeVisible()
+    expect(
+      await screen.findByText('你沒有使用這個頁面的權限', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/templates',
+    )
     expect(screen.getByRole('link', { name: '範本' })).toBeVisible()
     const projectsLink = screen.queryByRole('link', {
       name: '前往我的專案',
@@ -588,12 +592,17 @@ describe('依後端存取摘要決定落點（#480）', () => {
     renderApp('/tasks')
 
     expect(
-      await screen.findByRole('heading', { name: '目前無法查看現場任務' }),
+      await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
-    const settingsLink = screen.getByRole('link', {
-      name: '前往個人設定',
-    })
-    expect(settingsLink).toHaveAttribute('href', '/settings')
+    expect(
+      await screen.findByText('你沒有使用這個頁面的權限', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/settings',
+    )
   })
 })
 
@@ -705,7 +714,7 @@ describe('出路與 404（#480）', () => {
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
     expect(screen.queryByRole('button', { name: /新增/ })).toBeNull()
-    fireEvent.click(screen.getByRole('link', { name: '返回專案' }))
+    fireEvent.click(screen.getByRole('link', { name: '回到我的首頁' }))
     expect(
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()
@@ -718,7 +727,6 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
     expect(accountLink).toHaveAttribute('href', '/accounts/admin-1')
     fireEvent.click(accountLink)
     await screen.findByRole('heading', { name: '主管', level: 1 })
-    fireEvent.click(screen.getByText('更多'))
     fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
   }
 

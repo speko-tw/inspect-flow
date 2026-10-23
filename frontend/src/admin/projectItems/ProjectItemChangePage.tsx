@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router'
 
 import { httpErrorMessage, isForbidden, isNotFound } from '../../http'
+import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import RouteNotFound from '../../RouteNotFound'
 import { StatusBadge } from '../../ui/Badge'
 import { ConfirmBox } from '../../ui/ConfirmBox'
@@ -385,6 +386,7 @@ export default function ProjectItemChangePage({
   const [confirming, setConfirming] = useState(false)
   const [readOnly, setReadOnly] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [accessDenied, setAccessDenied] = useState(false)
   const [notFound, setNotFound] = useState(false)
   const [busy, setBusy] = useState(false)
   const guard = useSubmitGuard()
@@ -448,6 +450,7 @@ export default function ProjectItemChangePage({
       .loadPreview(projectId, itemId)
       .then((loaded) => {
         if (!active) return
+        setAccessDenied(false)
         const localized = {
           ...loaded,
           item: {
@@ -490,7 +493,7 @@ export default function ProjectItemChangePage({
         if (!active) return
         // 項目 id 格式不對或不存在：顯示找不到，不顯示空表單與錯誤句。
         if (isNotFound(caught)) setNotFound(true)
-        if (isForbidden(caught)) setReadOnly(true)
+        if (isForbidden(caught)) setAccessDenied(true)
         setError(errorMessage(caught))
       })
       .finally(() => {
@@ -815,6 +818,8 @@ export default function ProjectItemChangePage({
       />
     )
   }
+
+  if (accessDenied) return <AccessDeniedPage headingLevel={2} />
 
   return (
     <section aria-labelledby="project-item-heading">

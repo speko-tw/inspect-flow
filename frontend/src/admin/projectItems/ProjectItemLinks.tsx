@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 
+import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { httpErrorMessage, isForbidden } from '../../http'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { ManagementApiError } from '../api'
@@ -32,6 +33,7 @@ export default function ProjectItemLinks({
   const [notice, setNotice] = useState('')
   const deleteTrigger = useRef<HTMLButtonElement | null>(null)
   const heading = useRef<HTMLHeadingElement | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
   const routeState = location.state as { highlightedItemIds?: unknown } | null
   const highlightedItemIds = new Set(
     Array.isArray(routeState?.highlightedItemIds)
@@ -50,11 +52,11 @@ export default function ProjectItemLinks({
       })
       .catch((caught: unknown) => {
         if (!active) return
-        setError(
-          isForbidden(caught)
-            ? '你沒有權限瀏覽此專案的查核項目。'
-            : '無法載入專案查核項目。',
-        )
+        if (isForbidden(caught)) {
+          setAccessDenied(true)
+        } else {
+          setError('無法載入專案查核項目。')
+        }
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -112,6 +114,8 @@ export default function ProjectItemLinks({
       setBusy(false)
     }
   }
+
+  if (accessDenied) return <AccessDeniedPage headingLevel={2} />
 
   return (
     <section aria-labelledby="project-items-heading">

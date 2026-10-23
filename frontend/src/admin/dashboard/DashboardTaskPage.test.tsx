@@ -9,6 +9,8 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { HttpError } from '../../http'
+import { currentUserFixture } from '../../testing/contractFixtures'
+import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import DashboardTaskPage from './DashboardTaskPage'
 
 const api = vi.hoisted(() => ({
@@ -41,11 +43,35 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
-          element={<DashboardTaskPage />}
+          element={
+            <CurrentUserProvider
+              value={{
+                user: currentUserFixture({
+                  is_admin: true,
+                  has_office_access: true,
+                }),
+                clear: vi.fn(),
+              }}
+            >
+              <DashboardTaskPage />
+            </CurrentUserProvider>
+          }
           path="/overview/projects/:projectId/tasks"
         />
         <Route
-          element={<DashboardTaskPage />}
+          element={
+            <CurrentUserProvider
+              value={{
+                user: currentUserFixture({
+                  is_admin: true,
+                  has_office_access: true,
+                }),
+                clear: vi.fn(),
+              }}
+            >
+              <DashboardTaskPage />
+            </CurrentUserProvider>
+          }
           path="/overview/projects/:projectId/tasks/:taskId"
         />
       </Routes>
@@ -188,10 +214,14 @@ describe('Dashboard 任務唯讀頁', () => {
     api.getDashboardTask.mockRejectedValue(new HttpError(403))
     renderAt('/overview/projects/project-1/tasks/task-2048')
 
-    const deniedHeading = await screen.findByRole('heading', {
-      name: '目前無法查看專案進度',
-    })
-    expect(deniedHeading).toBeInTheDocument()
+    expect(
+      await screen.findByText('你沒有使用這個頁面的權限'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/overview',
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText('陳建宏')).not.toBeInTheDocument()
   })
 })
