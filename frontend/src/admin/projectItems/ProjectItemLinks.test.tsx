@@ -275,6 +275,36 @@ describe('#435 刪除專案查核項目', () => {
     expect(screen.getByText('未使用項目')).toBeInTheDocument()
   })
 
+  it('刪除收到 403 時在確認框提示權限不足並保留項目', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(itemList())
+      .mockResolvedValueOnce(
+        Response.json(
+          { error: { code: 'permission.denied' } },
+          { status: 403 },
+        ),
+      )
+    renderItems(fetchMock)
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: '刪除「未使用項目」',
+      }),
+    )
+    const box = screen.getByRole('group', { name: '刪除查核項目' })
+    fireEvent.click(within(box).getByRole('button', { name: '確認刪除' }))
+
+    expect(await within(box).findByRole('alert')).toHaveTextContent(
+      '你沒有權限刪除此查核項目。',
+    )
+    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+    expect(screen.getByText('未使用項目')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/projects/p1/inspection-items/i1',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+  })
+
   it('取消刪除不送出請求', async () => {
     const fetchMock = vi.fn().mockResolvedValue(itemList())
     renderItems(fetchMock)

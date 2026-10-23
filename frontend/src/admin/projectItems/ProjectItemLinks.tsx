@@ -103,7 +103,7 @@ export default function ProjectItemLinks({
         setDeleteError(
           httpErrorMessage(caught, {
             codes: {
-              'authorization.forbidden': '你沒有權限刪除此查核項目。',
+              'permission.denied': '你沒有權限刪除此查核項目。',
               'resource.not_found': '找不到此查核項目，請重新載入清單。',
             },
             fallback: '刪除失敗，請稍後再試。',
