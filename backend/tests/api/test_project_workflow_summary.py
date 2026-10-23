@@ -1,7 +1,10 @@
 """Project workflow summary API contract (Issue #446)."""
 
+from datetime import date
+
 from sqlalchemy import select
 
+from app.db import clock
 from app.models import (
     InspectionPlan,
     InspectionTask,
@@ -13,6 +16,7 @@ from app.models import (
     Role,
     RolePermission,
     TaskInspectionItem,
+    User,
     UserModulePermission,
 )
 from app.permission_codes import PermissionCode, permission_code_scope
@@ -151,6 +155,99 @@ def test_empty_project_reports_first_setup_step(db_session, make_client):
             "pending": False,
         },
     ]
+
+
+def test_summary_counts_active_external_member_but_not_expired_account(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin_user"]
+    project = Project(
+        project_code="SUMMARY-MEMBERS",
+        name="成員數專案",
+        client_name="示範業主",
+        site_location="示範工地",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db_session.add(project)
+    db_session.flush()
+    active = User(
+        username="summary.active.external",
+        email="summary.active.external@example.com",
+        name_zh="啟用外部成員",
+        is_external_collaborator=True,
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    expires_today = User(
+        username="summary.today.external",
+        email="summary.today.external@example.com",
+        name_zh="到期日外部成員",
+        is_external_collaborator=True,
+        account_expires_on=clock.utc_now().date(),
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    expired = User(
+        username="summary.expired.external",
+        email="summary.expired.external@example.com",
+        name_zh="到期外部成員",
+        is_external_collaborator=True,
+        account_expires_on=date(2000, 1, 1),
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db_session.add_all([active, expires_today, expired])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectMember(
+                project_id=project.id,
+                user_id=user.id,
+                created_by=admin.id,
+                updated_by=admin.id,
+            )
+            for user in (active, expires_today, expired)
+        ]
+    )
+    db_session.commit()
+
+    def assert_counts_match() -> int:
+        listed = world["admin"].get("/api/v1/projects")
+        summary = world["admin"].get(_summary_path(project.id))
+        assert listed.status_code == 200, listed.text
+        assert summary.status_code == 200, summary.text
+        list_count = next(
+            row["member_count"]
+            for row in listed.json()["items"]
+            if row["id"] == str(project.id)
+        )
+        summary_count = summary.json()["member_count"]
+        assert list_count == summary_count == 2
+        return summary_count
+
+    count_before_role = assert_counts_match()
+
+    role = Role(
+        name="summary external member role",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db_session.add(role)
+    db_session.flush()
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == active.id,
+        )
+    )
+    assert member is not None
+    member.role_assignments.append(ProjectMemberRole(role_id=role.id))
+    db_session.commit()
+
+    count_after_role = assert_counts_match()
+    assert count_before_role == count_after_role
 
 
 def test_summary_excludes_cancelled_or_archived_rechecks(

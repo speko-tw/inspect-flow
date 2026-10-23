@@ -595,6 +595,14 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
             completion_rate: 0,
           })
         }
+        if (
+          url.includes('/api/v1/users?') ||
+          url.includes('/api/v1/companies?') ||
+          url.includes('/api/v1/admin/users/external-without-project?') ||
+          url.includes('/api/v1/admin/projects/unmanaged?')
+        ) {
+          return jsonResponse({ items: [], next_cursor: null })
+        }
         return jsonResponse([])
       }),
     )
@@ -647,6 +655,7 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
     await submitChange()
 
     await screen.findByRole('heading', { name: '帳號', level: 1 })
+    await screen.findByText('目前沒有帳號。')
     expect(screen.getByRole('status').textContent).toBe('密碼已變更。')
   })
 

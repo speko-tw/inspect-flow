@@ -670,7 +670,14 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       ) : (
         <ul className="member-list">
           {members.map((member) => (
-            <li className="member-card" key={member.id}>
+            <li
+              className={
+                member.is_effectively_active
+                  ? 'member-card'
+                  : 'member-card member-card-inactive'
+              }
+              key={member.id}
+            >
               <div className="member-card-main">
                 <label className="member-batch-select">
                   <input
@@ -715,7 +722,11 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                   ) : (
                     (member.name_zh ?? member.username)
                   )}
-                  {member.is_active ? null : <span>（已停用）</span>}
+                  {!member.is_active ? (
+                    <span>（已停用）</span>
+                  ) : !member.is_effectively_active ? (
+                    <span>（已到期）</span>
+                  ) : null}
                 </p>
                 <p className="field-hint">
                   {[

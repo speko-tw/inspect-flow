@@ -3,6 +3,7 @@
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date, timedelta
 from pathlib import Path
 from typing import TypedDict
 from uuid import UUID, uuid4
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import ErrorCode
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.db import clock
 from app.db.engine import get_engine
 from app.models import (
     AuditLog,
@@ -547,6 +549,84 @@ def test_project_list_query_count_does_not_grow(
     assert sum(bool(row["warnings"]) for row in rows["items"]) == 2
     assert baseline
     assert len(expanded) == len(baseline)
+    assert all("member_count" in row for row in rows["items"])
+
+
+def test_project_list_counts_only_active_members(project_api, db_session):
+    project = project_api["project"]
+    other_project = project_api["other_project"]
+    target = project_api["target"]
+    role = project_api["role"]
+    assert isinstance(target, User)
+    assert isinstance(role, Role)
+
+    inactive = create_user(
+        db_session,
+        is_external_collaborator=True,
+        account_expires_on=date(2099, 12, 31),
+        username="inactive.project.member",
+        email="inactive.project.member@demo.example",
+        name_zh="停用專案成員",
+    )
+    external = create_user(
+        db_session,
+        is_external_collaborator=True,
+        username="active.external.member",
+        email="active.external.member@demo.example",
+        name_zh="啟用外部成員",
+    )
+    expires_today = create_user(
+        db_session,
+        is_external_collaborator=True,
+        account_expires_on=clock.utc_now().date(),
+        username="today.external.member",
+        email="today.external.member@demo.example",
+        name_zh="到期日外部成員",
+    )
+    expired_external = create_user(
+        db_session,
+        is_external_collaborator=True,
+        account_expires_on=date(2000, 1, 1),
+        username="expired.external.member",
+        email="expired.external.member@demo.example",
+        name_zh="到期外部成員",
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=target.id,
+        role_ids=[role.id],
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=inactive.id,
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=external.id,
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=expires_today.id,
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=expired_external.id,
+    )
+    inactive.is_active = False
+    db_session.commit()
+
+    response = project_api["admin_client"].get("/api/v1/projects")
+    assert response.status_code == 200
+    counts = {
+        row["id"]: row["member_count"] for row in response.json()["items"]
+    }
+    assert counts[str(project.id)] == 4
+    assert counts[str(other_project.id)] == 0
 
 
 def test_project_list_search_cursor_and_validation(project_api):
@@ -1925,6 +2005,7 @@ def test_list_members_returns_user_fields_roles_and_join_order(
         assert rows[0]["company_id"] is None
         assert rows[0]["company_name"] is None
         assert rows[0]["is_active"] is True
+        assert rows[0]["is_effectively_active"] is True
         assert rows[0]["role_ids"] == [str(role.id)]
         assert rows[1]["role_ids"] == []
 
@@ -1959,6 +2040,57 @@ def test_list_members_includes_company_and_inactive_user(
     assert row["company_id"] == str(company.id)
     assert row["company_name"] == company.name
     assert row["is_active"] is False
+    assert row["is_effectively_active"] is False
+
+
+def test_list_members_marks_expired_account_without_writing_inactive(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    admin = project_api["admin"]
+    assert isinstance(project, Project)
+    assert isinstance(admin, User)
+    expired = create_user(
+        db_session,
+        username="expired.member",
+        email="expired.member@demo.example",
+        name_zh="到期未停用成員",
+        is_external_collaborator=True,
+        account_expires_on=clock.utc_now().date() - timedelta(days=1),
+    )
+    expires_today = create_user(
+        db_session,
+        username="expires.today.member",
+        email="expires.today.member@demo.example",
+        name_zh="今日到期成員",
+        is_external_collaborator=True,
+        account_expires_on=clock.utc_now().date(),
+    )
+    add_project_member(db_session, project_id=project.id, user_id=expired.id)
+    add_project_member(
+        db_session, project_id=project.id, user_id=expires_today.id
+    )
+    db_session.commit()
+
+    response = project_api["admin_client"].get(
+        f"/api/v1/projects/{project.id}/members"
+    )
+    row = next(
+        item for item in response.json() if item["user_id"] == str(expired.id)
+    )
+    today_row = next(
+        item
+        for item in response.json()
+        if item["user_id"] == str(expires_today.id)
+    )
+
+    assert response.status_code == 200
+    assert row["is_active"] is True
+    assert row["is_effectively_active"] is False
+    assert today_row["is_active"] is True
+    assert today_row["is_effectively_active"] is True
+    db_session.refresh(expired)
+    assert expired.is_active is True
 
 
 def test_list_members_marks_external_collaborators(

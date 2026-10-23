@@ -8,6 +8,7 @@
     "email",
     "id",
     "is_active",
+    "is_effectively_active",
     "is_external_collaborator",
     "module_status",
     "name_zh",

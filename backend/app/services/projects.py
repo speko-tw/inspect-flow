@@ -3,6 +3,7 @@
 import uuid
 from collections.abc import Sequence
 from datetime import date
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,6 +17,9 @@ from app.services.module_permissions import (
     query_person_access,
 )
 from app.services.operator import get_current_operator
+from app.services.project_member_counts import (
+    count_active_project_members as _count_active_project_members,
+)
 from app.services.project_members import add_project_member
 
 # DOM-R76：改本公司角色的原因，去除前後空白後 1～256 字元。
@@ -279,6 +283,13 @@ def find_projects_by_code(
         ).all()
 
 
+def count_active_project_members(
+    session: Session, project_ids: set[UUID]
+) -> dict[UUID, int]:
+    """委派 DOM-R77 的共用有效啟用成員計算。"""
+    return _count_active_project_members(session, project_ids)
+
+
 __all__ = [
     "COMPANY_ROLE_REASON_MAX_LENGTH",
     "CompanyRoleReasonRequiredError",
@@ -286,6 +297,7 @@ __all__ = [
     "InvalidCompanyRoleError",
     "InvalidProjectFieldError",
     "ProjectUnchangedError",
+    "count_active_project_members",
     "create_project",
     "find_projects_by_code",
     "update_project",
