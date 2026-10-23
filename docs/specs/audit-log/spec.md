@@ -33,7 +33,7 @@
 - `authentication` 事件的寫入入口與寫入時機的驗收：由 `authentication` 實作與驗收（AUT-R39、AUT-AC49～AUT-AC51、AUT-AC62）。
 - 保存期限、讀取紀錄是否另寫稽核、請求來源資訊：見[待釐清](#待釐清)；查詢 API 與畫面已依 [ALG-Q2](#alg-q2) 裁定納入範圍。
 - 其他資料（`Company`、`User` 基本欄位的人工修改等）的完整操作歷史：屬「延後但不排除」的 Audit Trail（[01-overview](../../intents/01-overview.md#延後但不排除的能力)，架構基準 §35）；這些資料目前只靠 [PR-08](../../intents/02-principles.md#pr-08) 的建立與修改紀錄。
-  - **部分已被取代**（負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））：「`User` 基本欄位的修改不寫稽核」這一部分不再成立，帳號名稱修改與公司連結變更（含清空的工號、部門與地點）改為要寫，見 ALG-R19、ALG-R20；`User` 的姓名、email 與 `Company` 的修改，以及單獨修改工號、部門、地點，仍不寫；`User.is_active` 的變更改為要寫（[ALG-Q4](#alg-q4) 已裁定，ALG-R25）。
+  - **部分已被取代**（負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））：「`User` 基本欄位的修改不寫稽核」這一部分不再成立，帳號名稱修改與公司連結變更（含清空的工號、部門與地點）改為要寫，見 ALG-R19、ALG-R20；之後依 #712 補上 email 與到期日變更及建立帳號事件（ALG-R31），姓名與 `Company` 的修改、單獨修改工號、部門、地點仍不寫；`User.is_active` 的變更依 ALG-R25 寫入。
 - 資料庫層的防竄改（trigger、權限控管、雜湊鏈）：見[考慮過但沒採用的做法](plan.md#考慮過但沒採用的做法)。
 
 ## 使用情境
@@ -99,6 +99,7 @@
 | ALG-R28 | 專案事件（[專案事件](#專案事件)）：新增專案**必須**在同一交易寫 `project.created`，修改專案基本欄位**必須**在同一交易寫 `project.updated`；指派被 DOM-R70 或 DOM-R72 擋下、授權被 DOM-R62 或 DOM-R63 拒絕時，後端**必須**分別寫 `project_member.assignment_denied`、`module_permission.grant_denied`，且在獨立交易寫入，使請求失敗後仍保留，這是 ALG-R14「被拒絕不留紀錄」的唯一例外 | 必須 | 負責人裁定（[#538 第 18 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（後端擋下違規並寫稽核）；`project.created`、`project.updated`、獨立交易的做法與授權拒絕事件是規格設計（非負責人裁定）（兩位專家審查建議） | ALG-AC23、ALG-AC24 |
 | ALG-R29 | **操作者身分快照**：每筆稽核紀錄**必須**保存寫入當下的操作者身分快照（欄位 `actor_snapshot`，文字，由寫入入口依操作者當下的姓名、外部協作人員標記與單位組成）：有 `name_zh` 的外部協作人員為「姓名．外部協作人員．單位」，沒有單位時為「外部協作人員（未填單位）」；有 `name_zh` 的內部人員為「姓名．單位」（沒有單位時只有姓名）；沒有 `name_zh` 時以 `username` 作為快照姓名，有單位仍依身分組成，有單位以外的缺項則省略（例如無姓名、無單位的外部帳號只保存 `username`）；日後人員資料變更不影響已寫入的快照；這是 ALG-R05 的欄位補充，新增一支 migration 加不可空值欄位（既有紀錄以當時 `created_by` 的現值回填一次），事件目錄不變 | 必須 | 負責人裁定（[#538 第 25 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-10）第 6 點：每筆紀錄保存寫入當下的身分快照；欄位名稱、組成方式與既有紀錄的回填是規格設計（非負責人裁定）；沒有姓名時以 `username` 作快照姓名並省略不存在的單位，依維護者決定（#580，2026-10-16） | ALG-AC25 |
 | ALG-R30 | 稽核查詢以 `created_at DESC, id DESC` 穩定分頁；為操作者與事件類型篩選，資料庫**必須**分別建立 `(created_by, created_at, id)` 與 `(event_type, created_at, id)` 複合索引。索引依實際查詢條件及排序設計；只新增或移除索引的 migration 不得重建 `audit_logs` | 必須 | 維護者決定（#624，2026-10-16）：依 `query_audit_events` 的篩選欄位與分頁排序新增複合索引 | ALG-AC29 |
+| ALG-R31 | 帳號管理 API 成功建立帳號時**必須**在建立帳號的同一交易寫一筆 `user.created`；成功修改 email 或到期日時，各自只在值確實改變時寫一筆對應事件。拒絕、回滾或值未變時不得留下這些事件。事件內容依[帳號與公司連結事件](#帳號與公司連結事件)，不得包含密碼、密碼雜湊、臨時密碼或 Session 值 | 必須 | #712（評估補 email 變更、帳號到期日變更、建立帳號稽核事件）；事件代碼與欄位為規格設計，依 ALG-R07～ALG-R09、ALG-R14 | ALG-AC30 |
 
 ## Issue #580 維護者決定（2026-10-16）
 
@@ -219,12 +220,16 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
 | `user.username_changed` | `User.username` 被修改（DOM-R45）；只有具 Admin 權限的人能改，改前改後相同不寫 | `user` | `username` | `username` |
+| `user.email_changed` | 帳號管理 API 修改 `User.email` 且新舊值不同 | `user` | `email` | `email` |
+| `user.account_expiry_changed` | 帳號管理 API 修改 `User.account_expires_on` 且新舊值不同；清除到期日也要記錄 | `user` | `account_expires_on` | `account_expires_on` |
+| `user.created` | 帳號管理 API 成功建立帳號；只記錄必要識別資訊，不記錄密碼或聯絡方式 | `user` | 空值 | `username`、`name_zh`、`email`、`is_external_collaborator`、`auth_source` |
 | `user.company_changed` | `User.company_id` 改變：換公司、連結公司、解除連結（DOM-R47）；因此被清空的工號、部門、地點一併記下（ALG-R20） | `user` | `company_id`、`employee_no`、`department`、`location` | 同左 |
 | `user.active_changed` | `User.is_active` 改變：停用或啟用帳號（DOM-R67）；改前改後相同不寫；停用公司時選擇一併停用的人員逐一寫（DOM-R33）；重新啟用時另記下 Admin 勾選的恢復與被移除的項目；自動停用（外部協作人員最後一個專案身分被移除或到期，DOM-R75）是系統事件（ALG-R15），到期只寫一次 | `user` | `is_active` | `is_active`；自動停用時另含 `reason`（`last_membership_removed`、`account_expired`，DOM-R75）；重新啟用時另含 `restored_permission_codes`、`removed_permission_codes`、`restored_delegated_modules`、`removed_delegated_modules`、`restored_project_ids`、`removed_project_ids`、`cleared_task_ids`（皆為排序後的陣列） |
 | `user.external_flag_changed` | `User.is_external_collaborator` 改變：外部改內部（確認後放行）與內部改外部（通過資格檢查後）都寫（DOM-R73）；被擋下的內部改外部不寫 | `user` | `is_external_collaborator` | `is_external_collaborator` |
 
 - 值用 `username` 存放的小寫（DOM-R45）；`company_id` 沒有公司時是空值；欄位沒有值時記空值，不省略。
 - 本系統帳號與外部帳號都適用；外部身分同步覆蓋這些欄位時另依 ALG-R13 寫。
+- `user.account_expiry_changed` 的 `account_expires_on` 使用 `YYYY-MM-DD`；原值或新值為空時以 JSON `null` 記錄。`user.created` 不含 `is_admin`，其變更由 `user.admin_changed` 記錄。
 
 <a id="寫入時機"></a>
 ### 寫入時機
@@ -305,6 +310,7 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 | ALG-AC27 | 外部協作人員 L（持合格資料）與內部人員 X（合格轉外部）；角色 R | 把 L 由外部改內部；把 X 由內部改外部；修改 R 的 `is_external_allowed`；重新啟用時未勾選的模組權限、模組委派與成員身分 | 兩個方向的標記變更各寫一筆 `user.external_flag_changed`；`role.updated` 記下 `is_external_allowed` 的前後值；未勾選而被收回與移除的項目各寫 `module_permission.revoked`、`module_delegation.revoked`、`project_member.removed` | ALG-R25、ALG-R14 |
 | ALG-AC28 | 專案 P；具專案權限 `project.update` 的成員 M（程式改造完成後的行為） | M 把 `company_role` 由 `contractor` 改為 `supervisor` 並帶原因；再只改專案名稱；再以相同的 `company_role` 重送 | 改角色一筆 `project.updated`：前後值含 `company_role`，後值另含 `company_role_change_reason`；只改名稱的 `project.updated` 不含原因欄；沒有變動不寫 | ALG-R28、DOM-R76 |
 | ALG-AC29 | 已有多筆稽核紀錄的資料庫 | 執行新增複合索引 migration，檢視查詢及 downgrade | `created_by, created_at, id` 與 `event_type, created_at, id` 索引存在且順序正確；既有資料不變；downgrade 移除兩索引且不重建資料表 | ALG-R30 |
+| ALG-AC30 | Admin 建立一筆帳號；再修改該帳號的 email 與到期日，並分別重送相同值；另嘗試建立失敗及提交相同值的更新 | 建立事件在同一交易恰一筆，`created_by`、`entity_id`、`before`、`after` 正確且不含密碼、雜湊、臨時密碼或 Session；email 與到期日各只在值改變時新增一筆，清除到期日使用 JSON `null`；失敗與 no-op 不新增紀錄；前端三事件均有白話標籤 | ALG-R31 |
 
 ## 待釐清
 

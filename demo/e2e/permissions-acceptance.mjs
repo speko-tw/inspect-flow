@@ -360,14 +360,43 @@ try {
     name: '查看這個帳號的能力',
   }).click()
   await page.getByRole('heading', {
+    name: '臨時密碼抄下了嗎？',
+  }).waitFor()
+  const temporaryPasswordOutputs = page.getByLabel('臨時密碼')
+  assert.ok((await temporaryPasswordOutputs.count()) > 0)
+  await page.getByRole('button', { name: '留在此頁' }).click()
+  await page.getByRole('heading', { name: '帳號已建立' }).waitFor()
+  assert.ok(
+    await temporaryPasswordOutputs.evaluateAll(
+      (elements, expectedPassword) =>
+        elements.every(
+          (element) => element.textContent === expectedPassword,
+        ),
+      temporaryPassword,
+    ),
+    '選擇留在此頁後仍應顯示原臨時密碼',
+  )
+  await page.getByRole('button', {
+    name: '查看這個帳號的能力',
+  }).click()
+  await page.getByRole('heading', {
+    name: '臨時密碼抄下了嗎？',
+  }).waitFor()
+  await page.getByRole('button', { name: '離開此頁' }).click()
+  await page.getByRole('heading', {
     name: '能做什麼',
   }).waitFor()
-  // 臨時密碼只在完成畫面顯示一次：離開後頁面不再出現。
+  // 離開完成頁後，能力摘要不得再顯示臨時密碼。
   assert.ok(
     !(await page.locator('body').innerText()).includes(temporaryPassword),
   )
   await page.getByRole('combobox').nth(0).selectOption('members')
-  await page.getByRole('combobox').nth(1).selectOption({
+  const projectSelector = page.getByRole('combobox').nth(1)
+  await projectSelector.focus()
+  await page.getByRole('option', {
+    name: '示範廠擴建機電工程', exact: true,
+  }).waitFor({state: 'attached'})
+  await projectSelector.selectOption({
     label: '示範廠擴建機電工程',
   })
   const diagnosticResponse = page.waitForResponse(

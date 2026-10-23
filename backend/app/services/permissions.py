@@ -11,9 +11,10 @@ DOM-R35 登記權限代碼。讀取時先取出角色現有代碼再比對，避
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, event, func, select
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import get_request_effective_access_cache
 from app.models import (
     ProjectMember,
     ProjectMemberRole,
@@ -44,6 +45,24 @@ class EffectiveAccess:
     project_memberships: frozenset[uuid.UUID] = frozenset()
 
 
+@event.listens_for(Session, "after_flush")
+def _clear_request_access_cache_after_flush(
+    session: Session, flush_context
+) -> None:
+    """Flush 後清除請求快取，避免授權讀到寫入前的資料。"""
+    cache = get_request_effective_access_cache()
+    if cache is not None:
+        cache.clear()
+
+
+@event.listens_for(Session, "after_rollback")
+def _clear_request_access_cache_after_rollback(session: Session) -> None:
+    """DOM-R69、#712：回滾後不可保留未提交交易中計算的權限。"""
+    cache = get_request_effective_access_cache()
+    if cache is not None:
+        cache.clear()
+
+
 def calculate_effective_access(
     session: Session,
     *,
@@ -55,10 +74,19 @@ def calculate_effective_access(
     將這些結果放在同一個快照，避免各入口用不同查詢推導授權，並保留
     無角色成員的專案身分供只要求成員資格的端點使用。
     """
+    cache = get_request_effective_access_cache()
+    cache_key = (id(session), user_id, project_id)
+    if cache is not None and not (
+        session.new or session.dirty or session.deleted
+    ):
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     with session.no_autoflush:
         person = query_person_access(session, user_id=user_id)
         if person is None:
-            return EffectiveAccess(
+            result = EffectiveAccess(
                 False,
                 False,
                 frozenset(),
@@ -66,6 +94,9 @@ def calculate_effective_access(
                 frozenset(),
                 {},
             )
+            if cache is not None:
+                cache[cache_key] = result
+            return result
         project_map = _project_permissions_by_project(
             session, user_id=user_id, project_id=project_id
         )
@@ -84,7 +115,7 @@ def calculate_effective_access(
             if project_id
             else frozenset()
         )
-    return EffectiveAccess(
+    result = EffectiveAccess(
         is_active=person.is_active,
         is_admin=person.is_admin,
         module_permissions=person.module_permissions,
@@ -93,6 +124,11 @@ def calculate_effective_access(
         project_permissions_by_project=project_map,
         project_memberships=frozenset(project_map),
     )
+    if cache is not None and not (
+        session.new or session.dirty or session.deleted
+    ):
+        cache[cache_key] = result
+    return result
 
 
 def project_member_ids_with_permission(

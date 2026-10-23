@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { Link, useNavigate } from 'react-router'
+import { useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
@@ -43,10 +44,106 @@ vi.mock('../UsersPage', () => ({
 }))
 
 vi.mock('../module-permissions/ModulePermissionsPage', () => ({
-  default: ({ selectedUserId }: { selectedUserId?: string }) => (
-    <section>{selectedUserId ? '模組授權' : '能力設定'}</section>
+  default: ({
+    selectedUserId,
+    openWizardRequest,
+    onTemporaryPasswordVisible,
+    onRequestTemporaryPasswordLeave,
+    onWizardBackToList,
+    onWizardViewUser,
+  }: {
+    selectedUserId?: string
+    openWizardRequest?: number
+    onTemporaryPasswordVisible?: (visible: boolean) => void
+    onRequestTemporaryPasswordLeave?: (action: () => void) => void
+    onWizardBackToList?: () => void
+    onWizardViewUser?: (id: string) => void
+  }) => (
+    <ModulePermissionsMock
+      onRequestTemporaryPasswordLeave={onRequestTemporaryPasswordLeave}
+      onTemporaryPasswordVisible={onTemporaryPasswordVisible}
+      onWizardBackToList={onWizardBackToList}
+      onWizardViewUser={onWizardViewUser}
+      openWizardRequest={openWizardRequest}
+      selectedUserId={selectedUserId}
+    />
   ),
 }))
+
+function ModulePermissionsMock({
+  openWizardRequest,
+  selectedUserId,
+  onTemporaryPasswordVisible,
+  onRequestTemporaryPasswordLeave,
+  onWizardBackToList,
+  onWizardViewUser,
+}: {
+  openWizardRequest?: number
+  selectedUserId?: string
+  onTemporaryPasswordVisible?: (visible: boolean) => void
+  onRequestTemporaryPasswordLeave?: (action: () => void) => void
+  onWizardBackToList?: () => void
+  onWizardViewUser?: (id: string) => void
+}) {
+  const [passwordVisible, setPasswordVisible] = useState(false)
+  const action = (leave: () => void) =>
+    onRequestTemporaryPasswordLeave?.(leave)
+
+  return (
+    <section>
+      {selectedUserId ? '模組授權' : '能力設定'}
+      {openWizardRequest ? (
+        <>
+          <button
+            onClick={() => {
+              setPasswordVisible(true)
+              onTemporaryPasswordVisible?.(true)
+            }}
+            type="button"
+          >
+            顯示臨時密碼
+          </button>
+          {passwordVisible && <output>temporary-secret</output>}
+          <button
+            onClick={() =>
+              action(() => {
+                setPasswordVisible(false)
+                onTemporaryPasswordVisible?.(false)
+              })
+            }
+            type="button"
+          >
+            新增另一個帳號
+          </button>
+          <button
+            onClick={() =>
+              action(() => {
+                setPasswordVisible(false)
+                onTemporaryPasswordVisible?.(false)
+                onWizardBackToList?.()
+              })
+            }
+            type="button"
+          >
+            回清單
+          </button>
+          <button
+            onClick={() =>
+              action(() => {
+                setPasswordVisible(false)
+                onTemporaryPasswordVisible?.(false)
+                onWizardViewUser?.('person-1')
+              })
+            }
+            type="button"
+          >
+            查看這個帳號的能力
+          </button>
+        </>
+      ) : null}
+    </section>
+  )
+}
 
 describe('PeoplePage', () => {
   beforeEach(() => {
@@ -184,6 +281,114 @@ describe('PeoplePage', () => {
     expect(peopleApiMock.request).toHaveBeenCalledWith(
       '/module-delegate/users?limit=50&q=field.member',
     )
+  })
+
+  it('臨時密碼顯示時，站內導覽須確認且可留在精靈', async () => {
+    peopleApiMock.request.mockResolvedValue({ items: [] })
+    render(
+      <DataMemoryRouter initialEntries={['/accounts']}>
+        <>
+          <PeoplePage onTemporaryPassword={vi.fn()} />
+          <Link to="/companies">離開精靈</Link>
+        </>
+      </DataMemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
+    fireEvent.click(screen.getByRole('button', { name: '顯示臨時密碼' }))
+    fireEvent.click(screen.getByRole('link', { name: '離開精靈' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
+    ).toBeVisible()
+    expect(screen.getByRole('heading', { name: '新增帳號' })).toBeVisible()
+    expect(screen.getByText('temporary-secret')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '留在此頁' }))
+    expect(
+      screen.queryByRole('heading', { name: '臨時密碼抄下了嗎？' }),
+    ).toBeNull()
+    expect(screen.getByRole('heading', { name: '新增帳號' })).toBeVisible()
+    expect(screen.getByText('temporary-secret')).toBeVisible()
+  })
+
+  it.each([
+    ['新增另一個帳號', '新增帳號'],
+    ['回清單', '帳號'],
+    ['查看這個帳號的能力', '詳情：person-1'],
+    ['取消', '帳號'],
+  ])(
+    '內部操作「%s」取消會保留密碼，確認後才執行',
+    async (actionLabel, expectedAfterConfirm) => {
+      peopleApiMock.request.mockResolvedValue({ items: [] })
+      render(
+        <DataMemoryRouter initialEntries={['/accounts']}>
+          <PeoplePage onTemporaryPassword={vi.fn()} />
+        </DataMemoryRouter>,
+      )
+
+      fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
+      fireEvent.click(screen.getByRole('button', { name: '顯示臨時密碼' }))
+      expect(screen.getByText('temporary-secret')).toBeVisible()
+
+      fireEvent.click(screen.getByRole('button', { name: actionLabel }))
+      expect(
+        await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
+      ).toBeVisible()
+      expect(screen.getByText('temporary-secret')).toBeVisible()
+      fireEvent.click(screen.getByRole('button', { name: '留在此頁' }))
+      expect(screen.getByText('temporary-secret')).toBeVisible()
+      expect(screen.getByRole('button', { name: actionLabel })).toBeVisible()
+
+      fireEvent.click(screen.getByRole('button', { name: actionLabel }))
+      fireEvent.click(screen.getByRole('button', { name: '離開此頁' }))
+      expect(screen.queryByText('temporary-secret')).toBeNull()
+      if (expectedAfterConfirm === '新增帳號') {
+        expect(screen.getByRole('heading', { name: '新增帳號' })).toBeVisible()
+      } else if (expectedAfterConfirm === '帳號') {
+        expect(screen.getByRole('heading', { name: '帳號' })).toBeVisible()
+      } else {
+        expect(screen.getByText('詳情：person-1')).toBeVisible()
+      }
+    },
+  )
+
+  it('臨時密碼顯示時，瀏覽器返回使用指定確認文字', async () => {
+    peopleApiMock.request.mockResolvedValue({ items: [] })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    function BackNavigation() {
+      const navigate = useNavigate()
+      const location = useLocation()
+      return (
+        <>
+          <output data-testid="path">{location.pathname}</output>
+          <button onClick={() => navigate(-1)} type="button">
+            上一頁
+          </button>
+        </>
+      )
+    }
+
+    render(
+      <DataMemoryRouter
+        initialEntries={['/companies', '/accounts']}
+        initialIndex={1}
+      >
+        <>
+          <PeoplePage onTemporaryPassword={vi.fn()} />
+          <BackNavigation />
+        </>
+      </DataMemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
+    fireEvent.click(screen.getByRole('button', { name: '顯示臨時密碼' }))
+    fireEvent.click(screen.getByRole('button', { name: '上一頁' }))
+
+    expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？')
+    expect(screen.getByTestId('path')).toHaveTextContent('/accounts')
+    expect(screen.getByText('temporary-secret')).toBeVisible()
+    confirm.mockRestore()
   })
 
   it('shows not-found for a malformed account id without any request', () => {

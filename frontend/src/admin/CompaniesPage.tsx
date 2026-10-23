@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 
+import { useCurrentUser } from '../auth/useCurrentUser'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
 import { Form, FormError, FormSubmitButton } from '../ui/Form'
@@ -13,13 +14,16 @@ import {
   listCompaniesPage,
   managementErrorMessage,
   renameCompany,
+  setCompaniesStatus,
   setCompanyActive,
+  type ActiveCompanyUsers,
   type Company,
 } from './api'
 import { CursorListSearch } from './CursorListSearch'
 import { useCursorList } from './useCursorList'
 
 export default function CompaniesPage() {
+  const { user: currentUser } = useCurrentUser()
   const companyList = useCursorList(listCompaniesPage, managementErrorMessage)
   const {
     items: companies,
@@ -46,6 +50,16 @@ export default function CompaniesPage() {
     request: number
   } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([])
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [batchBusy, setBatchBusy] = useState(false)
+  const [batchError, setBatchError] = useState('')
+  const [batchNotice, setBatchNotice] = useState('')
+  const [batchPreview, setBatchPreview] = useState<{
+    companies: Company[]
+    activeUsers: Record<string, ActiveCompanyUsers['users']>
+    selectedUsers: Record<string, string[]>
+  } | null>(null)
   const saveGuard = useSubmitGuard()
   const renamedCompany = companies.find((item) => item.id === renamingId)
   const hasUnsavedChanges = renamingId
@@ -136,11 +150,176 @@ export default function CompaniesPage() {
     }
   }
 
+  async function prepareBatchDeactivation() {
+    const selected = companies.filter((item) =>
+      selectedCompanyIds.includes(item.id),
+    )
+    if (
+      selected.length === 0 ||
+      selected.some((item) => !item.is_active) ||
+      batchLoading
+    ) {
+      return
+    }
+    setBatchError('')
+    setBatchNotice('')
+    setBatchLoading(true)
+    try {
+      const activeUsers = await Promise.all(
+        selected.map((item) => listActiveCompanyUsers(item.id)),
+      )
+      const usersByCompany: Record<string, ActiveCompanyUsers['users']> = {}
+      selected.forEach((item, index) => {
+        usersByCompany[item.id] = activeUsers[index].users
+      })
+      setBatchPreview({
+        companies: selected,
+        activeUsers: usersByCompany,
+        selectedUsers: Object.fromEntries(
+          selected.map((item) => [item.id, []]),
+        ),
+      })
+    } catch (caught) {
+      setBatchError(managementErrorMessage(caught))
+    } finally {
+      setBatchLoading(false)
+    }
+  }
+
+  async function confirmBatchDeactivation() {
+    if (!batchPreview || batchBusy || !saveGuard.enter()) return
+    setBatchError('')
+    setBatchBusy(true)
+    try {
+      await setCompaniesStatus(
+        batchPreview.companies.map((item) => ({
+          company_id: item.id,
+          is_active: false,
+          disable_user_ids: batchPreview.selectedUsers[item.id] ?? [],
+        })),
+      )
+      setBatchNotice(`已停用 ${batchPreview.companies.length} 間公司。`)
+      setSelectedCompanyIds([])
+      setBatchPreview(null)
+      await reload()
+    } catch (caught) {
+      setBatchError(managementErrorMessage(caught))
+    } finally {
+      saveGuard.leave()
+      setBatchBusy(false)
+    }
+  }
+
+  async function batchActivate() {
+    const selected = companies.filter((item) =>
+      selectedCompanyIds.includes(item.id),
+    )
+    if (
+      selected.length === 0 ||
+      selected.some((item) => item.is_active) ||
+      batchBusy ||
+      !saveGuard.enter()
+    ) {
+      return
+    }
+    setBatchError('')
+    setBatchNotice('')
+    setBatchBusy(true)
+    try {
+      await setCompaniesStatus(
+        selected.map((item) => ({
+          company_id: item.id,
+          is_active: true,
+          disable_user_ids: [],
+        })),
+      )
+      setBatchNotice(`已啟用 ${selected.length} 間公司。`)
+      setSelectedCompanyIds([])
+      await reload()
+    } catch (caught) {
+      setBatchError(managementErrorMessage(caught))
+    } finally {
+      saveGuard.leave()
+      setBatchBusy(false)
+    }
+  }
+
+  function toggleBatchUser(
+    companyId: string,
+    userId: string,
+    checked: boolean,
+  ) {
+    setBatchPreview((current) => {
+      if (!current) return current
+      const selected = current.selectedUsers[companyId] ?? []
+      return {
+        ...current,
+        selectedUsers: {
+          ...current.selectedUsers,
+          [companyId]: checked
+            ? [...selected, userId]
+            : selected.filter((id) => id !== userId),
+        },
+      }
+    })
+  }
+
   return (
     <section aria-labelledby="companies-heading">
       <UnsavedLeaveBox guard={leaveGuard} />
       <h1 id="companies-heading">公司管理</h1>
       <FormError>{error}</FormError>
+      {batchError && <p role="alert">{batchError}</p>}
+      {batchNotice && <p role="status">{batchNotice}</p>}
+      {batchPreview && (
+        <ConfirmBox
+          busy={batchBusy}
+          confirmLabel={batchBusy ? '正在停用公司…' : '確認批次停用公司'}
+          label="批次停用確認"
+          onCancel={() => {
+            setBatchPreview(null)
+            setBatchError('')
+          }}
+          onConfirm={confirmBatchDeactivation}
+          role="region"
+          variant="danger"
+        >
+          <p>選取的公司會停用；只有勾選的帳號會一併停用。</p>
+          <p>選擇要一併停用的帳號</p>
+          {batchPreview.companies.map((item) => (
+            <fieldset key={item.id}>
+              <legend>{item.name}</legend>
+              {batchPreview.activeUsers[item.id].length === 0 ? (
+                <p>沒有啟用中的帳號。</p>
+              ) : (
+                batchPreview.activeUsers[item.id].map((user) => (
+                  <label key={user.id}>
+                    <input
+                      checked={batchPreview.selectedUsers[item.id].includes(
+                        user.id,
+                      )}
+                      disabled={batchBusy || user.id === currentUser.id}
+                      onChange={(event) =>
+                        toggleBatchUser(item.id, user.id, event.target.checked)
+                      }
+                      type="checkbox"
+                      value={user.id}
+                    />
+                    {user.name_zh
+                      ? `${user.name_zh}（${user.username}）`
+                      : user.username}
+                    {user.id === currentUser.id && (
+                      <span className="field-hint">
+                        不能批次停用自己的帳號。
+                      </span>
+                    )}
+                  </label>
+                ))
+              )}
+            </fieldset>
+          ))}
+        </ConfirmBox>
+      )}
       {deactivating && (
         <ConfirmBox
           busy={saving}
@@ -208,6 +387,9 @@ export default function CompaniesPage() {
         <table>
           <thead>
             <tr>
+              <th scope="col">
+                <span className="visually-hidden">選取</span>
+              </th>
               <th scope="col">公司名稱</th>
               <th scope="col">狀態</th>
               <th scope="col">操作</th>
@@ -216,6 +398,22 @@ export default function CompaniesPage() {
           <tbody>
             {companies.map((company) => (
               <tr key={company.id}>
+                <td>
+                  <input
+                    aria-label={`選取公司 ${company.name}`}
+                    checked={selectedCompanyIds.includes(company.id)}
+                    disabled={saving || batchBusy}
+                    onChange={(event) =>
+                      setSelectedCompanyIds((current) =>
+                        event.target.checked
+                          ? [...current, company.id]
+                          : current.filter((id) => id !== company.id),
+                      )
+                    }
+                    type="checkbox"
+                    value={company.id}
+                  />
+                </td>
                 <th scope="row">{company.name}</th>
                 <td>
                   <StatusBadge status={activeStatus(company.is_active)} />
@@ -255,6 +453,38 @@ export default function CompaniesPage() {
         >
           {loadingMore ? '載入中…' : '載入更多'}
         </button>
+      )}
+      {companies.length > 0 && (
+        <div aria-label="批次公司操作">
+          <p>已選取 {selectedCompanyIds.length} 間公司。</p>
+          <button
+            disabled={
+              selectedCompanyIds.length === 0 ||
+              companies
+                .filter((item) => selectedCompanyIds.includes(item.id))
+                .some((item) => item.is_active) ||
+              batchBusy
+            }
+            onClick={() => void batchActivate()}
+            type="button"
+          >
+            {batchBusy ? '正在更新公司…' : '批次啟用公司'}
+          </button>
+          <button
+            disabled={
+              selectedCompanyIds.length === 0 ||
+              companies
+                .filter((item) => selectedCompanyIds.includes(item.id))
+                .some((item) => !item.is_active) ||
+              batchBusy ||
+              batchLoading
+            }
+            onClick={() => void prepareBatchDeactivation()}
+            type="button"
+          >
+            {batchLoading ? '正在檢查公司…' : '批次停用公司'}
+          </button>
+        </div>
       )}
       <Form
         error={formError?.message}

@@ -305,3 +305,38 @@ class TestNoAutoflushOnRead:
 
         assert _mutating_statements(statements) == []
         assert role in session.dirty
+
+
+def test_request_access_cache_reads_flushed_changes_and_rollback(
+    session, operator, monkeypatch
+):
+    """DOM-R69、#712：同請求 flush 後讀新權限，rollback 後讀回原權限。"""
+    from app.auth import dependencies
+
+    user = create_root_user_with_company(session, "CACHE712")
+    session.commit()
+    user_id = user.id
+    cache = {}
+    monkeypatch.setattr(
+        dependencies, "get_request_effective_access_cache", lambda: cache
+    )
+    from app.services import permissions
+
+    monkeypatch.setattr(
+        permissions, "get_request_effective_access_cache", lambda: cache
+    )
+    initial = calculate_effective_access(session, user_id=user_id)
+    assert "project.use" not in initial.module_permissions
+    session.add(
+        UserModulePermission(
+            user_id=user_id, permission_code="project.use", source="manual"
+        )
+    )
+    session.flush()
+    changed = calculate_effective_access(session, user_id=user_id)
+    assert "project.use" in changed.module_permissions
+    assert calculate_effective_access(session, user_id=user_id) is changed
+    session.rollback()
+    restored = calculate_effective_access(session, user_id=user_id)
+    assert "project.use" not in restored.module_permissions
+    assert restored is not changed
