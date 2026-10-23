@@ -36,6 +36,8 @@
   - **部分已被取代**（負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））：「`User` 基本欄位的修改不寫稽核」這一部分不再成立，帳號名稱修改與公司連結變更（含清空的工號、部門與地點）改為要寫，見 ALG-R19、ALG-R20；之後依 #712 補上 email 與到期日變更及建立帳號事件（ALG-R31），姓名與 `Company` 的修改、單獨修改工號、部門、地點仍不寫；`User.is_active` 的變更依 ALG-R25 寫入。
 - 資料庫層的防竄改（trigger、權限控管、雜湊鏈）：見[考慮過但沒採用的做法](plan.md#考慮過但沒採用的做法)。
 
+本人外觀 `User.appearance` 是非敏感呈現偏好，不屬事件目錄的帳號安全或業務變更；依 ALG-R07 不新增稽核事件，仍由 PR-08 的修改者與修改時間記錄變更。API 與驗收見 AUT-R55／AUT-AC82（範圍變更，依[負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)）。
+
 ## 使用情境
 
 - Admin 把「現場查核」角色的權限加上 `report.approve`；系統同時寫一筆 `role.updated`，記下改前、改後的權限代碼清單與操作者。
@@ -385,6 +387,4 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 
 - 整合 main（#622）：為保留 #712 帳號稽核的 ALG-R31／ALG-AC30，將 #382 範本稽核改編 ALG-R32／ALG-AC31，並同步範本規格與計畫引用；行為與驗收內容不變。
 
-## #515 外觀偏好的邊界澄清
-
-本人外觀 `User.appearance` 是非敏感呈現偏好，不屬事件目錄列出的帳號安全或業務變更；依 ALG-R07 不新增未登記事件，仍由 PR-08 的 `updated_at`／`updated_by` 記錄修改。API 與驗收見 authentication AUT-R55／AUT-AC82（依據：[#515](https://github.com/speko-tw/inspect-flow/issues/515)、[最終導覽指示](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6250057575)；負責人 W-515 指示於同一任務澄清並落地）。
+- 範圍變更（負責人指示，#515）：納入本人外觀偏好的稽核邊界，保存修改紀錄但不新增稽核事件 — [負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)

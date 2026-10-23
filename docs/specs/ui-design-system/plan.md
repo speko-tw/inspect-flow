@@ -18,7 +18,7 @@
 | T6 | 將 tokens、元件及清單／詳情模式套用至 Admin 專案清單與摘要；依凍結 API 顯示 `member_count`、搜尋及 cursor，不以前端推算替代 | `frontend/src/admin/projects/ProjectsPage.tsx`、專案清單測試與契約 fixture | T2～T4；#413 搜尋／cursor 契約與已凍結 DOM-R77；未管理專案清單計數由 #414 先合併後再共用 | UDS-AC02～05、12、13、16 | 待開 task |
 | T7 | 在人員模組權限、委派及權限組合頁套用共用元件並驗收狀態、錯誤與確認互動；功能與授權規則仍由 `admin-dashboard` T4 負責，不重做其契約 | `frontend/src/admin/module-permissions/` 專用樣式與測試；不改 `AdminPage.tsx` 或權限 API | T1～T4 已完成；`domain-model` 任務 L／N／O、`authentication` 任務 P 與 `admin-dashboard` T4（#581、#582）已合併 | UDS-AC03、05～07、09、10 | 待開 task |
 | T8 | 套用共用表單、錯誤與回饋模式至 Admin 新增／修改與密碼流程，驗收新增修改分離、未儲存提醒、IME、送出生命週期 | 指定的 Admin／Auth 表單檔案及相關測試 | T2、T3；各頁功能規格與 API 契約已凍結 | UDS-AC02、05～07、09 | 待開 task |
-| T9 | 依 #515／AUT-R55／DOM-R78 契約實作外觀三態、跨裝置保存與首次繪製快取；確認頁首、內容與狀態一同切換 | 指定的 Auth 外觀設定檔案、共用樣式入口及契約測試 | T1、T2；#515 負責人已指示範圍內澄清，於同一任務同步 authentication／domain-model 契約與實作 | UDS-AC04、08、14 | #515（本任務實作與驗收） |
+| T9 | 依 #515／AUT-R55／DOM-R78 契約實作外觀三態、跨裝置保存與首次繪製快取；確認頁首、內容與狀態一同切換 | 指定的 Auth 外觀設定檔案、共用樣式入口及契約測試 | T1、T2；#515 負責人直接指示的範圍變更，於同一任務同步 authentication／domain-model 契約與實作 | UDS-AC04、08、14 | #515（本任務實作與驗收） |
 | T10 | 補齊元件規範、使用指引、設計系統回饋及跨頁視覺／無障礙驗收；追蹤各功能頁的套用範圍 | `docs/`、`frontend/src/components/`、相關測試 | T1～T9；前端主要路由已套用 | UDS-AC01、09～16 | 待開 task |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收。

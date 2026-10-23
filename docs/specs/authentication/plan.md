@@ -198,4 +198,4 @@
 
 ## #515 本人外觀偏好
 
-依負責人直接指示同一任務同步規格與實作：AUT-R55／DOM-R78；API 使用 PATCH `/auth/me`，資料增加一支接最新 head 的 migration。驗收 AUT-AC80～82、DOM-AC77、UDS-AC04／08／14，測試涵蓋 SQLite／PostgreSQL、跨裝置登入、本人限制、失敗回復與首次繪製快取。不改臨時密碼允許清單、不新增稽核事件。
+依負責人直接指示的範圍變更（[負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)），同一 PR 同步規格與實作：AUT-R55／DOM-R78；API 使用 PATCH `/auth/me`，資料增加一支接最新 head 的 migration。驗收 AUT-AC80～82、DOM-AC77、UDS-AC04／08／14，測試涵蓋 SQLite／PostgreSQL、跨裝置登入、本人限制、失敗回復與首次繪製快取。不改臨時密碼允許清單、不新增稽核事件。

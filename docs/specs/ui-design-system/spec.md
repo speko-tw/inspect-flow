@@ -3,7 +3,7 @@
 **代碼**：`UDS`　**Phase**：P4–P7（跨階段共用）　**狀態**：草稿
 **前置規格**：無；Field 與 Admin 頁面依其功能規格逐批套用
 **引用意圖**：[PR-10](../../intents/02-principles.md#pr-10)、[PR-18](../../intents/02-principles.md#pr-18)、[PR-19](../../intents/02-principles.md#pr-19)、[KD-70](../../intents/03-decisions-and-stack.md#kd-70)
-**被擋議題**：[#515](https://github.com/speko-tw/inspect-flow/issues/515) 的帳號偏好欄位與 API 須先確認規格歸屬並完成契約規格化
+**被擋議題**：無；#515 已由 authentication AUT-R55／domain-model DOM-R78 承接，依[負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)於同一 PR 同步規格與實作。
 
 ## 目的
 
@@ -168,4 +168,4 @@
 
 ## 變更紀錄
 
--
+- 範圍變更（負責人指示，#515）：外觀三態由本人偏好契約承接，確認個人設定入口、首次繪製快取與跨裝置驗收 UDS-AC04／08／14 — [負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)
