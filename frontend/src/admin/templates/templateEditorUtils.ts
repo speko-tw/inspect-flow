@@ -31,6 +31,13 @@ export function blankPoint(
   }
 }
 
+/** 依 TPL-R13 將舊格式缺省形式視為標準值加誤差；新區間須明選。 */
+export function rangeForm(
+  standard: NonNullable<InspectionPoint['numeric_standard']>,
+): 'interval' | 'tolerance' {
+  return standard.range_form ?? 'tolerance'
+}
+
 /**
  * 將項次欄位轉成編輯器使用的 clientKey 關聯；持久 ID 只留在子項欄位。
  * `stablePointKeys` 用於會重排項次的專案編輯，`fillBoundFieldUnit` 用於
@@ -77,6 +84,9 @@ export function localizeInspectionPoints(
       numeric_standard: standard
         ? {
             ...standard,
+            ...(standard.condition === 'range'
+              ? { range_form: rangeForm(standard) }
+              : {}),
             measurement_field_id: undefined,
             measurement_field_client_id: undefined,
             measurement_field_client_key: boundKey,
@@ -211,7 +221,7 @@ export function forWire(
         (field) => Boolean(boundKey) && field.clientKey === boundKey,
       )
       const interval =
-        numeric?.condition === 'range' && numeric.range_form === 'interval'
+        numeric?.condition === 'range' && rangeForm(numeric) === 'interval'
       const clean = (value: string | null | undefined) => value?.trim() || null
       return {
         ...(includeIds && point.id ? { id: point.id } : {}),
@@ -239,9 +249,7 @@ export function forWire(
               unit: bound?.unit?.trim() ?? numeric.unit?.trim() ?? '',
               tolerance: interval ? null : clean(numeric.tolerance),
               range_form:
-                numeric.condition === 'range'
-                  ? (numeric.range_form ?? 'tolerance')
-                  : null,
+                numeric.condition === 'range' ? rangeForm(numeric) : null,
               lower_bound: interval ? clean(numeric.lower_bound) : null,
               upper_bound: interval ? clean(numeric.upper_bound) : null,
               measurement_field_client_id: bound?.client_id,
@@ -303,8 +311,7 @@ export function templateFieldErrorBindings(
     if (point.numeric_standard) {
       const standard = point.numeric_standard
       const interval =
-        standard.condition === 'range' &&
-        (standard.range_form ?? 'interval') === 'interval'
+        standard.condition === 'range' && rangeForm(standard) === 'interval'
       bindings.push({
         path: `${pointPath}/numeric_standard/measurement_field_client_id`,
         key: `${pointKey}:binding`,
