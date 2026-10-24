@@ -38,12 +38,14 @@ def _audit_foreign_keys(table: str) -> list[sa.ForeignKeyConstraint]:
 
 
 def _normalized_name_expression(column: str):
+    """以正規化名稱落實唯一性，避免空白或大小寫差異造成重複（TPL-R03）。"""
     if op.get_bind().dialect.name == "postgresql":
         return sa.text(f"lower(trim(BOTH FROM {column}))")
     return sa.func.lower(sa.func.trim(sa.column(column)))
 
 
 def upgrade() -> None:
+    """建立範本結構、套用快照及系統角色指派所需資料表。"""
     op.create_table(
         "template_categories",
         *_audit_columns(),
@@ -462,6 +464,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """依外鍵相依順序移除本 revision 建立的範本資料表。"""
     op.drop_table("project_evidence_requirements")
     op.drop_table("project_numeric_standards")
     op.drop_table("project_text_standards")
