@@ -2574,9 +2574,14 @@ def test_batch_roles_reject_more_than_200_items(project_api):
         },
     )
     assert response.status_code == 422
-    assert response.json()["error"]["details"] == [
-        "一次最多選取 200 筆，請減少數量後再試。"
+    error = response.json()["error"]
+    assert error["fields"] == [
+        {
+            "path": "/items",
+            "code": "field.too_long",
+        }
     ]
+    assert error["details"] == ["一次最多選取 200 筆，請減少數量後再試。"]
 
 
 def test_batch_roles_accept_exactly_200_items(project_api, db_session):
@@ -2637,7 +2642,9 @@ def test_batch_roles_keep_stricter_nested_limit(project_api):
         json=body,
     )
     assert response.status_code == 422, response.text
-    assert response.json()["error"]["fields"] == [
+    error = response.json()["error"]
+    assert "details" not in error
+    assert error["fields"] == [
         {
             "path": "/items/0/role_ids",
             "code": "field.too_long",

@@ -1605,9 +1605,14 @@ def test_batch_status_rejects_more_than_200_items(admin_client, resource):
     suffix = "batch-active-status" if resource == "users" else "batch-status"
     response = client.post(f"/api/v1/{resource}:{suffix}", json=body)
     assert response.status_code == 422
-    assert response.json()["error"]["details"] == [
-        "一次最多選取 200 筆，請減少數量後再試。"
+    error = response.json()["error"]
+    assert error["fields"] == [
+        {
+            "path": "/user_ids" if resource == "users" else "/items",
+            "code": "field.too_long",
+        }
     ]
+    assert error["details"] == ["一次最多選取 200 筆，請減少數量後再試。"]
 
 
 @pytest.mark.parametrize("linked", [True, False])
@@ -1807,3 +1812,107 @@ def test_batch_company_accepts_200_selected_users(admin_client, db_session):
     assert response.status_code == 200, response.text
     db_session.expire_all()
     assert all(not user.is_active for user in users)
+
+
+@pytest.mark.parametrize("resource", ["companies", "users"])
+def test_single_status_entry_rejects_201_selected_ids(
+    admin_client, db_session, resource
+):
+    """#731：單筆入口沿用子清單上限，不能繞過批次保護。"""
+    client, _ = admin_client
+    user = create_root_user_with_company(db_session, "SINGLE731")
+    user.is_active = False
+    db_session.commit()
+    ids = [str(uuid4()) for _ in range(201)]
+    if resource == "companies":
+        response = client.put(
+            f"/api/v1/companies/{user.company_id}/active",
+            json={"is_active": False, "disable_user_ids": ids},
+        )
+        pointer = "/disable_user_ids"
+    else:
+        response = client.post(
+            f"/api/v1/users/{user.id}:reactivate",
+            json={"restore": {"project_ids": ids}},
+        )
+        pointer = "/restore/project_ids"
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "request.validation_failed"
+    assert error["fields"] == [
+        {
+            "path": pointer,
+            "code": "field.too_long",
+        }
+    ]
+    assert error["details"] == ["一次最多選取 200 筆，請減少數量後再試。"]
+
+
+@pytest.mark.parametrize("total", [200, 201])
+def test_batch_company_selected_user_total_limit(
+    admin_client, db_session, total
+):
+    """ADM-R13、#731：跨公司加總仍受限，超限不留下部分停用。"""
+    client, admin = admin_client
+    items = []
+    companies = []
+    users = []
+    for index, count in enumerate((100, total - 100)):
+        company = Company(
+            name=f"合計邊界公司{index}",
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+        db_session.add(company)
+        db_session.flush()
+        selected = [
+            create_user(
+                db_session,
+                username=f"total.{index}.{number}",
+                email=f"total.{index}.{number}@example.test",
+                name_zh=f"成員{number}",
+                is_external_collaborator=False,
+                company_id=company.id,
+            )
+            for number in range(count)
+        ]
+        companies.append(company)
+        users.extend(selected)
+        items.append(
+            {
+                "company_id": str(company.id),
+                "is_active": False,
+                "disable_user_ids": [str(user.id) for user in selected],
+            }
+        )
+    db_session.commit()
+    before = db_session.scalar(select(func.count()).select_from(AuditLog))
+    response = client.post(
+        "/api/v1/companies:batch-status",
+        json={"items": items},
+    )
+    assert response.status_code == (200 if total == 200 else 422), (
+        response.text
+    )
+    db_session.expire_all()
+    if total == 200:
+        assert len(response.json()["items"]) == 2
+        assert all(not company.is_active for company in companies)
+        assert all(not user.is_active for user in users)
+    else:
+        error = response.json()["error"]
+        assert error["code"] == "request.validation_failed"
+        assert error["fields"] == [
+            {
+                "path": "/items",
+                "code": "field.too_long",
+            }
+        ]
+        assert error["details"] == [
+            "每批最多選取 200 位停用人員，請減少數量後再試。"
+        ]
+        assert all(company.is_active for company in companies)
+        assert all(user.is_active for user in users)
+        assert db_session.scalar(
+            select(func.count()).select_from(AuditLog)
+        ) == (before)

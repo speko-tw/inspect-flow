@@ -12,7 +12,7 @@ from app.api.batch import (
     BatchLimitedRequest,
     require_batch_size,
 )
-from app.api.errors import APIError, ErrorCode
+from app.api.errors import APIError, ErrorCode, FieldErrorCode
 from app.api.pagination import ilike_contains, page_by_text_key, write_call
 from app.api.v1._management_errors import (
     management_api_error,
@@ -229,6 +229,18 @@ def batch_change_company_status(
     """Apply selected company statuses atomically (ADM-R13)."""
     items = body.items
     require_batch_size(len(items))
+    # ADM-R13、#731：停用人員合計沿用帳號批次的 200 人上限，
+    # 避免跨公司累積後超過 SQLite 綁定參數限制，維持雙資料庫一致。
+    if sum(len(item.disable_user_ids) for item in items) > MAX_BATCH_ITEMS:
+        raise APIError(
+            ErrorCode.REQUEST_VALIDATION_FAILED,
+            422,
+            details=[
+                f"每批最多選取 {MAX_BATCH_ITEMS} 位停用人員，"
+                "請減少數量後再試。"
+            ],
+            fields=[{"path": "/items", "code": FieldErrorCode.TOO_LONG.value}],
+        )
     company_ids = [item.company_id for item in items]
     if not items or len(set(company_ids)) != len(company_ids):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
