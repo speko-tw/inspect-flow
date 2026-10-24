@@ -51,7 +51,9 @@ export default function ProjectZonesPage({
   const errorMessage = useRef<HTMLParagraphElement>(null)
   const pageHeading = useRef<HTMLHeadingElement>(null)
   const rowTrigger = useRef<HTMLElement | null>(null)
-  const focusRowAfterSave = useRef(false)
+  const focusRowId = useRef<string | null>(null)
+  const focusRowAfterEdit = useRef(false)
+  const rowTriggers = useRef(new Map<string, HTMLButtonElement>())
   // Enter 走 requestSubmit() 時，停用的按鈕擋不住第二次送出，連按兩次
   // Enter 會送出兩次並讓第二次變成「名稱重複」；用同步防護擋掉。
   const guard = useSubmitGuard()
@@ -77,12 +79,16 @@ export default function ProjectZonesPage({
     if (editingId) nameInput.current?.focus()
   }, [editingId])
 
-  // 改名儲存成功後，表單在下一次 render 才會消失；等它收起、觸發鈕重新
-  // 可用再還焦點，鍵盤使用者才能從原列接續操作（與取消一致）。
+  // 編輯結束後表單才會收起；等觸發鈕重新掛載再依列 ID 找它，不能沿用
+  // 編輯中已卸載的舊 DOM 參照。
   useEffect(() => {
-    if (editing || !focusRowAfterSave.current) return
-    focusRowAfterSave.current = false
-    if (rowTrigger.current?.isConnected) rowTrigger.current.focus()
+    if (editing || !focusRowAfterEdit.current) return
+    focusRowAfterEdit.current = false
+    const trigger = focusRowId.current
+      ? rowTriggers.current.get(focusRowId.current)
+      : null
+    focusRowId.current = null
+    if (trigger?.isConnected) trigger.focus()
   }, [editing])
 
   useEffect(() => {
@@ -120,15 +126,11 @@ export default function ProjectZonesPage({
   }
 
   function cancelEditing() {
-    const trigger = rowTrigger.current
+    focusRowAfterEdit.current = true
     setEditing(null)
     setName('')
     setError('')
     clearNameErrors()
-    // 取消後名稱列會重新渲染，等它回到 DOM 再還焦點。
-    queueMicrotask(() => {
-      if (trigger?.isConnected) trigger.focus()
-    })
   }
 
   function handleNameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -198,7 +200,7 @@ export default function ProjectZonesPage({
           current.map((zone) => (zone.id === updated.id ? updated : zone)),
         )
         setNotice(`已將分區改名為「${updated.name}」。`)
-        focusRowAfterSave.current = true
+        focusRowAfterEdit.current = true
       } else {
         const created = await client.createZone(projectId, name)
         setZones((current) => [...current, created])
@@ -336,14 +338,18 @@ export default function ProjectZonesPage({
             ) : (
               <span className="named-row-name">{zone.name}</span>
             )}
-            {canManage && (
+            {canManage && editing?.id !== zone.id && (
               <span className="named-row-actions">
-                {/* 取消時需保留觸發鈕以還原焦點。 */}
                 <button
                   className="btn-sm"
-                  disabled={busy || editing?.id === zone.id}
+                  ref={(element) => {
+                    if (element) rowTriggers.current.set(zone.id, element)
+                    else rowTriggers.current.delete(zone.id)
+                  }}
+                  disabled={busy}
                   onClick={(event) => {
                     rowTrigger.current = event.currentTarget
+                    focusRowId.current = zone.id
                     setDeleting(null)
                     setName(zone.name)
                     setEditing(zone)
@@ -356,10 +362,9 @@ export default function ProjectZonesPage({
                 >
                   重新命名
                 </button>
-                {/* 編輯中停用刪除，避免焦點目標消失。 */}
                 <button
                   className="btn-sm"
-                  disabled={busy || editing?.id === zone.id}
+                  disabled={busy}
                   onClick={(event) => {
                     rowTrigger.current = event.currentTarget
                     setError('')

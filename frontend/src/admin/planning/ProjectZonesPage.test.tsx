@@ -189,13 +189,25 @@ describe('project zones section', () => {
     const row = (await screen.findByText('北區')).closest('li') as HTMLElement
     const trigger = within(row).getByRole('button', { name: '重新命名' })
     fireEvent.click(trigger)
+    expect(
+      within(row).queryByRole('button', { name: '重新命名' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(row).queryByRole('button', { name: '刪除' }),
+    ).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('分區名稱'), {
       target: { value: '北一區' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存名稱' }))
 
     expect(await screen.findByText('北一區')).toBeVisible()
-    await waitFor(() => expect(trigger).toHaveFocus())
+    await waitFor(() => {
+      const row = screen.getByText('北一區').closest('li') as HTMLElement
+      expect(
+        within(row).getByRole('button', { name: '重新命名' }),
+      ).toHaveFocus()
+      expect(within(row).getByRole('button', { name: '刪除' })).toBeVisible()
+    })
   })
 
   it('maps the server zone-name 422 field beside the input and focuses it', async () => {
@@ -297,11 +309,43 @@ describe('project zones section', () => {
     expect(input).toHaveAttribute('aria-invalid', 'true')
 
     const southRow = screen.getByText('南區').closest('li')
+    expect(
+      within(northRow as HTMLElement).queryByRole('button', {
+        name: '重新命名',
+      }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(southRow as HTMLElement).getByRole('button', {
+        name: '重新命名',
+      }),
+    ).toBeEnabled()
+    expect(
+      within(southRow as HTMLElement).getByRole('button', { name: '刪除' }),
+    ).toBeEnabled()
     fireEvent.click(
       within(southRow as HTMLElement).getByRole('button', {
         name: '重新命名',
       }),
     )
+
+    expect(
+      within(southRow as HTMLElement).queryByRole('button', {
+        name: '重新命名',
+      }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(southRow as HTMLElement).queryByRole('button', {
+        name: '刪除',
+      }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(northRow as HTMLElement).getByRole('button', {
+        name: '重新命名',
+      }),
+    ).toBeEnabled()
+    expect(
+      within(northRow as HTMLElement).getByRole('button', { name: '刪除' }),
+    ).toBeEnabled()
 
     const southInput = screen.getByLabelText('分區名稱')
     expect(southInput).toHaveValue('南區')
@@ -417,10 +461,17 @@ describe('adding and renaming zones', () => {
     mount(client)
     await screen.findByText('北區')
 
+    const originalRow = rowOf('北區')
     fireEvent.click(
-      within(rowOf('北區')).getByRole('button', { name: '重新命名' }),
+      within(originalRow).getByRole('button', { name: '重新命名' }),
     )
     const input = screen.getByLabelText('分區名稱')
+    expect(
+      within(originalRow).queryByRole('button', { name: '重新命名' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(originalRow).queryByRole('button', { name: '刪除' }),
+    ).not.toBeInTheDocument()
     // 進入改名模式後由 effect 聚焦，等待焦點移動完成。
     await waitFor(() => expect(input).toHaveFocus())
     fireEvent.change(input, { target: { value: '北側' } })
@@ -439,9 +490,41 @@ describe('adding and renaming zones', () => {
     })
     fireEvent.keyDown(screen.getByLabelText('分區名稱'), { key: 'Escape' })
 
-    await waitFor(() => expect(trigger).toHaveFocus())
+    await waitFor(() => {
+      expect(
+        within(rowOf('北側')).getByRole('button', { name: '重新命名' }),
+      ).toHaveFocus()
+    })
     expect(screen.queryByText('取消的名稱')).toBeNull()
     expect(screen.getByRole('heading', { name: '新增分區' })).toBeVisible()
+  })
+
+  it('restores both row actions and focus after clicking cancel', async () => {
+    const client = createMockPlanningClient()
+    await client.createZone(PROJECT, '北區')
+    mount(client)
+    await screen.findByText('北區')
+
+    const row = rowOf('北區')
+    fireEvent.click(within(row).getByRole('button', { name: '重新命名' }))
+    const input = screen.getByLabelText('分區名稱')
+    await waitFor(() => expect(input).toHaveFocus())
+    expect(
+      within(row).queryByRole('button', { name: '重新命名' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(row).queryByRole('button', { name: '刪除' }),
+    ).not.toBeInTheDocument()
+    fireEvent.change(input, { target: { value: '取消的名稱' } })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    await waitFor(() => {
+      expect(
+        within(row).getByRole('button', { name: '重新命名' }),
+      ).toHaveFocus()
+      expect(within(row).getByRole('button', { name: '刪除' })).toBeVisible()
+    })
+    expect(screen.queryByText('取消的名稱')).toBeNull()
   })
 
   it('sends one create request when Enter is pressed twice quickly (#490)', async () => {
