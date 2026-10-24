@@ -54,7 +54,7 @@ export type ConfirmBoxProps = {
   cancelRef?: Ref<HTMLButtonElement>
   /** 掛載時把焦點放哪；預設取消。呼叫端自己管理焦點時傳 `none`。 */
   initialFocus?: 'cancel' | 'heading' | 'none'
-  /** UDS-R18：掛載時先捲入視窗；modal 呼叫端傳 false。 */
+  /** UDS-R18：掛載時先捲入視窗；modal 預設不捲動，可明確覆寫。 */
   reveal?: Reveal
   /** 影響範圍載入完成時遞增，沿用共用捲動與焦點順序。 */
   revealRequest?: number
@@ -94,9 +94,9 @@ export function ConfirmBox({
   rootRef,
   cancelRef,
   initialFocus = 'cancel',
-  reveal = 'nearest',
-  revealRequest = 0,
   modal = false,
+  reveal = modal ? false : 'nearest',
+  revealRequest = 0,
   asForm = false,
   noValidate = false,
   cancelLabel = '取消',

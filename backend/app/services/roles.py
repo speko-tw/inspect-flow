@@ -52,6 +52,7 @@ from app.models import (
     User,
 )
 from app.services import UNSET, _Unset
+from app.services.account_status import effectively_active_user_clause
 from app.services.audit import record_audit_event
 from app.services.module_permissions import (
     CreatorRoleInUseError,
@@ -79,7 +80,8 @@ class RoleUsage:
     """角色目前的不重複持有人與涉及專案數。
 
     同一人跨專案只算一次；user_count 包含已停用者，
-    inactive_user_count 另計其中停用人數。無持有人時均為零。
+    inactive_user_count 包含已到期但尚未寫回停用狀態者。
+    無持有人時均為零。
     """
 
     user_count: int
@@ -105,7 +107,9 @@ def role_usages(
                 func.count(distinct(ProjectMember.user_id)),
                 func.count(distinct(ProjectMember.project_id)),
                 func.count(
-                    distinct(case((User.is_active.is_(False), User.id)))
+                    distinct(
+                        case((~effectively_active_user_clause(), User.id))
+                    )
                 ),
             )
             .join(

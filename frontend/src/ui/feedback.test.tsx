@@ -199,3 +199,41 @@ it('非同步影響範圍就緒後再捲入確認框並聚焦取消，普通重�
   view.rerender(box(1))
   expect(scroll).not.toHaveBeenCalled()
 })
+
+it('modal 未指定 reveal 也不捲動，仍聚焦取消', () => {
+  render(
+    <ConfirmBox
+      modal
+      role="dialog"
+      title="修改計畫"
+      confirmLabel="確認"
+      onConfirm={() => undefined}
+      onCancel={() => undefined}
+    />,
+  )
+  expect(scroll).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: '取消' })).toHaveFocus()
+})
+
+it('背景錯誤不捲動或聚焦；切為主動操作才處理同一錯誤', () => {
+  const view = render(
+    <>
+      <input aria-label="搜尋" />
+      <Notice variant="error" autoReveal={false}>
+        載入失敗。
+      </Notice>
+    </>,
+  )
+  const input = screen.getByRole('textbox')
+  input.focus()
+  expect(scroll).not.toHaveBeenCalled()
+  expect(input).toHaveFocus()
+  view.rerender(
+    <>
+      <input aria-label="搜尋" />
+      <Notice variant="error">載入失敗。</Notice>
+    </>,
+  )
+  expect(scroll).toHaveBeenCalledTimes(1)
+  expect(screen.getByRole('alert')).toHaveFocus()
+})

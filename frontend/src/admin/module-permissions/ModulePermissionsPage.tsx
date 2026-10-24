@@ -608,7 +608,24 @@ function ModulePermissionsPageContent({
     onTemporaryPasswordVisible?.(Boolean(temporaryPassword))
     return () => onTemporaryPasswordVisible?.(false)
   }, [onTemporaryPasswordVisible, temporaryPassword])
-  const revokeTrigger = useRef<HTMLInputElement>(null)
+  const revokeTrigger = useRef<HTMLButtonElement>(null)
+  const accessHeadingRef = useRef<HTMLHeadingElement>(null)
+  const diagnosticHeadingRef = useRef<HTMLHeadingElement>(null)
+  const revokeFocusPending = useRef<'access' | 'diagnostic' | null>(null)
+
+  useEffect(() => {
+    const scope = revokeFocusPending.current
+    if (!scope || revoke || busy) return
+    revokeFocusPending.current = null
+    const trigger = revokeTrigger.current
+    const target =
+      trigger?.isConnected && !trigger.disabled
+        ? trigger
+        : scope === 'diagnostic'
+          ? diagnosticHeadingRef.current
+          : accessHeadingRef.current
+    target?.focus({ preventScroll: true })
+  }, [revoke, busy])
   const bundleDeleteTrigger = useRef<HTMLButtonElement>(null)
   const wizardHeadingRef = useRef<HTMLHeadingElement>(null)
 
@@ -1021,6 +1038,7 @@ function ModulePermissionsPageContent({
     if (revoked.length > 0) {
       setBusy(true)
       setOperationError(scope, '')
+      setOperationError('revoke', '')
       try {
         const impact = await getRevokeImpact(selectedUser, revoked[0])
         setRevoke({ code: revoked[0], impact, scope })
@@ -1077,6 +1095,7 @@ function ModulePermissionsPageContent({
       setAccessDraft((current) =>
         current.filter((code) => code !== revoke.code),
       )
+      revokeFocusPending.current = revoke.scope
       setRevoke(null)
       setOperationNotice(revoke.scope, '權限已收回。')
       await diagnose()
@@ -1413,7 +1432,15 @@ function ModulePermissionsPageContent({
       const assigned = new Set(
         access.module_permissions.map((item) => item.code),
       )
-      const missingModuleCodes = diagnostic.required_module_codes.filter(
+      // 相容舊診斷：只從已登記的功能代碼補救，不猜專案角色代碼。
+      const requiredModuleCodes = diagnostic.required_module_codes.length
+        ? diagnostic.required_module_codes
+        : diagnostic.missing_layers.includes('module')
+          ? permissions
+              .filter((item) => diagnostic.missing_codes.includes(item.code))
+              .map((item) => item.code)
+          : []
+      const missingModuleCodes = requiredModuleCodes.filter(
         (code) => !assigned.has(code),
       )
       const actionMessages: Record<string, string> = {
@@ -1423,10 +1450,15 @@ function ModulePermissionsPageContent({
         task_list: '缺少查核功能的權限。',
       }
       setDiagnosticResult({
-        requiredModuleCodes: diagnostic.required_module_codes,
+        requiredModuleCodes,
         missingModuleCodes,
         missingRole: roleMissing,
-        moduleMessage: actionMessages[diagnostic.action],
+        moduleMessage:
+          diagnostic.missing_layers.includes('module') ||
+          missingModuleCodes.length > 0
+            ? (actionMessages[diagnostic.action] ??
+              '缺少功能權限，請檢查已設定的權限。')
+            : '',
         roleMessage:
           diagnostic.action === 'manage_project_members'
             ? '這個專案裡沒有可以管理成員的角色。'
@@ -1449,8 +1481,9 @@ function ModulePermissionsPageContent({
             requiredModuleCodes: [code],
             missingModuleCodes: missing ? [code] : [],
             missingRole: false,
-            moduleMessage:
-              diagnosticAction === 'members'
+            moduleMessage: !missing
+              ? ''
+              : diagnosticAction === 'members'
                 ? '他也還沒開通專案管理功能的權限。'
                 : '他也還沒開通查核功能的權限。',
             roleMessage: '',
@@ -1555,7 +1588,7 @@ function ModulePermissionsPageContent({
       if (diagnosticSelection.current.selectedUser !== selectedUser) return
       setUserAccess(access.permission_codes)
       setAccessDraft(access.permission_codes)
-      if (notice) await diagnose()
+      if (diagnosticResult || notice) await diagnose()
       setOperationNotice(scope, '權限組合已完整套用。')
     } catch (caught) {
       setOperationError(scope, message(caught))
@@ -1652,8 +1685,8 @@ function ModulePermissionsPageContent({
       confirmLabel="確認收回"
       busy={busy}
       onCancel={() => {
+        revokeFocusPending.current = revoke.scope
         setRevoke(null)
-        revokeTrigger.current?.focus({ preventScroll: true })
       }}
       onConfirm={confirmRevoke}
       role="region"
@@ -1785,7 +1818,9 @@ function ModulePermissionsPageContent({
       )}
       {embedded && !currentUser.is_admin && selectedUser && (
         <Card aria-label="權限開通" role="region">
-          <h2>權限</h2>
+          <h2 ref={accessHeadingRef} tabIndex={-1}>
+            權限
+          </h2>
           <p>只能開通受委派範圍內的權限，不能替自己開通或轉交委派。</p>
           {catalogLoadErrors}
           {accessLoad.userId === selectedUser &&
@@ -1815,9 +1850,6 @@ function ModulePermissionsPageContent({
                   checked={accessDraft.includes(item.code)}
                   type="checkbox"
                   onChange={(event) => {
-                    if (!event.target.checked) {
-                      revokeTrigger.current = event.currentTarget
-                    }
                     setAccessDraft((current) =>
                       event.target.checked
                         ? [...new Set([...current, item.code])]
@@ -1832,7 +1864,13 @@ function ModulePermissionsPageContent({
           {capabilitySummaryReady &&
             JSON.stringify([...accessDraft].sort()) !==
               JSON.stringify([...userAccess].sort()) && (
-              <Button disabled={busy} onClick={() => void submitAccessDraft()}>
+              <Button
+                disabled={busy}
+                onClick={(event) => {
+                  revokeTrigger.current = event.currentTarget
+                  void submitAccessDraft()
+                }}
+              >
                 開通
               </Button>
             )}
@@ -2252,7 +2290,9 @@ function ModulePermissionsPageContent({
             </div>
           )}
           <Card aria-label="已設定的權限" role="region">
-            <h2>已設定的權限</h2>
+            <h2 ref={accessHeadingRef} tabIndex={-1}>
+              已設定的權限
+            </h2>
             <p>
               這裡顯示帳號已開通的權限；專案內能力請查看「參與專案與角色」。
             </p>
@@ -2270,9 +2310,6 @@ function ModulePermissionsPageContent({
                         checked={accessDraft.includes(item.code)}
                         type="checkbox"
                         onChange={(event) => {
-                          if (!event.target.checked) {
-                            revokeTrigger.current = event.currentTarget
-                          }
                           setAccessDraft((current) =>
                             event.target.checked
                               ? [...new Set([...current, item.code])]
@@ -2288,7 +2325,10 @@ function ModulePermissionsPageContent({
                   JSON.stringify([...userAccess].sort()) && (
                   <Button
                     disabled={busy}
-                    onClick={() => void submitAccessDraft()}
+                    onClick={(event) => {
+                      revokeTrigger.current = event.currentTarget
+                      void submitAccessDraft()
+                    }}
                   >
                     開通
                   </Button>
@@ -2611,7 +2651,9 @@ function ModulePermissionsPageContent({
               ))}
             </ul>
             <section aria-label="為什麼他不能做這件事？">
-              <h3>為什麼他不能做這件事？</h3>
+              <h3 ref={diagnosticHeadingRef} tabIndex={-1}>
+                為什麼他不能做這件事？
+              </h3>
               <label>
                 要檢查的操作
                 <select
@@ -2705,21 +2747,23 @@ function ModulePermissionsPageContent({
                         </Link>
                       </li>
                     )}
-                    {diagnosticResult.missingModuleCodes.length > 0 && (
+                    {diagnosticResult.moduleMessage && (
                       <li>
                         {diagnosticResult.moduleMessage}
-                        <Button
-                          disabled={busy}
-                          onClick={() => void repairDiagnosticModules()}
-                        >
-                          {diagnosticAction === 'task-list'
-                            ? '開通查核功能'
-                            : diagnosticAction === 'members'
-                              ? '開通專案管理功能'
-                              : diagnosticAction === 'template'
-                                ? '開通範本管理權限'
-                                : '開通建立專案權限'}
-                        </Button>
+                        {diagnosticResult.missingModuleCodes.length > 0 && (
+                          <Button
+                            disabled={busy}
+                            onClick={() => void repairDiagnosticModules()}
+                          >
+                            {diagnosticAction === 'task-list'
+                              ? '開通查核功能'
+                              : diagnosticAction === 'members'
+                                ? '開通專案管理功能'
+                                : diagnosticAction === 'template'
+                                  ? '開通範本管理權限'
+                                  : '開通建立專案權限'}
+                          </Button>
+                        )}
                       </li>
                     )}
                     {diagnosticResult.missingRole && (

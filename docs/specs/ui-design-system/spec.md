@@ -70,7 +70,7 @@ UDS-R18／UDS-AC17 依[負責人指示](https://github.com/speko-tw/inspect-flow
 | UDS-R15 | 專案清單**必須**沿用搜尋與 cursor 分頁契約；搜尋、載入更多、等待、空結果與失敗重試須有清楚回饋，並保留服務端資料責任。 | 必須 | #413；PR-01；核可原型設計說明「併入 issue 對照」 |
 | UDS-R16 | 互動動畫**應**短促且不妨礙操作；使用者設定 `prefers-reduced-motion: reduce` 時，介面應移除非必要位移與轉場。 | 應 | 設計系統回饋第 7 項；WCAG 2.2 SC 2.3.3 為增強參考 |
 | UDS-R17 | 本規格不改寫前後端契約；正式 API 回應、錯誤與權限依相應規格處理，前端不得以 mock 或自行推算宣稱契約已成立。 | 必須 | PR-01、PR-19；#286、#413、#514 |
-| UDS-R18 | 操作確認與回饋**必須**出現在觸發的列、卡片或按鈕區塊附近；確認框在觸發鈕下方，成功結果在被修改清單或區塊上方，非欄位錯誤在確認框內、列內或送出鈕旁，只有頁級載入失敗得取代全區；批次工具列、回饋與確認框依序置於同一容器緊貼清單。本版使用一般文流，不做 sticky、fixed 或 toast。出現時**必須**先 scrollIntoView，就近捲動採 nearest，區塊高過視窗 80% 改 start；確認預設聚焦取消，錯誤使用 role=alert、tabIndex=-1 並聚焦，focus 必須搭配 preventScroll；成功及資訊結果使用 role=status，不搶焦點，不自動消失，下一次相關操作或離開所屬頁面才清除。modal 呼叫端以 reveal=false 關閉捲動；欄位錯誤仍依 UDS-R07。區塊內查詢與補救動作同處，非成員提示為資訊結果；手機採全寬文流與可觸及控制項，並使用 scroll-margin-block 留閱讀空間。 | 必須 | PR-19；範圍變更（負責人指示，#734），[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)；擺放細節依專家盤點 |
+| UDS-R18 | 操作確認與回饋**必須**出現在觸發的列、卡片或按鈕區塊附近；確認框在觸發鈕下方，成功結果在被修改清單或區塊上方，非欄位錯誤在確認框內、列內或送出鈕旁，只有頁級載入失敗得取代全區；批次工具列、回饋與確認框依序置於同一容器緊貼清單。本版使用一般文流，不做 sticky、fixed 或 toast。出現時**必須**先 scrollIntoView，就近捲動採 nearest，區塊高過視窗 80% 改 start；確認預設聚焦取消，錯誤使用 role=alert、tabIndex=-1 並聚焦，focus 必須搭配 preventScroll；成功及資訊結果使用 role=status，不搶焦點，不自動消失，下一次相關操作或離開所屬頁面才清除。modal 預設 reveal=false，不需呼叫端另行指定；背景自動載入失敗不捲動或搶焦點，使用者主動重試後失敗才依錯誤規則處理；欄位錯誤仍依 UDS-R07。區塊內查詢與補救動作同處，非成員提示為資訊結果；手機採全寬文流與可觸及控制項，並使用 scroll-margin-block 留閱讀空間。 | 必須 | PR-19；範圍變更（負責人指示，#734），[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)；擺放細節依專家盤點 |
 
 ## 語意 token
 
@@ -175,3 +175,5 @@ UDS-R18／UDS-AC17 依[負責人指示](https://github.com/speko-tw/inspect-flow
 - 範圍變更（負責人指示，#515）：外觀三態由本人偏好契約承接，確認個人設定入口、首次繪製快取與跨裝置驗收 UDS-AC04／08／14 — [負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)
 
 - 範圍變更（負責人指示，#734）：新增 UDS-R18、UDS-AC17 回饋擺放、捲動、焦點與批次規則；依[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)於 #735 同步實作。
+
+- 規格澄清（#735、PR #740 審查）：modal 預設關閉 reveal；背景自動載入錯誤保留原焦點，主動重試仍失敗時才聚焦，與一般操作預設行為分開。

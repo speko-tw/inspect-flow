@@ -168,6 +168,7 @@ export default function UsersPage({
   const editExpiryRequested =
     new URLSearchParams(location.search).get('edit') === 'expiry'
   const consumedExpiryRequest = useRef('')
+  const [expiryEditorUser, setExpiryEditorUser] = useState<string | null>(null)
   const userList = useCursorList(listUsersPage, managementErrorMessage)
   const {
     items: users,
@@ -199,6 +200,7 @@ export default function UsersPage({
   const [lifecycleLoaded, setLifecycleLoaded] = useState(false)
   const [lifecycleLoading, setLifecycleLoading] = useState(false)
   const [lifecycleError, setLifecycleError] = useState('')
+  const [lifecycleInteractive, setLifecycleInteractive] = useState(false)
   const [companyListError, setCompanyListError] = useState('')
   // 修改資料與公司連結的存檔錯誤：顯示在那一列的表單裡並聚焦。放在頁頂
   // 的話，列表一長就在視窗外，螢幕閱讀器使用者也不會被帶過去（F-O02）。
@@ -293,7 +295,18 @@ export default function UsersPage({
         consumedExpiryRequest.current !== location.key
       ) {
         consumedExpiryRequest.current = location.key
+        setExpiryEditorUser(user.id)
         setEditingUser(user.id)
+        const params = new URLSearchParams(location.search)
+        params.delete('edit')
+        navigate(
+          {
+            pathname: location.pathname,
+            search: params.toString(),
+            hash: location.hash,
+          },
+          { replace: true, state: location.state, preventScrollReset: true },
+        )
       }
     }
     const listed = users.find((user) => user.id === detailUserId)
@@ -313,7 +326,17 @@ export default function UsersPage({
     return () => {
       active = false
     }
-  }, [detailUserId, users, editExpiryRequested, location.key])
+  }, [
+    detailUserId,
+    users,
+    editExpiryRequested,
+    location.key,
+    location.search,
+    location.pathname,
+    location.hash,
+    location.state,
+    navigate,
+  ])
 
   useEffect(() => {
     // T3：清單結果不屬於詳情或另一頁，不能隨共用頁面狀態留下。
@@ -384,7 +407,8 @@ export default function UsersPage({
     return companyOptionsRequest
   }, [])
 
-  const loadLifecycleLists = useCallback(async () => {
+  const loadLifecycleLists = useCallback(async (interactive = false) => {
+    setLifecycleInteractive(interactive)
     setLifecycleLoading(true)
     setLifecycleError('')
     try {
@@ -795,7 +819,10 @@ export default function UsersPage({
               <div className="account-detail-actions">
                 <button
                   disabled={detail.is_system || detail.auth_source !== 'local'}
-                  onClick={() => setEditingUser(detail.id)}
+                  onClick={() => {
+                    setExpiryEditorUser(null)
+                    setEditingUser(detail.id)
+                  }}
                   type="button"
                 >
                   修改資料
@@ -915,11 +942,14 @@ export default function UsersPage({
               )}
               {editingUser === detail.id && (
                 <UserDetailsForm
-                  focusExpiry={editExpiryRequested}
+                  focusExpiry={expiryEditorUser === detail.id}
                   busy={busyUser !== null}
                   error={rowError(detail.id, 'details')}
                   errorFocusRequest={saveError?.request}
-                  onCancel={() => setEditingUser(null)}
+                  onCancel={() => {
+                    setExpiryEditorUser(null)
+                    setEditingUser(null)
+                  }}
                   onDirtyChange={(dirty) =>
                     reportDirty(`details:${detail.id}`, dirty)
                   }
@@ -1015,10 +1045,12 @@ export default function UsersPage({
           )}
           {lifecycleError && (
             <div>
-              <Notice variant="error">{lifecycleError}</Notice>
+              <Notice variant="error" autoReveal={lifecycleInteractive}>
+                {lifecycleError}
+              </Notice>
               <button
                 disabled={lifecycleLoading}
-                onClick={() => void loadLifecycleLists()}
+                onClick={() => void loadLifecycleLists(true)}
                 type="button"
               >
                 重試
@@ -1161,6 +1193,7 @@ export default function UsersPage({
                                 }
                                 onClick={() => {
                                   setSaveError(null)
+                                  setExpiryEditorUser(null)
                                   setEditingUser(
                                     editingUser === user.id ? null : user.id,
                                   )

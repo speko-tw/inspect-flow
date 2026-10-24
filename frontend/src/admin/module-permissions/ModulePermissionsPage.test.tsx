@@ -21,6 +21,7 @@ vi.mock('../../auth/useCurrentUser', () => ({
 interface FixtureOptions {
   permissionCodes?: string[]
   failBundleOnce?: boolean
+  failRevokeOnce?: boolean
   missingBundle?: boolean
   missingRole?: boolean
   openWizard?: boolean
@@ -73,6 +74,7 @@ function permissionPage(options: FixtureOptions = {}) {
   })
   const permissionCodes = [...(options.permissionCodes ?? [])]
   let failBundleOnce = options.failBundleOnce ?? false
+  let failRevokeOnce = options.failRevokeOnce ?? false
   let loseMemberResponseOnce = options.loseMemberResponseOnce ?? false
   let memberRoleIds = [...(options.memberRoleIds ?? [])]
   let createdMemberRoleIds: string[] | null = null
@@ -578,6 +580,10 @@ function permissionPage(options: FixtureOptions = {}) {
         return Response.json({ user_id: 'person', role_ids: memberRoleIds })
       }
       if (method === 'DELETE' && path.includes('/module-permissions/')) {
+        if (failRevokeOnce) {
+          failRevokeOnce = false
+          return Response.json({ detail: '收回暫時失敗' }, { status: 500 })
+        }
         const code = path.split('/').at(-1) ?? ''
         const index = permissionCodes.indexOf(code)
         if (index >= 0) permissionCodes.splice(index, 1)
@@ -3273,4 +3279,142 @@ it('T6 直接補救只送 API 需求差集，不提交或遺失其他權限草�
     '/users/person/module-permissions/project.create',
   ])
   expect(within(access).getByLabelText('管理範本庫')).toBeChecked()
+})
+
+it('診斷缺功能後套用組合會自動重查，缺口與開通鈕消失', async () => {
+  const { fetchMock } = permissionPage({
+    openWizard: false,
+    memberRoleIds: ['field-role'],
+  })
+  fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
+  await screen.findByText(/能使用：/)
+  const area = screen.getByRole('region', {
+    name: '為什麼他不能做這件事？',
+  })
+  fireEvent.change(within(area).getByLabelText('專案'), {
+    target: { value: 'project-1' },
+  })
+  fireEvent.click(within(area).getByRole('button', { name: '檢查' }))
+  expect(await within(area).findByText('缺少查核功能的權限。')).toBeVisible()
+  expect(
+    within(area).getByRole('button', { name: '開通查核功能' }),
+  ).toBeVisible()
+  const diagnosticRequests = () =>
+    fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes('project_id=project-1'),
+    ).length
+  const before = diagnosticRequests()
+  fireEvent.click(screen.getByText('進階設定'))
+  const row = screen
+    .getByText('現場工程師常用', { selector: 'strong' })
+    .closest('li')!
+  fireEvent.click(
+    within(row).getByRole('button', {
+      name: '套用至所選帳號',
+    }),
+  )
+  await within(area).findByText('這個人具備此操作所需的有效權限。')
+  expect(within(area).queryByText('缺少查核功能的權限。')).toBeNull()
+  expect(
+    within(area).queryByRole('button', { name: '開通查核功能' }),
+  ).toBeNull()
+  expect(diagnosticRequests()).toBe(before + 1)
+})
+
+it.each([['inspection.use'], []])(
+  '舊診斷未列 required 模組時仍呈現缺口：%j',
+  async (...codes) => {
+    permissionPage({
+      openWizard: false,
+      diagnosticResponse: async () =>
+        Response.json({
+          module_permissions: [],
+          project_roles: [],
+          diagnostics: [
+            {
+              action: 'task_list',
+              allowed: false,
+              required_module_codes: [],
+              required_project_codes: [],
+              missing_layers: ['module'],
+              missing_codes: codes,
+            },
+          ],
+        }),
+    })
+    fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
+    await screen.findByText(/能使用：/)
+    const area = screen.getByRole('region', {
+      name: '為什麼他不能做這件事？',
+    })
+    fireEvent.change(within(area).getByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(within(area).getByRole('button', { name: '檢查' }))
+    const result = await within(area).findByRole('status')
+    expect(result).toHaveTextContent('缺少查核功能的權限。')
+    expect(within(result).getAllByRole('listitem')).toHaveLength(1)
+    expect(
+      within(result).queryByRole('button', { name: '開通查核功能' }) !== null,
+    ).toBe(codes.length > 0)
+  },
+)
+
+it('收回失敗取消後重開清舊錯誤，成功後回到區塊標題', async () => {
+  const { calls } = permissionPage({
+    openWizard: false,
+    permissionCodes: ['project.use'],
+    failRevokeOnce: true,
+  })
+  fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
+  await screen.findByText(/能使用：/)
+  fireEvent.click(screen.getByText('進階設定'))
+  const area = screen.getByRole('region', { name: '已設定的權限' })
+  const assigned = within(area).getByRole('checkbox', { name: '使用專案功能' })
+  await waitFor(() => expect(assigned).toBeChecked())
+  fireEvent.click(assigned)
+  const trigger = within(area).getByRole('button', { name: '開通' })
+  fireEvent.click(trigger)
+  let box = await within(area).findByRole('region', { name: '確認收回權限' })
+  fireEvent.click(within(box).getByRole('button', { name: '確認收回' }))
+  await within(box).findByRole('alert')
+  fireEvent.click(within(box).getByRole('button', { name: '取消' }))
+  await waitFor(() => expect(trigger).toHaveFocus())
+  fireEvent.click(trigger)
+  box = await within(area).findByRole('region', { name: '確認收回權限' })
+  expect(within(box).queryByRole('alert')).toBeNull()
+  fireEvent.click(within(box).getByRole('button', { name: '確認收回' }))
+  const heading = within(area).getByRole('heading', { name: '已設定的權限' })
+  await waitFor(() => expect(heading).toHaveFocus())
+  expect(trigger).not.toBeInTheDocument()
+  expect(
+    calls.filter(
+      (call) => call.method === 'DELETE' && call.path.endsWith('/project.use'),
+    ),
+  ).toHaveLength(2)
+})
+
+it('收回成功仍有其他未送出草稿時，焦點回到原觸發鈕', async () => {
+  permissionPage({ openWizard: false, permissionCodes: ['project.use'] })
+  fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
+  await screen.findByText(/能使用：/)
+  fireEvent.click(screen.getByText('進階設定'))
+  const area = screen.getByRole('region', { name: '已設定的權限' })
+  const assigned = within(area).getByRole('checkbox', { name: '使用專案功能' })
+  await waitFor(() => expect(assigned).toBeChecked())
+  fireEvent.click(assigned)
+  fireEvent.click(within(area).getByRole('checkbox', { name: '使用查核功能' }))
+  const trigger = within(area).getByRole('button', { name: '開通' })
+  fireEvent.click(trigger)
+  const box = await within(area).findByRole('region', {
+    name: '確認收回權限',
+  })
+  fireEvent.click(within(box).getByRole('button', { name: '確認收回' }))
+  await waitFor(() => expect(trigger).toHaveFocus())
+  expect(
+    within(area).getByRole('checkbox', { name: '使用查核功能' }),
+  ).toBeChecked()
+  expect(
+    within(area).queryByRole('region', { name: '確認收回權限' }),
+  ).toBeNull()
 })

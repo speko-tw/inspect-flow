@@ -2438,12 +2438,17 @@ a.app-header-tab[aria-current='page'] {
 
 /* B2：只以版面間距分組，DOM 及剪貼簿仍是連續密碼。 */
 output.temporary-password {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5ch;
+  display: block;
+}
+
+.temporary-password-group + .temporary-password-group::before {
+  content: '';
+  display: inline-block;
+  width: 0.5ch;
 }
 
 .temporary-password-group {
+  display: inline;
   white-space: nowrap;
 }
 

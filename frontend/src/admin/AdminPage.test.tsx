@@ -1028,8 +1028,8 @@ describe('admin user and company pages', () => {
     )
     expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
     expect(
-      screen.queryByRole('status', { name: '已新增李柏的帳號' }),
-    ).toBeNull()
+      screen.getAllByRole('heading', { name: '已新增李柏的帳號' }),
+    ).toHaveLength(1)
     expectNoPasswordPersistence(password)
     fireEvent.click(screen.getByRole('button', { name: '回清單' }))
     expect(
@@ -1229,6 +1229,7 @@ describe('admin user and company pages', () => {
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
       'leave-page-password',
     )
+    expect(document.body.textContent).toContain('leave-page-password')
 
     fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
     fireEvent.click(screen.getByRole('button', { name: '離開此頁' }))
@@ -1239,7 +1240,7 @@ describe('admin user and company pages', () => {
       screen.queryByRole('heading', { name: '有尚未儲存的變更' }),
     ).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.queryByText('leave-page-password')).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('leave-page-password')
     expectNoPasswordPersistence('leave-page-password')
   })
 

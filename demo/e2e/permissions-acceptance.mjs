@@ -377,6 +377,10 @@ try {
     ),
     '選擇留在此頁後仍應顯示原臨時密碼',
   )
+  assert.ok(
+    (await page.locator('body').textContent()).includes(temporaryPassword),
+    '離頁前同一查法確實找得到連續密碼',
+  )
   await page.getByRole('button', {
     name: '查看這個帳號的能力',
   }).click()
@@ -389,7 +393,7 @@ try {
   }).waitFor()
   // 離開完成頁後，能力摘要不得再顯示臨時密碼。
   assert.ok(
-    !(await page.locator('body').innerText()).includes(temporaryPassword),
+    !(await page.locator('body').textContent()).includes(temporaryPassword),
   )
   await page.getByRole('combobox').nth(0).selectOption('members')
   const projectSelector = page.getByRole('combobox').nth(1)

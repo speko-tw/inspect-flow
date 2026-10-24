@@ -24,6 +24,7 @@ function CopyablePassword({ password }: { password: string }) {
 
   return (
     <>
+      {/* inline 群組只加視覺間距，原生選取才不會插入空白或換行。 */}
       <output aria-label="臨時密碼" className="temporary-password">
         {password.match(/.{1,5}/g)?.map((group, index) => (
           <span className="temporary-password-group" key={index}>

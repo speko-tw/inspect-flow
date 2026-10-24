@@ -1,14 +1,21 @@
 """Role-management HTTP API tests (DOM-R55, DOM-AC47~DOM-AC49)."""
 
-from datetime import UTC, datetime
+import os
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import UUID
 
 import pytest
+from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from alembic import command
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.db import clock
+from app.db.engine import dispose_engine
+from app.db.settings import DATABASE_URL_ENV_VAR
 from app.models import (
     AuditLog,
     CreatorRoleSetting,
@@ -20,10 +27,44 @@ from app.models import (
 )
 from app.permission_codes import PermissionCode, permission_code_scope
 from tests.db.conftest import create_root_user_with_company
+from tests.db.reset_postgres_schema import reset_public_schema
+
+
+@pytest.fixture
+def migrated_url(tmp_path, monkeypatch):
+    """角色 API 可明確選擇專用 PostgreSQL，絕不默默退回 SQLite。"""
+    postgres = os.environ.get("INSPECTFLOW_TEST_ROLE_API_POSTGRES") == "1"
+    if postgres:
+        url = os.environ.get("INSPECTFLOW_TEST_POSTGRES_URL")
+        if not url:
+            raise pytest.UsageError("角色 API PostgreSQL 測試必須提供 URL")
+    else:
+        url = f"sqlite:///{tmp_path / 'test.db'}"
+    monkeypatch.setenv(DATABASE_URL_ENV_VAR, url)
+    dispose_engine()
+    if postgres:
+        reset_public_schema(url)
+    try:
+        config = Config(
+            str(Path(__file__).resolve().parents[2] / "alembic.ini")
+        )
+        command.upgrade(config, "head")
+        yield url
+    finally:
+        dispose_engine()
+        if postgres:
+            reset_public_schema(url)
 
 
 @pytest.fixture
 def role_admin_client(db_session, make_client) -> tuple[TestClient, User]:
+    expected_backend = (
+        "postgresql"
+        if os.environ.get("INSPECTFLOW_TEST_ROLE_API_POSTGRES") == "1"
+        else "sqlite"
+    )
+    assert db_session.get_bind().dialect.name == expected_backend
+    print(f"Role API backend verified: {expected_backend}")
     admin = create_root_user_with_company(db_session, "ROLE-API-ADMIN")
     admin.is_admin = True
     _, token = create_session(db_session, admin)
@@ -520,11 +561,21 @@ def test_unknown_integrity_error_is_not_reported_as_name_conflict(
     assert response.status_code == 500
 
 
+@pytest.mark.parametrize("inactive_kind", ["disabled", "expired"])
 def test_role_api_reports_user_and_project_counts(
-    role_admin_client, db_session
+    role_admin_client, db_session, inactive_kind
 ):
     client, admin = role_admin_client
     held = client.post("/api/v1/roles", json=_role_payload("Held")).json()
+    if inactive_kind == "expired":
+        # 建立角色不接受治理旗標，須先走修改 API 才能指派外部帳號。
+        response = client.patch(
+            f"/api/v1/roles/{held['id']}",
+            json={"is_external_allowed": True},
+        )
+        assert response.status_code == 200, response.text
+        held = response.json()
+        assert held["is_external_allowed"] is True
     unused = client.post("/api/v1/roles", json=_role_payload("Unused")).json()
     assert (held["user_count"], held["project_count"]) == (0, 0)
     assert held["inactive_user_count"] == 0
@@ -548,7 +599,14 @@ def test_role_api_reports_user_and_project_counts(
         label: create_root_user_with_company(db_session, f"ROLE-COUNT-{label}")
         for label in ("A", "B")
     }
-    users["A"].is_active = False
+    if inactive_kind == "expired":
+        users["A"].is_external_collaborator = True
+        users["A"].account_expires_on = clock.utc_now().date() - timedelta(
+            days=1
+        )
+        assert users["A"].is_active is True
+    else:
+        users["A"].is_active = False
     for project, label in (
         (projects[0], "A"),
         (projects[0], "B"),
@@ -585,7 +643,12 @@ def test_role_api_reports_user_and_project_counts(
     ) == (0, 0)
     assert listed[unused["id"]]["inactive_user_count"] == 0
 
-    renamed = client.patch(
+    renamed_response = client.patch(
         f"/api/v1/roles/{held['id']}", json={"name": "Held renamed"}
-    ).json()
+    )
+    assert renamed_response.status_code == 200, renamed_response.text
+    renamed = renamed_response.json()
     assert {key: renamed[key] for key in expected} == expected
+    if inactive_kind == "expired":
+        db_session.refresh(users["A"])
+        assert users["A"].is_active is True

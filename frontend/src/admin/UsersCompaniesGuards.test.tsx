@@ -8,6 +8,7 @@ import {
   within,
 } from '@testing-library/react'
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 import { DataMemoryRouter } from '../testing/DataMemoryRouter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -2069,16 +2070,67 @@ it('批次啟用排除到期者，警示附編輯連結且只送出其餘帳號'
   ).toEqual(['user-2'])
 })
 
-it('改到期日連結網址會開啟詳情編輯器並聚焦日期欄位', async () => {
+it('到期參數 replace 消費一次，取消重開不再聚焦日期', async () => {
   stubBackend({ users: [{ ...regularUser, is_external_collaborator: true }] })
+  function LocationProbe() {
+    const location = useLocation()
+    const navigate = useNavigate()
+    return (
+      <>
+        <output aria-label="測試網址">
+          {location.pathname + location.search}
+        </output>
+        <button onClick={() => navigate(-1)}>測試上一頁</button>
+      </>
+    )
+  }
   render(
-    <DataMemoryRouter initialEntries={['/accounts/user-1?edit=expiry']}>
+    <DataMemoryRouter
+      initialEntries={['/before', '/accounts/user-1?edit=expiry&keep=1']}
+    >
       <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
         <UsersPage detailUserId="user-1" onTemporaryPassword={vi.fn()} />
+        <LocationProbe />
       </CurrentUserProvider>
     </DataMemoryRouter>,
   )
   const date = await screen.findByLabelText(/外部帳號到期日/)
   await waitFor(() => expect(date).toHaveFocus())
   expect(date).toHaveAttribute('type', 'date')
+  await waitFor(() =>
+    expect(screen.getByLabelText('測試網址')).toHaveTextContent(
+      '/accounts/user-1?keep=1',
+    ),
+  )
+  const currentDate = screen.getByLabelText(/外部帳號到期日/)
+  await waitFor(() => expect(currentDate).toHaveFocus())
+  fireEvent.click(
+    within(currentDate.closest('form')!).getByRole('button', {
+      name: '取消',
+    }),
+  )
+  fireEvent.click(screen.getByRole('button', { name: '修改資料' }))
+  const reopened = await screen.findByLabelText(/外部帳號到期日/)
+  expect(reopened).not.toHaveFocus()
+  fireEvent.click(screen.getByRole('button', { name: '測試上一頁' }))
+  await waitFor(() =>
+    expect(screen.getByLabelText('測試網址')).toHaveTextContent('/before'),
+  )
+})
+
+it('提醒背景失敗不搶搜尋焦點，主動重試失敗才聚焦錯誤', async () => {
+  const backend = stubBackend({
+    fail: (call) => call.path.endsWith('/external-without-project'),
+  })
+  renderUsers()
+  const search = screen.getByLabelText('搜尋帳號')
+  search.focus()
+  fireEvent.change(search, { target: { value: '林' } })
+  const alert = await screen.findByRole('alert')
+  expect(search).toHaveFocus()
+  expect(search).toHaveValue('林')
+  expect(alert).not.toHaveFocus()
+  fireEvent.click(screen.getByRole('button', { name: '重試' }))
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveFocus())
+  expect(backend.count('GET', /external-without-project/)).toBe(2)
 })
