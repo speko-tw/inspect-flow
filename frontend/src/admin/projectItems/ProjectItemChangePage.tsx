@@ -338,6 +338,7 @@ export default function ProjectItemChangePage({
   const [baseline, setBaseline] = useState<string | null>(null)
   const dialogHeadingRef = useRef<HTMLHeadingElement>(null)
   const confirmBoxRef = useRef<HTMLDivElement>(null)
+  const editorRootRef = useRef<HTMLDivElement>(null)
   const actionErrorRef = useRef<HTMLParagraphElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
 
@@ -365,7 +366,6 @@ export default function ProjectItemChangePage({
     title.trim() !== original.title.trim() &&
     JSON.stringify({ ...editorValues, title: original.title }) === baseline
   const reinspectionChoice = reinspect ?? (renameOnly ? false : null)
-  const structureLocked = needsChoice && reinspectionChoice === false
   const photoRequirementChanged = Boolean(
     preview?.item.inspection_points.some(
       (point, index) =>
@@ -452,7 +452,13 @@ export default function ProjectItemChangePage({
   }, [confirming])
 
   useEffect(() => {
-    if (error && preview) actionErrorRef.current?.focus()
+    if (error && preview) {
+      const requestError = editorRootRef.current?.querySelector<HTMLElement>(
+        '.tpl-editor-footer [role="alert"]',
+      )
+      requestError?.scrollIntoView?.({ block: 'nearest' })
+      requestError?.focus({ preventScroll: true })
+    }
   }, [error, preview])
 
   function applyPreview(loaded: ProjectItemPreview) {
@@ -695,23 +701,6 @@ export default function ProjectItemChangePage({
       })
       return Promise.resolve(invalidPoints)
     }
-    if (needsChoice && reinspectionChoice === null) {
-      setError('請先選擇這次修改要不要重新查核。')
-      return Promise.resolve(null)
-    }
-    if (
-      structureLocked &&
-      (hasStructureChange(preview!.item.inspection_points, inspectionPoints) ||
-        photoRequirementChanged)
-    ) {
-      setError(
-        [
-          '選擇「不要」重新查核時，不能增減項次或實測欄位，',
-          '也不能變更照片需求、欄位型別、單位、數值綁定或標準種類。',
-        ].join(''),
-      )
-      return Promise.resolve(null)
-    }
     const submitter = (event.nativeEvent as SubmitEvent).submitter
     returnFocusRef.current =
       (submitter as HTMLElement | null) ??
@@ -734,6 +723,11 @@ export default function ProjectItemChangePage({
   const willDeleteStructure = preview
     ? removesStructure(preview.item.inspection_points, inspectionPoints)
     : false
+  const hasStructuralChange = Boolean(
+    preview &&
+    (hasStructureChange(preview.item.inspection_points, inspectionPoints) ||
+      photoRequirementChanged),
+  )
   const deletedNames = preview
     ? deletedStructureNames(preview.item.inspection_points, inspectionPoints)
     : []
@@ -764,159 +758,130 @@ export default function ProjectItemChangePage({
           唯讀瀏覽
         </p>
       )}
-      {error && (
+      {error && !preview && (
         <p ref={actionErrorRef} role="alert" tabIndex={-1}>
           {error}
         </p>
       )}
       {preview && (
         <>
-          {needsChoice && (
-            <fieldset className="tpl-card" disabled={readOnly || busy}>
-              <legend>這次修改要不要重新查核？</legend>
-              <label className="tpl-radio-option">
-                <input
-                  aria-describedby="reinspect-yes-hint"
-                  checked={reinspectionChoice === true}
-                  onChange={() => setReinspect(true)}
-                  name="reinspect"
-                  type="radio"
-                />
-                要，用新標準重新查核
-              </label>
-              <p className="tpl-hint muted-text" id="reinspect-yes-hint">
-                {REINSPECT_YES_HINT}
-              </p>
-              <label className="tpl-radio-option">
-                <input
-                  aria-describedby="reinspect-no-hint"
-                  checked={reinspectionChoice === false}
-                  onChange={() => setReinspect(false)}
-                  name="reinspect"
-                  type="radio"
-                />
-                不要，只更正文字與標準值
-              </label>
-              <p className="tpl-hint muted-text" id="reinspect-no-hint">
-                {REINSPECT_NO_HINT}
-              </p>
-            </fieldset>
-          )}
           {currentDraft && (
-            <TemplateItemEditor
-              addPoint={() =>
-                setInspectionPoints((current) => [
-                  ...current,
-                  blankPoint(current.length + 1, { stableClientKey: true }),
-                ])
-              }
-              cancelLabel="返回專案查核項目"
-              cancelHref={`/projects/${projectId}/inspection-items`}
-              stablePointErrorKeys
-              clearPointServerErrors={(index) => {
-                const point = inspectionPoints[index]
-                const identity = point?.clientKey ?? point?.id ?? index
-                const prefix = `point:${identity}:`
-                setServerFieldErrors((current) =>
-                  Object.fromEntries(
-                    Object.entries(current).filter(
-                      ([key]) => !key.startsWith(prefix),
-                    ),
-                  ),
-                )
-              }}
-              confirmField={confirmField}
-              contextLabel={`專案查核項目 / ${preview.item.title}`}
-              dirty={dirty}
-              errors={{ ...serverFieldErrors, ...localErrors }}
-              focusRequest={focusRequest}
-              itemDraft={currentDraft}
-              mode="edit-item"
-              photoDraft={photoDraft}
-              readOnly={readOnly || busy}
-              removePoint={(index) => {
-                setInspectionPoints((current) =>
-                  current
-                    .filter((_point, pointIndex) => pointIndex !== index)
-                    .map((point, pointIndex) => ({
-                      ...point,
-                      sequence: pointIndex + 1,
-                    })),
-                )
-                setPhotoDraft((current) => {
-                  const next: Record<string, string> = {}
-                  Object.entries(current).forEach(([key, value]) => {
-                    const pointIndex = Number(key)
-                    if (pointIndex < index) next[key] = value
-                    if (pointIndex > index)
-                      next[String(pointIndex - 1)] = value
-                  })
-                  return next
-                })
-              }}
-              resetMode={() => {}}
-              requestError=""
-              saveItem={submitItem}
-              saveLabel="儲存變更"
-              selected={null}
-              setConfirmField={setConfirmField}
-              setGuard={() => {}}
-              setPhotoDraft={setPhotoDraft}
-              structureLocked={structureLocked}
-              structureLockReason={
-                '選擇「不要」時，只能更正文字與數值標準、容差、區間；照片需求、欄位型別、單位、數值綁定、標準種類及項次／欄位增減都會鎖定。'
-              }
-              systemId={projectId}
-              updateDraft={(changes: Partial<TemplateItem>) => {
-                if (changes.title !== undefined) setTitle(changes.title)
-                if (changes.instruction !== undefined) {
-                  setInstruction(changes.instruction)
+            <div ref={editorRootRef}>
+              <TemplateItemEditor
+                addPoint={() =>
+                  setInspectionPoints((current) => [
+                    ...current,
+                    blankPoint(current.length + 1, { stableClientKey: true }),
+                  ])
                 }
-                setError('')
-                setResult(null)
-              }}
-              updateField={(pointIndex, fieldIndex, changes) => {
-                setInspectionPoints((current) =>
-                  current.map((point, index) =>
-                    index !== pointIndex
-                      ? point
-                      : {
-                          ...point,
-                          measurement_fields: point.measurement_fields.map(
-                            (field, fieldPosition) =>
-                              fieldPosition === fieldIndex
-                                ? { ...field, ...changes }
-                                : field,
-                          ),
-                        },
-                  ),
-                )
-                setError('')
-                setResult(null)
-              }}
-              updateNumeric={(index, changes) =>
-                setInspectionPoints((current) =>
-                  updatePoint(current, index, {
-                    numeric_standard: {
-                      ...current[index].numeric_standard!,
-                      ...changes,
-                    },
-                  }),
-                )
-              }
-              updatePoint={(index, changes) =>
-                setInspectionPoints((current) =>
-                  updatePoint(current, index, changes),
-                )
-              }
-            />
+                cancelLabel="返回專案查核項目"
+                cancelHref={`/projects/${projectId}/inspection-items`}
+                stablePointErrorKeys
+                clearPointServerErrors={(index) => {
+                  const point = inspectionPoints[index]
+                  const identity = point?.clientKey ?? point?.id ?? index
+                  const prefix = `point:${identity}:`
+                  setServerFieldErrors((current) =>
+                    Object.fromEntries(
+                      Object.entries(current).filter(
+                        ([key]) => !key.startsWith(prefix),
+                      ),
+                    ),
+                  )
+                }}
+                confirmField={confirmField}
+                contextLabel={`專案查核項目 / ${preview.item.title}`}
+                dirty={dirty}
+                errors={{ ...serverFieldErrors, ...localErrors }}
+                focusRequest={focusRequest}
+                itemDraft={currentDraft}
+                mode="edit-item"
+                photoDraft={photoDraft}
+                readOnly={readOnly || busy}
+                removePoint={(index) => {
+                  setInspectionPoints((current) =>
+                    current
+                      .filter((_point, pointIndex) => pointIndex !== index)
+                      .map((point, pointIndex) => ({
+                        ...point,
+                        sequence: pointIndex + 1,
+                      })),
+                  )
+                  setPhotoDraft((current) => {
+                    const next: Record<string, string> = {}
+                    Object.entries(current).forEach(([key, value]) => {
+                      const pointIndex = Number(key)
+                      if (pointIndex < index) next[key] = value
+                      if (pointIndex > index)
+                        next[String(pointIndex - 1)] = value
+                    })
+                    return next
+                  })
+                }}
+                resetMode={() => {}}
+                requestError={error}
+                saveItem={submitItem}
+                saveLabel="儲存變更"
+                selected={null}
+                setConfirmField={setConfirmField}
+                setGuard={() => {}}
+                setPhotoDraft={setPhotoDraft}
+                systemId={projectId}
+                updateDraft={(changes: Partial<TemplateItem>) => {
+                  if (changes.title !== undefined) setTitle(changes.title)
+                  if (changes.instruction !== undefined) {
+                    setInstruction(changes.instruction)
+                  }
+                  setError('')
+                  setResult(null)
+                }}
+                updateField={(pointIndex, fieldIndex, changes) => {
+                  setInspectionPoints((current) =>
+                    current.map((point, index) =>
+                      index !== pointIndex
+                        ? point
+                        : {
+                            ...point,
+                            measurement_fields: point.measurement_fields.map(
+                              (field, fieldPosition) =>
+                                fieldPosition === fieldIndex
+                                  ? { ...field, ...changes }
+                                  : field,
+                            ),
+                          },
+                    ),
+                  )
+                  setError('')
+                  setResult(null)
+                }}
+                updateNumeric={(index, changes) =>
+                  setInspectionPoints((current) =>
+                    updatePoint(current, index, {
+                      numeric_standard: {
+                        ...current[index].numeric_standard!,
+                        ...changes,
+                      },
+                    }),
+                  )
+                }
+                updatePoint={(index, changes) =>
+                  setInspectionPoints((current) =>
+                    updatePoint(current, index, changes),
+                  )
+                }
+              />
+            </div>
           )}
 
           {confirming && (
             <ConfirmBox
               busy={busy}
               confirmDisabled={
-                readOnly || (needsChoice && reinspectionChoice === null)
+                readOnly ||
+                (needsChoice && reinspectionChoice === null) ||
+                (needsChoice &&
+                  reinspectionChoice === false &&
+                  hasStructuralChange)
               }
               confirmLabel="確認儲存"
               headingRef={dialogHeadingRef}
@@ -934,6 +899,38 @@ export default function ProjectItemChangePage({
             >
               {needsChoice && (
                 <>
+                  <fieldset className="tpl-card" disabled={readOnly || busy}>
+                    <legend>這次修改要不要重新查核？</legend>
+                    <label className="tpl-radio-option">
+                      <input
+                        aria-describedby="reinspect-yes-hint"
+                        checked={reinspectionChoice === true}
+                        onChange={() => setReinspect(true)}
+                        name="reinspect"
+                        type="radio"
+                      />
+                      要，用新標準重新查核
+                    </label>
+                    <p className="tpl-hint muted-text" id="reinspect-yes-hint">
+                      {REINSPECT_YES_HINT}
+                    </p>
+                    <label className="tpl-radio-option">
+                      <input
+                        aria-describedby="reinspect-no-hint"
+                        checked={reinspectionChoice === false}
+                        disabled={hasStructuralChange}
+                        onChange={() => setReinspect(false)}
+                        name="reinspect"
+                        type="radio"
+                      />
+                      不要，只更正文字與標準值
+                    </label>
+                    <p className="tpl-hint muted-text" id="reinspect-no-hint">
+                      {hasStructuralChange
+                        ? '這次有增減項次／欄位，一定要重新查核'
+                        : REINSPECT_NO_HINT}
+                    </p>
+                  </fieldset>
                   <p>
                     {'有任務已經派出。'}
                     {hasDraft && '草稿任務不受選擇影響，會直接更新為新內容；'}
@@ -943,6 +940,7 @@ export default function ProjectItemChangePage({
                     {reinspectionChoice === true &&
                       '你選擇「要」重新查核，各任務會有以下狀態變化。'}
                     {reinspectionChoice === false &&
+                      !hasStructuralChange &&
                       '你選擇「不要」重新查核，各任務狀態維持不變。'}
                   </p>
                 </>

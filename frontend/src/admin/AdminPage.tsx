@@ -47,6 +47,9 @@ import TemporaryPassword from './TemporaryPassword'
 const PlanningPage = lazy(() => import('./planning/PlanningPage'))
 const AuditLogPage = lazy(() => import('./audit-log/AuditLogPage'))
 const TemplatesPage = lazy(() => import('./templates/TemplatesPage'))
+const SaveTemplateFromProjectPage = lazy(
+  () => import('./templates/SaveTemplateFromProjectPage'),
+)
 const ProjectTemplatesPage = lazy(
   () => import('./projects/ProjectTemplatesPage'),
 )
@@ -431,6 +434,17 @@ function AdminPageContent() {
             />
             {PROJECT_ROUTES}
             <Route
+              path={nestedRoutePath(
+                ROUTES.templateSaveFromProject,
+                ROUTES.adminShell,
+              )}
+              element={
+                <AdminRouteSuspense>
+                  <SaveTemplateFromProjectPage />
+                </AdminRouteSuspense>
+              }
+            />
+            <Route
               path={nestedRoutePath(ROUTES.adminTemplates, ROUTES.adminShell)}
               element={
                 <AdminRouteSuspense>
@@ -527,6 +541,19 @@ function MemberAdminShell({
             element={<DashboardRoute access={dashboardAccess} user={user} />}
           />
           {PROJECT_ROUTES}
+          {canAccessRoute(user, ROUTES.templateSaveFromProject) && (
+            <Route
+              path={nestedRoutePath(
+                ROUTES.templateSaveFromProject,
+                ROUTES.adminShell,
+              )}
+              element={
+                <AdminRouteSuspense>
+                  <SaveTemplateFromProjectPage />
+                </AdminRouteSuspense>
+              }
+            />
+          )}
           {canAccessRoute(user, ROUTES.adminTemplates) && (
             <Route
               path={nestedRoutePath(ROUTES.adminTemplates, ROUTES.adminShell)}

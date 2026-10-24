@@ -22,6 +22,17 @@ const NAME_FIELD_CODES: ReadonlySet<string> = new Set([
   'project_zone.invalid_name',
 ])
 
+function focusLocalError(message: HTMLParagraphElement | null) {
+  if (!message) return
+  // #734 T7：錯誤先捲入視野，聚焦時避免瀏覽器再自行捲動。
+  const block =
+    message.getBoundingClientRect().height > window.innerHeight * 0.8
+      ? 'start'
+      : 'nearest'
+  message.scrollIntoView?.({ block })
+  message.focus({ preventScroll: true })
+}
+
 /**
  * 依 IP-R10 管理專案分區，並說明無分區時的文字地點流程。
  * 讀取失敗時禁止新增，避免在未知既有分區的情況下重複建立。
@@ -44,11 +55,13 @@ export default function ProjectZonesPage({
   const loading = loadedProjectId !== projectId
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [deleteError, setDeleteError] = useState('')
   const [notice, setNotice] = useState('')
   const [nameError, setNameError] = useState(false)
   const [serverNameError, setServerNameError] = useState('')
   const nameInput = useRef<HTMLInputElement>(null)
   const errorMessage = useRef<HTMLParagraphElement>(null)
+  const deleteErrorMessage = useRef<HTMLParagraphElement>(null)
   const pageHeading = useRef<HTMLHeadingElement>(null)
   const rowTrigger = useRef<HTMLElement | null>(null)
   const focusRowId = useRef<string | null>(null)
@@ -68,8 +81,14 @@ export default function ProjectZonesPage({
   }, [nameError, serverNameError])
 
   useEffect(() => {
-    if (error && !nameError && !serverNameError) errorMessage.current?.focus()
+    if (error && !nameError && !serverNameError) {
+      focusLocalError(errorMessage.current)
+    }
   }, [error, nameError, serverNameError])
+
+  useEffect(() => {
+    if (deleteError) focusLocalError(deleteErrorMessage.current)
+  }, [deleteError])
 
   // 進入改名時把焦點放到名稱欄。改名表單掛在該列內、新增表單掛在頁底，
   // 共用同一個 ref；從一列切到另一列時元件不一定重新掛載，autoFocus 不
@@ -219,6 +238,7 @@ export default function ProjectZonesPage({
   function closeDelete() {
     const trigger = rowTrigger.current
     setDeleting(null)
+    setDeleteError('')
     queueMicrotask(() => {
       if (trigger?.isConnected) trigger.focus()
     })
@@ -227,6 +247,7 @@ export default function ProjectZonesPage({
   async function remove(zone: ProjectZone) {
     setBusy(true)
     setError('')
+    setDeleteError('')
     setNotice('')
     try {
       await client.deleteZone(projectId, zone.id)
@@ -236,12 +257,11 @@ export default function ProjectZonesPage({
       // 觸發鈕所在的列已經不在了，焦點回到頁面標題。
       queueMicrotask(() => pageHeading.current?.focus())
     } catch (caught) {
-      // 分區仍被任務使用等情況：關掉確認框，錯誤顯示在頁面訊息區。
-      setDeleting(null)
+      // #734 T7：保留列內確認框，讓錯誤與補救動作留在原處。
       if (isForbidden(caught)) {
-        setError('你沒有權限變更這個專案的分區，內容沒有更動。')
+        setDeleteError('你沒有權限變更這個專案的分區，內容沒有更動。')
       } else {
-        setError(planningErrorMessage(caught))
+        setDeleteError(planningErrorMessage(caught))
       }
     } finally {
       setBusy(false)
@@ -310,11 +330,6 @@ export default function ProjectZonesPage({
         管理專案內可供任務選擇的地點分區。沒有分區時，可在任務填寫文字地點。
       </p>
       <UnsavedLeaveBox guard={leaveGuard} />
-      {notice && (
-        <p className="notice-success" role="status">
-          {notice}
-        </p>
-      )}
       {error && (
         <p ref={errorMessage} role="alert" tabIndex={-1}>
           {error}
@@ -329,6 +344,11 @@ export default function ProjectZonesPage({
       {!loading && !loadFailed && zones.length === 0 ? (
         <p>尚未設定分區。</p>
       ) : null}
+      {notice && (
+        <p className="notice-success" role="status">
+          {notice}
+        </p>
+      )}
       <ul className="named-list">
         {zones.map((zone) => (
           <li className="named-row" key={zone.id}>
@@ -368,6 +388,7 @@ export default function ProjectZonesPage({
                   onClick={(event) => {
                     rowTrigger.current = event.currentTarget
                     setError('')
+                    setDeleteError('')
                     setNotice('')
                     setDeleting(zone)
                   }}
@@ -388,6 +409,11 @@ export default function ProjectZonesPage({
                 variant="danger"
               >
                 <p>刪除後無法復原；已有任務使用的分區無法刪除。</p>
+                {deleteError && (
+                  <p ref={deleteErrorMessage} role="alert" tabIndex={-1}>
+                    {deleteError}
+                  </p>
+                )}
               </ConfirmBox>
             )}
           </li>

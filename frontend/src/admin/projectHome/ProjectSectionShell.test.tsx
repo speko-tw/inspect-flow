@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
@@ -15,6 +15,13 @@ function renderShell(
     'project_member.manage',
     'project_inspection_item.edit',
   ],
+  activeSection:
+    | 'home'
+    | 'members'
+    | 'inspection-items'
+    | 'zones'
+    | 'planning'
+    | 'progress' = 'home',
 ) {
   return render(
     <MemoryRouter
@@ -32,7 +39,7 @@ function renderShell(
         <Route
           element={
             <ProjectSectionShell
-              activeSection="home"
+              activeSection={activeSection}
               project={{ project_code: 'DEMO-001', name: '示範工程' }}
               projectId="project-1"
               viewerPermissions={viewerPermissions}
@@ -49,6 +56,46 @@ function renderShell(
 }
 
 describe('project section navigation state', () => {
+  it('shows the current section and toggles the mobile menu label', () => {
+    renderShell(
+      '/projects/:projectId/planning',
+      ['inspection_plan.read'],
+      'planning',
+    )
+
+    const button = screen.getByRole('button', {
+      name: '切換專案頁面，目前在計畫與任務',
+    })
+    expect(button).toHaveTextContent('計畫與任務 ▾')
+    expect(button).toHaveAttribute('aria-controls', 'project-mobile-sections')
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(button)
+
+    expect(button).toHaveTextContent('計畫與任務 ▴')
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    const drawer = document.getElementById('project-mobile-sections')
+    expect(drawer).not.toBeNull()
+    const planningLink = within(drawer as HTMLElement).getByRole('link', {
+      name: '計畫與任務',
+    })
+    expect(planningLink).toBeVisible()
+    expect(planningLink).toHaveAttribute(
+      'href',
+      '/projects/project-1/planning',
+    )
+  })
+
+  it('uses the home section name in the accessible mobile menu label', () => {
+    renderShell('/projects/:projectId/planning')
+
+    expect(
+      screen.getByRole('button', {
+        name: '切換專案頁面，目前在專案首頁',
+      }),
+    ).toHaveTextContent('專案首頁 ▾')
+  })
+
   it('passes applied item highlights to the inspection items section only', () => {
     renderShell('/projects/:projectId/inspection-items')
 

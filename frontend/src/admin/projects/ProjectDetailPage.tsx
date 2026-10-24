@@ -91,6 +91,17 @@ function sameSet(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((id) => b.includes(id))
 }
 
+function revealMemberAlert(alert: HTMLParagraphElement | null) {
+  if (!alert) return
+  // #734 T7：長訊息從頂端可讀，短訊息就近顯示，再以 preventScroll 聚焦。
+  const block =
+    alert.getBoundingClientRect().height > window.innerHeight * 0.8
+      ? 'start'
+      : 'nearest'
+  alert.scrollIntoView?.({ block })
+  alert.focus({ preventScroll: true })
+}
+
 export default function ProjectDetailPage() {
   const { projectId = '' } = useParams()
   // 換專案時整頁重來，不沿用上一個專案的候選與角色。
@@ -113,8 +124,10 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     scope: Scope
     text: string
   } | null>(null)
+  const memberMessageRef = useRef<HTMLParagraphElement | null>(null)
   const [notice, setNotice] = useState('')
   const [batchRoleError, setBatchRoleError] = useState('')
+  const batchRoleErrorRef = useRef<HTMLParagraphElement | null>(null)
   const [batchRoleNotice, setBatchRoleNotice] = useState('')
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
   const [batchRoleId, setBatchRoleId] = useState('')
@@ -143,6 +156,14 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   )
   const editRolesRef = useRef<HTMLInputElement>(null)
   const editHeadingRef = useRef<HTMLHeadingElement>(null)
+
+  useEffect(() => {
+    if (message) revealMemberAlert(memberMessageRef.current)
+  }, [message])
+
+  useEffect(() => {
+    if (batchRoleError) revealMemberAlert(batchRoleErrorRef.current)
+  }, [batchRoleError])
 
   const [removing, setRemoving] = useState<ProjectMember | null>(null)
 
@@ -370,7 +391,11 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     candidatesState.status === 'ready' && candidates.length === 0
 
   const alertFor = (scope: Scope) =>
-    message?.scope === scope ? <p role="alert">{message.text}</p> : null
+    message?.scope === scope ? (
+      <p ref={memberMessageRef} role="alert" tabIndex={-1}>
+        {message.text}
+      </p>
+    ) : null
 
   // 專案不存在：整頁只顯示找不到，其餘區塊都沒有意義。
   const missing = [membersState, projectState].find(
@@ -647,7 +672,11 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
           >
             {busy ? '正在更新角色…' : '批次收回角色'}
           </button>
-          {batchRoleError && <p role="alert">{batchRoleError}</p>}
+          {batchRoleError && (
+            <p ref={batchRoleErrorRef} role="alert" tabIndex={-1}>
+              {batchRoleError}
+            </p>
+          )}
           {batchRoleNotice && <p role="status">{batchRoleNotice}</p>}
         </section>
       )}

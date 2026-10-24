@@ -8,6 +8,7 @@ from sqlalchemy import event, select
 
 from app.db.engine import get_engine
 from app.models import (
+    InspectionTask,
     Project,
     ProjectInspectionItem,
     ProjectInspectionPoint,
@@ -143,6 +144,44 @@ def test_list_select_count_does_not_grow_with_page_size(world, name):
     assert large_items > middle_items
     assert small == middle == large
     assert large <= _MAX_SELECTS
+
+
+def test_project_item_list_includes_batched_distinct_task_counts(
+    world, db_session
+):
+    """驗證 TPL-R27 列表涵蓋 IP-R21 刪除 guard 的各種任務狀態。"""
+    tasks = db_session.scalars(
+        select(InspectionTask)
+        .where(InspectionTask.plan_id == UUID(world["plan_id"]))
+        .order_by(InspectionTask.id)
+    ).all()
+    for index, task in enumerate(tasks):
+        task.status = [
+            "CANCELLED",
+            "COMPLETED",
+            "DRAFT",
+            "IN_PROGRESS",
+            "PENDING",
+            "COMPLETED",
+        ][index]
+        if task.status == "CANCELLED":
+            task.cancelled_from_status = "PENDING"
+            task.cancellation_reason = "測試取消"
+    db_session.commit()
+
+    admin = world["admin"]
+    url = _urls(world)["project items"]
+    small_count, small_rows = select_count(admin, url, limit=1)
+    large_count, large_rows = select_count(admin, url, limit=100)
+    assert small_rows == 1
+    assert large_rows >= 5
+    assert small_count > 0
+    assert small_count == large_count
+    items = admin.get(url, params={"limit": 100}).json()["items"]
+    counts = {row["id"]: row["task_count"] for row in items}
+    assert counts[str(world["item"].id)] == _TASKS
+    assert counts[str(world["item_two"].id)] == _TASKS
+    assert counts[str(items[-1]["id"])] == 0
 
 
 def test_plan_detail_select_count_is_fixed_for_many_tasks(world):

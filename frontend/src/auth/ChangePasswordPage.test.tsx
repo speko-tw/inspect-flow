@@ -6,7 +6,13 @@
 // 替身沿用 `LogoutButton.test.tsx` 的寫法，連同
 // `/api/v1/auth/me` 一併模擬。
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { Link, Route, Routes, useNavigate } from 'react-router'
 import { DataMemoryRouter } from '../testing/DataMemoryRouter'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -131,6 +137,10 @@ describe('全無權限帳號的設定落點（role-tasks.md）', () => {
 
     expect(await screen.findByText('密碼已變更。')).toBeVisible()
     expect(screen.getByRole('heading', { name: '個人設定' })).toBeVisible()
+    const form = screen
+      .getByRole('button', { name: '變更密碼' })
+      .closest('form') as HTMLFormElement
+    expect(within(form).getByRole('status')).toHaveTextContent('密碼已變更。')
   })
 
   it('顯示尚未開通功能的說明並保留變更密碼表單', async () => {

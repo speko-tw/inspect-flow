@@ -854,20 +854,20 @@ function AdminProjectsPage() {
                         <Link
                           className="btn btn-primary"
                           onClick={(event) =>
-                            guardProjectLink(event, applyTemplatesPath)
-                          }
-                          to={applyTemplatesPath}
-                        >
-                          套用範本
-                        </Link>
-                        <Link
-                          className="btn"
-                          onClick={(event) =>
                             guardProjectLink(event, `/projects/${project.id}`)
                           }
                           to={`/projects/${project.id}`}
                         >
                           開啟專案
+                        </Link>
+                        <Link
+                          className="btn"
+                          onClick={(event) =>
+                            guardProjectLink(event, applyTemplatesPath)
+                          }
+                          to={applyTemplatesPath}
+                        >
+                          套用範本
                         </Link>
                         <Link
                           className="btn"
