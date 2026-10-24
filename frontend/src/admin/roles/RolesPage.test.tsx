@@ -70,6 +70,7 @@ function makeRole(
     id,
     name,
     permission_codes: codes,
+    inactive_user_count: 0,
     ...usage,
     created_at: '2026-10-01T00:00:00.000000Z',
     updated_at: '2026-10-01T00:00:00.000000Z',
@@ -1096,4 +1097,30 @@ describe('#734 T7 角色操作回饋位置', () => {
     })
     expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
   })
+})
+
+it('持有人數保留總數並標出其中停用者，確認影響範圍仍用總數', async () => {
+  rolesFetch({
+    roles: [
+      {
+        ...makeRole('r1', '含停用者角色', [], {
+          user_count: 5,
+          project_count: 2,
+        }),
+        inactive_user_count: 1,
+      },
+    ],
+  })
+  renderRoles()
+  const row = await screen.findByRole('row', { name: /含停用者角色/ })
+  expect(row).toHaveTextContent('5 個帳號（含 1 個已停用）')
+  fireEvent.click(
+    within(row).getByRole('button', {
+      name: '刪除角色 含停用者角色',
+    }),
+  )
+  const box = await within(row).findByRole('region', {
+    name: '刪除「含停用者角色」',
+  })
+  expect(box).toHaveTextContent('會影響 2 個專案中的 5 個帳號')
 })

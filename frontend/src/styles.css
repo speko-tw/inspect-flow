@@ -2129,7 +2129,8 @@ a.app-header-tab[aria-current='page'] {
 }
 
 .tpl-live-preview ol {
-  padding-left: var(--space-5);
+  list-style: none;
+  padding-left: 0;
 }
 
 .tpl-preview-title,
@@ -2433,4 +2434,20 @@ a.app-header-tab[aria-current='page'] {
     width: 100%;
     min-block-size: 44px;
   }
+}
+
+/* B2：只以版面間距分組，DOM 及剪貼簿仍是連續密碼。 */
+output.temporary-password {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5ch;
+}
+
+.temporary-password-group {
+  white-space: nowrap;
+}
+
+.tpl-tree-row,
+.tpl-detail-list button {
+  justify-content: flex-start;
 }

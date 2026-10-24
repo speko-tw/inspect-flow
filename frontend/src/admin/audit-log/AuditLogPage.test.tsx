@@ -393,19 +393,20 @@ it('T13：範本快照先顯示白話欄位，識別碼只在進階原文', asyn
     within(card).getByText('範本項目：排水管坡度檢查（業主版）'),
   ).toBeVisible()
   fireEvent.click(within(card).getByText('查看改前與改後內容'))
-  const column = within(card).getByRole('heading', { name: '改後' })
-    .parentElement as HTMLElement
-  expect(within(column).getByText('排水管坡度檢查（業主版）')).toBeVisible()
-  expect(within(column).getByText('數值標準')).toBeVisible()
-  expect(within(column).getByText('大於或等於')).toBeVisible()
-  expect(within(column).getByText('數字')).toBeVisible()
+  const column = within(card).getByRole('region', { name: '改了什麼' })
+  const changedName = within(column).getByRole('row', { name: /名稱/ })
+  expect(changedName).toHaveTextContent('排水管坡度檢查（業主版）')
+  expect(
+    within(column).getByRole('row', { name: /查核項次/ }),
+  ).toHaveTextContent('1 項')
+  expect(within(column).queryByRole('row', { name: /順序/ })).toBeNull()
   expect(column.textContent).not.toMatch(/system_id|field_type|title/)
   expect(column.textContent).not.toContain(systemId)
   const advanced = within(card)
-    .getByText('進階：原始紀錄與識別碼')
+    .getByText('技術細節（工程人員用）')
     .closest('details') as HTMLDetailsElement
   expect(advanced).not.toHaveAttribute('open')
-  fireEvent.click(within(advanced).getByText('進階：原始紀錄與識別碼'))
+  fireEvent.click(within(advanced).getByText('技術細節（工程人員用）'))
   const originals = advanced.querySelectorAll('pre')
   expect(originals[0]).toHaveTextContent(systemId)
   expect(originals[1].textContent).toBe(JSON.stringify(after, null, 2))

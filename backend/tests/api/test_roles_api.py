@@ -527,6 +527,7 @@ def test_role_api_reports_user_and_project_counts(
     held = client.post("/api/v1/roles", json=_role_payload("Held")).json()
     unused = client.post("/api/v1/roles", json=_role_payload("Unused")).json()
     assert (held["user_count"], held["project_count"]) == (0, 0)
+    assert held["inactive_user_count"] == 0
 
     projects = []
     for index in range(2):
@@ -547,6 +548,7 @@ def test_role_api_reports_user_and_project_counts(
         label: create_root_user_with_company(db_session, f"ROLE-COUNT-{label}")
         for label in ("A", "B")
     }
+    users["A"].is_active = False
     for project, label in (
         (projects[0], "A"),
         (projects[0], "B"),
@@ -565,7 +567,11 @@ def test_role_api_reports_user_and_project_counts(
         db_session.add(member)
     db_session.commit()
 
-    expected = {"user_count": 2, "project_count": 2}
+    expected = {
+        "user_count": 2,
+        "project_count": 2,
+        "inactive_user_count": 1,
+    }
     single = client.get(f"/api/v1/roles/{held['id']}").json()
     assert {key: single[key] for key in expected} == expected
     listed = {
@@ -577,6 +583,7 @@ def test_role_api_reports_user_and_project_counts(
         listed[unused["id"]]["user_count"],
         listed[unused["id"]]["project_count"],
     ) == (0, 0)
+    assert listed[unused["id"]]["inactive_user_count"] == 0
 
     renamed = client.patch(
         f"/api/v1/roles/{held['id']}", json={"name": "Held renamed"}

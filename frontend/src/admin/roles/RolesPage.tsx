@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  useLayoutEffect,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 
 import { ManagementApiError } from '../api'
 import { ConfirmBox } from '../../ui/ConfirmBox'
@@ -83,7 +89,7 @@ export default function RolesPage() {
     message: string
     request: number
   } | null>(null)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!roleFormOpen || formError) return
     revealElement(editorRef.current)
     nameRef.current?.focus({ preventScroll: true })
@@ -406,7 +412,11 @@ export default function RolesPage() {
               {roles.map((role) => (
                 <tr key={role.id}>
                   <th scope="row">{role.name}</th>
-                  <td data-label="持有人數">{role.user_count} 個帳號</td>
+                  <td data-label="持有人數">
+                    {role.user_count} 個帳號
+                    {role.inactive_user_count > 0 &&
+                      `（含 ${role.inactive_user_count} 個已停用）`}
+                  </td>
                   <td data-label="權限">
                     <RolePermissionSummary
                       codes={role.permission_codes}

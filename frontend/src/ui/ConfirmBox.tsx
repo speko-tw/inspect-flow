@@ -56,6 +56,8 @@ export type ConfirmBoxProps = {
   initialFocus?: 'cancel' | 'heading' | 'none'
   /** UDS-R18：掛載時先捲入視窗；modal 呼叫端傳 false。 */
   reveal?: Reveal
+  /** 影響範圍載入完成時遞增，沿用共用捲動與焦點順序。 */
+  revealRequest?: number
   /** 蓋住整頁的 modal（計畫頁專用）；其餘一律原地展開。 */
   modal?: boolean
   /** 內容含必填欄位時，用 form 包起來，確認鈕改成 submit。 */
@@ -70,6 +72,8 @@ export type ConfirmBoxProps = {
   confirmLabel: string
   busy?: boolean
   confirmDisabled?: boolean
+  /** 只保留取消及內容中的自訂操作，不接受隱含的確認送出。 */
+  hideConfirm?: boolean
   onCancel: () => void
   /** 回傳 Promise 時，到它完成為止都不接受第二次確認。 */
   onConfirm: () => void | Promise<unknown>
@@ -91,6 +95,7 @@ export function ConfirmBox({
   cancelRef,
   initialFocus = 'cancel',
   reveal = 'nearest',
+  revealRequest = 0,
   modal = false,
   asForm = false,
   noValidate = false,
@@ -98,6 +103,7 @@ export function ConfirmBox({
   confirmLabel,
   busy = false,
   confirmDisabled = false,
+  hideConfirm = false,
   onCancel,
   onConfirm,
   children,
@@ -116,11 +122,12 @@ export function ConfirmBox({
     } else if (initialFocus === 'heading') {
       localHeading.current?.focus({ preventScroll: true })
     }
-    // 只在掛載時決定一次焦點；之後的焦點交給使用者與呼叫端。
+    // 掛載或影響資料就緒才重設位置與焦點，其餘互動交回使用者。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [revealRequest])
 
   async function confirm() {
+    if (hideConfirm) return
     setConfirmError('')
     try {
       await guard.run(onConfirm)
@@ -181,14 +188,16 @@ export function ConfirmBox({
         >
           {cancelLabel}
         </button>
-        <button
-          className={variant === 'danger' ? 'btn-danger' : 'btn-primary'}
-          disabled={busy || confirmDisabled}
-          onClick={asForm ? undefined : confirm}
-          type={asForm ? 'submit' : 'button'}
-        >
-          {confirmLabel}
-        </button>
+        {!hideConfirm && (
+          <button
+            className={variant === 'danger' ? 'btn-danger' : 'btn-primary'}
+            disabled={busy || confirmDisabled}
+            onClick={asForm ? undefined : confirm}
+            type={asForm ? 'submit' : 'button'}
+          >
+            {confirmLabel}
+          </button>
+        )}
       </div>
     </>
   )

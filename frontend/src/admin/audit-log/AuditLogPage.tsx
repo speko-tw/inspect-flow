@@ -12,7 +12,7 @@ import {
 import { PAGE_TITLES } from '../../terms'
 import { entityLabel, EVENT_TYPE_OPTIONS, eventLabel } from './auditLabels'
 import './AuditLogPage.css'
-import { AuditSnapshot } from './AuditSnapshot'
+import { AuditChanges } from './AuditSnapshot'
 import { Notice } from '../../ui/Notice'
 import { revealElement } from '../../ui/reveal'
 
@@ -201,18 +201,19 @@ export default function AuditLogPage() {
           </dl>
           <details>
             <summary>查看改前與改後內容</summary>
-            <div className="audit-entry-changes">
-              <div>
-                <h3>改前</h3>
-                <AuditSnapshot value={entry.before} />
-              </div>
-              <div>
-                <h3>改後</h3>
-                <AuditSnapshot value={entry.after} />
-              </div>
-            </div>
+            <AuditChanges
+              before={entry.before}
+              after={entry.after}
+              lookup={{
+                userName,
+                projectName: (id) => {
+                  const project = projects.find((item) => item.id === id)
+                  return project?.name ?? null
+                },
+              }}
+            />
             <details>
-              <summary>進階：原始紀錄與識別碼</summary>
+              <summary>技術細節（工程人員用）</summary>
               <h3>改前原文</h3>
               <pre>{displayJson(entry.before)}</pre>
               <h3>改後原文</h3>

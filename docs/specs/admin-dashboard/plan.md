@@ -99,3 +99,7 @@
 | ADM-AC47 | SQLite 與 PostgreSQL API 測試：委派者查專案內與專案外 Admin 均回與無權限相同的 403 body，且不含目標欄位；委派者查自己回 200；Admin 查 Admin 維持成功 |
 | ADM-AC49 | `UsersPage`、`PeoplePage`、`ModulePermissionsPage`、`RolesPage`、`AppHeader`、Dashboard 與專案首頁的前端測試：開通前不寫入、成功文案、精確搜尋、個人選單 aria／鍵盤、清單提醒與卡片、精靈焦點／stepper／欄位、停用確認、角色卡片、有效權限診斷、參與專案角色與空狀態、唯讀入口和任務標題；API 測試驗證 Admin 專用批次端點、無角色結果、委派者最小詳情及 Admin 目標 403、可省略專案 ID 的診斷及專案內查詢必要範圍；依 G7 work order 完成八身分 1280px／360px 淺／深真瀏覽器走查與點擊數比較 |
 純文件規格 PR 不跑 `make setup`／`make check`。產品實作 task 依範圍執行必要檢查及資料庫驗收；PostgreSQL 未設定時記為 SKIPPED，不能當成 PASS。
+
+## #735 第二輪追加
+
+承接 T24：以共用四項停用後果與管理者警告防止詳情遺漏；密碼結果帶姓名、五碼視覺分組及持續的一次性顯示；診斷直接補救與自動重查；提醒自動載入與重試；到期者不進批次啟用請求；角色總人數另標停用人數；操作紀錄以變更欄位對照表摘要，原 JSON 留技術細節。每項加入同容器與副作用測試，並重跑四種視窗／主題與完整 make check、demo E2E。

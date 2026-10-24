@@ -399,7 +399,7 @@ describe('今日任務首頁', () => {
     await waitFor(() => expect(clear).toHaveBeenCalledOnce())
     fireEvent.click(screen.getByRole('link', { name: '設定' }))
     expect(screen.getByTestId('location')).toHaveTextContent(
-      '"from":"/tasks/"',
+      '"from":"/tasks/?scope=all"',
     )
     expect(screen.getByText('密碼頁')).toBeInTheDocument()
   })
@@ -701,4 +701,61 @@ describe('開始查核後返回清單', () => {
       'true',
     )
   })
+})
+
+it('管理者沒有指派任務時預設全部，仍有共用管理選單與 Admin 標記', async () => {
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'https://testserver')
+    const mine = url.searchParams.get('assigned_to_me') === 'true'
+    return Response.json({ items: mine ? [] : [TASK], next_cursor: null })
+  })
+  vi.stubGlobal('fetch', fetcher)
+  renderPage({ user: { is_admin: true } })
+  await screen.findByText(TASK.name)
+  const scope = screen.getByLabelText('任務範圍')
+  expect(within(scope).getByRole('button', { name: '全部' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  const notice = screen.getByRole('region', { name: '我的任務提醒' })
+  expect(notice).toHaveTextContent('目前沒有指派給你的任務')
+  expect(
+    within(notice).getByRole('button', { name: '查看全部任務' }),
+  ).toBeVisible()
+  expect(screen.getByText('Admin')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '管理 ▾' }))
+  expect(screen.getByRole('link', { name: '帳號' })).toHaveAttribute(
+    'href',
+    '/accounts',
+  )
+  expect(fetcher.mock.calls.map(([input]) => String(input))).toEqual([
+    expect.stringContaining('assigned_to_me=true'),
+    expect.stringContaining('assigned_to_me=false'),
+  ])
+})
+
+it('有指派的人維持預設我的任務，明確切換不被自動覆蓋', async () => {
+  const fetcher = vi.fn(async () =>
+    Response.json({
+      items: [TASK],
+      next_cursor: null,
+    }),
+  )
+  vi.stubGlobal('fetch', fetcher)
+  renderPage()
+  await screen.findByText(TASK.name)
+  const scope = screen.getByLabelText('任務範圍')
+  expect(
+    within(scope).getByRole('button', { name: '我的任務' }),
+  ).toHaveAttribute('aria-pressed', 'true')
+  expect(fetcher).toHaveBeenCalledOnce()
+  fireEvent.click(within(scope).getByRole('button', { name: '全部' }))
+  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
+  fireEvent.click(
+    within(screen.getByLabelText('任務範圍')).getByRole('button', {
+      name: '我的任務',
+    }),
+  )
+  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
+  expect(screen.getByTestId('location')).toHaveTextContent('scope=mine')
 })

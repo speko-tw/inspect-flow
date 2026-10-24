@@ -171,3 +171,31 @@ it('同一錯誤重繪不搶回使用者正在操作的焦點', () => {
   expect(trigger).toHaveFocus()
   expect(scroll).not.toHaveBeenCalled()
 })
+
+it('非同步影響範圍就緒後再捲入確認框並聚焦取消，普通重繪不重設', () => {
+  const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+  const box = (request: number) => (
+    <ConfirmBox
+      title="停用確認"
+      revealRequest={request}
+      confirmLabel="確認停用帳號"
+      onConfirm={() => undefined}
+      onCancel={() => undefined}
+    >
+      {request ? '停用後此專案沒有管理者。' : '正在檢查影響。'}
+    </ConfirmBox>
+  )
+  const view = render(box(0))
+  scroll.mockClear()
+  focus.mockClear()
+  view.rerender(box(1))
+  expect(scroll).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
+  expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+  expect(scroll.mock.invocationCallOrder[0]).toBeLessThan(
+    focus.mock.invocationCallOrder[0],
+  )
+  expect(screen.getByRole('button', { name: '取消' })).toHaveFocus()
+  scroll.mockClear()
+  view.rerender(box(1))
+  expect(scroll).not.toHaveBeenCalled()
+})

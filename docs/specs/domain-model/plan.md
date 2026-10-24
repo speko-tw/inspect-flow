@@ -189,3 +189,7 @@ R 新增一支 migration；與其他新增 migration 的任務不同波（共用
 ## #515 本人外觀偏好
 
 依負責人直接指示的範圍變更（[負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)），同一 PR 同步規格與實作：AUT-R55／DOM-R78；API 使用 PATCH `/auth/me`，資料增加一支接最新 head 的 migration。驗收 AUT-AC80～82、DOM-AC77、UDS-AC04／08／14，測試涵蓋 SQLite／PostgreSQL、跨裝置登入、本人限制、失敗回復與首次繪製快取。不改臨時密碼允許清單、不新增稽核事件。
+
+## #734 第二輪角色持有人數
+
+#735 於既有角色分組查詢加入已停用持有人不重複計數，角色列表／單筆／寫入回應一律帶 `inactive_user_count`；總人數與影響範圍口徑保留。驗證跨專案同一停用者只算一次、無持有人為零，並涵蓋列表／單筆／改名回應；不新增 migration。

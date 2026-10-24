@@ -72,6 +72,16 @@ import {
   type ParticipatingProject,
 } from './api'
 
+/** T6：缺口使用結構化資料，補救不從顯示文案反推授權代碼。 */
+type DiagnosticResult = {
+  requiredModuleCodes: string[]
+  missingModuleCodes: string[]
+  missingRole: boolean
+  moduleMessage: string
+  roleMessage: string
+  nonmember: boolean
+}
+
 type IdentityField = 'username' | 'name' | 'email'
 type IdentityErrors = Partial<Record<IdentityField, string>>
 
@@ -276,6 +286,7 @@ type ModulePermissionsPageProps = {
     username: string,
     password: string,
     source?: 'created' | 'reset',
+    displayName?: string,
   ) => void
   onTemporaryPasswordVisible?: (visible: boolean) => void
   onRequestTemporaryPasswordLeave?: (action: () => void) => void
@@ -458,7 +469,8 @@ function ModulePermissionsPageContent({
   const [nonmemberProject, setNonmemberProject] = useState('')
   const [notice, setNotice] = useState('')
   const [diagnosticError, setDiagnosticError] = useState('')
-  const [diagnosticNeedsModule, setDiagnosticNeedsModule] = useState(false)
+  const [diagnosticResult, setDiagnosticResult] =
+    useState<DiagnosticResult | null>(null)
   const [feedback, setFeedback] = useState<
     Record<
       string,
@@ -470,22 +482,28 @@ function ModulePermissionsPageContent({
   >({})
   const bundleNameRef = useRef<HTMLDivElement>(null)
 
+  function feedbackKey(scope: string) {
+    return scope === 'diagnostic'
+      ? `${selectedUser}:${scope}:${diagnosticProject}:${diagnosticAction}`
+      : `${selectedUser}:${scope}`
+  }
+
   function setOperationError(scope: string, value: string) {
     setFeedback((current) => ({
       ...current,
-      [`${selectedUser}:${scope}`]: { error: value, notice: '' },
+      [feedbackKey(scope)]: { error: value, notice: '' },
     }))
   }
 
   function setOperationNotice(scope: string, value: string) {
     setFeedback((current) => ({
       ...current,
-      [`${selectedUser}:${scope}`]: { error: '', notice: value },
+      [feedbackKey(scope)]: { error: '', notice: value },
     }))
   }
 
   function operationFeedback(scope: string) {
-    const result = feedback[`${selectedUser}:${scope}`]
+    const result = feedback[feedbackKey(scope)]
     return (
       <>
         {result?.error && <Notice variant="error">{result.error}</Notice>}
@@ -559,11 +577,11 @@ function ModulePermissionsPageContent({
     setNotice('')
     setDiagnosticError('')
     setNonmemberProject('')
-    setDiagnosticNeedsModule(false)
+    setDiagnosticResult(null)
     setCandidateRoles([])
     setFeedback((current) => ({
       ...current,
-      [`${selectedUser}:diagnostic`]: {},
+      [feedbackKey('diagnostic')]: {},
     }))
   }
 
@@ -1031,7 +1049,8 @@ function ModulePermissionsPageContent({
       const grantedNames = permissions
         .filter((item) => granted.includes(item.code))
         .map((item) => item.description.replace('模組', '功能'))
-      if (scope === 'diagnostic') await diagnose()
+      if (scope === 'diagnostic' || diagnosticResult || notice)
+        await diagnose()
       setOperationNotice(
         scope,
         `已為${targetName}開通${grantedNames.join('、')}。`,
@@ -1186,7 +1205,12 @@ function ModulePermissionsPageContent({
       if (created) setCreatedUsername(created.username)
       const completed = await finishProvisioning(nextProvisioning, created)
       if (created && completed) {
-        onTemporaryPassword?.(created.username, created.temporary_password)
+        onTemporaryPassword?.(
+          created.username,
+          created.temporary_password,
+          'created',
+          created.name_zh || created.username,
+        )
       }
     } catch (caught) {
       const errorMessage = managementErrorMessage(caught).replace(
@@ -1285,7 +1309,12 @@ function ModulePermissionsPageContent({
     setError('')
     const completed = await finishProvisioning(provisioning)
     if (completed && createdUsername && temporaryPassword) {
-      onTemporaryPassword?.(createdUsername, temporaryPassword)
+      onTemporaryPassword?.(
+        createdUsername,
+        temporaryPassword,
+        'created',
+        createdName,
+      )
     }
     setBusy(false)
   }
@@ -1310,7 +1339,7 @@ function ModulePermissionsPageContent({
     setOperationError('diagnostic', '')
     setNonmemberProject('')
     setNotice('')
-    setDiagnosticNeedsModule(false)
+    setDiagnosticResult(null)
     setCandidateRoles([])
     setSelectedCandidateRole('')
     setSafeCandidateRole('')
@@ -1381,29 +1410,34 @@ function ModulePermissionsPageContent({
         setSafeCandidateRole(minimalCandidates[0].id)
         setSelectedCandidateRole(minimalCandidates[0].id)
       }
-      const missingModule = diagnostic.missing_layers.includes('module')
+      const assigned = new Set(
+        access.module_permissions.map((item) => item.code),
+      )
+      const missingModuleCodes = diagnostic.required_module_codes.filter(
+        (code) => !assigned.has(code),
+      )
       const actionMessages: Record<string, string> = {
         create_project: '缺少建立專案的權限。',
         manage_template_library: '缺少管理範本庫的權限。',
         manage_project_members: '缺少專案管理功能的權限。',
         task_list: '缺少查核功能的權限。',
       }
-      setDiagnosticNeedsModule(missingModule)
-      const missing = []
-      if (missingModule) missing.push(actionMessages[diagnostic.action])
-      if (roleMissing) {
-        missing.push(
+      setDiagnosticResult({
+        requiredModuleCodes: diagnostic.required_module_codes,
+        missingModuleCodes,
+        missingRole: roleMissing,
+        moduleMessage: actionMessages[diagnostic.action],
+        roleMessage:
           diagnostic.action === 'manage_project_members'
             ? '這個專案裡沒有可以管理成員的角色。'
             : '這個專案裡沒有可以查看或執行任務的角色。',
-        )
-      }
-      setNotice(missing.join(''))
+        nonmember: false,
+      })
     } catch (caught) {
       if (!active()) return
       if (isNotFound(caught) && needsProject && diagnosticProject) {
         setNonmemberProject(diagnosticProject)
-        setNotice(NONMEMBER_MESSAGE)
+
         try {
           // T6：非成員的專案查詢沒有診斷資料，另讀既有功能權限入口。
           const access = await getUserModulePermissions(selectedUser)
@@ -1411,15 +1445,17 @@ function ModulePermissionsPageContent({
           const code =
             diagnosticAction === 'members' ? 'project.use' : 'inspection.use'
           const missing = !access.permission_codes.includes(code)
-          setDiagnosticNeedsModule(missing)
-          setNotice(
-            NONMEMBER_MESSAGE +
-              (missing
-                ? diagnosticAction === 'members'
-                  ? '他也還沒開通專案管理功能的權限。'
-                  : '他也還沒開通查核功能的權限。'
-                : ''),
-          )
+          setDiagnosticResult({
+            requiredModuleCodes: [code],
+            missingModuleCodes: missing ? [code] : [],
+            missingRole: false,
+            moduleMessage:
+              diagnosticAction === 'members'
+                ? '他也還沒開通專案管理功能的權限。'
+                : '他也還沒開通查核功能的權限。',
+            roleMessage: '',
+            nonmember: true,
+          })
         } catch (permissionError) {
           if (!active()) return
           setDiagnosticError(message(permissionError))
@@ -1427,6 +1463,40 @@ function ModulePermissionsPageContent({
       } else {
         setDiagnosticError(message(caught))
       }
+    }
+  }
+
+  async function repairDiagnosticModules() {
+    if (!selectedUser || !diagnosticResult || busy) return
+    const selection = diagnosticSelection.current
+    const stillCurrent = () => diagnosticSelection.current === selection
+    setBusy(true)
+    setOperationError('diagnostic', '')
+    try {
+      // 用 API 宣告的需求與最新實際權限差集，不套用編輯草稿中的其他權限。
+      const latest = await getUserModulePermissions(selectedUser)
+      const missing = diagnosticResult.requiredModuleCodes.filter(
+        (code) => !latest.permission_codes.includes(code),
+      )
+      for (const code of missing) {
+        await grantModulePermission(selectedUser, code)
+      }
+      const updated = await getUserModulePermissions(selectedUser)
+      if (!stillCurrent()) return
+      setUserAccess(updated.permission_codes)
+      setAccessDraft((current) => [
+        ...new Set([
+          ...current,
+          ...updated.permission_codes.filter(
+            (code) => !latest.permission_codes.includes(code),
+          ),
+        ]),
+      ])
+      await diagnose()
+    } catch (caught) {
+      if (stillCurrent()) setDiagnosticError(message(caught))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -1605,7 +1675,60 @@ function ModulePermissionsPageContent({
   )
 
   const canRepairProjectRole =
-    candidateRoles.length > 0 && Boolean(diagnosticProject)
+    diagnosticResult?.missingRole &&
+    candidateRoles.length > 0 &&
+    Boolean(diagnosticProject)
+  const diagnosticRoleChoices = canRepairProjectRole ? (
+    <section aria-label="可選專案角色">
+      <h3>可補上的專案角色</h3>
+      {safeCandidateRole ? (
+        <Button disabled={busy} onClick={() => void repairDiagnosticRole()}>
+          補上「現場工程師」角色
+        </Button>
+      ) : (
+        <>
+          <p>請先比較角色能做的事，再選擇符合需求的角色。</p>
+          {candidateRoles.map((role) => (
+            <div className="role-candidate" key={role.id}>
+              <label>
+                <input
+                  checked={selectedCandidateRole === role.id}
+                  name="diagnostic-role"
+                  type="radio"
+                  onChange={() => setSelectedCandidateRole(role.id)}
+                />
+                <strong>{role.name}</strong>
+              </label>
+              <p>角色可用權限（{role.permission_codes.length} 項）</p>
+              <RolePermissionSummary
+                codes={role.permission_codes}
+                name={role.name}
+              />
+              <p>比目前多給的能力</p>
+              <RolePermissionSummary
+                codes={role.permission_codes.filter(
+                  (code) => !currentProjectRoleCodes.includes(code),
+                )}
+                emptyText="不會增加新的能力"
+                name={`${role.name}比目前多給的能力`}
+              />
+            </div>
+          ))}
+          <Button
+            disabled={busy || !selectedCandidateRole}
+            onClick={() => void repairDiagnosticRole()}
+          >
+            指派所選角色
+          </Button>
+        </>
+      )}
+      <Link to={`/projects/${diagnosticProject}/members`}>
+        前往專案成員設定
+      </Link>
+    </section>
+  ) : (
+    <Link to={`/projects/${diagnosticProject}/members`}>前往專案成員設定</Link>
+  )
   return (
     <div className="admin-page permission-management">
       {!externalNavigationGuard && (
@@ -1721,20 +1844,23 @@ function ModulePermissionsPageContent({
         <Card>
           {step === 4 ? (
             <section aria-label="建立完成">
-              <h2>{existingAccount ? '職務已套用' : '帳號已建立'}</h2>
+              <h2>
+                {existingAccount ? '職務已套用' : `已新增${createdName}的帳號`}
+              </h2>
               {/* 臨時密碼離開就看不到，所以放在標題正下方最先看到。 */}
               {!existingAccount && (
                 <>
+                  <p>帳號：{createdUsername}</p>
                   <p>
-                    請現在把以下臨時密碼交給本人；離開此畫面後就無法再查看。
+                    他第一次登入必須先改成自己的密碼。離開此頁後就看不到這組密碼。
                   </p>
                   <TemporaryPassword password={temporaryPassword} />
                 </>
               )}
               <p>
                 {existingAccount
-                  ? `${createdName} 的職務與權限設定已完成。`
-                  : `${createdName} 的帳號與權限設定已完成。`}
+                  ? `${createdName}的職務與權限設定已完成。`
+                  : `${createdName}的帳號與權限設定已完成。`}
               </p>
               <p>
                 {existingAccount
@@ -2567,100 +2693,43 @@ function ModulePermissionsPageContent({
               {diagnosticError && (
                 <Notice variant="error">{diagnosticError}</Notice>
               )}
-              {notice && (
+              {notice && <Notice variant="info">{notice}</Notice>}
+              {diagnosticResult && (
                 <Notice variant="info">
-                  {notice}
-                  {nonmemberProject && (
-                    <Link to={`/projects/${nonmemberProject}/members`}>
-                      前往專案成員頁
-                    </Link>
-                  )}
+                  <ul>
+                    {diagnosticResult.nonmember && (
+                      <li>
+                        {NONMEMBER_MESSAGE}
+                        <Link to={`/projects/${nonmemberProject}/members`}>
+                          前往專案成員頁
+                        </Link>
+                      </li>
+                    )}
+                    {diagnosticResult.missingModuleCodes.length > 0 && (
+                      <li>
+                        {diagnosticResult.moduleMessage}
+                        <Button
+                          disabled={busy}
+                          onClick={() => void repairDiagnosticModules()}
+                        >
+                          {diagnosticAction === 'task-list'
+                            ? '開通查核功能'
+                            : diagnosticAction === 'members'
+                              ? '開通專案管理功能'
+                              : diagnosticAction === 'template'
+                                ? '開通範本管理權限'
+                                : '開通建立專案權限'}
+                        </Button>
+                      </li>
+                    )}
+                    {diagnosticResult.missingRole && (
+                      <li>
+                        {diagnosticResult.roleMessage}
+                        {diagnosticRoleChoices}
+                      </li>
+                    )}
+                  </ul>
                 </Notice>
-              )}
-              {canRepairProjectRole && (
-                <section aria-label="可選專案角色">
-                  <h3>可補上的專案角色</h3>
-                  {safeCandidateRole ? (
-                    <Button
-                      disabled={busy}
-                      onClick={() => void repairDiagnosticRole()}
-                    >
-                      補上「現場工程師」角色
-                    </Button>
-                  ) : (
-                    <>
-                      <p>請先比較角色能做的事，再選擇符合需求的角色。</p>
-                      {candidateRoles.map((role) => (
-                        <div className="role-candidate" key={role.id}>
-                          <label>
-                            <input
-                              checked={selectedCandidateRole === role.id}
-                              name="diagnostic-role"
-                              type="radio"
-                              onChange={() =>
-                                setSelectedCandidateRole(role.id)
-                              }
-                            />
-                            <strong>{role.name}</strong>
-                          </label>
-                          <p>
-                            角色可用權限（{role.permission_codes.length} 項）
-                          </p>
-                          <RolePermissionSummary
-                            codes={role.permission_codes}
-                            name={role.name}
-                          />
-                          <p>比目前多給的能力</p>
-                          <RolePermissionSummary
-                            codes={role.permission_codes.filter(
-                              (code) =>
-                                !currentProjectRoleCodes.includes(code),
-                            )}
-                            emptyText="不會增加新的能力"
-                            name={`${role.name}比目前多給的能力`}
-                          />
-                        </div>
-                      ))}
-                      <Button
-                        disabled={busy || !selectedCandidateRole}
-                        onClick={() => void repairDiagnosticRole()}
-                      >
-                        指派所選角色
-                      </Button>
-                    </>
-                  )}
-                  <Link to={`/projects/${diagnosticProject}/members`}>
-                    前往專案成員設定
-                  </Link>
-                </section>
-              )}
-              {diagnosticNeedsModule && (
-                <Button
-                  onClick={() => {
-                    const code =
-                      diagnosticAction === 'create-project'
-                        ? 'project.create'
-                        : diagnosticAction === 'template'
-                          ? 'template.manage'
-                          : diagnosticAction === 'members'
-                            ? 'project.use'
-                            : 'inspection.use'
-                    setAccessDraft((current) =>
-                      current.includes(code) ? current : [...current, code],
-                    )
-                  }}
-                >
-                  選取要開通的權限
-                </Button>
-              )}
-              {JSON.stringify([...accessDraft].sort()) !==
-                JSON.stringify([...userAccess].sort()) && (
-                <Button
-                  disabled={busy}
-                  onClick={() => void submitAccessDraft('diagnostic')}
-                >
-                  開通
-                </Button>
               )}
               {operationFeedback('diagnostic')}
               {revoke?.scope === 'diagnostic' && revokePanel}

@@ -49,6 +49,7 @@ const role = {
   name: '示範內業',
   permission_codes: [],
   user_count: 0,
+  inactive_user_count: 0,
   project_count: 0,
   created_at: '2026-10-01T00:00:00.000000Z',
   updated_at: '2026-10-01T00:00:00.000000Z',
@@ -85,6 +86,12 @@ function stubBackend(conflictCode: string) {
           { error: { code: conflictCode } },
           { status: 409 },
         )
+      }
+      if (
+        pathname.endsWith('/external-without-project') ||
+        pathname.endsWith('/projects/unmanaged')
+      ) {
+        return Response.json({ items: [], next_cursor: null })
       }
       if (pathname.endsWith('/users')) {
         return Response.json({ items: [regularUser], next_cursor: null })
