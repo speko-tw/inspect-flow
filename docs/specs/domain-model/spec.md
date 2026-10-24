@@ -72,6 +72,8 @@
 | DOM-R45 | `User` **必須**具備帳號名稱 `username`：3～32 個字元，第一個字元是英文字母，其餘只能是英文字母、數字、`.`、`_`、`-`（不可中文、不可 `@`、不可空白）；`admin`、`system`、`root` 是保留字，只有內建 `admin` 能使用 `admin`，其餘帳號**不得**使用這三個字。輸入時接受任意大小寫，**必須**一律轉成小寫後存放與比對；在所有 `User`（含已停用）之間**必須**唯一，由資料庫約束保證。只有具 Admin 權限的人能修改帳號名稱；`auth_source = external` 的帳號以外部來源為準，Service 層**必須**拒絕人工修改，只有外部身分同步流程得覆蓋。帳號名稱的修改**必須**寫稽核紀錄（DOM-R22）。長度與格式的檢查方式見 DOM-R31 | 必須 | [KD-45](../../intents/03-decisions-and-stack.md#kd-45)；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：格式、保留字、小寫存放、修改權限與外部帳號以外部來源為準 | DOM-AC34（格式、保留字、唯一）；DOM-AC35（修改權限、外部帳號）；改名稽核由 `audit-log` 驗收 |
 | DOM-R46 | `User` **必須**具備基本欄位：帳號名稱 `username`（DOM-R45）、email `email`、中文姓名 `name_zh`、英文姓名 `name_en`、公司 `company_id`（外鍵指向 `Company`）、部門 `department`、地點 `location`、工號 `employee_no`（定義見 DBF-R12，唯一性見 DBF-R13、DOM-R47）、啟用狀態 `is_active`。`username`、`is_active` 在資料庫層不可空值（NOT NULL）；`email`、`name_zh` 在資料庫層**允許**空值，另加 CHECK：`is_system = true`，或兩者都不為空值，所以一般帳號不得為空、內建帳號得為空；`name_en`、`company_id`、`department`、`location`、`employee_no` 允許空值，其中後三者只有在 `company_id` 有值時才能有值（DOM-R47）。內建帳號（`is_system = true`）是例外：`email` 允許空值，且公司、部門、地點、工號、中文姓名、英文姓名都必須為空值（DOM-R50）。NOT NULL 與上述 CHECK 由資料庫約束保證；其餘跨欄位的約束（沒有公司就不能填三個欄位、內建帳號公司與姓名為空）用資料庫 CHECK 或寫入前檢查，由計畫選擇，但**必須**涵蓋所有經 ORM model 的寫入（比照 DOM-R31）。`is_active` 未指定時為 `true`；建立時 `username`、`email`、`name_zh` 都**必須**由呼叫端提供（內建帳號除外） | 必須；應（欄位名） | [KD-46](../../intents/03-decisions-and-stack.md#kd-46)、[KD-45](../../intents/03-decisions-and-stack.md#kd-45)；`is_active` 預設啟用為負責人裁定（[DOM-Q7](#dom-q7)，[#127](https://github.com/speko-tw/inspect-flow/issues/127)，2026-09-26）；公司可選、英文姓名選填、工號與部門與地點跟著公司：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）；跨欄位約束的寫法交計畫選擇是本規格的推導，理由同 DOM-R31 | DOM-AC33、DOM-AC40 |
 | DOM-R47 | 人員最多連結一家公司，得沒有；`employee_no`、`department`、`location` 在 `company_id` 為空值時**必須**為空值。本系統帳號換公司或解除連結（`company_id` 改為空值）時，Service 層**必須**在同一次修改內清空這三個欄位，並寫稽核紀錄（DOM-R22）；同一次修改若明確提供新的值，則保留新值。`employee_no` 在同一家公司內**必須**唯一，不同公司得相同；沒有公司的人沒有工號，不受這條約束；由資料庫約束保證。外部帳號的公司與這三個欄位依 DOM-R04，不能人工修改 | 必須 | [KD-46](../../intents/03-decisions-and-stack.md#kd-46)；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：不一定屬於公司、連結前不能填、換公司或解除時清空並寫稽核、工號同公司內唯一；「同一次修改提供新值則保留」是本規格的判讀，已由負責人確認（見 [DOM-Q9](#dom-q9)） | DOM-AC38、DOM-AC39；清空的稽核由 `audit-log` 驗收 |
+| DOM-R78 | `User.appearance` **必須**為不可空值字串，僅允許 `system`、`light`、`dark`，ORM 與資料庫預設 `system`。migration 回填所有既有帳號為 `system`，保留原資料與外鍵；DB CHECK 拒絕 null 以外的非法值，NOT NULL 拒絕 null。此欄位是本人偏好，不加入管理他人帳號的寫入欄位，讀寫 API 依 AUT-R55；修改紀錄依 PR-08，不新增 audit event | 必須 | [#515](https://github.com/speko-tw/inspect-flow/issues/515)、[最終導覽指示](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6250057575)；範圍變更依[負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)於同一 PR 落地 | DOM-AC77 |
+
 
 ### 初始化指令與操作者（凍結）
 
@@ -190,7 +192,7 @@
 
 | 實體 | 共通結構（`database-foundation`） | 本規格定義 | 狀態 |
 |---|---|---|---|
-| `User` | UUID 主鍵、`employee_no`（同一家公司內唯一，DBF-R13）、`created_at`、`updated_at`、`created_by`、`updated_by`（DBF-R11～DBF-R14） | 帳號名稱、基本欄位、聯絡與補充欄位、`is_admin`、`is_system`、外部身分預留欄位（DOM-R02～DOM-R10、DOM-R45～DOM-R47、DOM-R50、DOM-R51；DOM-R01 已被取代）；字串欄位的長度與格式，含 `employee_no` 的長度（DOM-R28）；認證欄位歸 `authentication` | 凍結 |
+| `User` | UUID 主鍵、`employee_no`（同一家公司內唯一，DBF-R13）、`created_at`、`updated_at`、`created_by`、`updated_by`（DBF-R11～DBF-R14） | 帳號名稱、基本欄位、聯絡與補充欄位、`is_admin`、`is_system`、外觀偏好 `appearance`（DOM-R78）、外部身分預留欄位（DOM-R02～DOM-R10、DOM-R45～DOM-R47、DOM-R50、DOM-R51；DOM-R01 已被取代）；字串欄位的長度與格式，含 `employee_no` 的長度（DOM-R28）；認證欄位歸 `authentication` | 凍結 |
 | `Company` | 沿用同一套共通結構（DOM-R15） | `name`、`is_active`（DOM-R48、DOM-R49）；公司連結的規則（DOM-R18）；DOM-R16、DOM-R17、DOM-R29 已被取代 | 凍結 |
 | `Role` | 沿用同一套共通結構（DOM-R15） | `name`、`is_assignable`、權限代碼集合（DOM-R19～DOM-R24）；名稱與權限代碼的長度及格式（DOM-R30）；名稱不分大小寫唯一（DOM-R34）；權限代碼須已登記（DOM-R35） | 凍結 |
 | `ProjectMember` | 沿用同一套共通結構（DOM-R15） | `project_id`、`user_id`、角色指派（DOM-R25～DOM-R27） | 凍結 |
@@ -368,6 +370,8 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 | DOM-AC39 | 公司 A、B；A 已有一筆 `employee_no = "E001"` 的 `User`；沒有公司的兩筆 `User` | 依序：在 A 新增一筆 `employee_no = "E001"` 的 `User`；在 B 新增一筆 `employee_no = "E001"` 的 `User`；新增兩筆沒有公司、沒有工號的 `User`（若上一步的兩筆不足以驗證，再各新增一筆）；把 B 的那筆改到 A，並同時提供 `employee_no = "E001"` | 第一次被資料庫拒絕，筆數不變；第二次成功；沒有公司、沒有工號的多筆都成功；最後一次被拒絕，資料不變 | DOM-R47、DBF-R13 |
 | DOM-AC40 | 與 DOM-AC33 相同的前置資料 | 分別嘗試：把內建 `admin` 的 `company_id` 設為那家公司；為內建 `admin` 填入 `name_zh`；把內建 `admin` 的 `username` 改為 `root`；新增 `is_system = false` 且 `username = "Admin"` 的 `User`；新增 `is_system = false` 但 `email` 為空值的 `User` | 每一次都被拒絕，`User` 資料不變；（內建 `admin` 沒有 email 與姓名，這在 DOM-AC33 已成功建立） | DOM-R46、DOM-R50、DOM-R45 |
 | DOM-AC41 | 具 Admin 權限的操作者 A、一般帳號 U、內建 `admin` | 以 A 為操作者，透過 Service 層：把 U 的 `is_admin` 設為 `true`；再設為 `false`；把內建 `admin` 的 `is_admin` 設為 `false` | 前兩次成功，各產生一筆 `user.admin_changed` 稽核紀錄（內容由 `audit-log` 驗收）；第三次被拒絕，資料不變；操作者是不是 Admin 由 `authentication` 驗收 | DOM-R51、DOM-R06 |
+| DOM-AC77 | SQLite 與 PostgreSQL；migration 前已存在帳號 | 執行 upgrade、讀舊資料，透過 ORM 與 SQL 寫入三態、非法值與 null；降版再升版 | 舊帳號 system；三態持久化、其他值及 null 遭拒；單一線性 migration，降升版保留原帳號資料與外鍵；模型與 migration 一致 | DOM-R78 |
+
 
 ### 初始化指令與操作者
 
@@ -579,3 +583,5 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 規格澄清（規格設計，非負責人裁定，[#553](https://github.com/speko-tw/inspect-flow/issues/553)，PR #563 第 1 輪審查）：DOM-AC50 的每專案 `has_office_access` 改依 AUT-R19 以有效權限計；DOM-R20、DOM-R64 依據欄註明「檢視專案」第三項為規格設計並引 07 圖 3 — [#553](https://github.com/speko-tw/inspect-flow/issues/553)
 - 規格澄清（負責人指示，#105）：「其他實體（草稿）」改指向 `field-evidence` 與 `completion-validation` 的實體定義；不改凍結範圍與既有需求 — [負責人直接指示](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135)
 - 規格澄清（[#542](https://github.com/speko-tw/inspect-flow/issues/542)）：intents 整併後，已裁定的 OQ／G 與被取代的 KD 引用改指新位置，開工門檻比對改列仍擋門檻的 G-06、G-07 與已併入決策的原門檻項目；只改引用與依據欄，不改需求、驗收條件與狀態；建立者角色三項下限（含 `project.read`）改引 KD-69，標為負責人裁定（2026-10-13） — [#542](https://github.com/speko-tw/inspect-flow/issues/542)
+
+- 範圍變更（負責人指示，#515）：新增 User.appearance 三態欄位、預設與資料庫約束，單一 migration 回填與降升版驗收 DOM-AC77 — [負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)

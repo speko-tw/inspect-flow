@@ -210,6 +210,11 @@ class User(AuditMixin, TimestampedBase):
         _bounded_string("employee_no"), nullable=True
     )
 
+    # DOM-R78：偏好屬帳號，資料庫預設也涵蓋直接 SQL 建立的帳號。
+    appearance: Mapped[str] = mapped_column(
+        String(6), nullable=False, default="system", server_default="system"
+    )
+
     # -- DOM-R46: basic fields -----------------------------------
     # ``deferrable``/``initially`` (DEFERRABLE INITIALLY DEFERRED):
     # ``Company.created_by`` also points back at ``users.id`` and is
@@ -313,6 +318,10 @@ class User(AuditMixin, TimestampedBase):
     # names.
     __table_args__ = (
         CheckConstraint(
+            "appearance IN ('system', 'light', 'dark')",
+            name="appearance_values",
+        ),
+        CheckConstraint(
             "auth_source IN ('local', 'external')", name="auth_source"
         ),
         CheckConstraint(
@@ -382,4 +391,11 @@ class User(AuditMixin, TimestampedBase):
             # always stored and compared in lowercase.
             value = value.lower()
         _check_string_field(key, value)
+        return value
+
+    @validates("appearance")
+    def _validate_appearance(self, key: str, value: str) -> str:
+        """DOM-R78：ORM 與 DB 共用相同三態，不默默接受拼錯的偏好。"""
+        if value not in {"system", "light", "dark"}:
+            raise ValueError("Invalid appearance preference")
         return value

@@ -8,6 +8,7 @@ const tests = [
   'field-acceptance.mjs',
   'template-acceptance.mjs',
   'permissions-acceptance.mjs',
+  'appearance-acceptance.mjs',
 ]
 
 for (const test of tests) {

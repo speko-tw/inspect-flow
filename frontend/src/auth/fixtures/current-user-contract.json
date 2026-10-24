@@ -1,5 +1,6 @@
 {
   "current_user_keys": [
+    "appearance",
     "can_browse_templates",
     "can_create_project",
     "can_inspect_tasks",

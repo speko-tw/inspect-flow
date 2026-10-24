@@ -26,6 +26,8 @@ from app.models.audit_log import AuditLogImmutableError
 from app.services.audit import _format_actor_snapshot
 from tests.db.conftest import create_root_user_with_company, make_system_admin
 
+pytestmark = pytest.mark.usefixtures("historical_user_schema")
+
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _PARENT = "8c624a9d70f1"
 _REVISION = "9b7a6c2d1e45"

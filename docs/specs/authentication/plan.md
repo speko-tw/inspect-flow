@@ -195,3 +195,7 @@
 - **非成員存取專案時回 404，隱藏專案是否存在**：可以避免從錯誤碼推測專案存在，但與 `api-conventions` 的 `resource.not_found` 語意混在一起，前端也難以區分「沒權限」與「不存在」。專案 ID 是 UUID，無法列舉，先採 403；若日後有需要，屬範圍變更。
 - **把臨時密碼併進 T6 或 T3，或整包放在一個任務**：T6 只是一支指令，併入欄位、migration、dependency 與新 API 後就不是一個 PR 能單獨驗收的大小；併進 T3 則會讓 T3 多等 T5、T6。整包放在一個任務時，T4 要等 T5、T6 才能驗收各層級都被擋。因此拆成 T9（標記與阻擋，只依賴 T2、T3，讓 T4 儘早接上）與 T11（變更密碼 API 與設定入口，依賴 T5、T6），代價是 T9、T11 要改寫 T3、T6 已合併的檔案，見[風險](#風險)。前端獨立成 T10，因為它只依賴 HTTP 契約，可以先做。
 - **另做 CSRF token**：`SameSite=Strict` 讓跨站請求不帶 Cookie，加上非上傳 API 只接受 JSON（API-R03），跨站表單無法送出有效請求；多一套 token 會增加前端與測試的負擔。若 `SameSite` 改為 `Lax`，要重新評估。
+
+## #515 本人外觀偏好
+
+依負責人直接指示的範圍變更（[負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)），同一 PR 同步規格與實作：AUT-R55／DOM-R78；API 使用 PATCH `/auth/me`，資料增加一支接最新 head 的 migration。驗收 AUT-AC80～82、DOM-AC77、UDS-AC04／08／14，測試涵蓋 SQLite／PostgreSQL、跨裝置登入、本人限制、失敗回復與首次繪製快取。不改臨時密碼允許清單、不新增稽核事件。

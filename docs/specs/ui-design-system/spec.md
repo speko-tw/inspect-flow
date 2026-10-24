@@ -3,7 +3,7 @@
 **代碼**：`UDS`　**Phase**：P4–P7（跨階段共用）　**狀態**：草稿
 **前置規格**：無；Field 與 Admin 頁面依其功能規格逐批套用
 **引用意圖**：[PR-10](../../intents/02-principles.md#pr-10)、[PR-18](../../intents/02-principles.md#pr-18)、[PR-19](../../intents/02-principles.md#pr-19)、[KD-70](../../intents/03-decisions-and-stack.md#kd-70)
-**被擋議題**：[#515](https://github.com/speko-tw/inspect-flow/issues/515) 的帳號偏好欄位與 API 須先確認規格歸屬並完成契約規格化
+**被擋議題**：無；#515 已由 authentication AUT-R55／domain-model DOM-R78 承接，依[負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)於同一 PR 同步規格與實作。
 
 ## 目的
 
@@ -163,9 +163,9 @@
 ## 待釐清
 
 - 專案清單與首頁摘要沿用 DOM-R77 的正式口徑；本規格不另定義計數。
-- **#515 依賴**：帳號外觀偏好的欄位、儲存位置與 API 契約歸屬尚待確認。依 [#515](https://github.com/speko-tw/inspect-flow/issues/515)，開工前須確認規格歸屬；若需新增資料欄位或端點，先完成相應規格變更，合併後再實作跨裝置保存與首次繪製前套用。
+- **#515 契約已確認**：依負責人直接指示，authentication AUT-R55 承接 GET／PATCH `/auth/me`，domain-model DOM-R78 承接 `appearance`；同一任務同步規格與實作，UDS-AC04／08／14 驗收三態、快取與跨裝置保存。
 - `prefers-reduced-motion` 減少動態要求屬設計系統回饋的建議，故本規格列「應」；後續若要提升為全產品「必須」，須另有明確裁定。
 
 ## 變更紀錄
 
--
+- 範圍變更（負責人指示，#515）：外觀三態由本人偏好契約承接，確認個人設定入口、首次繪製快取與跨裝置驗收 UDS-AC04／08／14 — [負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)

@@ -11,7 +11,6 @@ from sqlalchemy import Uuid, bindparam, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
-from app.cli.init_system import run as run_init
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import (
     AuditLog,
@@ -28,6 +27,9 @@ from app.models import (
 )
 from app.services.permissions import calculate_effective_access
 from tests.db.conftest import create_root_user_with_company, make_system_admin
+from tests.db.conftest import run_historical_init as run_init
+
+pytestmark = pytest.mark.usefixtures("historical_user_schema")
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"

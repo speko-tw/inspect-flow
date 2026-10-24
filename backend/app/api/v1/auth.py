@@ -8,10 +8,11 @@ T11 (issue #192) adds the change-password route itself.
 """
 
 import logging
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -63,6 +64,13 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class AppearancePreference(BaseModel):
+    """AUT-R55：只接受外觀，避免本人入口意外成為帳號管理 API。"""
+
+    model_config = ConfigDict(extra="forbid")
+    appearance: Literal["system", "light", "dark"]
+
+
 class CurrentUserResponse(BaseModel):
     """The identity part shared by every current-user body (AUT-R08,
     AUT-R10)."""
@@ -76,6 +84,7 @@ class CurrentUserResponse(BaseModel):
     name_zh: str | None
     is_admin: bool
     must_change_password: bool
+    appearance: Literal["system", "light", "dark"]
 
 
 class CompanyRef(BaseModel):
@@ -124,6 +133,9 @@ def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
         name_en=user.name_en,
         name_zh=user.name_zh,
         is_admin=user.is_admin,
+        appearance=AppearancePreference.model_validate(
+            {"appearance": user.appearance}
+        ).appearance,
         must_change_password=has_effective_temporary_password_flag(db, user),
     )
 
@@ -261,6 +273,19 @@ def get_me(
 
 
 register_temporary_password_allowed("GET", get_me)
+
+
+@router.patch("/me", response_model=AppearancePreference)
+def update_my_appearance(
+    body: AppearancePreference,
+    user: User = Depends(require_login_access, scope="function"),  # noqa
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> AppearancePreference:
+    """AUT-R55：身分只取 session，不讓呼叫者指定另一個帳號。"""
+    user.appearance = body.appearance
+    user.updated_by = user.id
+    db.flush()
+    return body
 
 
 @router.post("/password", status_code=204)
