@@ -2,6 +2,16 @@
 <html lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // UDS-AC08：在樣式與頁面內容出現前，只讀取已驗證的非敏感三態。
+      try {
+        const value = localStorage.getItem('inspectflow.appearance')
+        document.documentElement.dataset.theme =
+          value === 'light' || value === 'dark' ? value : 'system'
+      } catch {
+        document.documentElement.dataset.theme = 'system'
+      }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1f5aa6" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

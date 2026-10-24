@@ -6,6 +6,8 @@
 import { createContext, useContext, type ReactNode } from 'react'
 
 import type { CurrentUser } from './api'
+import { AppearanceProvider } from './AppearanceProvider'
+import { normalizeAppearance } from './appearance'
 
 interface CurrentUserContextValue {
   user: CurrentUser
@@ -16,6 +18,7 @@ interface CurrentUserContextValue {
 
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null)
 
+/** AUT-R55：帳號切換與伺服器偏好更新時重設外觀生命週期。 */
 export function CurrentUserProvider({
   value,
   children,
@@ -23,10 +26,16 @@ export function CurrentUserProvider({
   value: CurrentUserContextValue
   children: ReactNode
 }) {
+  const appearance = normalizeAppearance(value.user.appearance)
   return (
-    <CurrentUserContext.Provider value={value}>
-      {children}
-    </CurrentUserContext.Provider>
+    <AppearanceProvider
+      key={`${value.user.id}:${appearance}`}
+      initialAppearance={appearance}
+    >
+      <CurrentUserContext.Provider value={value}>
+        {children}
+      </CurrentUserContext.Provider>
+    </AppearanceProvider>
   )
 }
 

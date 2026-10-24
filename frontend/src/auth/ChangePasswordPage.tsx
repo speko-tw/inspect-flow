@@ -22,6 +22,7 @@ import { useLocation, useNavigate } from 'react-router'
 import { BackLink } from '../layout/BackLink'
 import { ApiError, changePassword } from './api'
 import AuthLayout from './AuthLayout'
+import AppearanceSettings from './AppearanceSettings'
 import { PAGE_TITLES } from '../layout/navigationLabels'
 import { UnsavedLeaveBox } from '../ui/navigation'
 import * as navigationGuard from '../ui/navigation'
@@ -173,11 +174,16 @@ export default function ChangePasswordPage() {
         )
       }
       title={PAGE_TITLES.personalSettings}
-      lead="請輸入目前密碼，並設定新的密碼。"
+      lead={
+        user.must_change_password
+          ? '請輸入目前密碼，並設定新的密碼。'
+          : '調整外觀或變更密碼。'
+      }
     >
       {!hasFeatureAccess && (
         <p role="status">尚未開通任何功能，請洽系統管理者</p>
       )}
+      {!user.must_change_password && <AppearanceSettings />}
       {success && <p role="status">{success}</p>}
       <UnsavedLeaveBox guard={leaveGuard} />
       <Form

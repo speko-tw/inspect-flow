@@ -5,9 +5,17 @@
 // `credentials: 'same-origin'`，且不手動設定 `Authorization` 或
 // `Cookie` 標頭。
 
+import {
+  applyAppearance,
+  normalizeAppearance,
+  type Appearance,
+} from './appearance'
+
 const AUTH_BASE = '/api/v1/auth'
 
 export interface CurrentUser {
+  // AUT-R55：正式回應必填；舊元件 fixture 省略時安全回到 system。
+  appearance?: Appearance
   id: string
   username: string
   email: string | null
@@ -91,7 +99,8 @@ export async function fetchCurrentUser(): Promise<CurrentUser | null> {
     throw new ApiError(response.status)
   }
 
-  return (await response.json()) as CurrentUser
+  const user = (await response.json()) as CurrentUser
+  return user
 }
 
 /**
@@ -118,7 +127,9 @@ export async function login(
     throw new ApiError(response.status)
   }
 
-  return (await response.json()) as CurrentUser
+  const user = (await response.json()) as CurrentUser
+  applyAppearance(normalizeAppearance(user.appearance))
+  return user
 }
 
 /**
@@ -168,4 +179,20 @@ export async function changePassword(
   if (!response.ok) {
     throw new ApiError(response.status, await readErrorCode(response))
   }
+}
+
+/** AUT-R55：本人偏好沿用認證 Cookie，不能指定別人的 user_id。 */
+export async function saveAppearance(
+  appearance: Appearance,
+): Promise<{ appearance: Appearance }> {
+  const response = await fetch(`${AUTH_BASE}/me`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ appearance }),
+  })
+  if (!response.ok) {
+    throw new ApiError(response.status, await readErrorCode(response))
+  }
+  return (await response.json()) as { appearance: Appearance }
 }

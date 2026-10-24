@@ -185,3 +185,7 @@ R 新增一支 migration；與其他新增 migration 的任務不同波（共用
 - **把權限代碼存成 `Role` 上的一個 JSON 欄位**：少一張子表，但資料庫無法保證同一角色內不重複，SQLite 與 PostgreSQL 的 JSON 查詢方式也不同，違反 [PR-03](../../intents/02-principles.md#pr-03) 盡量不依賴資料庫專屬功能的方向。
 - **把有效權限預先存到 `ProjectMember`**：查詢較快，但修改角色時要同步更新所有持有者，違反 DOM-R26「修改角色立即影響所有持有者」的簡單語意；等效能出現問題再評估快取。
 - **範本角色用資料 migration 建立**：migration 在每個環境都會跑，但原裁定曾要求範本角色以內建 `admin` 為 `created_by`；負責人裁定（#261，2026-09-29）已取消預建角色，因此不適用。
+
+## #515 本人外觀偏好
+
+依負責人直接指示的範圍變更（[負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)），同一 PR 同步規格與實作：AUT-R55／DOM-R78；API 使用 PATCH `/auth/me`，資料增加一支接最新 head 的 migration。驗收 AUT-AC80～82、DOM-AC77、UDS-AC04／08／14，測試涵蓋 SQLite／PostgreSQL、跨裝置登入、本人限制、失敗回復與首次繪製快取。不改臨時密碼允許清單、不新增稽核事件。

@@ -127,6 +127,7 @@ class TestAutAc05LoginCookieAndBody:
 
             assert resp.status_code == 200
             assert resp.json() == {
+                "appearance": "system",
                 "id": str(user.id),
                 "username": user.username,
                 "email": user.email,
@@ -255,6 +256,7 @@ class TestAutAc08CurrentUser:
         db_session.commit()
 
         expected_keys = {
+            "appearance",
             "id",
             "username",
             "email",

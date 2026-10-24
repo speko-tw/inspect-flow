@@ -11,6 +11,7 @@ export function currentUserFixture(
 ): CurrentUser {
   return {
     id: 'user-1',
+    appearance: 'system',
     username: 'demo',
     email: 'demo@example.com',
     name_en: null,

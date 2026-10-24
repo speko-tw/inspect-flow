@@ -61,3 +61,10 @@ const LANDING_LABELS: Record<LandingLabelKey, string> = {
 export function landingLabel(key: LandingLabelKey): string {
   return LANDING_LABELS[key]
 }
+
+/** UDS-R10：外觀選項沿用白話名稱，不把技術值當作畫面文字。 */
+export const APPEARANCE_LABELS = {
+  system: '跟隨裝置（預設）',
+  light: '淺色',
+  dark: '深色',
+} as const
