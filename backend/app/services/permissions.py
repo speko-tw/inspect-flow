@@ -75,6 +75,9 @@ def calculate_effective_access(
     無角色成員的專案身分供只要求成員資格的端點使用。
     """
     cache = get_request_effective_access_cache()
+    # 請求內以 id(session) 隔離交易；flush／rollback 事件會清除快取。
+    # 日後若以 Core bulk 寫入權限相關表，會繞過 ORM flush 事件，
+    # 寫入端必須同步清除請求快取，避免沿用舊權限（DOM-R69）。
     cache_key = (id(session), user_id, project_id)
     if cache is not None and not (
         session.new or session.dirty or session.deleted

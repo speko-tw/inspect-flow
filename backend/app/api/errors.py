@@ -627,11 +627,11 @@ def _http_exception_code(exc: StarletteHTTPException) -> ErrorCode:
 
 
 def register_error_handlers(app: FastAPI) -> None:
-    """Register the shared exception handlers on ``app``.
+    """在 app 註冊共用例外處理器。
 
-    Every handler includes ``error.code``. Only an ``APIError``
-    explicitly given details also includes ``error.details``;
-    messages and raw exception data are never returned.
+    所有回應都帶 error.code；APIError 明確提供 details，或套用批次
+    清單上限的驗證錯誤，才帶 error.details 的白話提示。
+    不回傳原始驗證訊息或例外資料。
     """
 
     @app.exception_handler(APIError)
@@ -660,6 +660,24 @@ def register_error_handlers(app: FastAPI) -> None:
         error: dict[str, object] = {
             "code": ErrorCode.REQUEST_VALIDATION_FAILED.value
         }
+        # 批次清單改由 Pydantic 擋下，仍保留 ADM-R13 的白話提示。
+        # 延後匯入，避免 batch.py 引用本模組的 APIError 時產生循環。
+        from app.api.batch import MAX_BATCH_ITEMS, BatchLimitedRequest
+
+        model = _request_body_model(request)
+        if (
+            isinstance(model, type)
+            and issubclass(model, BatchLimitedRequest)
+            and any(
+                item.get("type") == "too_long"
+                and item.get("ctx", {}).get("max_length") == MAX_BATCH_ITEMS
+                and isinstance(item.get("input"), list)
+                for item in exc.errors()
+            )
+        ):
+            error["details"] = [
+                f"一次最多選取 {MAX_BATCH_ITEMS} 筆，請減少數量後再試。"
+            ]
         fields = _request_field_errors(request, exc)
         if fields is not None:
             error["fields"] = fields
