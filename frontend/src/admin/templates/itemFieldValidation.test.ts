@@ -71,7 +71,7 @@ describe('validateItemFields', () => {
   })
 
   it.each(['=', '<=', '>='] as const)(
-    '非區間 %s 接受有限負容差',
+    '非區間 %s 拒絕負容差且接受非負有限值',
     (condition) => {
       const item = draft()
       Object.assign(item.inspection_points[0].numeric_standard!, {
@@ -80,7 +80,13 @@ describe('validateItemFields', () => {
         value: '3',
         tolerance: '-0.5',
       })
-      expect(validateItemFields(item, {})).toEqual({})
+      expect(validateItemFields(item, {})).toEqual({
+        'point:0:tolerance': '容許誤差不能小於 0',
+      })
+      for (const tolerance of ['0', '0.5']) {
+        item.inspection_points[0].numeric_standard!.tolerance = tolerance
+        expect(validateItemFields(item, {})).toEqual({})
+      }
       item.inspection_points[0].numeric_standard!.tolerance = 'Infinity'
       expect(validateItemFields(item, {})).toEqual({
         'point:0:tolerance': '請填寫有效的容許誤差',

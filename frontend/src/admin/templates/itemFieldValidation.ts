@@ -79,6 +79,10 @@ export function validateItemFields(
           const tolerance = Number(standard.tolerance)
           if (!Number.isFinite(tolerance)) {
             result[`${key}:tolerance`] = '請填寫有效的容許誤差'
+          } else if (tolerance < 0) {
+            // TPL-AC16：非區間也只收誤差大小；KD-52 的 ± 已含雙向，
+            // 負值會使預覽呈現「± -0.5」而誤導使用者。
+            result[`${key}:tolerance`] = '容許誤差不能小於 0'
           }
         }
       }

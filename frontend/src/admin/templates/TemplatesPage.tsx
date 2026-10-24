@@ -602,7 +602,9 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
             itemDraft.title.trim().toLocaleLowerCase(),
       )
     ) {
-      result.title = '此系統已有同名查核項目，請換個名稱'
+      // TPL-R18：名稱位於表單最前，重名也須先聚焦並列為摘要首項。
+      delete result.title
+      return { title: '此系統已有同名查核項目，請換個名稱', ...result }
     }
     return result
   }, [itemDraft, photoDraft, systemItems])

@@ -12,8 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { currentUserFixture } from '../../testing/contractFixtures'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
-import { ManagementApiError } from '../api'
-import type { ProjectItemApi } from '../projectItems/api'
+import { projectItemApi, type ProjectItemApi } from '../projectItems/api'
 import ProjectItemChangePage from '../projectItems/ProjectItemChangePage'
 import * as api from './api'
 import type { TemplateItem } from './api'
@@ -53,6 +52,7 @@ const item: TemplateItem = {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 async function openEditor(
@@ -60,7 +60,35 @@ async function openEditor(
   source = structuredClone(item),
   duplicate = false,
 ) {
+  // 捕捉真正 HTTP body，讓兩頁都驗過序列化而非只驗草稿形狀。
   const write = vi.fn()
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input), 'http://localhost').pathname
+      expect(path).toBe(
+        page === 'template'
+          ? '/api/v1/templates/item-1'
+          : '/api/v1/projects/project-1/inspection-items/item-1',
+      )
+      expect(init?.method).toBe(page === 'template' ? 'PUT' : 'PATCH')
+      const payload = JSON.parse(String(init?.body))
+      write(payload)
+      if (duplicate && page === 'project') {
+        return Response.json(
+          { error: { code: 'project_inspection_item.duplicate_name' } },
+          { status: 409 },
+        )
+      }
+      return Response.json({
+        ...source,
+        ...payload,
+        id: 'item-1',
+        reinspection_selected: false,
+        affected_tasks: [],
+      })
+    }),
+  )
   let element
   if (page === 'template') {
     vi.spyOn(api, 'listTemplateCategories').mockResolvedValue([
@@ -77,11 +105,6 @@ async function openEditor(
           : []),
       ],
     })
-    vi.spyOn(api, 'updateTemplateItem').mockImplementation(write)
-    write.mockImplementation(async (_id, payload) => ({
-      ...payload,
-      id: 'item-1',
-    }))
     element = <TemplatesPage canManage />
   } else {
     const projectApi: ProjectItemApi = {
@@ -97,22 +120,8 @@ async function openEditor(
         },
         affectedTasks: [],
       })),
-      update: write,
+      update: projectItemApi.update,
     }
-    write.mockImplementation(async () => {
-      if (duplicate) {
-        throw new ManagementApiError(
-          409,
-          'project_inspection_item.duplicate_name',
-        )
-      }
-      return {
-        ...source,
-        id: 'item-1',
-        reinspection_selected: false,
-        affected_tasks: [],
-      }
-    })
     element = (
       <Routes>
         <Route
@@ -177,24 +186,58 @@ describe.each(['template', 'project'] as const)('%s 共用欄位規則', (page) 
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('非區間條件允許有限負容差', async () => {
+  it.each(['non-range', 'range'] as const)(
+    '%s 負容差在送出前阻擋並聚焦',
+    async (kind) => {
+      const { write, save } = await openEditor(page)
+      fireEvent.click(
+        screen.getByRole('radio', {
+          name: kind === 'range' ? '標準值 ± 容許誤差' : '＝',
+        }),
+      )
+      fireEvent.change(screen.getByRole('textbox', { name: /^標準值/ }), {
+        target: { value: '3' },
+      })
+      const field = screen.getByLabelText(/^容許誤差/)
+      fireEvent.change(field, { target: { value: '-0.5' } })
+      save()
+      await waitFor(() => expect(field).toHaveFocus())
+      expect(field).toHaveAttribute('aria-invalid', 'true')
+      expect(screen.getAllByText('容許誤差不能小於 0').length).toBeGreaterThan(
+        0,
+      )
+      expect(write).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).toBeNull()
+    },
+  )
+
+  it.each(['0', '0.5'])('非區間有效容差 %s 正確序列化', async (tolerance) => {
     const { write, save, confirm } = await openEditor(page)
     fireEvent.click(screen.getByRole('radio', { name: '＝' }))
-    fireEvent.change(screen.getByLabelText(/^標準值/), {
+    fireEvent.change(screen.getByRole('textbox', { name: /^標準值/ }), {
       target: { value: '3' },
     })
     fireEvent.change(screen.getByLabelText(/^容許誤差/), {
-      target: { value: '-0.5' },
+      target: { value: tolerance },
     })
     save()
     confirm()
     await waitFor(() => expect(write).toHaveBeenCalledTimes(1))
-    const payload = write.mock.calls[0][page === 'template' ? 1 : 2]
-    expect(payload.inspection_points[0].numeric_standard).toMatchObject({
+    const point = write.mock.calls[0][0].inspection_points[0]
+    expect(point.numeric_standard).toMatchObject({
       condition: '=',
       value: '3',
-      tolerance: '-0.5',
+      tolerance,
+      range_form: null,
+      lower_bound: null,
+      upper_bound: null,
+      measurement_field_client_id: point.measurement_fields[0].client_id,
     })
+    expect(point.measurement_fields[0].unit).toBeNull()
+    expect(point.measurement_fields[0]).not.toHaveProperty('clientKey')
+    expect(point.numeric_standard).not.toHaveProperty(
+      'measurement_field_client_key',
+    )
   })
 
   it('省略 range_form 的舊資料顯示並送出 tolerance', async () => {
@@ -218,10 +261,17 @@ describe.each(['template', 'project'] as const)('%s 共用欄位規則', (page) 
     save()
     confirm()
     await waitFor(() => expect(write).toHaveBeenCalledTimes(1))
-    expect(
-      write.mock.calls[0][page === 'template' ? 1 : 2].inspection_points[0]
-        .numeric_standard.range_form,
-    ).toBe('tolerance')
+    const point = write.mock.calls[0][0].inspection_points[0]
+    expect(point.numeric_standard).toMatchObject({
+      range_form: 'tolerance',
+      value: '3',
+      tolerance: '0.5',
+      lower_bound: null,
+      upper_bound: null,
+      measurement_field_client_id: point.measurement_fields[0].client_id,
+    })
+    expect(point.measurement_fields[0].unit).toBeNull()
+    expect(point.measurement_fields[0]).not.toHaveProperty('clientKey')
   })
 
   it('同名維持各頁的唯一範圍與錯誤來源', async () => {
@@ -248,4 +298,23 @@ describe.each(['template', 'project'] as const)('%s 共用欄位規則', (page) 
     }
     expect(screen.getByLabelText(/查核項目名稱/)).toHaveValue('既有名稱')
   })
+})
+
+it('同名加項次標題空白時名稱優先聚焦且位於摘要首項', async () => {
+  const { write, save } = await openEditor(
+    'template',
+    structuredClone(item),
+    true,
+  )
+  const title = screen.getByLabelText(/查核項目名稱/)
+  fireEvent.change(title, { target: { value: '既有名稱' } })
+  fireEvent.change(screen.getByLabelText(/項次標題/), {
+    target: { value: '' },
+  })
+  save()
+  await waitFor(() => expect(title).toHaveFocus())
+  const errors = within(screen.getByRole('alert')).getAllByRole('button')
+  expect(errors[0]).toHaveTextContent('此系統已有同名查核項目，請換個名稱')
+  expect(errors[1]).toHaveTextContent('請填寫項次標題')
+  expect(write).not.toHaveBeenCalled()
 })
