@@ -57,6 +57,7 @@ interface FixtureOptions {
   failPermissionCatalogOnce?: boolean
   userCatalogResponse?: () => Promise<Response>
   permissionCatalogResponse?: () => Promise<Response>
+  diagnosticResponse?: () => Promise<Response>
   accessResponse?: (userId: string) => Promise<Response>
   participationResponse?: (path: string) => Promise<Response>
   bundleApplyResponse?: (path: string) => Promise<Response>
@@ -401,6 +402,8 @@ function permissionPage(options: FixtureOptions = {}) {
         method === 'GET' &&
         /^\/users\/[^/]+\/effective-access$/.test(path)
       ) {
+        if (options.diagnosticResponse && url.searchParams.has('project_id'))
+          return options.diagnosticResponse()
         const projectRoles = roles.filter((role) =>
           memberRoleIds.includes(role.id),
         )
@@ -943,7 +946,7 @@ describe('ModulePermissionsPage', () => {
     })
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'API 錯誤（狀態碼 500）',
+      '伺服器暫時無法處理，請稍後再試。',
     )
     expect(
       screen.getByRole('button', { name: '重新載入帳號目錄' }),
@@ -1735,7 +1738,9 @@ describe('ModulePermissionsPage', () => {
       await screen.findByText(/帳號已建立；後續權限或專案加入未完成/)
       fireEvent.click(screen.getByRole('button', { name: '重試未完成的步驟' }))
 
-      expect(await screen.findByRole('alert')).toHaveTextContent(/409/)
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        '這個帳號已經是此專案的成員。',
+      )
       expect(screen.queryByRole('heading', { name: '帳號已建立' })).toBeNull()
       expect(
         calls.filter(
@@ -2877,5 +2882,44 @@ describe('第二輪審查的區塊錯誤恢復（#414）', () => {
       1,
     )
     expect(calls.filter((c) => c.path === '/projects')).toHaveLength(1)
+  })
+})
+
+describe('#727 診斷錯誤白話', () => {
+  it.each([404, 'network'])('診斷 %s 保留修正方向', async (failure) => {
+    permissionPage({
+      openWizard: false,
+      diagnosticResponse: async () => {
+        if (failure === 'network') throw new TypeError('Failed to fetch')
+        return Response.json(
+          { error: { code: 'resource.not_found' } },
+          { status: 404 },
+        )
+      },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
+    await screen.findByText(/能使用：/)
+    fireEvent.change(await screen.findByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '檢查' }))
+    const alert = await screen.findByText(
+      failure === 404
+        ? '他還不是這個專案的成員，請先到專案成員頁加入。'
+        : '無法連線到伺服器，請稍後再試。',
+      { exact: false },
+    )
+    expect(alert).not.toHaveTextContent(/API 錯誤|Failed to fetch/)
+    if (failure === 404) {
+      expect(alert).toHaveTextContent(
+        '他還不是這個專案的成員，請先到專案成員頁加入。',
+      )
+      expect(within(alert).getByRole('link')).toHaveAttribute(
+        'href',
+        '/projects/project-1/members',
+      )
+    } else {
+      expect(alert).toHaveTextContent(/連線|網路/)
+    }
   })
 })

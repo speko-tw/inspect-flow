@@ -35,8 +35,8 @@ const PARTIAL_SYSTEM_APPLIED_HELP = [
   '請改選未套用的單一項目。',
 ].join('')
 const APPLY_CONFIRM_WARNING = [
-  '套用後可在查核項目修改內容，',
-  '目前無法刪除。',
+  '套用後可在查核項目修改或刪除；',
+  '已有任務使用的項目不能刪除。',
 ].join('')
 
 function formatTime(value: string): string {

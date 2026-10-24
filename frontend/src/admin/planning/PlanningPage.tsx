@@ -197,14 +197,15 @@ function draftTaskSummary(task: InspectionTask): string {
 
 /**
  * 依 ADM-R17、IP-R02、IP-R10 呈現專案計畫與任務管理。
- * Plan 已封存時收起修改入口；頁面不預先判斷寫入權限，寫入被
- * 後端回 403 後才切成唯讀，實際寫入一律由後端覆核。
+ * #727：依專案 viewer 權限隱藏修改入口；後端仍覆核實際寫入。
  */
 export default function PlanningPage({
   client = defaultPlanningPageClient,
   initialProjectId = '',
+  viewerPermissions,
 }: {
   client?: PlanningPageClient
+  viewerPermissions?: string[]
   initialProjectId?: string
 }) {
   const [projects, setProjects] = useState<Pick<Project, 'id' | 'name'>[]>([])
@@ -217,7 +218,14 @@ export default function PlanningPage({
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? null
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [readOnly, setReadOnly] = useState(false)
+  const [writeDenied, setReadOnly] = useState(false)
+  const canCreate =
+    viewerPermissions === undefined ||
+    viewerPermissions.includes('inspection_plan.create')
+  const canManage =
+    viewerPermissions === undefined ||
+    viewerPermissions.includes('inspection_plan.manage')
+  const readOnly = writeDenied || (!canCreate && !canManage)
   const [accessDenied, setAccessDenied] = useState(false)
   const [projectNotFound, setProjectNotFound] = useState(false)
   const [zonesDenied, setZonesDenied] = useState(false)
@@ -531,7 +539,9 @@ export default function PlanningPage({
       const results = await Promise.allSettled([
         client.listProjectItems(projectId),
         client.listProjectZones(projectId),
-        client.listProjectAssignees(projectId),
+        canManage
+          ? client.listProjectAssignees(projectId)
+          : Promise.resolve([]),
         allPlans(),
       ])
       if (active) {
@@ -579,7 +589,7 @@ export default function PlanningPage({
     return () => {
       active = false
     }
-  }, [client, projectId, reloadKey])
+  }, [client, projectId, reloadKey, canManage])
 
   const [selectedPlanData, setSelectedPlanData] = useState<{
     id: string
@@ -634,7 +644,7 @@ export default function PlanningPage({
   )
   // 計畫封存或畫面唯讀時，任務上的所有修改入口（含阻擋說明的捷徑與
   // 修改表單）都不顯示；只留說明文字。
-  const canModify = canEditPlan && !readOnly
+  const canModify = canEditPlan && canManage && !readOnly
   const suggestedName = suggestedTaskName(
     items,
     taskItems,
@@ -1115,7 +1125,7 @@ export default function PlanningPage({
           目前為唯讀模式。
         </p>
       )}
-      {membersDenied && (
+      {membersDenied && !readOnly && (
         <p className="notice-info" role="status">
           沒有讀取可指派帳號清單的權限；可略過建議指派。
         </p>
@@ -1151,7 +1161,7 @@ export default function PlanningPage({
                 </li>
               ))}
             </ul>
-            {!readOnly && (
+            {!readOnly && canCreate && (
               <form
                 onKeyDown={blockImeEnter}
                 data-error-context="plan-create"
@@ -1215,7 +1225,7 @@ export default function PlanningPage({
                 <StatusBadge status={selectedPlanDetail.status} />
               </p>
               {noticeFor('plan-detail')}
-              {!readOnly && (
+              {!readOnly && canManage && (
                 <>
                   <button
                     disabled={busy || selectedPlan.status === 'ARCHIVED'}

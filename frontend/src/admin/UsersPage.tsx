@@ -13,6 +13,8 @@ import { FormErrorSummary, FormField, FormGroup } from '../components'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
 import { Form, FormError, FormSubmitButton } from '../ui/Form'
+import permissionCodeContract from '../permissionCodeContract'
+import { STATUS_BADGES, type BadgeStatus } from '../ui/statusBadge'
 import { activeStatus } from '../ui/statusBadge'
 import { useSubmitGuard } from '../ui/submitGuard'
 import { UnsavedLeaveBox } from '../ui/navigation'
@@ -92,7 +94,7 @@ function companyLinkErrorMessage(error: unknown): string {
 
 type PendingAction = {
   user: User
-  kind: 'admin' | 'deactivate' | 'activate'
+  kind: 'admin' | 'deactivate' | 'activate' | 'reset'
 }
 
 export default function UsersPage({
@@ -267,7 +269,7 @@ export default function UsersPage({
   }, [pendingAction])
 
   useEffect(() => {
-    if (!pendingAction || pendingAction.kind === 'admin') {
+    if (!pendingAction || ['admin', 'reset'].includes(pendingAction.kind)) {
       setActionPreview(null)
       return
     }
@@ -398,6 +400,7 @@ export default function UsersPage({
   }
 
   async function prepareBatchDeactivation() {
+    clearBatchMessages()
     const selected = users.filter(
       (user) =>
         selectedBatchUserIds.includes(user.id) && user.id !== currentUser.id,
@@ -431,6 +434,7 @@ export default function UsersPage({
   }
 
   async function confirmBatchDeactivation() {
+    clearBatchMessages()
     if (!batchDeactivationPreview || batchDeactivationBusy) return
     setBatchDeactivationBusy(true)
     setBatchDeactivationError('')
@@ -453,6 +457,7 @@ export default function UsersPage({
   }
 
   async function prepareBatchActivation() {
+    clearBatchMessages()
     const selected = users.filter((user) =>
       selectedBatchUserIds.includes(user.id),
     )
@@ -486,6 +491,7 @@ export default function UsersPage({
   }
 
   async function confirmBatchActivation() {
+    clearBatchMessages()
     if (!batchActivationPreview || batchActivationBusy) return
     const { users: selected } = batchActivationPreview
     const restore = selected.map((user) => ({
@@ -512,29 +518,17 @@ export default function UsersPage({
     }
   }
 
-  function toggleBatchRestoreSelection(
-    userId: string,
-    category: keyof RestorePreviewSelection,
-    value: string,
-  ) {
-    setBatchRestoreSelections((current) => {
-      const selection = current[userId] ?? emptyRestorePreviewSelection()
-      const values = selection[category]
-      return {
-        ...current,
-        [userId]: {
-          ...selection,
-          [category]: values.includes(value)
-            ? values.filter((item) => item !== value)
-            : [...values, value],
-        },
-      }
-    })
+  // #727：新操作不能沿用另一種批次操作的成功或失敗訊息。
+  function clearBatchMessages() {
+    setBatchDeactivationError('')
+    setBatchDeactivationNotice('')
+    setBatchActivationError('')
+    setBatchActivationNotice('')
   }
 
   function cancelBatchDeactivation() {
     setBatchDeactivationPreview(null)
-    setBatchDeactivationError('')
+    clearBatchMessages()
   }
 
   // 收回「自己」的管理者權限：先確認；成功後不能再重新載入列表
@@ -547,6 +541,11 @@ export default function UsersPage({
   async function confirmActionOnce() {
     if (!pendingAction) return
     const { user, kind } = pendingAction
+    if (kind === 'reset') {
+      await resetTemporaryPassword(user)
+      setPendingAction(null)
+      return
+    }
     setActionError('')
     if (kind === 'admin' && user.is_admin && user.id === currentUser.id) {
       setBusyUser(user.id)
@@ -605,6 +604,13 @@ export default function UsersPage({
 
   function actionMessage({ user, kind }: PendingAction): string {
     const name = user.name_zh || user.username
+    if (kind === 'reset') {
+      return [
+        `重設${name}（${user.username}）的密碼後，`,
+        '他目前的密碼與登入狀態會立刻失效；',
+        '你會拿到一組只顯示一次的臨時密碼，他下次登入必須改密碼。',
+      ].join('')
+    }
     if (kind === 'deactivate') {
       return `停用${name}（${user.username}）後，他將無法登入；過去的查核紀錄與專案資料都會保留。`
     }
@@ -621,6 +627,7 @@ export default function UsersPage({
 
   function requestAction(user: User, kind: PendingAction['kind']) {
     setActionError('')
+    setPreviewError('')
     setPendingAction({ user, kind })
   }
 
@@ -628,7 +635,7 @@ export default function UsersPage({
   // 用紅色；授予或恢復（啟用、指派管理者）用一般主色。管理者身分只影響
   // 「管理者」動作，不影響啟用與停用。
   function confirmVariant({ user, kind }: PendingAction) {
-    if (kind === 'deactivate') return 'danger'
+    if (kind === 'deactivate' || kind === 'reset') return 'danger'
     if (kind === 'admin' && user.is_admin) return 'danger'
     return 'neutral'
   }
@@ -692,112 +699,35 @@ export default function UsersPage({
           )}
           confirmLabel={batchActivationBusy ? '正在啟用帳號…' : '確認啟用帳號'}
           label="批次啟用確認"
-          onCancel={() => setBatchActivationPreview(null)}
+          onCancel={() => {
+            setBatchActivationPreview(null)
+            clearBatchMessages()
+          }}
           onConfirm={confirmBatchActivation}
           role="region"
         >
           <p>請逐一確認每個帳號要恢復的權限、成員身分與未完成任務。</p>
           {batchActivationPreview.previews.map((preview) => (
-            <fieldset key={preview.user_id}>
-              <legend>{preview.username}</legend>
-              {preview.permission_codes.length === 0 &&
-                preview.delegated_modules.length === 0 &&
-                preview.project_memberships.length === 0 &&
-                preview.tasks.length === 0 && (
-                  <p>這個帳號沒有需要恢復的權限或專案。</p>
-                )}
-              {preview.account_expired && (
-                <p role="alert">外部帳號已到期，無法啟用。</p>
-              )}
-              {preview.permission_codes.map((code) => (
-                <label key={`permission-${code}`}>
-                  <input
-                    aria-label={code}
-                    checked={
-                      batchRestoreSelections[
-                        preview.user_id
-                      ]?.permission_codes.includes(code) ?? false
-                    }
-                    disabled={batchActivationBusy || preview.account_expired}
-                    onChange={() =>
-                      toggleBatchRestoreSelection(
-                        preview.user_id,
-                        'permission_codes',
-                        code,
-                      )
-                    }
-                    type="checkbox"
-                  />
-                  {code}
-                </label>
-              ))}
-              {preview.delegated_modules.map((module) => (
-                <label key={`module-${module}`}>
-                  <input
-                    aria-label={module}
-                    checked={
-                      batchRestoreSelections[
-                        preview.user_id
-                      ]?.delegated_modules.includes(module) ?? false
-                    }
-                    disabled={batchActivationBusy || preview.account_expired}
-                    onChange={() =>
-                      toggleBatchRestoreSelection(
-                        preview.user_id,
-                        'delegated_modules',
-                        module,
-                      )
-                    }
-                    type="checkbox"
-                  />
-                  {module}
-                </label>
-              ))}
-              {preview.project_memberships.map((membership) => (
-                <label key={`project-${membership.project_id}`}>
-                  <input
-                    aria-label={`${membership.project_code}／${membership.project_name}`}
-                    checked={
-                      batchRestoreSelections[
-                        preview.user_id
-                      ]?.project_ids.includes(membership.project_id) ?? false
-                    }
-                    disabled={batchActivationBusy || preview.account_expired}
-                    onChange={() =>
-                      toggleBatchRestoreSelection(
-                        preview.user_id,
-                        'project_ids',
-                        membership.project_id,
-                      )
-                    }
-                    type="checkbox"
-                  />
-                  {membership.project_code}／{membership.project_name}
-                </label>
-              ))}
-              {preview.tasks.map((task) => (
-                <label key={`task-${task.task_id}`}>
-                  <input
-                    aria-label={task.name}
-                    checked={
-                      batchRestoreSelections[
-                        preview.user_id
-                      ]?.task_ids.includes(task.task_id) ?? false
-                    }
-                    disabled={batchActivationBusy || preview.account_expired}
-                    onChange={() =>
-                      toggleBatchRestoreSelection(
-                        preview.user_id,
-                        'task_ids',
-                        task.task_id,
-                      )
-                    }
-                    type="checkbox"
-                  />
-                  {task.name}
-                </label>
-              ))}
-            </fieldset>
+            <RestoreChoices
+              key={preview.user_id}
+              name={
+                batchActivationPreview.users.find(
+                  (user) => user.id === preview.user_id,
+                )?.name_zh ?? preview.username
+              }
+              preview={preview}
+              selection={
+                batchRestoreSelections[preview.user_id] ??
+                emptyRestorePreviewSelection()
+              }
+              disabled={batchActivationBusy}
+              onChange={(selection) =>
+                setBatchRestoreSelections((current) => ({
+                  ...current,
+                  [preview.user_id]: selection,
+                }))
+              }
+            />
           ))}
         </ConfirmBox>
       )}
@@ -896,7 +826,7 @@ export default function UsersPage({
                     detail.auth_source !== 'local' ||
                     busyUser !== null
                   }
-                  onClick={() => void resetTemporaryPassword(detail)}
+                  onClick={() => requestAction(detail, 'reset')}
                   type="button"
                 >
                   {busyUser === detail.id
@@ -919,7 +849,7 @@ export default function UsersPage({
                 <ConfirmBox
                   busy={busyUser === detail.id}
                   confirmDisabled={
-                    pendingAction.kind !== 'admin' &&
+                    !['admin', 'reset'].includes(pendingAction.kind) &&
                     (!actionPreview ||
                       Boolean(previewError) ||
                       (pendingAction.kind === 'activate' &&
@@ -927,7 +857,9 @@ export default function UsersPage({
                         actionPreview.account_expired))
                   }
                   key={`${detail.id}:${pendingAction.kind}`}
-                  confirmLabel="確認"
+                  confirmLabel={
+                    pendingAction.kind === 'reset' ? '確認重設' : '確認'
+                  }
                   label="操作確認"
                   onCancel={cancelPendingAction}
                   onConfirm={confirmAction}
@@ -943,6 +875,10 @@ export default function UsersPage({
                     'permission_codes' in actionPreview && (
                       <RestoreChoices
                         preview={actionPreview}
+                        name={
+                          pendingAction.user.name_zh ??
+                          pendingAction.user.username
+                        }
                         selection={restoreSelection}
                         onChange={setRestoreSelection}
                       />
@@ -1081,6 +1017,7 @@ export default function UsersPage({
               onQueryChange={setQuery}
               onSearch={(event) => {
                 event.preventDefault()
+                clearBatchMessages()
                 setSelectedBatchUserIds([])
                 void search(query).then(() => onQueryApplied?.(query.trim()))
               }}
@@ -1094,6 +1031,7 @@ export default function UsersPage({
                   <button
                     onClick={() =>
                       void clearSearch().then(() => {
+                        clearBatchMessages()
                         setSelectedBatchUserIds([])
                         onQueryApplied?.('')
                       })
@@ -1262,7 +1200,9 @@ export default function UsersPage({
                                 <ConfirmBox
                                   busy={busyUser === user.id}
                                   confirmDisabled={
-                                    pendingAction.kind !== 'admin' &&
+                                    !['admin', 'reset'].includes(
+                                      pendingAction.kind,
+                                    ) &&
                                     (!actionPreview ||
                                       Boolean(previewError) ||
                                       (pendingAction.kind === 'activate' &&
@@ -1270,7 +1210,11 @@ export default function UsersPage({
                                         actionPreview.account_expired))
                                   }
                                   key={`${user.id}:${pendingAction.kind}`}
-                                  confirmLabel="確認"
+                                  confirmLabel={
+                                    pendingAction.kind === 'reset'
+                                      ? '確認重設'
+                                      : '確認'
+                                  }
                                   label="操作確認"
                                   onCancel={cancelPendingAction}
                                   onConfirm={confirmAction}
@@ -1317,6 +1261,10 @@ export default function UsersPage({
                                     'permission_codes' in actionPreview && (
                                       <RestoreChoices
                                         preview={actionPreview}
+                                        name={
+                                          pendingAction.user.name_zh ??
+                                          pendingAction.user.username
+                                        }
                                         selection={restoreSelection}
                                         onChange={setRestoreSelection}
                                       />
@@ -1463,9 +1411,13 @@ function companyLabel(user: User, companies: Company[]): string {
 /** 讓 Admin 對預覽中的資料逐項選擇，避免整包復原過期授權。 */
 function RestoreChoices({
   preview,
+  name,
   selection,
   onChange,
+  disabled = false,
 }: {
+  disabled?: boolean
+  name: string
   preview: RestorePreview
   selection: {
     permission_codes: string[]
@@ -1492,7 +1444,10 @@ function RestoreChoices({
   }
 
   return (
-    <div>
+    <fieldset disabled={disabled || preview.account_expired}>
+      <legend>
+        {name || preview.username}（{preview.username}）
+      </legend>
       {preview.account_expired && (
         <p role="alert">外部帳號已到期，請先修改到期日後再重新啟用。</p>
       )}
@@ -1510,7 +1465,9 @@ function RestoreChoices({
                     onChange={() => toggle('permission_codes', code)}
                     type="checkbox"
                   />
-                  {code}
+                  {permissionCodeContract.codes
+                    .find((item) => item.code === code)
+                    ?.description.replace('模組', '功能') ?? '其他功能'}
                 </label>
               ))}
             </section>
@@ -1525,7 +1482,10 @@ function RestoreChoices({
                     onChange={() => toggle('delegated_modules', module)}
                     type="checkbox"
                   />
-                  {module}
+                  {{ project: '專案', inspection: '查核', template: '範本' }[
+                    module
+                  ] ?? '其他'}
+                  權限管理
                 </label>
               ))}
             </section>
@@ -1555,14 +1515,17 @@ function RestoreChoices({
                     onChange={() => toggle('task_ids', task.task_id)}
                     type="checkbox"
                   />
-                  {task.name}（{task.status}）
+                  {task.name}（
+                  {STATUS_BADGES[task.status as BadgeStatus]?.label ??
+                    '未完成'}
+                  ）
                 </label>
               ))}
             </section>
           )}
         </>
       )}
-    </div>
+    </fieldset>
   )
 }
 

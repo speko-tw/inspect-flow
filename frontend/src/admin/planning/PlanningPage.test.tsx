@@ -31,13 +31,11 @@ function validationError(fixture: {
   return error
 }
 
-function render(ui: ReactElement) {
+function render(ui: ReactElement, user = currentUserFixture()) {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <DataMemoryRouter>
-        <CurrentUserProvider
-          value={{ user: currentUserFixture(), clear: vi.fn() }}
-        >
+        <CurrentUserProvider value={{ user, clear: vi.fn() }}>
           {children}
         </CurrentUserProvider>
       </DataMemoryRouter>
@@ -2668,4 +2666,38 @@ describe('planning trial fixes (#634)', () => {
     fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
     expect(screen.getByLabelText(/鋼筋保護層/)).not.toBeChecked()
   })
+})
+
+describe('#727 唯讀身分', () => {
+  it.each(['現場工程師', '外部協作'])(
+    '%s 從進頁即無寫入表單',
+    async (identity) => {
+      const client = createMockPlanningClient()
+      const plan = await client.createPlan('project-demo-1', {
+        name: '既有計畫',
+      })
+      const assignees = vi.spyOn(client, 'listProjectAssignees')
+      render(
+        <PlanningPage
+          client={client}
+          initialProjectId="project-demo-1"
+          viewerPermissions={['inspection_plan.read', 'inspection_task.read']}
+        />,
+        currentUserFixture({
+          is_external_collaborator: identity === '外部協作',
+          has_project_access: true,
+          has_field_access: identity === '現場工程師',
+          can_inspect_tasks: identity === '現場工程師',
+        }),
+      )
+      fireEvent.click(await screen.findByRole('button', { name: /既有計畫/ }))
+      await screen.findByRole('heading', { name: plan.name })
+      expect(screen.getByText('目前為唯讀模式。')).toBeVisible()
+      expect(screen.queryByRole('button', { name: '建立計畫' })).toBeNull()
+      expect(screen.queryByRole('button', { name: '＋ 新增任務' })).toBeNull()
+      expect(screen.queryByRole('button', { name: '修改計畫名稱' })).toBeNull()
+      expect(screen.queryByText(/沒有讀取可指派帳號清單/)).toBeNull()
+      expect(assignees).not.toHaveBeenCalled()
+    },
+  )
 })
