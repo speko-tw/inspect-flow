@@ -21,6 +21,11 @@ export interface ProjectItemData {
   inspection_points: InspectionPoint[]
 }
 
+/** TPL-R27：只有專案項目列表回傳的全狀態任務引用數。 */
+export interface ProjectItemListData extends ProjectItemData {
+  task_count: number
+}
+
 interface TaskItem {
   id: string
   current_snapshot: { title: string } | null
@@ -101,7 +106,7 @@ export interface ProjectItemApi {
 /** 列出專案項目所有分頁，避免確認畫面遺漏項目。 */
 export function listProjectItems(
   projectId: string,
-): Promise<ProjectItemData[]> {
+): Promise<ProjectItemListData[]> {
   return listAllPages(`/projects/${projectId}/inspection-items`)
 }
 

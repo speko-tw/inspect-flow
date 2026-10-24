@@ -26,7 +26,7 @@ from app.models import (
     User,
 )
 from app.services.inspection_details import (
-    project_inspection_item_details,
+    project_inspection_item_list_details,
 )
 from app.services.permissions import calculate_effective_access
 from app.services.project_templates import (
@@ -197,7 +197,7 @@ def list_project_inspection_items(
         cursor=cursor,
         limit=limit,
         filters=(ProjectInspectionItem.project_id == project_id,),
-        serialize_batch=lambda items: project_inspection_item_details(
+        serialize_batch=lambda items: project_inspection_item_list_details(
             db, items
         ),
     )

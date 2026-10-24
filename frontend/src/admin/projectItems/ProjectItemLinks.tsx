@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 
+import { canManageTemplateLibrary } from '../../auth/landing'
+import { useCurrentUser } from '../../auth/useCurrentUser'
 import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { httpErrorMessage, isForbidden } from '../../http'
 import { ConfirmBox } from '../../ui/ConfirmBox'
@@ -8,7 +10,7 @@ import { ManagementApiError } from '../api'
 import {
   deleteProjectItem,
   listProjectItems,
-  type ProjectItemData,
+  type ProjectItemListData,
 } from './api'
 import './ProjectItemLinks.css'
 
@@ -24,10 +26,11 @@ export default function ProjectItemLinks({
   viewerPermissions: string[]
 }) {
   const location = useLocation()
-  const [items, setItems] = useState<ProjectItemData[]>([])
+  const { user } = useCurrentUser()
+  const [items, setItems] = useState<ProjectItemListData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [deleting, setDeleting] = useState<ProjectItemData | null>(null)
+  const [deleting, setDeleting] = useState<ProjectItemListData | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
@@ -43,6 +46,21 @@ export default function ProjectItemLinks({
       : [],
   )
   const canEdit = viewerPermissions.includes('project_inspection_item.edit')
+  const canManageTemplates = canManageTemplateLibrary(user)
+  const isInUse = (deleting?.task_count ?? 0) > 0
+  const deleteAlert = useRef<HTMLParagraphElement | null>(null)
+
+  useEffect(() => {
+    if (!deleteError || !deleteAlert.current) return
+    // #734 T7：刪除錯誤留在確認區或項目列，先捲入視野再聚焦。
+    const alert = deleteAlert.current
+    const block =
+      alert.getBoundingClientRect().height > window.innerHeight * 0.8
+        ? 'start'
+        : 'nearest'
+    alert.scrollIntoView?.({ block })
+    alert.focus({ preventScroll: true })
+  }, [deleteError, deleting?.id, isInUse])
 
   useEffect(() => {
     let active = true
@@ -91,14 +109,16 @@ export default function ProjectItemLinks({
         const count: unknown = Array.isArray(caught.details)
           ? caught.details[0]
           : undefined
-        const prefix =
+        const parsedCount =
           typeof count === 'string' && /^\d+$/.test(count)
-            ? `已有 ${count} 個任務使用這個項目`
-            : '已有任務使用這個項目'
-        setDeleteError(
-          `${prefix}，為保留查核紀錄不能刪除。` +
-            '若都是草稿任務，刪除草稿後即可移除。',
+            ? Number(count)
+            : Math.max(1, deleting.task_count)
+        const updated = { ...deleting, task_count: parsedCount }
+        setItems((current) =>
+          current.map((item) => (item.id === updated.id ? updated : item)),
         )
+        setDeleting(updated)
+        setDeleteError(blockedDeleteMessage(parsedCount))
       } else {
         setDeleteError(
           httpErrorMessage(caught, {
@@ -130,6 +150,11 @@ export default function ProjectItemLinks({
           從範本新增查核項目
         </Link>
       )}
+      {canEdit && !canManageTemplates && (
+        <p className="project-item-template-hint">
+          要把項目存回範本庫，需要「管理範本庫」功能，請找系統管理者開通。
+        </p>
+      )}
       {notice && <p role="status">{notice}</p>}
       {loading && <p>載入中…</p>}
       {error && <p role="alert">{error}</p>}
@@ -143,7 +168,14 @@ export default function ProjectItemLinks({
                   剛套用
                 </p>
               )}
-              <strong>{item.title}</strong>
+              <div className="project-item-title">
+                <strong>{item.title}</strong>
+                {item.task_count > 0 && (
+                  <span className="project-item-usage">
+                    使用中（{item.task_count} 個任務）
+                  </span>
+                )}
+              </div>
               <p>{item.inspection_points.length} 個查核項次</p>
               <p>來源範本：{item.source_template_name}</p>
               <p>
@@ -156,32 +188,74 @@ export default function ProjectItemLinks({
                 className="project-item-applied-time"
                 dateTime={item.applied_at}
               >
-                套用時間：{new Date(item.applied_at).toLocaleString('zh-TW')}
+                套用時間：{formatAppliedAt(item.applied_at)}
               </time>
-              <Link
-                aria-label={`${canEdit ? '修改' : '檢視'}「${item.title}」`}
-                className="btn"
-                to={`/projects/${projectId}/inspection-items/${item.id}`}
-              >
-                {canEdit ? '修改' : '檢視'}
-              </Link>
-              {canEdit && (
-                <button
-                  aria-label={`刪除「${item.title}」`}
-                  className="btn btn-danger"
-                  disabled={busy}
-                  onClick={(event) => {
-                    deleteTrigger.current = event.currentTarget
-                    setDeleting(item)
-                    setDeleteError('')
-                    setNotice('')
-                  }}
-                  type="button"
+              <div className="project-item-actions">
+                <Link
+                  aria-label={`${canEdit ? '修改' : '檢視'}「${item.title}」`}
+                  className="btn btn-sm"
+                  to={`/projects/${projectId}/inspection-items/${item.id}`}
                 >
-                  刪除
-                </button>
+                  {canEdit ? '修改' : '檢視'}
+                </Link>
+                {canManageTemplates && (
+                  <Link
+                    className="btn btn-sm"
+                    state={{ saveItemId: item.id }}
+                    to={`/projects/${projectId}/inspection-items/templates`}
+                  >
+                    存為範本
+                  </Link>
+                )}
+                {canEdit && (
+                  <button
+                    aria-label={`刪除「${item.title}」`}
+                    className="btn btn-sm"
+                    disabled={busy}
+                    onClick={(event) => {
+                      deleteTrigger.current = event.currentTarget
+                      setDeleting(item)
+                      setDeleteError(
+                        item.task_count > 0
+                          ? blockedDeleteMessage(item.task_count)
+                          : '',
+                      )
+                      setNotice('')
+                    }}
+                    type="button"
+                  >
+                    刪除
+                  </button>
+                )}
+              </div>
+              {deleting?.id === item.id && isInUse && (
+                <div
+                  aria-label="無法刪除查核項目"
+                  className="project-item-delete-blocked"
+                  role="group"
+                >
+                  <p ref={deleteAlert} role="alert" tabIndex={-1}>
+                    {deleteError || blockedDeleteMessage(item.task_count)}
+                  </p>
+                  <div className="project-item-actions">
+                    <button
+                      className="btn btn-sm"
+                      onClick={cancelDelete}
+                      type="button"
+                    >
+                      知道了
+                    </button>
+                    <Link
+                      className="btn btn-sm"
+                      onClick={() => setDeleting(null)}
+                      to={`/projects/${projectId}/inspection-items/${item.id}`}
+                    >
+                      前往修改
+                    </Link>
+                  </div>
+                </div>
               )}
-              {deleting?.id === item.id && (
+              {deleting?.id === item.id && !isInUse && (
                 <ConfirmBox
                   busy={busy}
                   confirmLabel="確認刪除"
@@ -195,7 +269,11 @@ export default function ProjectItemLinks({
                   <p>
                     只有沒有任務引用的項目可以刪除，草稿與已取消任務也算引用。
                   </p>
-                  {deleteError && <p role="alert">{deleteError}</p>}
+                  {deleteError && (
+                    <p ref={deleteAlert} role="alert" tabIndex={-1}>
+                      {deleteError}
+                    </p>
+                  )}
                 </ConfirmBox>
               )}
             </li>
@@ -204,4 +282,30 @@ export default function ProjectItemLinks({
       )}
     </section>
   )
+}
+
+function blockedDeleteMessage(count: number): string {
+  return (
+    `已有 ${count} 個任務使用這個項目，為保留查核紀錄不能刪除；` +
+    '草稿與已取消的任務也算。若只是寫錯名稱或標準，' +
+    '請改用『修改』。若都是草稿，到計畫與任務刪除草稿後即可刪除。'
+  )
+}
+
+function formatAppliedAt(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '未記錄'
+  const datePart = new Intl.DateTimeFormat('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+    .format(date)
+    .replace(/-/g, '/')
+  const timePart = new Intl.DateTimeFormat('zh-TW', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date)
+  return `${datePart} ${timePart}`
 }

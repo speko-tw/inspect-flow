@@ -1252,6 +1252,43 @@ def test_project_item_list_authorization_and_cursor_pagination(
     assert world["admin"].get(cross_list_url).status_code == 200
     assert world["editor"].get(cross_list_url).status_code == 403
 
+    # TPL-R09: managers may read and copy from projects they do not belong to.
+    all_projects = world["template_admin"].get("/api/v1/projects")
+    assert all_projects.status_code == 200, all_projects.text
+    assert {row["id"] for row in all_projects.json()["items"]} >= {
+        str(world["project"].id),
+        str(other_project.id),
+    }
+    source_items = world["template_admin"].get(url)
+    assert source_items.status_code == 200, source_items.text
+    source_id = source_items.json()["items"][0]["id"]
+    copied = world["template_admin"].post(
+        f"/api/v1/projects/{world['project'].id}/templates",
+        json={
+            "project_inspection_item_id": source_id,
+            "system_id": system_id,
+            "name": "範本管理員複本",
+        },
+    )
+    assert copied.status_code == 201, copied.text
+    edit_url = f"{url}/{source_id}"
+    assert (
+        world["template_admin"]
+        .patch(edit_url, json={"title": "不能編輯專案項目"})
+        .status_code
+        == 403
+    )
+    assert (
+        world["template_admin"]
+        .post(
+            f"/api/v1/projects/{world['project'].id}"
+            "/inspection-items:apply-template",
+            json={"system_id": system_id},
+        )
+        .status_code
+        == 403
+    )
+
 
 def test_apply_system_rolls_back_all_copies_after_mid_request_failure(
     db_session, make_client, monkeypatch

@@ -7,6 +7,7 @@ import {
   within,
 } from '@testing-library/react'
 import type { ReactElement } from 'react'
+import type { InitialEntry } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 
@@ -17,12 +18,12 @@ import TemplatesPage from './TemplatesPage'
 import wireFixture from './fixtures/template-item-payload.json'
 import type { TemplateItem } from './api'
 
-function render(ui: ReactElement) {
+function render(ui: ReactElement, initialEntries?: InitialEntry[]) {
   return renderWithoutRouter(
     <CurrentUserProvider
       value={{ user: currentUserFixture(), clear: vi.fn() }}
     >
-      <DataMemoryRouter>{ui}</DataMemoryRouter>
+      <DataMemoryRouter initialEntries={initialEntries}>{ui}</DataMemoryRouter>
     </CurrentUserProvider>,
   )
 }
@@ -404,6 +405,41 @@ async function startNewItem(): Promise<void> {
 }
 
 afterEach(() => vi.unstubAllGlobals())
+
+it('存檔後返回並選取新範本，顯示目標類別與系統', async () => {
+  templateFetch({
+    categories: [category],
+    systems: [system],
+    items: [{ ...sampleItem, id: 'saved-template' }],
+  })
+  render(<TemplatesPage canManage />, [
+    {
+      pathname: '/templates',
+      state: {
+        savedTemplateId: 'saved-template',
+        savedCategoryId: category.id,
+        savedSystemId: system.id,
+        savedTemplateTitle: '欄杆尺寸',
+        savedTemplatePath: '土木工程 / 護欄',
+      },
+    },
+  ])
+
+  expect(
+    await screen.findByRole('heading', { name: '欄杆尺寸' }),
+  ).toBeInTheDocument()
+  const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+  expect(
+    await within(nav).findByRole('button', { name: '欄杆尺寸' }),
+  ).toHaveAttribute('aria-current', 'true')
+  expect(
+    screen.getByText('已存入『土木工程 / 護欄』：欄杆尺寸'),
+  ).toHaveAttribute('role', 'status')
+  expect(screen.getByRole('link', { name: '從專案存為範本' })).toHaveAttribute(
+    'href',
+    '/templates/from-project',
+  )
+})
 
 describe('TemplatesPage', () => {
   it('uses the shared full page title', async () => {

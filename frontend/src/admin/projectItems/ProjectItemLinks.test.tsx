@@ -5,7 +5,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
@@ -83,6 +83,7 @@ describe('ProjectItemLinks', () => {
               source_category_name: '建築設備',
               source_system_name: '給排水系統',
               applied_at: '2026-10-05T01:00:00Z',
+              task_count: 0,
               inspection_points: [],
             },
           ],
@@ -92,26 +93,33 @@ describe('ProjectItemLinks', () => {
     )
 
     render(
-      <MemoryRouter
-        initialEntries={[
-          {
-            pathname: '/projects/project-1',
-            state: { highlightedItemIds: ['copy-1'] },
-          },
-        ]}
+      <CurrentUserProvider
+        value={{
+          user: currentUserFixture({ is_admin: true }),
+          clear: vi.fn(),
+        }}
       >
-        <Routes>
-          <Route
-            element={
-              <ProjectItemLinks
-                projectId="project-1"
-                viewerPermissions={['project_inspection_item.edit']}
-              />
-            }
-            path="/projects/:projectId"
-          />
-        </Routes>
-      </MemoryRouter>,
+        <MemoryRouter
+          initialEntries={[
+            {
+              pathname: '/projects/project-1',
+              state: { highlightedItemIds: ['copy-1'] },
+            },
+          ]}
+        >
+          <Routes>
+            <Route
+              element={
+                <ProjectItemLinks
+                  projectId="project-1"
+                  viewerPermissions={['project_inspection_item.edit']}
+                />
+              }
+              path="/projects/:projectId"
+            />
+          </Routes>
+        </MemoryRouter>
+      </CurrentUserProvider>,
     )
 
     expect(await screen.findByText('來源範本：給排水')).toBeInTheDocument()
@@ -152,6 +160,7 @@ describe('ProjectItemLinks', () => {
               source_category_name: null,
               source_system_name: null,
               applied_at: '2026-10-05T01:00:00Z',
+              task_count: 0,
               inspection_points: [],
             },
           ],
@@ -161,19 +170,25 @@ describe('ProjectItemLinks', () => {
     )
 
     render(
-      <MemoryRouter initialEntries={['/projects/project-1/inspection-items']}>
-        <Routes>
-          <Route
-            element={
-              <ProjectItemLinks
-                projectId="project-1"
-                viewerPermissions={['inspection_plan.read']}
-              />
-            }
-            path="/projects/:projectId/inspection-items"
-          />
-        </Routes>
-      </MemoryRouter>,
+      <CurrentUserProvider
+        value={{ user: currentUserFixture(), clear: vi.fn() }}
+      >
+        <MemoryRouter
+          initialEntries={['/projects/project-1/inspection-items']}
+        >
+          <Routes>
+            <Route
+              element={
+                <ProjectItemLinks
+                  projectId="project-1"
+                  viewerPermissions={['inspection_plan.read']}
+                />
+              }
+              path="/projects/:projectId/inspection-items"
+            />
+          </Routes>
+        </MemoryRouter>
+      </CurrentUserProvider>,
     )
 
     expect(await screen.findByText('管線查核')).toBeInTheDocument()
@@ -194,24 +209,38 @@ describe('ProjectItemLinks', () => {
 })
 
 describe('#435 刪除專案查核項目', () => {
-  function renderItems(fetchMock: ReturnType<typeof vi.fn>) {
-    vi.stubGlobal('fetch', fetchMock)
-    render(
-      <MemoryRouter>
-        <ProjectItemLinks
-          projectId="p1"
-          viewerPermissions={['project_inspection_item.edit']}
-        />
-      </MemoryRouter>,
+  function LocationProbe() {
+    const location = useLocation()
+    return (
+      <span data-testid="route-state">{JSON.stringify(location.state)}</span>
     )
   }
 
-  function itemList() {
+  function renderItems(
+    fetchMock: ReturnType<typeof vi.fn>,
+    user = currentUserFixture(),
+  ) {
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <CurrentUserProvider value={{ user, clear: vi.fn() }}>
+        <MemoryRouter>
+          <LocationProbe />
+          <ProjectItemLinks
+            projectId="p1"
+            viewerPermissions={['project_inspection_item.edit']}
+          />
+        </MemoryRouter>
+      </CurrentUserProvider>,
+    )
+  }
+
+  function itemList(taskCount = 0) {
     return Response.json({
       items: [
         {
           id: 'i1',
           title: '未使用項目',
+          task_count: taskCount,
           inspection_points: [],
           source_template_name: '示範',
           applied_at: '2026-10-22T00:00:00Z',
@@ -246,8 +275,11 @@ describe('#435 刪除專案查核項目', () => {
       '/api/v1/projects/p1/inspection-items/i1',
       expect.objectContaining({ method: 'DELETE' }),
     )
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '已刪除「未使用項目」',
+    const success = screen.getByRole('status')
+    expect(success).toHaveTextContent('已刪除「未使用項目」')
+    expect(success.parentElement).toHaveAttribute(
+      'aria-labelledby',
+      'project-items-heading',
     )
   })
 
@@ -255,7 +287,7 @@ describe('#435 刪除專案查核項目', () => {
     renderItems(
       vi
         .fn()
-        .mockResolvedValueOnce(itemList())
+        .mockResolvedValueOnce(itemList(0))
         .mockResolvedValueOnce(
           Response.json(
             {
@@ -274,10 +306,95 @@ describe('#435 刪除專案查核項目', () => {
       }),
     )
     fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '已有 2 個任務使用這個項目，為保留查核紀錄不能刪除。若都是草稿任務，刪除草稿後即可移除。',
+    const panel = await screen.findByRole('group', {
+      name: '無法刪除查核項目',
+    })
+    expect(within(panel).getByRole('alert')).toHaveTextContent(
+      '已有 2 個任務使用這個項目，為保留查核紀錄不能刪除；草稿與已取消的任務也算。若只是寫錯名稱或標準，請改用『修改』。若都是草稿，到計畫與任務刪除草稿後即可刪除。',
     )
+    expect(
+      within(panel).queryByRole('button', { name: '確認刪除' }),
+    ).toBeNull()
+    expect(screen.getByText('使用中（2 個任務）')).toBeInTheDocument()
     expect(screen.getByText('未使用項目')).toBeInTheDocument()
+  })
+
+  it('已知使用中的項目直接顯示列內說明而不詢問確認刪除', async () => {
+    renderItems(vi.fn().mockResolvedValueOnce(itemList(2)))
+    const item = await screen
+      .findByText('未使用項目')
+      .then((title) => title.closest('li'))
+    expect(item).not.toBeNull()
+    expect(
+      await within(item!).findByText('使用中（2 個任務）'),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      within(item!).getByRole('button', { name: '刪除「未使用項目」' }),
+    )
+
+    const panel = within(item!).getByRole('group', {
+      name: '無法刪除查核項目',
+    })
+    expect(within(panel).getByRole('alert')).toHaveTextContent(
+      '已有 2 個任務使用這個項目，為保留查核紀錄不能刪除；草稿與已取消的任務也算。若只是寫錯名稱或標準，請改用『修改』。若都是草稿，到計畫與任務刪除草稿後即可刪除。',
+    )
+    expect(within(panel).getByRole('button', { name: '知道了' })).toBeVisible()
+    expect(
+      within(panel).getByRole('link', { name: '前往修改' }),
+    ).toHaveAttribute('href', '/projects/p1/inspection-items/i1')
+    expect(
+      within(panel).queryByRole('button', { name: '確認刪除' }),
+    ).toBeNull()
+    expect(panel.querySelector('[role="alert"]')).toHaveFocus()
+    fireEvent.click(within(panel).getByRole('button', { name: '知道了' }))
+    expect(within(item!).queryByRole('group')).toBeNull()
+    expect(within(item!).getByText('未使用項目')).toBeInTheDocument()
+  })
+
+  it('顯示一次範本管理提示，並將修改、刪除放同列次要小按鈕且不顯示秒', async () => {
+    renderItems(vi.fn().mockResolvedValueOnce(itemList()))
+    const item = await screen
+      .findByText('未使用項目')
+      .then((title) => title.closest('li'))
+    expect(
+      screen.getByText(
+        '要把項目存回範本庫，需要「管理範本庫」功能，請找系統管理者開通。',
+      ),
+    ).toBeInTheDocument()
+    const actions = within(item!).getByRole('link', {
+      name: '修改「未使用項目」',
+    }).parentElement
+    expect(actions).toHaveClass('project-item-actions')
+    expect(
+      within(actions!).getByRole('button', { name: '刪除「未使用項目」' }),
+    ).toHaveClass('btn-sm')
+    expect(
+      within(actions!).getByRole('button', { name: '刪除「未使用項目」' }),
+    ).not.toHaveClass('btn-danger')
+    expect(within(item!).getByText(/套用時間：/)).toHaveTextContent(
+      /\d{2}:\d{2}$/,
+    )
+  })
+
+  it('範本管理員可從項目卡片進入來源已指定的存為範本流程', async () => {
+    renderItems(
+      vi.fn().mockResolvedValueOnce(itemList()),
+      currentUserFixture({ can_manage_template_library: true }),
+    )
+    const item = await screen
+      .findByText('未使用項目')
+      .then((title) => title.closest('li'))
+    const saveLink = within(item!).getByRole('link', { name: '存為範本' })
+    expect(saveLink).toHaveAttribute(
+      'href',
+      '/projects/p1/inspection-items/templates',
+    )
+    fireEvent.click(saveLink)
+    await waitFor(() =>
+      expect(screen.getByTestId('route-state')).toHaveTextContent(
+        '"saveItemId":"i1"',
+      ),
+    )
   })
 
   it('刪除收到 403 時在確認框提示權限不足並保留項目', async () => {
@@ -302,6 +419,7 @@ describe('#435 刪除專案查核項目', () => {
     expect(await within(box).findByRole('alert')).toHaveTextContent(
       '你沒有權限刪除此查核項目。',
     )
+    await waitFor(() => expect(within(box).getByRole('alert')).toHaveFocus())
     expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
     expect(screen.getByText('未使用項目')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenLastCalledWith(

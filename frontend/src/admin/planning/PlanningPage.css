@@ -1,0 +1,4 @@
+.assignee-list-unavailable {
+  margin: 0.25rem 0 0.75rem;
+  color: var(--text-muted);
+}
