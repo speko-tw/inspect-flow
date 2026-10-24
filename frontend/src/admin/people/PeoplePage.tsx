@@ -47,6 +47,7 @@ export function PeoplePage({
     username: string,
     password: string,
     source?: 'created' | 'reset',
+    displayName?: string,
   ) => void
 }) {
   const location = useLocation()

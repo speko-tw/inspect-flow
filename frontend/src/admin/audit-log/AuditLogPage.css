@@ -85,3 +85,14 @@
   gap: 1rem;
   margin-block: 1.5rem;
 }
+
+.audit-readable-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+}
+
+.audit-readable-fields ol {
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}

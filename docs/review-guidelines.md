@@ -66,6 +66,8 @@
 - **RG-M22**：前後端交界的讀寫有真實後端契約測試，驗證前端送出的資料確實被後端接受並能讀回；前端 mock 測試不單獨當成契約通過的證據（依據：[PR-19](intents/02-principles.md#pr-19)、負責人指示（2026-10-04，#431）；架構基準 §2.2、§14）。
 - **RG-M23**：commit 內文的 what／why／impact／verification 為實際分行，提交後檢查訊息中沒有字面反斜線加 n；發現格式錯誤且已 push 時不得未經授權改寫歷史（依據：[AGENTS.md](../AGENTS.md#git)、負責人指示（2026-10-04，#431）；架構基準無對應章節）。
 
+- **RG-M25**：回饋就近且入視窗：確認、結果與非欄位錯誤位於觸發或被修改的區塊；出現時捲入視窗，確認聚焦取消、錯誤聚焦並使用 preventScroll，成功與資訊 status 不聚焦、不自動消失；批次工具列、回饋、確認同容器。以 within(所屬容器) 與桌機／360px、淺／深色真瀏覽器證據驗收（依據：[UDS-R18／UDS-AC17](specs/ui-design-system/spec.md)、[ADM-R28／ADM-AC27](specs/admin-dashboard/spec.md)、[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)）。
+
 ## 建議
 
 - **RG-S01**：沒有遵守 [02-principles.md](intents/02-principles.md) 中「應」等級的原則時（例如避免 SQLite-specific 的 raw SQL、API 錯誤使用 `error.code`），在 PR 說明理由（依據：[02-principles.md](intents/02-principles.md)）。

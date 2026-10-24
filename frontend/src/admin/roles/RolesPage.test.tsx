@@ -847,7 +847,7 @@ describe('admin role management page', () => {
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
-  it('shows the not-found error at the top when the impact lookup fails on delete', async () => {
+  it('keeps delete-impact errors in the triggering row', async () => {
     rolesFetch({
       roles: [makeRole('r1', 'Viewer')],
       failures: {
@@ -856,11 +856,13 @@ describe('admin role management page', () => {
     })
     renderRoles()
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: '刪除角色 Viewer' }),
-    )
+    const trigger = await screen.findByRole('button', {
+      name: '刪除角色 Viewer',
+    })
+    const row = trigger.closest('tr') as HTMLElement
+    fireEvent.click(trigger)
 
-    const alert = await screen.findByRole('alert')
+    const alert = await within(row).findByRole('alert')
     expect(alert).toHaveTextContent(
       '找不到這個角色，可能已被刪除，請重新整理後再試。',
     )
@@ -1050,5 +1052,48 @@ describe('role confirmation guards (#507)', () => {
       expect(screen.queryByRole('row', { name: /Viewer/ })).toBeNull(),
     )
     expect(calls(fetchMock, 'DELETE')).toHaveLength(1)
+  })
+})
+
+describe('#734 T7 角色操作回饋位置', () => {
+  it('儲存確認留在編輯表單內，成功在被修改的角色清單上方', async () => {
+    rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
+    renderRoles()
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: '修改角色 Viewer',
+      }),
+    )
+    const input = screen.getByLabelText('角色名稱')
+    expect(input).toHaveFocus()
+    const form = input.closest('form') as HTMLFormElement
+    fireEvent.change(input, { target: { value: 'Reader' } })
+    fireEvent.click(within(form).getByRole('button', { name: '儲存角色' }))
+    const box = await within(form).findByRole('region', {
+      name: '修改「Viewer」',
+    })
+    fireEvent.click(within(box).getByRole('button', { name: '確認修改角色' }))
+    const list = screen.getByRole('region', { name: '角色清單' })
+    expect(await within(list).findByRole('status')).toHaveTextContent(
+      '已更新角色「Reader」。',
+    )
+    expect(within(list).getByRole('status')).not.toHaveFocus()
+    expect(
+      await within(list).findByRole('row', { name: /Reader/ }),
+    ).toBeVisible()
+  })
+
+  it('刪除確認留在該角色的操作列', async () => {
+    rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
+    renderRoles()
+    const trigger = await screen.findByRole('button', {
+      name: '刪除角色 Viewer',
+    })
+    const cell = trigger.closest('td') as HTMLElement
+    fireEvent.click(trigger)
+    const box = await within(cell).findByRole('region', {
+      name: '刪除「Viewer」',
+    })
+    expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
   })
 })

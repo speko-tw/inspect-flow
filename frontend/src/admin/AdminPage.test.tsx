@@ -1056,6 +1056,9 @@ describe('admin user and company pages', () => {
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
       'reset-once-123',
     )
+    expect(screen.getByText('鄧安娜（anna.deng）')).toBeVisible()
+    expect(screen.getByText(/他下次登入必須變更密碼/)).toBeVisible()
+    expect(screen.queryByText(/首次登入必須變更密碼/)).toBeNull()
     expect(
       fetchMock.mock.calls.filter(([input]) =>
         String(input).endsWith('/api/v1/users/user-1/temporary-password'),
@@ -1503,7 +1506,7 @@ describe('admin user and company pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
     const switched = screen.getByRole('region', { name: '操作確認' })
     expect(switched).toHaveTextContent(
-      '停用鄧安娜（anna.new）後，他將無法登入',
+      '鄧安娜（anna.new）會立刻被登出，之後不能再登入',
     )
     await waitFor(() =>
       expect(
@@ -1579,7 +1582,7 @@ describe('admin user and company pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
     const deactivation = screen.getByRole('region', { name: '操作確認' })
     expect(deactivation).toHaveTextContent('anna.new')
-    expect(deactivation).toHaveTextContent('無法登入')
+    expect(deactivation).toHaveTextContent('不能再登入')
     expect(
       within(deactivation).getByRole('button', { name: '確認' }),
     ).toHaveClass('btn-danger')

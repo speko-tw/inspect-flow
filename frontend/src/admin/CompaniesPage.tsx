@@ -1,8 +1,11 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
+import { BatchActionBar } from '../ui/BatchActionBar'
+import { Notice } from '../ui/Notice'
+import { revealElement } from '../ui/reveal'
 import { Form, FormError, FormSubmitButton } from '../ui/Form'
 import { activeStatus } from '../ui/statusBadge'
 import { useSubmitGuard } from '../ui/submitGuard'
@@ -43,6 +46,17 @@ export default function CompaniesPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [error, setError] = useState('')
+  const [operationCompanyId, setOperationCompanyId] = useState('')
+  const [operationNotice, setOperationNotice] = useState('')
+  const [formNotice, setFormNotice] = useState('')
+  const formRef = useRef<HTMLFormElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!renamingId) return
+    revealElement(formRef.current)
+    nameRef.current?.focus({ preventScroll: true })
+  }, [renamingId])
   // 新增或改名的存檔錯誤：顯示在表單裡並聚焦。表單在頁面底部，放在頁頂
   // 的話使用者看不到，螢幕閱讀器也不會被帶過去（F-O02）。
   const [formError, setFormError] = useState<{
@@ -76,6 +90,9 @@ export default function CompaniesPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const savedName = renamingId ? renameValue : name
+    const renamed = Boolean(renamingId)
+    setFormNotice('')
     setSaving(true)
     setError('')
     setFormError(null)
@@ -89,6 +106,11 @@ export default function CompaniesPage() {
         setName('')
       }
       await reload()
+      setFormNotice(
+        renamed
+          ? `已將公司名稱更新為「${savedName}」。`
+          : `已新增公司「${savedName}」。`,
+      )
     } catch (caught) {
       setFormError((previous) => ({
         message: managementErrorMessage(caught),
@@ -100,12 +122,15 @@ export default function CompaniesPage() {
   }
 
   async function toggleActive(company: Company) {
+    setOperationCompanyId(company.id)
+    setOperationNotice('')
     if (!saveGuard.enter()) return
     setError('')
     setSaving(true)
     try {
       if (!company.is_active) {
         await setCompanyActive(company.id, true)
+        setOperationNotice(`已啟用公司「${company.name}」。`)
         await reload()
         return
       }
@@ -120,6 +145,7 @@ export default function CompaniesPage() {
         return
       }
       await setCompanyActive(company.id, false)
+      setOperationNotice(`已停用公司「${company.name}」。`)
       await reload()
     } catch (caught) {
       setError(managementErrorMessage(caught))
@@ -140,6 +166,7 @@ export default function CompaniesPage() {
         false,
         deactivating.selected,
       )
+      setOperationNotice(`已停用公司「${deactivating.company.name}」。`)
       setDeactivating(null)
       await reload()
     } catch (caught) {
@@ -268,97 +295,6 @@ export default function CompaniesPage() {
     <section aria-labelledby="companies-heading">
       <UnsavedLeaveBox guard={leaveGuard} />
       <h1 id="companies-heading">公司管理</h1>
-      <FormError>{error}</FormError>
-      {batchError && <p role="alert">{batchError}</p>}
-      {batchNotice && <p role="status">{batchNotice}</p>}
-      {batchPreview && (
-        <ConfirmBox
-          busy={batchBusy}
-          confirmLabel={batchBusy ? '正在停用公司…' : '確認批次停用公司'}
-          label="批次停用確認"
-          onCancel={() => {
-            setBatchPreview(null)
-            setBatchError('')
-          }}
-          onConfirm={confirmBatchDeactivation}
-          role="region"
-          variant="danger"
-        >
-          <p>選取的公司會停用；只有勾選的帳號會一併停用。</p>
-          <p>選擇要一併停用的帳號</p>
-          {batchPreview.companies.map((item) => (
-            <fieldset key={item.id}>
-              <legend>{item.name}</legend>
-              {batchPreview.activeUsers[item.id].length === 0 ? (
-                <p>沒有啟用中的帳號。</p>
-              ) : (
-                batchPreview.activeUsers[item.id].map((user) => (
-                  <label key={user.id}>
-                    <input
-                      checked={batchPreview.selectedUsers[item.id].includes(
-                        user.id,
-                      )}
-                      disabled={batchBusy || user.id === currentUser.id}
-                      onChange={(event) =>
-                        toggleBatchUser(item.id, user.id, event.target.checked)
-                      }
-                      type="checkbox"
-                      value={user.id}
-                    />
-                    {user.name_zh
-                      ? `${user.name_zh}（${user.username}）`
-                      : user.username}
-                    {user.id === currentUser.id && (
-                      <span className="field-hint">
-                        不能批次停用自己的帳號。
-                      </span>
-                    )}
-                  </label>
-                ))
-              )}
-            </fieldset>
-          ))}
-        </ConfirmBox>
-      )}
-      {deactivating && (
-        <ConfirmBox
-          busy={saving}
-          key={deactivating.company.id}
-          role="region"
-          confirmLabel="確認停用公司"
-          onCancel={() => setDeactivating(null)}
-          onConfirm={confirmDeactivation}
-          title={`停用「${deactivating.company.name}」`}
-          variant="danger"
-        >
-          <p>還有 {deactivating.count} 個啟用中的帳號</p>
-          <p>只有勾選的帳號會一併停用；未選取的帳號會維持啟用。</p>
-          <fieldset>
-            <legend>選擇要一併停用的帳號</legend>
-            {deactivating.users.map((user) => (
-              <label key={user.id}>
-                <input
-                  checked={deactivating.selected.includes(user.id)}
-                  onChange={(event) => {
-                    setDeactivating((current) => {
-                      if (!current) return current
-                      const selected = event.target.checked
-                        ? [...current.selected, user.id]
-                        : current.selected.filter((id) => id !== user.id)
-                      return { ...current, selected }
-                    })
-                  }}
-                  type="checkbox"
-                  value={user.id}
-                />
-                {user.name_zh
-                  ? `${user.name_zh}（${user.username}）`
-                  : user.username}
-              </label>
-            ))}
-          </fieldset>
-        </ConfirmBox>
-      )}
       {loading ? <p>載入中…</p> : null}
       <CursorListSearch
         disabled={loading}
@@ -384,7 +320,7 @@ export default function CompaniesPage() {
         )
       ) : null}
       {companies.length > 0 && (
-        <table>
+        <table className="companies-table">
           <thead>
             <tr>
               <th scope="col">
@@ -398,7 +334,7 @@ export default function CompaniesPage() {
           <tbody>
             {companies.map((company) => (
               <tr key={company.id}>
-                <td>
+                <td data-label="選取">
                   <input
                     aria-label={`選取公司 ${company.name}`}
                     checked={selectedCompanyIds.includes(company.id)}
@@ -415,13 +351,14 @@ export default function CompaniesPage() {
                   />
                 </td>
                 <th scope="row">{company.name}</th>
-                <td>
+                <td data-label="狀態">
                   <StatusBadge status={activeStatus(company.is_active)} />
                 </td>
-                <td>
+                <td data-label="操作">
                   <button
                     onClick={() => {
                       setFormError(null)
+                      setFormNotice('')
                       setRenamingId(company.id)
                       setRenameValue(company.name)
                     }}
@@ -439,6 +376,53 @@ export default function CompaniesPage() {
                   {company.is_active && (
                     <span>停用公司不會自動停用帳號。</span>
                   )}
+                  {operationCompanyId === company.id && error && (
+                    <Notice variant="error">{error}</Notice>
+                  )}
+                  {operationCompanyId === company.id && operationNotice && (
+                    <Notice>{operationNotice}</Notice>
+                  )}
+                  {deactivating?.company.id === company.id && (
+                    <ConfirmBox
+                      busy={saving}
+                      key={deactivating.company.id}
+                      role="region"
+                      confirmLabel="確認停用公司"
+                      onCancel={() => setDeactivating(null)}
+                      onConfirm={confirmDeactivation}
+                      title={`停用「${deactivating.company.name}」`}
+                      variant="danger"
+                    >
+                      <p>還有 {deactivating.count} 個啟用中的帳號</p>
+                      <p>只有勾選的帳號會一併停用；未選取的帳號會維持啟用。</p>
+                      <fieldset>
+                        <legend>選擇要一併停用的帳號</legend>
+                        {deactivating.users.map((user) => (
+                          <label key={user.id}>
+                            <input
+                              checked={deactivating.selected.includes(user.id)}
+                              onChange={(event) => {
+                                setDeactivating((current) => {
+                                  if (!current) return current
+                                  const selected = event.target.checked
+                                    ? [...current.selected, user.id]
+                                    : current.selected.filter(
+                                        (id) => id !== user.id,
+                                      )
+                                  return { ...current, selected }
+                                })
+                              }}
+                              type="checkbox"
+                              value={user.id}
+                            />
+                            {user.name_zh
+                              ? `${user.name_zh}（${user.username}）`
+                              : user.username}
+                          </label>
+                        ))}
+                      </fieldset>
+                    </ConfirmBox>
+                  )}
                 </td>
               </tr>
             ))}
@@ -455,48 +439,117 @@ export default function CompaniesPage() {
         </button>
       )}
       {companies.length > 0 && (
-        <div aria-label="批次公司操作">
-          <p>已選取 {selectedCompanyIds.length} 間公司。</p>
-          <button
-            disabled={
-              selectedCompanyIds.length === 0 ||
-              companies
-                .filter((item) => selectedCompanyIds.includes(item.id))
-                .some((item) => item.is_active) ||
-              batchBusy
-            }
-            onClick={() => void batchActivate()}
-            type="button"
-          >
-            {batchBusy ? '正在更新公司…' : '批次啟用公司'}
-          </button>
-          <button
-            disabled={
-              selectedCompanyIds.length === 0 ||
-              companies
-                .filter((item) => selectedCompanyIds.includes(item.id))
-                .some((item) => !item.is_active) ||
-              batchBusy ||
-              batchLoading
-            }
-            onClick={() => void prepareBatchDeactivation()}
-            type="button"
-          >
-            {batchLoading ? '正在檢查公司…' : '批次停用公司'}
-          </button>
-        </div>
+        <BatchActionBar
+          label="批次公司操作"
+          actions={
+            <>
+              <p>已選取 {selectedCompanyIds.length} 間公司。</p>
+              <button
+                disabled={
+                  selectedCompanyIds.length === 0 ||
+                  companies
+                    .filter((item) => selectedCompanyIds.includes(item.id))
+                    .some((item) => item.is_active) ||
+                  batchBusy
+                }
+                onClick={() => void batchActivate()}
+                type="button"
+              >
+                {batchBusy ? '正在更新公司…' : '批次啟用公司'}
+              </button>
+              <button
+                disabled={
+                  selectedCompanyIds.length === 0 ||
+                  companies
+                    .filter((item) => selectedCompanyIds.includes(item.id))
+                    .some((item) => !item.is_active) ||
+                  batchBusy ||
+                  batchLoading
+                }
+                onClick={() => void prepareBatchDeactivation()}
+                type="button"
+              >
+                {batchLoading ? '正在檢查公司…' : '批次停用公司'}
+              </button>
+            </>
+          }
+          feedback={
+            <>
+              {' '}
+              {batchError && <Notice variant="error">{batchError}</Notice>}
+              {batchNotice && <Notice>{batchNotice}</Notice>}
+            </>
+          }
+          confirmation={
+            <>
+              {' '}
+              {batchPreview && (
+                <ConfirmBox
+                  busy={batchBusy}
+                  confirmLabel={
+                    batchBusy ? '正在停用公司…' : '確認批次停用公司'
+                  }
+                  label="批次停用確認"
+                  onCancel={() => {
+                    setBatchPreview(null)
+                    setBatchError('')
+                  }}
+                  onConfirm={confirmBatchDeactivation}
+                  role="region"
+                  variant="danger"
+                >
+                  <p>選取的公司會停用；只有勾選的帳號會一併停用。</p>
+                  <p>選擇要一併停用的帳號</p>
+                  {batchPreview.companies.map((item) => (
+                    <fieldset key={item.id}>
+                      <legend>{item.name}</legend>
+                      {batchPreview.activeUsers[item.id].length === 0 ? (
+                        <p>沒有啟用中的帳號。</p>
+                      ) : (
+                        batchPreview.activeUsers[item.id].map((user) => (
+                          <label key={user.id}>
+                            <input
+                              checked={batchPreview.selectedUsers[
+                                item.id
+                              ].includes(user.id)}
+                              disabled={
+                                batchBusy || user.id === currentUser.id
+                              }
+                              onChange={(event) =>
+                                toggleBatchUser(
+                                  item.id,
+                                  user.id,
+                                  event.target.checked,
+                                )
+                              }
+                              type="checkbox"
+                              value={user.id}
+                            />
+                            {user.name_zh
+                              ? `${user.name_zh}（${user.username}）`
+                              : user.username}
+                            {user.id === currentUser.id && (
+                              <span className="field-hint">
+                                不能批次停用自己的帳號。
+                              </span>
+                            )}
+                          </label>
+                        ))
+                      )}
+                    </fieldset>
+                  ))}
+                </ConfirmBox>
+              )}
+            </>
+          }
+        />
       )}
-      <Form
-        error={formError?.message}
-        errorFocusRequest={formError?.request}
-        errorTabIndex={-1}
-        guard={saveGuard}
-        onSubmit={save}
-      >
+      <Form ref={formRef} guard={saveGuard} onSubmit={save}>
         <h2>{renamingId ? '修改公司名稱' : '新增公司'}</h2>
         <label>
           公司名稱
           <input
+            ref={nameRef}
             onChange={(event) =>
               renamingId
                 ? setRenameValue(event.target.value)
@@ -518,9 +571,13 @@ export default function CompaniesPage() {
             取消
           </button>
         )}
+        <FormError focusRequest={formError?.request} tabIndex={-1}>
+          {formError?.message}
+        </FormError>
         <FormSubmitButton className="btn-primary" disabled={saving}>
           {renamingId ? '儲存名稱' : '新增公司'}
         </FormSubmitButton>
+        {formNotice && <Notice>{formNotice}</Notice>}
       </Form>
     </section>
   )

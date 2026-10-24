@@ -25,6 +25,7 @@ import {
 import { blockImeEnter, useSubmitGuard } from './submitGuard'
 import { FormError } from './Form'
 import { GENERIC_FAILURE_MESSAGE } from '../http'
+import { revealElement, type Reveal } from './reveal'
 
 /**
  * 依 ADM-R37，danger 用於立即收回他人權限、讓他人工作失效或
@@ -53,6 +54,8 @@ export type ConfirmBoxProps = {
   cancelRef?: Ref<HTMLButtonElement>
   /** 掛載時把焦點放哪；預設取消。呼叫端自己管理焦點時傳 `none`。 */
   initialFocus?: 'cancel' | 'heading' | 'none'
+  /** UDS-R18：掛載時先捲入視窗；modal 呼叫端傳 false。 */
+  reveal?: Reveal
   /** 蓋住整頁的 modal（計畫頁專用）；其餘一律原地展開。 */
   modal?: boolean
   /** 內容含必填欄位時，用 form 包起來，確認鈕改成 submit。 */
@@ -87,6 +90,7 @@ export function ConfirmBox({
   rootRef,
   cancelRef,
   initialFocus = 'cancel',
+  reveal = 'nearest',
   modal = false,
   asForm = false,
   noValidate = false,
@@ -99,14 +103,19 @@ export function ConfirmBox({
   children,
 }: ConfirmBoxProps) {
   const headingId = useId()
+  const localRoot = useRef<HTMLElement | null>(null)
   const localCancel = useRef<HTMLButtonElement | null>(null)
   const localHeading = useRef<HTMLHeadingElement | null>(null)
   const guard = useSubmitGuard()
   const [confirmError, setConfirmError] = useState('')
 
   useEffect(() => {
-    if (initialFocus === 'cancel') localCancel.current?.focus()
-    else if (initialFocus === 'heading') localHeading.current?.focus()
+    revealElement(localRoot.current, reveal)
+    if (initialFocus === 'cancel') {
+      localCancel.current?.focus({ preventScroll: true })
+    } else if (initialFocus === 'heading') {
+      localHeading.current?.focus({ preventScroll: true })
+    }
     // 只在掛載時決定一次焦點；之後的焦點交給使用者與呼叫端。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -184,6 +193,11 @@ export function ConfirmBox({
     </>
   )
 
+  function setRoot(node: HTMLDivElement | HTMLFormElement | null) {
+    localRoot.current = node
+    assignRef(rootRef as Ref<HTMLElement> | undefined, node)
+  }
+
   const common = {
     'aria-label': title ? undefined : label,
     'aria-labelledby': title ? headingId : undefined,
@@ -202,14 +216,14 @@ export function ConfirmBox({
           event.preventDefault()
           void confirm()
         }}
-        ref={rootRef as Ref<HTMLFormElement>}
+        ref={setRoot}
       >
         {body}
       </form>
     )
   }
   return (
-    <div {...common} ref={rootRef}>
+    <div {...common} ref={setRoot}>
       {body}
     </div>
   )

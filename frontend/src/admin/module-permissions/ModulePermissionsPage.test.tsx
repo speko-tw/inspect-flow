@@ -603,6 +603,27 @@ function permissionPage(options: FixtureOptions = {}) {
         if (input.user_id === 'person') memberRoleIds = input.role_ids
         return Response.json({ id: 'member-1', ...input })
       }
+      if (method === 'POST' && path === '/permission-bundles') {
+        const input = JSON.parse(body) as {
+          name: string
+          permission_codes: string[]
+        }
+        const bundle = {
+          id: 'created-bundle',
+          ...input,
+          created_at: '',
+          updated_at: '',
+        }
+        bundles.push(bundle)
+        return Response.json(bundle, { status: 201 })
+      }
+      if (method === 'PATCH' && path.startsWith('/roles/')) {
+        const role = roles.find((item) => item.id === path.split('/')[2])
+        if (role) {
+          Object.assign(role, JSON.parse(body))
+          return Response.json(role)
+        }
+      }
       return Response.json(
         { error: { code: 'unexpected_request' } },
         { status: 404 },
@@ -990,9 +1011,9 @@ describe('ModulePermissionsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '開通' }))
 
     expect(
-      await screen.findByText('已為林沐青開通使用專案功能。', {
-        selector: 'p[role="status"]',
-      }),
+      await within(
+        screen.getByRole('region', { name: '權限開通' }),
+      ).findByText('已為林沐青開通使用專案功能。'),
     ).toBeVisible()
     expect(
       calls.filter(
@@ -2152,7 +2173,12 @@ describe('ModulePermissionsPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '檢查' }))
     expect(await screen.findByText(/缺少查核功能的權限/)).toBeVisible()
-    const summary = screen.getByRole('region', { name: '帳號能力摘要' })
+    const summary = screen.getByRole('region', {
+      name: '為什麼他不能做這件事？',
+    })
+    expect(within(summary).getByRole('status')).toHaveTextContent(
+      '沒有可以查看或執行任務的角色',
+    )
     fireEvent.click(
       within(summary).getByRole('button', {
         name: '選取要開通的權限',
@@ -2178,9 +2204,11 @@ describe('ModulePermissionsPage', () => {
         ),
       ).toBe(true)
     })
-    fireEvent.click(screen.getByRole('button', { name: '檢查' }))
+    // T6：補上功能後自動重查，無須再按檢查，並只列剩下的角色缺口。
     expect(
-      await screen.findByText(/沒有可以查看或執行任務的角色/),
+      await within(summary).findByText(
+        '這個專案裡沒有可以查看或執行任務的角色。',
+      ),
     ).toBeVisible()
     expect(
       screen.getByRole('link', { name: '前往專案成員設定' }),
@@ -2959,6 +2987,213 @@ describe('#727c 非成員連結隔離', () => {
       target: { value: 'field-role' },
     })
     await screen.findByText('伺服器暫時無法處理，請稍後再試。')
-    expect(screen.queryByRole('link', { name: '前往專案成員頁' })).toBeNull()
+    const creator = screen.getByLabelText('專案建立者角色')
+    const area = creator.closest('label')?.parentElement as HTMLElement
+    const error = within(area).getByRole('alert')
+    expect(within(error).queryByRole('link')).toBeNull()
+    const diagnostic = screen.getByRole('region', {
+      name: '為什麼他不能做這件事？',
+    })
+    expect(
+      within(diagnostic).getByRole('link', {
+        name: '前往專案成員頁',
+      }),
+    ).toBeVisible()
+  })
+})
+
+describe('#734 T5/T6 診斷區塊與完整缺口', () => {
+  async function openDiagnostic() {
+    fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
+    await screen.findByText(/能使用：/)
+    const area = screen.getByRole('region', {
+      name: '為什麼他不能做這件事？',
+    })
+    fireEvent.change(within(area).getByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(within(area).getByRole('button', { name: '檢查' }))
+    return area
+  }
+
+  it('非成員與未開通查核一起列出；補上功能後只保留成員缺口', async () => {
+    const { calls } = permissionPage({
+      openWizard: false,
+      diagnosticResponse: async () =>
+        Response.json(
+          { error: { code: 'resource.not_found' } },
+          { status: 404 },
+        ),
+    })
+    const area = await openDiagnostic()
+    const result = await within(area).findByText(/他也還沒開通查核功能/)
+    expect(result).toHaveAttribute('role', 'status')
+    expect(result).toHaveTextContent('他還不是這個專案的成員')
+    expect(
+      within(result).getByRole('link', {
+        name: '前往專案成員頁',
+      }),
+    ).toHaveAttribute('href', '/projects/project-1/members')
+    expect(within(area).queryByRole('alert')).toBeNull()
+    fireEvent.click(
+      within(area).getByRole('button', {
+        name: '選取要開通的權限',
+      }),
+    )
+    fireEvent.click(within(area).getByRole('button', { name: '開通' }))
+    expect(
+      await within(area).findByText(
+        '他還不是這個專案的成員，請先到專案成員頁加入。',
+      ),
+    ).toBeVisible()
+    expect(within(area).queryByText(/他也還沒開通查核功能/)).toBeNull()
+    expect(await within(area).findByText(/已為林沐青開通/)).toBeVisible()
+    expect(
+      calls.filter(
+        (call) =>
+          call.method === 'PUT' && call.path.endsWith('/inspection.use'),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('先補角色也會自動只顯示剩餘的功能缺口', async () => {
+    const { calls } = permissionPage({ openWizard: false })
+    const area = await openDiagnostic()
+    const result = await within(area).findByRole('status')
+    expect(result).toHaveTextContent('缺少查核功能的權限')
+    expect(result).toHaveTextContent('沒有可以查看或執行任務的角色')
+    fireEvent.click(
+      within(area).getByRole('button', {
+        name: '補上「現場工程師」角色',
+      }),
+    )
+    expect(await within(area).findByText('缺少查核功能的權限。')).toBeVisible()
+    expect(within(area).queryByText(/沒有可以查看或執行任務的角色/)).toBeNull()
+    expect(await within(area).findByText('已更新專案角色。')).toBeVisible()
+    expect(
+      calls.filter(
+        (call) => call.method === 'POST' && call.path.endsWith('/members'),
+      ),
+    ).toHaveLength(1)
+    expect(
+      calls.filter(
+        (call) =>
+          call.method === 'PUT' && call.path.endsWith('/inspection.use'),
+      ),
+    ).toHaveLength(0)
+    fireEvent.click(within(area).getByRole('button', { name: '檢查' }))
+    await within(area).findByText('缺少查核功能的權限。')
+    expect(within(area).queryByText('已更新專案角色。')).toBeNull()
+  })
+})
+
+it('T5：較晚回來的舊問題不能覆蓋目前區塊的診斷', async () => {
+  let finish: (response: Response) => void = () => undefined
+  const delayed = new Promise<Response>((resolve) => {
+    finish = resolve
+  })
+  permissionPage({ openWizard: false, diagnosticResponse: () => delayed })
+  fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
+  await screen.findByText(/能使用：/)
+  const area = screen.getByRole('region', {
+    name: '為什麼他不能做這件事？',
+  })
+  fireEvent.change(within(area).getByLabelText('專案'), {
+    target: { value: 'project-1' },
+  })
+  fireEvent.click(within(area).getByRole('button', { name: '檢查' }))
+  fireEvent.change(within(area).getByLabelText('要檢查的操作'), {
+    target: { value: 'create-project' },
+  })
+  fireEvent.click(within(area).getByRole('button', { name: '檢查' }))
+  expect(await within(area).findByText('缺少建立專案的權限。')).toBeVisible()
+  await act(async () => {
+    finish(
+      Response.json(
+        { error: { code: 'resource.not_found' } },
+        { status: 404 },
+      ),
+    )
+    await delayed
+  })
+  expect(within(area).getByText('缺少建立專案的權限。')).toBeVisible()
+  expect(
+    within(area).queryByRole('link', { name: '前往專案成員頁' }),
+  ).toBeNull()
+})
+
+describe('#734 T7 其他權限寫入的就近回饋', () => {
+  async function prepare() {
+    permissionPage({ openWizard: false })
+    fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
+    await screen.findByText(/能使用：/)
+    const summary = screen.getByText('進階設定', { selector: 'summary' })
+    const details = summary.closest('details') as HTMLDetailsElement
+    if (!details.open) fireEvent.click(summary)
+    await waitFor(() => expect(details).toHaveAttribute('open'))
+    await screen.findByLabelText('組合名稱')
+  }
+
+  it('套用組合的結果留在該組合列', async () => {
+    await prepare()
+    const row = screen
+      .getByText('公司主管', { selector: 'strong' })
+      .closest('li') as HTMLElement
+    fireEvent.click(
+      within(row).getByRole('button', {
+        name: '套用至所選帳號',
+      }),
+    )
+    expect(await within(row).findByRole('status')).toHaveTextContent(
+      '權限組合已完整套用。',
+    )
+  })
+
+  it('新增組合的結果留在送出鈕所屬區塊', async () => {
+    await prepare()
+    fireEvent.change(screen.getByLabelText('組合名稱'), {
+      target: { value: '試用權限組合' },
+    })
+    const trigger = screen.getByRole('button', { name: '新增組合' })
+    const area = trigger.closest('div') as HTMLElement
+    fireEvent.click(trigger)
+    expect(await within(area).findByRole('status')).toHaveTextContent(
+      '權限組合已儲存；既有帳號權限不會被改動。',
+    )
+  })
+
+  it('委派結果留在對應勾選列，提示不改變勾選欄位名稱', async () => {
+    await prepare()
+    const input = screen.getByLabelText(/可管理.*專案.*權限/)
+    const label = input.closest('label') as HTMLElement
+    const area = label.parentElement as HTMLElement
+    fireEvent.click(input)
+    expect(await within(area).findByRole('status')).toHaveTextContent(
+      '已委派權限管理。',
+    )
+    expect(within(label).queryByRole('status')).toBeNull()
+    expect(input).toBeChecked()
+  })
+
+  it('角色治理結果留在該角色列', async () => {
+    await prepare()
+    const list = screen.getByRole('list', { name: '角色治理清單' })
+    const row = within(list).getByText('目前角色').closest('li') as HTMLElement
+    fireEvent.click(within(row).getByLabelText('可指派'))
+    expect(await within(row).findByRole('status')).toHaveTextContent(
+      '已更新角色「目前角色」的指派範圍。',
+    )
+  })
+
+  it('刪除組合的確認留在該組合列', async () => {
+    await prepare()
+    const row = screen
+      .getByText('公司主管', { selector: 'strong' })
+      .closest('li') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: '刪除定義' }))
+    const box = within(row).getByRole('region', {
+      name: '刪除權限組合定義',
+    })
+    expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
   })
 })

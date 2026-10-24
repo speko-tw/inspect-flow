@@ -12,6 +12,8 @@ import { useCurrentUser } from '../auth/useCurrentUser'
 import { FormErrorSummary, FormField, FormGroup } from '../components'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
+import { BatchActionBar } from '../ui/BatchActionBar'
+import { Notice } from '../ui/Notice'
 import { Form, FormError, FormSubmitButton } from '../ui/Form'
 import permissionCodeContract from '../permissionCodeContract'
 import { STATUS_BADGES, type BadgeStatus } from '../ui/statusBadge'
@@ -67,6 +69,9 @@ function emptyRestorePreviewSelection(): RestorePreviewSelection {
 
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
+const DEACTIVATION_RETENTION =
+  '功能權限與專案成員關係會保留，重新啟用時可逐項恢復；' +
+  '未完成任務請由內業改派。'
 
 /** 工號衝突由 API 判斷，錯誤需提供可執行的修正方向。 */
 function companyLinkErrorMessage(error: unknown): string {
@@ -111,6 +116,7 @@ export default function UsersPage({
     username: string,
     password: string,
     source?: 'created' | 'reset',
+    displayName?: string,
   ) => void
   detailUserId?: string | null
   initialQuery?: string
@@ -261,12 +267,15 @@ export default function UsersPage({
   }, [detailUserId, users])
 
   useEffect(() => {
-    if (!pendingAction) return
-    confirmationRef.current?.scrollIntoView?.({
-      block: 'center',
-      inline: 'start',
-    })
-  }, [pendingAction])
+    // T3：清單結果不屬於詳情或另一頁，不能隨共用頁面狀態留下。
+    setBatchDeactivationError('')
+    setBatchDeactivationNotice('')
+    setBatchActivationError('')
+    setBatchActivationNotice('')
+    setBatchActivationPreview(null)
+    setBatchDeactivationPreview(null)
+    setSelectedBatchUserIds([])
+  }, [detailUserId, location.key, appliedQuery])
 
   useEffect(() => {
     if (!pendingAction || ['admin', 'reset'].includes(pendingAction.kind)) {
@@ -388,7 +397,12 @@ export default function UsersPage({
     setBusyUser(user.id)
     try {
       const result = await resetUserTemporaryPassword(user.id)
-      onTemporaryPassword(user.username, result.temporary_password, 'reset')
+      onTemporaryPassword(
+        user.username,
+        result.temporary_password,
+        'reset',
+        user.name_zh || user.username,
+      )
     } catch (caught) {
       setPasswordResetError({
         userId: user.id,
@@ -612,7 +626,11 @@ export default function UsersPage({
       ].join('')
     }
     if (kind === 'deactivate') {
-      return `停用${name}（${user.username}）後，他將無法登入；過去的查核紀錄與專案資料都會保留。`
+      return [
+        `${name}（${user.username}）會立刻被登出，之後不能再登入。`,
+        DEACTIVATION_RETENTION,
+        '過去的查核紀錄與專案資料都會保留。',
+      ].join('')
     }
     if (kind === 'activate') {
       return `重新啟用${name}（${user.username}）後，他可以再次登入。`
@@ -655,9 +673,18 @@ export default function UsersPage({
       : ''
   }
 
-  function created(user: { username: string; temporary_password: string }) {
+  function created(user: {
+    username: string
+    temporary_password: string
+    name_zh?: string | null
+  }) {
     setDirtyForms({})
-    onTemporaryPassword(user.username, user.temporary_password, 'created')
+    onTemporaryPassword(
+      user.username,
+      user.temporary_password,
+      'created',
+      user.name_zh || user.username,
+    )
     void reload()
     void loadCompanies()
   }
@@ -684,88 +711,6 @@ export default function UsersPage({
     >
       {!externalNavigationGuard && (
         <UsersNavigationGuard hasUnsavedChanges={hasDirtyForms} />
-      )}
-      {batchDeactivationError && <p role="alert">{batchDeactivationError}</p>}
-      {batchDeactivationNotice && (
-        <p role="status">{batchDeactivationNotice}</p>
-      )}
-      {batchActivationError && <p role="alert">{batchActivationError}</p>}
-      {batchActivationNotice && <p role="status">{batchActivationNotice}</p>}
-      {batchActivationPreview && (
-        <ConfirmBox
-          busy={batchActivationBusy}
-          confirmDisabled={batchActivationPreview.previews.some(
-            (preview) => preview.account_expired,
-          )}
-          confirmLabel={batchActivationBusy ? '正在啟用帳號…' : '確認啟用帳號'}
-          label="批次啟用確認"
-          onCancel={() => {
-            setBatchActivationPreview(null)
-            clearBatchMessages()
-          }}
-          onConfirm={confirmBatchActivation}
-          role="region"
-        >
-          <p>請逐一確認每個帳號要恢復的權限、成員身分與未完成任務。</p>
-          {batchActivationPreview.previews.map((preview) => (
-            <RestoreChoices
-              key={preview.user_id}
-              name={
-                batchActivationPreview.users.find(
-                  (user) => user.id === preview.user_id,
-                )?.name_zh ?? preview.username
-              }
-              preview={preview}
-              selection={
-                batchRestoreSelections[preview.user_id] ??
-                emptyRestorePreviewSelection()
-              }
-              disabled={batchActivationBusy}
-              onChange={(selection) =>
-                setBatchRestoreSelections((current) => ({
-                  ...current,
-                  [preview.user_id]: selection,
-                }))
-              }
-            />
-          ))}
-        </ConfirmBox>
-      )}
-      {batchDeactivationPreview && (
-        <ConfirmBox
-          busy={batchDeactivationBusy}
-          confirmLabel={
-            batchDeactivationBusy ? '正在停用帳號…' : '確認停用帳號'
-          }
-          label="批次停用確認"
-          onCancel={cancelBatchDeactivation}
-          onConfirm={confirmBatchDeactivation}
-          role="region"
-          variant="danger"
-        >
-          <p>停用後，這些帳號的登入工作階段會立即失效，且無法再次登入。</p>
-          <ul>
-            {batchDeactivationPreview.users.map((user) => (
-              <li key={user.id}>
-                {user.name_zh || user.username}（{user.username}）
-              </li>
-            ))}
-          </ul>
-          {batchDeactivationPreview.projects.length > 0 && (
-            <div>
-              <p>停用後下列專案將沒有啟用中的管理成員；請先安排接手者。</p>
-              <ul>
-                {batchDeactivationPreview.projects.map((project) => (
-                  <li key={project.id}>
-                    <Link to={`/projects/${project.id}/planning`}>
-                      {project.project_code}／{project.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </ConfirmBox>
       )}
       {detailUserId ? (
         <section aria-labelledby="person-basic-heading">
@@ -838,12 +783,10 @@ export default function UsersPage({
                 <p className="field-hint">請到設定變更自己的密碼。</p>
               )}
               {passwordResetError?.userId === detail.id && (
-                <p role="alert">{passwordResetError.message}</p>
+                <Notice variant="error">{passwordResetError.message}</Notice>
               )}
               {actionNotice?.userId === detail.id && (
-                <p className="notice-success" role="status">
-                  {actionNotice.message}
-                </p>
+                <Notice>{actionNotice.message}</Notice>
               )}
               {pendingAction?.user.id === detail.id && (
                 <ConfirmBox
@@ -868,8 +811,12 @@ export default function UsersPage({
                   variant={confirmVariant(pendingAction)}
                 >
                   <p>{actionMessage(pendingAction)}</p>
-                  {previewError && <p role="alert">{previewError}</p>}
-                  {actionError && <p role="alert">{actionError}</p>}
+                  {previewError && (
+                    <Notice variant="error">{previewError}</Notice>
+                  )}
+                  {actionError && (
+                    <Notice variant="error">{actionError}</Notice>
+                  )}
                   {pendingAction.kind === 'activate' &&
                     actionPreview &&
                     'permission_codes' in actionPreview && (
@@ -1224,7 +1171,9 @@ export default function UsersPage({
                                 >
                                   <p>{actionMessage(pendingAction)}</p>
                                   {previewError && (
-                                    <p role="alert">{previewError}</p>
+                                    <Notice variant="error">
+                                      {previewError}
+                                    </Notice>
                                   )}
                                   {pendingAction.kind === 'deactivate' &&
                                     actionPreview &&
@@ -1270,7 +1219,9 @@ export default function UsersPage({
                                       />
                                     )}
                                   {actionError && (
-                                    <p role="alert">{actionError}</p>
+                                    <Notice variant="error">
+                                      {actionError}
+                                    </Notice>
                                   )}
                                 </ConfirmBox>
                               </td>
@@ -1342,45 +1293,175 @@ export default function UsersPage({
             {nextCursor && (
               <button
                 disabled={loading || loadingMore}
-                onClick={() => void loadMore()}
+                onClick={() => {
+                  clearBatchMessages()
+                  void loadMore()
+                }}
                 type="button"
               >
                 {loadingMore ? '載入中…' : '載入更多'}
               </button>
             )}
             {users.length > 0 && !detailUserId && (
-              <div aria-label="批次帳號操作">
-                <p>已選取 {selectedBatchUserIds.length} 個帳號。</p>
-                <button
-                  disabled={
-                    selectedBatchUserIds.length === 0 ||
-                    users
-                      .filter((user) => selectedBatchUserIds.includes(user.id))
-                      .some((user) => !user.is_active || user.is_system) ||
-                    batchDeactivationLoading ||
-                    batchDeactivationBusy ||
-                    batchActivationBusy
-                  }
-                  onClick={() => void prepareBatchDeactivation()}
-                  type="button"
-                >
-                  {batchDeactivationLoading ? '正在檢查帳號…' : '批次停用帳號'}
-                </button>
-                {selectedBatchUserIds.length > 0 &&
-                  users
-                    .filter((user) => selectedBatchUserIds.includes(user.id))
-                    .every((user) => !user.is_active && !user.is_system) && (
+              <BatchActionBar
+                label="批次帳號操作"
+                actions={
+                  <>
+                    <p>已選取 {selectedBatchUserIds.length} 個帳號。</p>
                     <button
-                      disabled={batchActivationLoading || batchActivationBusy}
-                      onClick={() => void prepareBatchActivation()}
+                      disabled={
+                        selectedBatchUserIds.length === 0 ||
+                        users
+                          .filter((user) =>
+                            selectedBatchUserIds.includes(user.id),
+                          )
+                          .some((user) => !user.is_active || user.is_system) ||
+                        batchDeactivationLoading ||
+                        batchDeactivationBusy ||
+                        batchActivationBusy
+                      }
+                      onClick={() => void prepareBatchDeactivation()}
                       type="button"
                     >
-                      {batchActivationLoading
-                        ? '正在載入恢復項目…'
-                        : '批次啟用帳號'}
+                      {batchDeactivationLoading
+                        ? '正在檢查帳號…'
+                        : '批次停用帳號'}
                     </button>
-                  )}
-              </div>
+                    {selectedBatchUserIds.length > 0 &&
+                      users
+                        .filter((user) =>
+                          selectedBatchUserIds.includes(user.id),
+                        )
+                        .every(
+                          (user) => !user.is_active && !user.is_system,
+                        ) && (
+                        <button
+                          disabled={
+                            batchActivationLoading || batchActivationBusy
+                          }
+                          onClick={() => void prepareBatchActivation()}
+                          type="button"
+                        >
+                          {batchActivationLoading
+                            ? '正在載入恢復項目…'
+                            : '批次啟用帳號'}
+                        </button>
+                      )}
+                  </>
+                }
+                feedback={
+                  <>
+                    {batchDeactivationError && (
+                      <Notice variant="error">{batchDeactivationError}</Notice>
+                    )}
+                    {batchDeactivationNotice && (
+                      <Notice>{batchDeactivationNotice}</Notice>
+                    )}
+                    {batchActivationError && (
+                      <Notice variant="error">{batchActivationError}</Notice>
+                    )}
+                    {batchActivationNotice && (
+                      <Notice>{batchActivationNotice}</Notice>
+                    )}
+                  </>
+                }
+                confirmation={
+                  <>
+                    {batchActivationPreview && (
+                      <ConfirmBox
+                        busy={batchActivationBusy}
+                        confirmDisabled={batchActivationPreview.previews.some(
+                          (preview) => preview.account_expired,
+                        )}
+                        confirmLabel={
+                          batchActivationBusy
+                            ? '正在啟用帳號…'
+                            : '確認啟用帳號'
+                        }
+                        label="批次啟用確認"
+                        onCancel={() => {
+                          setBatchActivationPreview(null)
+                          clearBatchMessages()
+                        }}
+                        onConfirm={confirmBatchActivation}
+                        role="region"
+                      >
+                        <p>
+                          請逐一確認每個帳號要恢復的權限、成員身分與未完成任務。
+                        </p>
+                        {batchActivationPreview.previews.map((preview) => (
+                          <RestoreChoices
+                            key={preview.user_id}
+                            name={
+                              batchActivationPreview.users.find(
+                                (user) => user.id === preview.user_id,
+                              )?.name_zh ?? preview.username
+                            }
+                            preview={preview}
+                            selection={
+                              batchRestoreSelections[preview.user_id] ??
+                              emptyRestorePreviewSelection()
+                            }
+                            disabled={batchActivationBusy}
+                            onChange={(selection) =>
+                              setBatchRestoreSelections((current) => ({
+                                ...current,
+                                [preview.user_id]: selection,
+                              }))
+                            }
+                          />
+                        ))}
+                      </ConfirmBox>
+                    )}
+                    {batchDeactivationPreview && (
+                      <ConfirmBox
+                        busy={batchDeactivationBusy}
+                        confirmLabel={
+                          batchDeactivationBusy
+                            ? '正在停用帳號…'
+                            : '確認停用帳號'
+                        }
+                        label="批次停用確認"
+                        onCancel={cancelBatchDeactivation}
+                        onConfirm={confirmBatchDeactivation}
+                        role="region"
+                        variant="danger"
+                      >
+                        <p>這些人會立刻被登出，之後不能再登入。</p>
+                        <p>{DEACTIVATION_RETENTION}</p>
+                        <ul>
+                          {batchDeactivationPreview.users.map((user) => (
+                            <li key={user.id}>
+                              {user.name_zh || user.username}（{user.username}
+                              ）
+                            </li>
+                          ))}
+                        </ul>
+                        {batchDeactivationPreview.projects.length > 0 && (
+                          <div>
+                            <p>
+                              停用後下列專案將沒有啟用中的管理成員；請先安排接手者。
+                            </p>
+                            <ul>
+                              {batchDeactivationPreview.projects.map(
+                                (project) => (
+                                  <li key={project.id}>
+                                    <Link
+                                      to={`/projects/${project.id}/planning`}
+                                    >
+                                      {project.project_code}／{project.name}
+                                    </Link>
+                                  </li>
+                                ),
+                              )}
+                            </ul>
+                          </div>
+                        )}
+                      </ConfirmBox>
+                    )}
+                  </>
+                }
+              />
             )}
           </div>
           {!hideCreateForm && (

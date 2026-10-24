@@ -1,7 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { ManagementApiError } from '../api'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { Notice } from '../../ui/Notice'
+import { revealElement } from '../../ui/reveal'
 import { Form, FormError, FormSubmitButton } from '../../ui/Form'
 import { useSubmitGuard } from '../../ui/submitGuard'
 import { UnsavedLeaveBox } from '../../ui/navigation'
@@ -70,12 +72,22 @@ export default function RolesPage() {
     }
   } | null>(null)
   const [error, setError] = useState('')
+  const [errorScope, setErrorScope] = useState('page')
+  const [notice, setNotice] = useState('')
+  const editorRef = useRef<HTMLFormElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+
   // 新增或修改角色的存檔錯誤：顯示在表單裡並聚焦。表單在頁面底部，放在
   // 頁頂的話使用者看不到，螢幕閱讀器也不會被帶過去（F-O02）。
   const [formError, setFormError] = useState<{
     message: string
     request: number
   } | null>(null)
+  useEffect(() => {
+    if (!roleFormOpen || formError) return
+    revealElement(editorRef.current)
+    nameRef.current?.focus({ preventScroll: true })
+  }, [editingId, roleFormOpen, formError])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const guard = useSubmitGuard()
@@ -108,11 +120,13 @@ export default function RolesPage() {
     try {
       setRoles(await listRoles())
     } catch (caught) {
+      setErrorScope('page')
       setError(roleErrorMessage(caught))
     }
   }
 
   async function saveCreatorRole() {
+    setErrorScope('creator')
     if (!creatorRoleId) {
       setError('請選擇新專案預設角色。')
       return
@@ -178,6 +192,7 @@ export default function RolesPage() {
   }
 
   function startEditing(role: Role) {
+    setNotice('')
     setError('')
     setFormError(null)
     setDeleting(null)
@@ -191,6 +206,7 @@ export default function RolesPage() {
   }
 
   function startCreatingRole() {
+    setNotice('')
     if (editing && hasUnsavedChanges) {
       setConfirmNewRole(true)
       return
@@ -243,6 +259,7 @@ export default function RolesPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setNotice('')
     const trimmed = name.trim()
     if (!trimmed) {
       failForm('請輸入角色名稱。')
@@ -256,6 +273,7 @@ export default function RolesPage() {
         await createRole({ name: trimmed, permission_codes: selected })
         resetForm()
         await reload()
+        setNotice(`已建立角色「${trimmed}」。`)
         return
       }
       // 後端拒絕沒有實際變更的更新，所以只送有變的欄位。
@@ -301,6 +319,7 @@ export default function RolesPage() {
     setFormError(null)
     try {
       await updateRole(pending.role.id, pending.changes)
+      setNotice(`已更新角色「${pending.changes.name ?? pending.role.name}」。`)
       setPending(null)
       resetForm()
       await reload()
@@ -323,6 +342,8 @@ export default function RolesPage() {
   }
 
   async function startDelete(role: Role) {
+    setErrorScope(role.id)
+    setNotice('')
     if (!guard.enter()) return
     setError('')
     setPending(null)
@@ -345,6 +366,7 @@ export default function RolesPage() {
     setError('')
     try {
       await deleteRole(deleting.id)
+      setNotice(`已刪除角色「${deleting.name}」。`)
       if (editingId === deleting.id) {
         resetForm()
       }
@@ -362,98 +384,81 @@ export default function RolesPage() {
     <section aria-labelledby="roles-heading" className="roles-page">
       <UnsavedLeaveBox guard={leaveGuard} />
       <h1 id="roles-heading">{PAGE_TITLES.projectRoles}</h1>
-      <FormError>{error}</FormError>
-      {confirmNewRole && (
-        <ConfirmBox
-          cancelLabel="保留編輯"
-          confirmLabel="捨棄變更並新增"
-          onCancel={() => setConfirmNewRole(false)}
-          onConfirm={confirmCreateRole}
-          role="region"
-          title="有尚未儲存的變更"
-          variant="danger"
-        >
-          <p>切換到新增角色會捨棄目前尚未儲存的內容。</p>
-        </ConfirmBox>
-      )}
-      {deleting && (
-        <ConfirmBox
-          busy={saving}
-          key={deleting.id}
-          role="region"
-          confirmLabel="確認刪除角色"
-          onCancel={() => setDeleting(null)}
-          onConfirm={confirmDelete}
-          title={`刪除「${deleting.name}」`}
-          variant="danger"
-        >
-          <p>
-            刪除{describeImpact(deleting)}
-            ：這些成員身上的這個角色指派都會一併移除，無法復原。
-          </p>
-        </ConfirmBox>
-      )}
-      {pending && (
-        <ConfirmBox
-          busy={saving}
-          key={pending.role.id}
-          role="region"
-          confirmLabel="確認修改角色"
-          onCancel={() => setPending(null)}
-          onConfirm={confirmUpdate}
-          title={`修改「${pending.role.name}」`}
-        >
-          <p>此變更{describeImpact(pending.role)}，儲存後立即生效。</p>
-        </ConfirmBox>
-      )}
-      {loading ? <p>載入中…</p> : null}
-      {!loading && roles.length === 0 ? <p>目前沒有角色。</p> : null}
-      {roles.length > 0 && (
-        <table className="roles-table">
-          <thead>
-            <tr>
-              <th scope="col">角色名稱</th>
-              <th scope="col">持有人數</th>
-              <th scope="col">權限</th>
-              <th scope="col">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {roles.map((role) => (
-              <tr key={role.id}>
-                <th scope="row">{role.name}</th>
-                <td data-label="持有人數">{role.user_count} 個帳號</td>
-                <td data-label="權限">
-                  <RolePermissionSummary
-                    codes={role.permission_codes}
-                    descriptions={descriptions}
-                    emptyText="（無）"
-                    name={role.name}
-                  />
-                </td>
-                <td data-label="操作">
-                  <button
-                    aria-label={`修改角色 ${role.name}`}
-                    disabled={saving}
-                    onClick={() => startEditing(role)}
-                    type="button"
-                  >
-                    修改
-                  </button>
-                  <button
-                    aria-label={`刪除角色 ${role.name}`}
-                    disabled={saving}
-                    onClick={() => void startDelete(role)}
-                    type="button"
-                  >
-                    刪除
-                  </button>
-                </td>
+      {(errorScope === 'page' ||
+        (errorScope !== 'creator' &&
+          !roles.some((role) => role.id === errorScope))) &&
+        error && <Notice variant="error">{error}</Notice>}
+      <section aria-label="角色清單">
+        {notice && <Notice>{notice}</Notice>}
+        {loading ? <p>載入中…</p> : null}
+        {!loading && roles.length === 0 ? <p>目前沒有角色。</p> : null}
+        {roles.length > 0 && (
+          <table className="roles-table">
+            <thead>
+              <tr>
+                <th scope="col">角色名稱</th>
+                <th scope="col">持有人數</th>
+                <th scope="col">權限</th>
+                <th scope="col">操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+            </thead>
+            <tbody>
+              {roles.map((role) => (
+                <tr key={role.id}>
+                  <th scope="row">{role.name}</th>
+                  <td data-label="持有人數">{role.user_count} 個帳號</td>
+                  <td data-label="權限">
+                    <RolePermissionSummary
+                      codes={role.permission_codes}
+                      descriptions={descriptions}
+                      emptyText="（無）"
+                      name={role.name}
+                    />
+                  </td>
+                  <td data-label="操作">
+                    <button
+                      aria-label={`修改角色 ${role.name}`}
+                      disabled={saving}
+                      onClick={() => startEditing(role)}
+                      type="button"
+                    >
+                      修改
+                    </button>
+                    <button
+                      aria-label={`刪除角色 ${role.name}`}
+                      disabled={saving}
+                      onClick={() => void startDelete(role)}
+                      type="button"
+                    >
+                      刪除
+                    </button>
+                    {errorScope === role.id && error && (
+                      <Notice variant="error">{error}</Notice>
+                    )}
+                    {deleting?.id === role.id && (
+                      <ConfirmBox
+                        busy={saving}
+                        key={deleting.id}
+                        role="region"
+                        confirmLabel="確認刪除角色"
+                        onCancel={() => setDeleting(null)}
+                        onConfirm={confirmDelete}
+                        title={`刪除「${deleting.name}」`}
+                        variant="danger"
+                      >
+                        <p>
+                          刪除{describeImpact(deleting)}
+                          ：這些成員身上的這個角色指派都會一併移除，無法復原。
+                        </p>
+                      </ConfirmBox>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
       <div className="roles-page-tools">
         <button
           aria-controls="creator-role-panel"
@@ -494,7 +499,10 @@ export default function RolesPage() {
           >
             儲存預設角色
           </button>
-          {creatorRoleSaved && <p role="status">新專案預設角色已更新。</p>}
+          {errorScope === 'creator' && error && (
+            <Notice variant="error">{error}</Notice>
+          )}
+          {creatorRoleSaved && <Notice>新專案預設角色已更新。</Notice>}
         </section>
         <button
           aria-controls="role-editor-panel"
@@ -503,21 +511,29 @@ export default function RolesPage() {
           type="button"
         >
           新增角色
-        </button>
+        </button>{' '}
+        {confirmNewRole && (
+          <ConfirmBox
+            cancelLabel="保留編輯"
+            confirmLabel="捨棄變更並新增"
+            onCancel={() => setConfirmNewRole(false)}
+            onConfirm={confirmCreateRole}
+            role="region"
+            title="有尚未儲存的變更"
+            variant="danger"
+          >
+            <p>切換到新增角色會捨棄目前尚未儲存的內容。</p>
+          </ConfirmBox>
+        )}
       </div>
       {roleFormOpen && (
         <div className="roles-page-editor" id="role-editor-panel">
-          <Form
-            error={formError?.message}
-            errorFocusRequest={formError?.request}
-            errorTabIndex={-1}
-            guard={guard}
-            onSubmit={save}
-          >
+          <Form ref={editorRef} guard={guard} onSubmit={save}>
             <h2>{editing ? `修改角色「${editing.name}」` : '新增角色'}</h2>
             <label>
               角色名稱
               <input
+                ref={nameRef}
                 disabled={locked}
                 maxLength={64}
                 onChange={(event) => setName(event.target.value)}
@@ -620,6 +636,9 @@ export default function RolesPage() {
                 </label>
               </fieldset>
             )}
+            <FormError focusRequest={formError?.request} tabIndex={-1}>
+              {formError?.message}
+            </FormError>
             <button
               disabled={saving}
               onClick={() => {
@@ -636,6 +655,19 @@ export default function RolesPage() {
             >
               {editing ? '儲存角色' : '建立角色'}
             </FormSubmitButton>
+            {pending && (
+              <ConfirmBox
+                busy={saving}
+                key={pending.role.id}
+                role="region"
+                confirmLabel="確認修改角色"
+                onCancel={() => setPending(null)}
+                onConfirm={confirmUpdate}
+                title={`修改「${pending.role.name}」`}
+              >
+                <p>此變更{describeImpact(pending.role)}，儲存後立即生效。</p>
+              </ConfirmBox>
+            )}
           </Form>
         </div>
       )}

@@ -12,6 +12,9 @@ import {
 import { PAGE_TITLES } from '../../terms'
 import { entityLabel, EVENT_TYPE_OPTIONS, eventLabel } from './auditLabels'
 import './AuditLogPage.css'
+import { AuditSnapshot } from './AuditSnapshot'
+import { Notice } from '../../ui/Notice'
+import { revealElement } from '../../ui/reveal'
 
 const emptyFilters: AuditLogFilters = {
   project_id: '',
@@ -110,8 +113,9 @@ export default function AuditLogPage() {
     setFilterErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
       setError('')
-      if (nextErrors.from) fromRef.current?.focus()
-      else toRef.current?.focus()
+      const target = nextErrors.from ? fromRef.current : toRef.current
+      revealElement(target)
+      target?.focus({ preventScroll: true })
       return
     }
     setLoading(true)
@@ -200,13 +204,20 @@ export default function AuditLogPage() {
             <div className="audit-entry-changes">
               <div>
                 <h3>改前</h3>
-                <pre>{displayJson(entry.before)}</pre>
+                <AuditSnapshot value={entry.before} />
               </div>
               <div>
                 <h3>改後</h3>
-                <pre>{displayJson(entry.after)}</pre>
+                <AuditSnapshot value={entry.after} />
               </div>
             </div>
+            <details>
+              <summary>進階：原始紀錄與識別碼</summary>
+              <h3>改前原文</h3>
+              <pre>{displayJson(entry.before)}</pre>
+              <h3>改後原文</h3>
+              <pre>{displayJson(entry.after)}</pre>
+            </details>
           </details>
         </article>
       </li>
@@ -324,7 +335,7 @@ export default function AuditLogPage() {
         )}
         <button type="submit">查詢</button>
       </form>
-      {error && <p role="alert">{error}</p>}
+      {error && <Notice variant="error">{error}</Notice>}
       {loading ? (
         <p role="status">載入稽核紀錄中…</p>
       ) : result?.items.length ? (

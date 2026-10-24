@@ -292,6 +292,7 @@ function AdminPageContent() {
     locationKey: string
     path: string
     source: 'created' | 'reset'
+    displayName?: string
   } | null>(null)
   const resultHeadingRef = useRef<HTMLHeadingElement>(null)
   const hasGlobalAccess = hasGlobalDashboardAccess(user)
@@ -369,8 +370,14 @@ function AdminPageContent() {
                 ? '帳號已新增'
                 : '臨時密碼已重設'}
             </h2>
-            <p>帳號：{temporaryPassword.username}</p>
-            <p>離開此頁後無法再次查看，首次登入必須變更密碼。</p>
+            <p>
+              {temporaryPassword.displayName &&
+              temporaryPassword.displayName !== temporaryPassword.username
+                ? temporaryPassword.displayName +
+                  `（${temporaryPassword.username}）`
+                : `帳號：${temporaryPassword.username}`}
+            </p>
+            <p>離開此頁後無法再次查看，他下次登入必須變更密碼。</p>
             <TemporaryPassword password={temporaryPassword.password} />
           </TemporaryPasswordResult>
         ) : (
@@ -393,13 +400,19 @@ function AdminPageContent() {
               path={nestedRoutePath(ROUTES.adminPeople, ROUTES.adminShell)}
               element={
                 <PeoplePage
-                  onTemporaryPassword={(username, password, source) =>
+                  onTemporaryPassword={(
+                    username,
+                    password,
+                    source,
+                    displayName,
+                  ) =>
                     setTemporaryPassword({
                       username,
                       password,
                       locationKey: location.key,
                       path: location.pathname,
                       source: source ?? 'created',
+                      displayName,
                     })
                   }
                 />

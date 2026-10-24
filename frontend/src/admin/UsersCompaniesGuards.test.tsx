@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import { useState } from 'react'
 import { DataMemoryRouter } from '../testing/DataMemoryRouter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -350,7 +351,10 @@ describe('UsersPage 帳號詳情', () => {
 
     const box = await screen.findByRole('region', { name: '操作確認' })
     expect(box).toHaveTextContent(
-      '停用鄧安娜（anna.deng）後，他將無法登入；過去的查核紀錄與專案資料都會保留。',
+      '鄧安娜（anna.deng）會立刻被登出，之後不能再登入。',
+    )
+    expect(box).toHaveTextContent(
+      '功能權限與專案成員關係會保留，重新啟用時可逐項恢復；未完成任務請由內業改派。',
     )
     const confirm = within(box).getByRole('button', { name: '確認' })
     await waitFor(() => expect(confirm).toBeEnabled())
@@ -430,6 +434,7 @@ describe('UsersPage 帳號詳情', () => {
         'anna.deng',
         'One-Time-123',
         'reset',
+        '鄧安娜',
       )
     })
   })
@@ -1801,5 +1806,147 @@ describe('#727c 反向批次訊息清除', () => {
     fireEvent.click(within(box).getByRole('button', { name: '取消' }))
     expect(backend.count('POST', /:batch-active-status$/)).toBe(1)
     expect(screen.queryByRole('region', { name: '批次停用確認' })).toBeNull()
+  })
+})
+
+describe('#734 T1/T2/T3 帳號批次回饋', () => {
+  it.each([true, false])(
+    '啟用狀態 %s 的確認與結果在觸發處同一容器',
+    async (active) => {
+      stubBackend({ users: [{ ...regularUser, is_active: active }] })
+      renderUsers({ onSelectUser: vi.fn() })
+      fireEvent.click(
+        await screen.findByRole('checkbox', {
+          name: '選取 anna.deng',
+        }),
+      )
+      const area = screen.getByRole('region', { name: '批次帳號操作' })
+      const action = active ? '停用' : '啟用'
+      fireEvent.click(
+        within(area).getByRole('button', {
+          name: `批次${action}帳號`,
+        }),
+      )
+      const box = await within(area).findByRole('region', {
+        name: `批次${action}確認`,
+      })
+      if (active) {
+        expect(box).toHaveTextContent('會立刻被登出，之後不能再登入')
+        expect(box).toHaveTextContent('功能權限與專案成員關係會保留')
+        expect(box).toHaveTextContent('未完成任務請由內業改派')
+      }
+      fireEvent.click(
+        within(box).getByRole('button', {
+          name: `確認${action}帳號`,
+        }),
+      )
+      expect(await within(area).findByRole('status')).toHaveTextContent(
+        `已${action} 1 個帳號。`,
+      )
+    },
+  )
+
+  it('共用頁面進詳情再回清單，不會帶回舊批次訊息', async () => {
+    stubBackend()
+    function KeptUsersPage() {
+      const [detail, setDetail] = useState<string | undefined>()
+      return (
+        <>
+          <button onClick={() => setDetail('user-1')}>查看詳情</button>
+          <button onClick={() => setDetail(undefined)}>返回清單</button>
+          <UsersPage detailUserId={detail} onTemporaryPassword={vi.fn()} />
+        </>
+      )
+    }
+    render(
+      <DataMemoryRouter>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <KeptUsersPage />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+    fireEvent.click(
+      await screen.findByRole('checkbox', {
+        name: '選取 anna.deng',
+      }),
+    )
+    const area = screen.getByRole('region', { name: '批次帳號操作' })
+    fireEvent.click(
+      within(area).getByRole('button', {
+        name: '批次停用帳號',
+      }),
+    )
+    fireEvent.click(
+      await within(area).findByRole('button', {
+        name: '確認停用帳號',
+      }),
+    )
+    await within(area).findByText('已停用 1 個帳號。')
+    fireEvent.click(screen.getByRole('button', { name: '查看詳情' }))
+    expect(screen.queryByText('已停用 1 個帳號。')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '返回清單' }))
+    await screen.findByRole('region', { name: '批次帳號操作' })
+    expect(screen.queryByText('已停用 1 個帳號。')).toBeNull()
+  })
+})
+
+describe('#734 T7 公司操作回饋位置', () => {
+  function renderCompanies() {
+    return render(
+      <DataMemoryRouter>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <CompaniesPage />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+  }
+
+  it('公司停用確認與結果留在該公司的操作列', async () => {
+    stubBackend({ activeCompanyUsers: { 'company-1': [regularUser] } })
+    renderCompanies()
+    const row = await screen.findByRole('row', { name: /示範公司/ })
+    fireEvent.click(within(row).getByRole('button', { name: '停用公司' }))
+    const box = await within(row).findByRole('region', {
+      name: '停用「示範公司」',
+    })
+    fireEvent.click(within(box).getByRole('button', { name: '確認停用公司' }))
+    expect(await within(row).findByRole('status')).toHaveTextContent(
+      '已停用公司「示範公司」。',
+    )
+  })
+
+  it('改名會聚焦表單，成功提示留在送出處', async () => {
+    stubBackend()
+    renderCompanies()
+    fireEvent.click(await screen.findByRole('button', { name: '改名稱' }))
+    const input = screen.getByLabelText('公司名稱')
+    expect(input).toHaveFocus()
+    const form = input.closest('form') as HTMLElement
+    fireEvent.change(input, { target: { value: '新公司名稱' } })
+    fireEvent.click(within(form).getByRole('button', { name: '儲存名稱' }))
+    expect(await within(form).findByRole('status')).toHaveTextContent(
+      '已將公司名稱更新為「新公司名稱」。',
+    )
+  })
+
+  it('公司批次的確認與結果同屬工具列容器', async () => {
+    stubBackend()
+    renderCompanies()
+    fireEvent.click(
+      await screen.findByRole('checkbox', {
+        name: '選取公司 示範公司',
+      }),
+    )
+    const area = screen.getByRole('region', { name: '批次公司操作' })
+    fireEvent.click(within(area).getByRole('button', { name: '批次停用公司' }))
+    const box = await within(area).findByRole('region', {
+      name: '批次停用確認',
+    })
+    fireEvent.click(
+      within(box).getByRole('button', { name: '確認批次停用公司' }),
+    )
+    expect(await within(area).findByRole('status')).toHaveTextContent(
+      '已停用 1 間公司。',
+    )
   })
 })
