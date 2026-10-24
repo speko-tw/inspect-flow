@@ -21,6 +21,7 @@ import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { managementErrorMessage } from '../api'
 import { InspectionPointCard } from './InspectionPointCard'
 import { TemplateItemEditor } from './TemplateItemEditor'
+import { validateItemFields } from './itemFieldValidation'
 import { TemplateLibraryNav } from './TemplateLibraryNav'
 import {
   blankPoint,
@@ -592,8 +593,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
 
   const validateItem = useCallback((): Record<string, string> => {
     if (!itemDraft) return {}
-    const result: Record<string, string> = {}
-    if (!itemDraft.title.trim()) result.title = '請填寫查核項目名稱'
+    const result = validateItemFields(itemDraft, photoDraft)
     if (
       systemItems.some(
         (row) =>
@@ -602,88 +602,10 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
             itemDraft.title.trim().toLocaleLowerCase(),
       )
     ) {
-      result.title = '此系統已有同名查核項目，請換個名稱'
+      // TPL-R18：名稱位於表單最前，重名也須先聚焦並列為摘要首項。
+      delete result.title
+      return { title: '此系統已有同名查核項目，請換個名稱', ...result }
     }
-    if (itemDraft.inspection_points.length === 0) {
-      result.points = '請至少新增一個查核項次'
-    }
-    itemDraft.inspection_points.forEach((point, pointIndex) => {
-      const key = `point:${pointIndex}`
-      if (!point.title.trim()) result[`${key}:title`] = '請填寫項次標題'
-      point.measurement_fields.forEach((field, fieldIndex) => {
-        const base = `${key}:field:${fieldIndex}`
-        if (!field.name.trim()) {
-          result[`${base}:name`] = '請填寫欄位名稱'
-        }
-        if (field.field_type === 'number' && !field.unit?.trim()) {
-          result[`${base}:unit`] = '請填寫單位'
-        }
-      })
-      const standard = point.numeric_standard
-      if (standard) {
-        if (!boundField(point)) {
-          result[`${key}:binding`] = '請選擇要用來判定的數字欄位'
-        }
-        if (standard.condition === 'range') {
-          if ((standard.range_form ?? 'tolerance') === 'interval') {
-            const lower = Number(standard.lower_bound)
-            const upper = Number(standard.upper_bound)
-            if (!standard.lower_bound?.trim() || !Number.isFinite(lower)) {
-              result[`${key}:lower`] = '請填寫有效的下限'
-            }
-            if (!standard.upper_bound?.trim() || !Number.isFinite(upper)) {
-              result[`${key}:upper`] = '請填寫有效的上限'
-            }
-            if (
-              Number.isFinite(lower) &&
-              Number.isFinite(upper) &&
-              lower > upper
-            ) {
-              result[`${key}:range`] = '下限不能大於上限'
-            }
-          } else {
-            if (
-              !standard.value?.trim() ||
-              !Number.isFinite(Number(standard.value))
-            ) {
-              result[`${key}:value`] = '請填寫有效的標準值'
-            }
-            const tolerance = Number(standard.tolerance)
-            if (!standard.tolerance?.trim() || !Number.isFinite(tolerance)) {
-              result[`${key}:tolerance`] = '請填寫有效的容許誤差'
-            } else if (tolerance < 0) {
-              result[`${key}:tolerance`] = '容許誤差不能小於 0'
-            }
-          }
-        } else {
-          if (
-            !standard.value?.trim() ||
-            !Number.isFinite(Number(standard.value))
-          ) {
-            result[`${key}:value`] = '請填寫有效的標準值'
-          }
-          if (standard.tolerance?.trim()) {
-            const tolerance = Number(standard.tolerance)
-            if (!Number.isFinite(tolerance)) {
-              result[`${key}:tolerance`] = '請填寫有效的容許誤差'
-            } else if (tolerance < 0) {
-              result[`${key}:tolerance`] = '容許誤差不能小於 0'
-            }
-          }
-        }
-      }
-      if (point.text_standard && !point.text_standard.text.trim()) {
-        result[`${key}:text`] = '請填寫標準文字'
-      }
-      const photos = photoDraft[String(pointIndex)] ?? '1'
-      if (
-        !photos.trim() ||
-        !Number.isInteger(Number(photos)) ||
-        Number(photos) < 1
-      ) {
-        result[`${key}:photos`] = '照片至少需要 1 張'
-      }
-    })
     return result
   }, [itemDraft, photoDraft, systemItems])
 

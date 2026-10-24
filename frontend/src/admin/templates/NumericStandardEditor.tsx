@@ -4,6 +4,7 @@ import {
   boundField,
   numberFields,
   numberStandard,
+  rangeForm,
 } from './templateEditorUtils'
 
 type Props = {
@@ -212,7 +213,7 @@ export function NumericStandardEditor({
                 ].map(([form, label]) => (
                   <label className="tpl-radio-option" key={form}>
                     <input
-                      checked={(standard.range_form ?? 'interval') === form}
+                      checked={rangeForm(standard) === form}
                       name={`range-form-${index}`}
                       onChange={() =>
                         updateNumeric(index, {
@@ -228,7 +229,7 @@ export function NumericStandardEditor({
               </fieldset>
             )}
             {standard.condition === 'range' &&
-            (standard.range_form ?? 'interval') === 'interval' ? (
+            rangeForm(standard) === 'interval' ? (
               <>
                 <label htmlFor={`lower-${index}`}>
                   下限 <RequiredMark />

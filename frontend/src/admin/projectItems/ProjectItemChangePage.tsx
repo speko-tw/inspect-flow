@@ -12,9 +12,9 @@ import { UnsavedLeaveBox } from '../../ui/navigation'
 import { useUnsavedNavigationGuard } from '../../ui/navigation'
 import { ManagementApiError } from '../api'
 import { TemplateItemEditor } from '../templates/TemplateItemEditor'
+import { validateItemFields } from '../templates/itemFieldValidation'
 import {
   blankPoint,
-  boundField,
   localizeInspectionPoints,
   TEMPLATE_FIELD_ERROR_MESSAGES,
   templateFieldErrorBindings,
@@ -291,75 +291,6 @@ function deletedStructureNames(
     }
   }
   return deleted
-}
-
-function validateDraft(
-  item: TemplateItem,
-  photos: Record<string, string>,
-): Record<string, string> {
-  const errors: Record<string, string> = {}
-  if (!item.title.trim()) errors.title = '請填寫查核項目名稱'
-  if (item.inspection_points.length === 0) {
-    errors.points = '請至少新增一個查核項次'
-  }
-  item.inspection_points.forEach((point, pointIndex) => {
-    const key = `point:${point.clientKey ?? point.id ?? pointIndex}`
-    if (!point.title.trim()) errors[`${key}:title`] = '請填寫項次標題'
-    point.measurement_fields.forEach((field, fieldIndex) => {
-      const fieldKey = `${key}:field:${fieldIndex}`
-      if (!field.name.trim()) {
-        errors[`${fieldKey}:name`] = '請填寫欄位名稱'
-      }
-      if (field.field_type === 'number' && !field.unit?.trim()) {
-        errors[`${fieldKey}:unit`] = '請填寫數字欄位的單位'
-      }
-    })
-    const standard = point.numeric_standard
-    if (standard) {
-      if (!boundField(point)) errors[`${key}:binding`] = '請選擇數字欄位'
-      if (
-        standard.condition === 'range' &&
-        standard.range_form === 'interval'
-      ) {
-        const lower = Number(standard.lower_bound)
-        const upper = Number(standard.upper_bound)
-        if (!Number.isFinite(lower)) errors[`${key}:lower`] = '請填寫有效下限'
-        if (!Number.isFinite(upper)) errors[`${key}:upper`] = '請填寫有效上限'
-        if (
-          Number.isFinite(lower) &&
-          Number.isFinite(upper) &&
-          lower > upper
-        ) {
-          errors[`${key}:range`] = '下限不能大於上限'
-        }
-      } else {
-        if (
-          !standard.value?.trim() ||
-          !Number.isFinite(Number(standard.value))
-        ) {
-          errors[`${key}:value`] = '請填寫有效標準值'
-        }
-        if (standard.condition === 'range') {
-          const tolerance = Number(standard.tolerance)
-          if (
-            !standard.tolerance?.trim() ||
-            !Number.isFinite(tolerance) ||
-            tolerance < 0
-          ) {
-            errors[`${key}:tolerance`] = '請填寫大於或等於 0 的容許誤差'
-          }
-        }
-      }
-    }
-    if (point.text_standard && !point.text_standard.text.trim()) {
-      errors[`${key}:text`] = '請填寫文字標準'
-    }
-    const count = Number(photos[String(pointIndex)] ?? '1')
-    if (!Number.isInteger(count) || count < 1) {
-      errors[`${key}:photos`] = '照片至少要 1 張'
-    }
-  })
-  return errors
 }
 
 /**
@@ -749,7 +680,9 @@ export default function ProjectItemChangePage({
       title,
       instruction,
     }
-    const invalid = validateDraft(draft, photoDraft)
+    const invalid = validateItemFields(draft, photoDraft, {
+      stablePointErrorKeys: true,
+    })
     if (Object.keys(invalid).length > 0) {
       const firstErrorKey = Object.keys(invalid)[0]
       focusRequestId.current += 1
@@ -794,7 +727,9 @@ export default function ProjectItemChangePage({
     : null
   const localErrors =
     attemptedSave && currentDraft
-      ? validateDraft(currentDraft, photoDraft)
+      ? validateItemFields(currentDraft, photoDraft, {
+          stablePointErrorKeys: true,
+        })
       : {}
   const willDeleteStructure = preview
     ? removesStructure(preview.item.inspection_points, inspectionPoints)
