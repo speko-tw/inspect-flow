@@ -450,6 +450,10 @@ describe('ProjectItemChangePage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '請重新確認受影響任務與查核選擇',
     )
+    const editor = screen.getByRole('form', { name: '查核項目編輯器' })
+    const footer = editor.querySelector('.tpl-editor-footer') as HTMLElement
+    const requestError = within(footer).getByRole('alert')
+    await waitFor(() => expect(requestError).toHaveFocus())
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(api.loadPreview).toHaveBeenCalledTimes(2)
     expect(api.update).not.toHaveBeenCalled()
@@ -1488,6 +1492,10 @@ describe('ProjectItemChangePage review round 2', () => {
     expect(
       await screen.findByText('已儲存變更，但重新載入任務狀態失敗。'),
     ).toBeInTheDocument()
+    const editor = screen.getByRole('form', { name: '查核項目編輯器' })
+    const footer = editor.querySelector('.tpl-editor-footer') as HTMLElement
+    const requestError = within(footer).getByRole('alert')
+    await waitFor(() => expect(requestError).toHaveFocus())
     await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1))
 
     await confirm('yes')

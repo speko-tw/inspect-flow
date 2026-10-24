@@ -471,11 +471,92 @@ describe('planning management page', () => {
     expect(within(form).getByRole('option', { name: '不指定' })).toBeVisible()
     fireEvent.click(within(form).getByRole('button', { name: '重試' }))
     await waitFor(() => expect(selector).toBeEnabled())
+    await waitFor(() => expect(selector).toHaveFocus())
     expect(
       within(form).queryByText('成員名單暫時載入失敗'),
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('focuses the assignee field after a retry fails', async () => {
+    const client = createMockPlanningClient()
+    await client.createPlan('project-demo-1', { name: '重試失敗' })
+    let attempts = 0
+    client.listProjectAssignees = async () => {
+      attempts += 1
+      throw new ManagementApiError(503, 'inspection_task.unavailable')
+    }
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '重試失敗（草稿）' }),
+    )
+    await openTaskCreationForm()
+    const form = document.querySelector(
+      '[data-error-context="task"]',
+    ) as HTMLFormElement
+    const selector = within(form).getByLabelText('建議指派人')
+    const hint = within(form).getByText('成員名單暫時載入失敗')
+    fireEvent.click(within(form).getByRole('button', { name: '重試' }))
+    await waitFor(() =>
+      expect(within(form).getByRole('button', { name: '重試' })).toBeEnabled(),
+    )
+    expect(selector).toBeDisabled()
+    await waitFor(() => expect(hint).toHaveFocus())
+    expect(attempts).toBe(2)
+  })
+
+  it('clears retrying members when switching projects during a retry', async () => {
+    const client = createMockPlanningClient()
+    await client.createPlan('project-demo-1', { name: 'A 專案' })
+    await client.createPlan('project-demo-2', { name: 'B 專案' })
+    const retryRequest =
+      deferred<Awaited<ReturnType<PlanningClient['listProjectAssignees']>>>()
+    let projectOneRequests = 0
+    client.listProjectAssignees = async (projectId) => {
+      if (projectId === 'project-demo-2') {
+        throw new ManagementApiError(503, 'inspection_task.unavailable')
+      }
+      if (projectOneRequests++ === 0) {
+        throw new ManagementApiError(503, 'inspection_task.unavailable')
+      }
+      return retryRequest.promise
+    }
+    const { rerender } = render(
+      <PlanningPage client={client} initialProjectId="project-demo-1" />,
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'A 專案（草稿）' }),
+    )
+    await openTaskCreationForm()
+    const form = document.querySelector(
+      '[data-error-context="task"]',
+    ) as HTMLFormElement
+    fireEvent.click(within(form).getByRole('button', { name: '重試' }))
+    expect(
+      await within(form).findByRole('button', { name: '重試中…' }),
+    ).toBeDisabled()
+
+    rerender(
+      <PlanningPage client={client} initialProjectId="project-demo-2" />,
+    )
+    expect(await screen.findByText('專案：示範工程 B')).toBeInTheDocument()
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'B 專案（草稿）' }),
+    )
+    await openTaskCreationForm()
+    const nextForm = document.querySelector(
+      '[data-error-context="task"]',
+    ) as HTMLFormElement
+    await waitFor(() =>
+      expect(
+        within(nextForm).getByRole('button', { name: '重試' }),
+      ).toBeEnabled(),
+    )
+    expect(
+      within(nextForm).queryByRole('button', { name: '重試中…' }),
+    ).toBeNull()
+    retryRequest.resolve([])
   })
 
   it('deletes draft tasks through a confirmation dialog', async () => {

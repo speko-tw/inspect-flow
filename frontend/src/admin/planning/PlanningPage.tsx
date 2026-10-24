@@ -274,6 +274,12 @@ export default function PlanningPage({
   >(null)
   const [retryingMembers, setRetryingMembers] = useState(false)
   const assigneeRequest = useRef(0)
+  const retryFocusTarget = useRef<{
+    projectId: string
+    select: HTMLSelectElement
+    fallback: HTMLElement
+  } | null>(null)
+  const wasRetryingMembers = useRef(false)
   const [error, setError] = useState('')
   const [errorContext, setErrorContext] = useState('page')
   const [fieldError, setFieldError] = useState<{ field: FieldKey } | null>(
@@ -590,6 +596,8 @@ export default function PlanningPage({
     const requestId = ++assigneeRequest.current
     async function loadProjectData() {
       setLoading(true)
+      setRetryingMembers(false)
+      retryFocusTarget.current = null
       setError('')
       setErrorContext('page')
       setZonesDenied(false)
@@ -657,9 +665,13 @@ export default function PlanningPage({
     }
   }, [client, projectId, reloadKey, canLoadAssignees])
 
-  async function retryAssigneeList(): Promise<void> {
+  async function retryAssigneeList(
+    select: HTMLSelectElement,
+    fallback: HTMLElement,
+  ): Promise<void> {
     if (!projectId || retryingMembers) return
     const requestId = ++assigneeRequest.current
+    retryFocusTarget.current = { projectId, select, fallback }
     setRetryingMembers(true)
     try {
       const result = await client.listProjectAssignees(projectId)
@@ -674,6 +686,31 @@ export default function PlanningPage({
     } finally {
       if (assigneeRequest.current === requestId) setRetryingMembers(false)
     }
+  }
+
+  useEffect(() => {
+    if (wasRetryingMembers.current && !retryingMembers) {
+      const target = retryFocusTarget.current
+      if (target?.projectId === projectId) {
+        const focusTarget = target.select.disabled
+          ? target.fallback
+          : target.select
+        if (focusTarget.isConnected) focusTarget.focus()
+      }
+      retryFocusTarget.current = null
+    }
+    wasRetryingMembers.current = retryingMembers
+  }, [projectId, retryingMembers])
+
+  function retryAssigneeListFrom(button: HTMLButtonElement, field: string) {
+    const form = button.closest('form')
+    const select = form?.querySelector<HTMLSelectElement>(
+      `[data-field="${field}"]`,
+    )
+    const fallback = form?.querySelector<HTMLElement>(
+      '.assignee-list-unavailable',
+    )
+    if (select && fallback) void retryAssigneeList(select, fallback)
   }
 
   const membersFailureText =
@@ -2018,6 +2055,7 @@ export default function PlanningPage({
                               <p
                                 className="assignee-list-unavailable"
                                 id={`assignee-list-unavailable-${task.id}`}
+                                tabIndex={-1}
                               >
                                 {membersFailureText}
                               </p>
@@ -2025,7 +2063,12 @@ export default function PlanningPage({
                             {membersFailure === 'temporary' && (
                               <button
                                 disabled={retryingMembers}
-                                onClick={() => void retryAssigneeList()}
+                                onClick={(event) =>
+                                  retryAssigneeListFrom(
+                                    event.currentTarget,
+                                    'suggested-assignee',
+                                  )
+                                }
                                 type="button"
                               >
                                 {retryingMembers ? '重試中…' : '重試'}
@@ -2286,6 +2329,7 @@ export default function PlanningPage({
                     <p
                       className="assignee-list-unavailable"
                       id="assignee-list-unavailable-create"
+                      tabIndex={-1}
                     >
                       {membersFailureText}
                     </p>
@@ -2293,7 +2337,12 @@ export default function PlanningPage({
                   {membersFailure === 'temporary' && (
                     <button
                       disabled={retryingMembers}
-                      onClick={() => void retryAssigneeList()}
+                      onClick={(event) =>
+                        retryAssigneeListFrom(
+                          event.currentTarget,
+                          'task-assignee',
+                        )
+                      }
                       type="button"
                     >
                       {retryingMembers ? '重試中…' : '重試'}

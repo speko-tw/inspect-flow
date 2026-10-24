@@ -580,7 +580,7 @@ export default function ProjectItemChangePage({
   async function save(selectedReinspect?: boolean, recheckDrafts = false) {
     if (!projectId || !itemId) return
     if (!guard.enter()) return
-    setFocusSaveError(false)
+    setFocusSaveError(true)
     setError('')
     setBusy(true)
     const change: ProjectItemChange = {

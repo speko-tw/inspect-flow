@@ -1088,6 +1088,7 @@ describe('專案範本套用與存為範本（#429）', () => {
   })
 
   it('存為範本後，目標系統在範本樹的項目數會重新載入（#487）', async () => {
+    useMobileViewport()
     mockApi({
       canSave: true,
       projectItems: [
@@ -1125,6 +1126,9 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(within(projectItemsPanel).getByRole('status')).toHaveTextContent(
       '已將「管線查核」存入「建築工程 / 電氣」。',
     )
+    const layout = projectItemsPanel.closest('.tpl-layout')
+    expect(layout).toHaveAttribute('data-pane', 'list')
+    expect(within(projectItemsPanel).getByRole('status')).toBeVisible()
     expect(
       screen.getByRole('heading', { name: '套用範本到專案' }),
     ).toBeInTheDocument()

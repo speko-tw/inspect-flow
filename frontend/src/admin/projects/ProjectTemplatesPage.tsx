@@ -594,6 +594,7 @@ export default function ProjectTemplatesPage({
       const systemName = destination?.name ?? '目標系統'
       setNotice(`已將「${name}」存入「${categoryName} / ${systemName}」。`)
       setSaveCompleted(true)
+      setMobilePane('list')
       setSaveSource(null)
       setRouteSaveItemId(null)
       setRouteSaveName(null)
@@ -854,11 +855,6 @@ export default function ProjectTemplatesPage({
                   >
                     {busy ? '儲存中…' : '存入這個系統'}
                   </button>
-                  {saveCompleted && notice && (
-                    <p className="notice-success" role="status">
-                      {notice}
-                    </p>
-                  )}
                 </div>
               )}
               {saveError && (
