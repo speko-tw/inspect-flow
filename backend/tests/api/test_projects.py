@@ -2577,3 +2577,69 @@ def test_batch_roles_reject_more_than_200_items(project_api):
     assert response.json()["error"]["details"] == [
         "一次最多選取 200 筆，請減少數量後再試。"
     ]
+
+
+def test_batch_roles_accept_exactly_200_items(project_api, db_session):
+    """#731：角色批次在 200 位不同成員時仍能完成交易。"""
+    project = project_api["project"]
+    users = [
+        create_user(
+            db_session,
+            username=f"role.limit.{index}",
+            email=f"role.limit.{index}@example.test",
+            name_zh=f"成員{index}",
+            is_external_collaborator=False,
+        )
+        for index in range(200)
+    ]
+    db_session.add_all(
+        [
+            ProjectMember(
+                project_id=project.id,
+                user_id=user.id,
+                created_by=project_api["admin"].id,
+                updated_by=project_api["admin"].id,
+            )
+            for user in users
+        ]
+    )
+    db_session.commit()
+    response = project_api["admin_client"].post(
+        f"/api/v1/projects/{project.id}/members:batch-roles",
+        json={
+            "items": [
+                {
+                    "user_id": str(user.id),
+                    "role_ids": [str(project_api["role"].id)],
+                }
+                for user in users
+            ]
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert len(response.json()["items"]) == 200
+
+
+def test_batch_roles_keep_stricter_nested_limit(project_api):
+    """#731：原有角色上限 64 不因批次上限 200 而放寬。"""
+    from app.api.v1.projects import BatchProjectMemberRolesRequest
+
+    item = {
+        "user_id": str(project_api["target"].id),
+        "role_ids": [str(uuid4()) for _ in range(64)],
+    }
+    body = {"items": [item]}
+    BatchProjectMemberRolesRequest.model_validate(body)
+    item["role_ids"].append(str(uuid4()))
+    project = project_api["project"]
+    response = project_api["admin_client"].post(
+        f"/api/v1/projects/{project.id}/members:batch-roles",
+        json=body,
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["fields"] == [
+        {
+            "path": "/items/0/role_ids",
+            "code": "field.too_long",
+        }
+    ]

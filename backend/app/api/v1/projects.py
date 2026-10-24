@@ -11,7 +11,11 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.batch import require_batch_size
+from app.api.batch import (
+    MAX_BATCH_ITEMS,
+    BatchLimitedRequest,
+    require_batch_size,
+)
 from app.api.errors import APIError, ErrorCode, FieldErrorCode
 from app.api.pagination import ilike_contains, page, page_by_text_key
 from app.auth.access import (
@@ -202,8 +206,8 @@ class BatchProjectMemberRoleItem(BaseModel):
     role_ids: list[UUID] = Field(max_length=64)
 
 
-class BatchProjectMemberRolesRequest(BaseModel):
-    items: list[BatchProjectMemberRoleItem]
+class BatchProjectMemberRolesRequest(BatchLimitedRequest):
+    items: list[BatchProjectMemberRoleItem] = Field(max_length=MAX_BATCH_ITEMS)
 
 
 class ProjectMemberResponse(BaseModel):

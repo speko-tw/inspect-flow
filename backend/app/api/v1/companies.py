@@ -7,7 +7,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.batch import require_batch_size
+from app.api.batch import (
+    MAX_BATCH_ITEMS,
+    BatchLimitedRequest,
+    require_batch_size,
+)
 from app.api.errors import APIError, ErrorCode
 from app.api.pagination import ilike_contains, page_by_text_key, write_call
 from app.api.v1._management_errors import (
@@ -60,19 +64,23 @@ class RenameCompanyRequest(BaseModel):
     name: str
 
 
-class CompanyStatusRequest(BaseModel):
+class CompanyStatusRequest(BatchLimitedRequest):
     is_active: bool
-    disable_user_ids: list[UUID] = Field(default_factory=list)
+    disable_user_ids: list[UUID] = Field(
+        default_factory=list, max_length=MAX_BATCH_ITEMS
+    )
 
 
 class BatchCompanyStatusItem(BaseModel):
     company_id: UUID
     is_active: bool
-    disable_user_ids: list[UUID] = Field(default_factory=list)
+    disable_user_ids: list[UUID] = Field(
+        default_factory=list, max_length=MAX_BATCH_ITEMS
+    )
 
 
-class BatchCompanyStatusRequest(BaseModel):
-    items: list[BatchCompanyStatusItem]
+class BatchCompanyStatusRequest(BatchLimitedRequest):
+    items: list[BatchCompanyStatusItem] = Field(max_length=MAX_BATCH_ITEMS)
 
 
 class BatchCompanyStatusResponse(BaseModel):

@@ -660,6 +660,23 @@ def register_error_handlers(app: FastAPI) -> None:
         error: dict[str, object] = {
             "code": ErrorCode.REQUEST_VALIDATION_FAILED.value
         }
+        # 批次清單改由 Pydantic 擋下，仍保留 ADM-R13 的白話提示。
+        from app.api.batch import MAX_BATCH_ITEMS, BatchLimitedRequest
+
+        model = _request_body_model(request)
+        if (
+            isinstance(model, type)
+            and issubclass(model, BatchLimitedRequest)
+            and any(
+                item.get("type") == "too_long"
+                and item.get("ctx", {}).get("max_length") == MAX_BATCH_ITEMS
+                and isinstance(item.get("input"), list)
+                for item in exc.errors()
+            )
+        ):
+            error["details"] = [
+                f"一次最多選取 {MAX_BATCH_ITEMS} 筆，請減少數量後再試。"
+            ]
         fields = _request_field_errors(request, exc)
         if fields is not None:
             error["fields"] = fields

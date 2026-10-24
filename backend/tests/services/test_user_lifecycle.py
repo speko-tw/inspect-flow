@@ -112,14 +112,15 @@ def test_unmanaged_project_query_count_does_not_grow_with_projects(
 
 
 @pytest.mark.parametrize(
-    ("active", "external", "expires_on", "expected_unmanaged"),
+    ("active", "external", "expires_on", "admin", "expected_unmanaged"),
     [
-        (False, False, None, True),
-        (True, True, date(2026, 10, 21), True),
-        (True, True, date(2026, 10, 22), False),
-        (True, True, date(2026, 10, 23), False),
-        (True, True, None, False),
-        (True, False, None, False),
+        (False, False, None, False, True),
+        (True, True, date(2026, 10, 21), False, True),
+        (True, True, date(2026, 10, 22), False, False),
+        (True, True, date(2026, 10, 23), False, False),
+        (True, True, None, False, False),
+        (True, False, None, False, False),
+        (True, False, None, True, True),
     ],
 )
 def test_unmanaged_projects_exclude_ineffective_accounts(
@@ -129,13 +130,15 @@ def test_unmanaged_projects_exclude_ineffective_accounts(
     active,
     external,
     expires_on,
+    admin,
     expected_unmanaged,
 ):
-    """DOM-R75、#286：殘留管理角色不能讓停用或到期帳號算管理者。"""
+    """DOM-R75：停用、到期與 Admin 不計入專案的有效管理成員。"""
     monkeypatch.setattr(
         clock, "utc_now", lambda: datetime(2026, 10, 22, 12, tzinfo=UTC)
     )
     manager = create_root_user_with_company(session, "UNM286")
+    manager.is_admin = admin
     manager.is_active = active
     manager.is_external_collaborator = external
     manager.account_expires_on = expires_on

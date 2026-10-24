@@ -1656,3 +1656,154 @@ def test_company_link_write_returns_the_new_company_name(
     assert response.status_code == 200
     assert response.json()["company_name"] == "新連結公司"
     assert response.json()["company_id"] == company.json()["id"]
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "disable_user_ids",
+        "restore",
+        "permission_codes",
+        "delegated_modules",
+        "project_ids",
+        "task_ids",
+    ],
+)
+def test_batch_nested_lists_validate_before_database_access(
+    admin_client, field
+):
+    """#731：子清單也先驗長度，避免大量 IN 查詢變成 500。"""
+    from app.api.v1.companies import BatchCompanyStatusRequest
+    from app.api.v1.users import BatchActiveStatusRequest
+
+    client, _ = admin_client
+    user_id = str(uuid4())
+    ids = [str(uuid4()) for _ in range(200)]
+    if field == "disable_user_ids":
+        model = BatchCompanyStatusRequest
+        path = "/api/v1/companies:batch-status"
+        body = {
+            "items": [
+                {
+                    "company_id": str(uuid4()),
+                    "is_active": False,
+                    field: ids,
+                }
+            ]
+        }
+        values = body["items"][0][field]
+        pointer = "/items/0/disable_user_ids"
+    else:
+        model = BatchActiveStatusRequest
+        path = "/api/v1/users:batch-active-status"
+        selection = {} if field == "restore" else {field: ids}
+        item = {"user_id": user_id, "restore": selection}
+        body = {
+            "user_ids": [user_id],
+            "is_active": True,
+            "restore": [item] * 200 if field == "restore" else [item],
+        }
+        values = body["restore"] if field == "restore" else selection[field]
+        pointer = (
+            "/restore" if field == "restore" else f"/restore/0/restore/{field}"
+        )
+    model.model_validate(body)
+    values.append(values[0])
+    response = client.post(path, json=body)
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "request.validation_failed"
+    assert error["fields"] == [{"path": pointer, "code": "field.too_long"}]
+    assert error["details"] == ["一次最多選取 200 筆，請減少數量後再試。"]
+
+
+@pytest.mark.parametrize("resource", ["users", "companies"])
+def test_batch_status_accepts_exactly_200_items(
+    admin_client, db_session, resource
+):
+    """#731：上限仍能實際成功，不因提早驗證少接受一筆。"""
+    client, admin = admin_client
+    if resource == "companies":
+        companies = [
+            Company(
+                name=f"邊界公司{index}",
+                created_by=admin.id,
+                updated_by=admin.id,
+            )
+            for index in range(200)
+        ]
+        db_session.add_all(companies)
+        db_session.commit()
+        body = {
+            "items": [
+                {"company_id": str(company.id), "is_active": False}
+                for company in companies
+            ]
+        }
+        path = "/api/v1/companies:batch-status"
+    else:
+        users = [
+            create_user(
+                db_session,
+                username=f"limit.{index}",
+                email=f"limit.{index}@example.test",
+                name_zh=f"邊界{index}",
+                is_external_collaborator=False,
+            )
+            for index in range(200)
+        ]
+        db_session.commit()
+        ids = [str(user.id) for user in users]
+        body = {"user_ids": ids, "is_active": False}
+        path = "/api/v1/users:batch-active-status"
+    response = client.post(path, json=body)
+    assert response.status_code == 200, response.text
+    assert len(response.json()["items"]) == 200
+    if resource == "users":
+        response = client.post(
+            path,
+            json={
+                "user_ids": ids,
+                "is_active": True,
+                "restore": [{"user_id": id_, "restore": {}} for id_ in ids],
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert len(response.json()["items"]) == 200
+
+
+def test_batch_company_accepts_200_selected_users(admin_client, db_session):
+    """#731：原先會產生巨大 IN 的欄位在邊界可完成停用。"""
+    client, admin = admin_client
+    company = Company(
+        name="子清單邊界", created_by=admin.id, updated_by=admin.id
+    )
+    db_session.add(company)
+    db_session.flush()
+    users = [
+        create_user(
+            db_session,
+            username=f"company.limit.{index}",
+            email=f"company.limit.{index}@example.test",
+            name_zh=f"成員{index}",
+            is_external_collaborator=False,
+            company_id=company.id,
+        )
+        for index in range(200)
+    ]
+    db_session.commit()
+    response = client.post(
+        "/api/v1/companies:batch-status",
+        json={
+            "items": [
+                {
+                    "company_id": str(company.id),
+                    "is_active": False,
+                    "disable_user_ids": [str(user.id) for user in users],
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    db_session.expire_all()
+    assert all(not user.is_active for user in users)
