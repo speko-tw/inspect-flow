@@ -13,7 +13,11 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.batch import require_batch_size
+from app.api.batch import (
+    MAX_BATCH_ITEMS,
+    BatchLimitedRequest,
+    require_batch_size,
+)
 from app.api.errors import APIError, ErrorCode
 from app.api.pagination import (
     encode_page_cursor,
@@ -239,13 +243,21 @@ class ActiveStatusRequest(BaseModel):
 
 
 class RestoreSelection(BaseModel):
-    permission_codes: list[str] = Field(default_factory=list)
-    delegated_modules: list[str] = Field(default_factory=list)
-    project_ids: list[UUID] = Field(default_factory=list)
-    task_ids: list[UUID] = Field(default_factory=list)
+    permission_codes: list[str] = Field(
+        default_factory=list, max_length=MAX_BATCH_ITEMS
+    )
+    delegated_modules: list[str] = Field(
+        default_factory=list, max_length=MAX_BATCH_ITEMS
+    )
+    project_ids: list[UUID] = Field(
+        default_factory=list, max_length=MAX_BATCH_ITEMS
+    )
+    task_ids: list[UUID] = Field(
+        default_factory=list, max_length=MAX_BATCH_ITEMS
+    )
 
 
-class ReactivateRequest(BaseModel):
+class ReactivateRequest(BatchLimitedRequest):
     restore: RestoreSelection
 
 
@@ -254,10 +266,12 @@ class BatchUserRestoreItem(BaseModel):
     restore: RestoreSelection
 
 
-class BatchActiveStatusRequest(BaseModel):
-    user_ids: list[UUID]
+class BatchActiveStatusRequest(BatchLimitedRequest):
+    user_ids: list[UUID] = Field(max_length=MAX_BATCH_ITEMS)
     is_active: bool
-    restore: list[BatchUserRestoreItem] = Field(default_factory=list)
+    restore: list[BatchUserRestoreItem] = Field(
+        default_factory=list, max_length=MAX_BATCH_ITEMS
+    )
 
 
 class BatchUserStatusResponse(BaseModel):
