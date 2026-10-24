@@ -251,6 +251,8 @@ function profileRoleLabel(
   )
 }
 
+const NONMEMBER_MESSAGE = '他還不是這個專案的成員，請先到專案成員頁加入。'
+
 function message(error: unknown): string {
   return managementErrorMessage(error)
 }
@@ -1285,7 +1287,7 @@ function ModulePermissionsPageContent({
     } catch (caught) {
       if (isNotFound(caught) && needsProject && diagnosticProject) {
         setNonmemberProject(diagnosticProject)
-        setError('他還不是這個專案的成員，請先到專案成員頁加入。')
+        setError(NONMEMBER_MESSAGE)
       } else {
         setError(message(caught))
       }
@@ -1345,7 +1347,7 @@ function ModulePermissionsPageContent({
       {error && (
         <p role="alert">
           {error}
-          {nonmemberProject && (
+          {error === NONMEMBER_MESSAGE && nonmemberProject && (
             <Link to={`/projects/${nonmemberProject}/members`}>
               前往專案成員頁
             </Link>

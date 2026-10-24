@@ -57,6 +57,7 @@ interface FixtureOptions {
   failPermissionCatalogOnce?: boolean
   userCatalogResponse?: () => Promise<Response>
   permissionCatalogResponse?: () => Promise<Response>
+  failCreatorWrite?: boolean
   diagnosticResponse?: () => Promise<Response>
   accessResponse?: (userId: string) => Promise<Response>
   participationResponse?: (path: string) => Promise<Response>
@@ -351,6 +352,16 @@ function permissionPage(options: FixtureOptions = {}) {
             : roles,
           next_cursor: null,
         })
+      }
+      if (
+        method === 'PATCH' &&
+        path === '/roles/creator-role' &&
+        options.failCreatorWrite
+      ) {
+        return Response.json(
+          { error: { code: 'server.internal_error' } },
+          { status: 500 },
+        )
       }
       if (method === 'GET' && path === '/roles/creator-role') {
         return Response.json({ role_id: 'office-role' })
@@ -2921,5 +2932,33 @@ describe('#727 診斷錯誤白話', () => {
     } else {
       expect(alert).toHaveTextContent(/連線|網路/)
     }
+  })
+})
+
+describe('#727c 非成員連結隔離', () => {
+  it('非成員診斷後的其他流程錯誤不得沿用成員連結', async () => {
+    permissionPage({
+      openWizard: false,
+      failCreatorWrite: true,
+      diagnosticResponse: async () =>
+        Response.json(
+          { error: { code: 'resource.not_found' } },
+          { status: 404 },
+        ),
+    })
+    fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
+    await screen.findByText(/能使用：/)
+    fireEvent.change(await screen.findByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '檢查' }))
+    expect(
+      await screen.findByRole('link', { name: '前往專案成員頁' }),
+    ).toBeVisible()
+    fireEvent.change(screen.getByLabelText('專案建立者角色'), {
+      target: { value: 'field-role' },
+    })
+    await screen.findByText('伺服器暫時無法處理，請稍後再試。')
+    expect(screen.queryByRole('link', { name: '前往專案成員頁' })).toBeNull()
   })
 })

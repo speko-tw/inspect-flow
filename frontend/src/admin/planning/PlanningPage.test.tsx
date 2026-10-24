@@ -2307,6 +2307,7 @@ describe('planning forms guard (#507)', () => {
 
     it('closes the cancel dialog and keeps the reason visible when it returns 403', async () => {
       const { client } = await seeded(true)
+      const assignees = vi.spyOn(client, 'listProjectAssignees')
       client.cancelTask = vi
         .fn()
         .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
@@ -2323,6 +2324,7 @@ describe('planning forms guard (#507)', () => {
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
       expect(await screen.findByRole('alert')).toBeVisible()
       expect(screen.getByText('目前為唯讀模式。')).toBeVisible()
+      expect(assignees).toHaveBeenCalledOnce()
     })
   })
 
@@ -2700,4 +2702,129 @@ describe('#727 唯讀身分', () => {
       expect(assignees).not.toHaveBeenCalled()
     },
   )
+})
+
+describe('#727c 各動作依實際權限', () => {
+  const allWrites = [
+    'inspection_plan.create',
+    'inspection_plan.manage',
+    'inspection_plan.archive',
+    'inspection_plan.unarchive',
+    'inspection_task.create',
+    'inspection_task.manage',
+    'inspection_task.assign',
+    'inspection_task.dispatch',
+    'inspection_task.delete_draft',
+    'inspection_task.cancel',
+  ]
+  async function setup(permissions: string[]) {
+    const client = createMockPlanningClient()
+    const plan = await client.createPlan('project-demo-1', {
+      name: '權限驗收',
+    })
+    const [item] = await client.listProjectItems('project-demo-1')
+    const zone = await client.createZone('project-demo-1', '北區')
+    const [person] = await client.listProjectAssignees('project-demo-1')
+    const tasks = []
+    for (const name of ['草稿案例', '待開始案例', '取消案例']) {
+      tasks.push(
+        await client.createTask(plan.id, {
+          name,
+          item_ids: [item.id],
+          suggested_assignee_id: person.id,
+          zone_id: zone.id,
+          location_text: null,
+        }),
+      )
+    }
+    await client.dispatchTask(tasks[1].id)
+    await client.dispatchTask(tasks[2].id)
+    await client.cancelTask(tasks[2].id, '測試取消')
+    const loadAssignees = vi.spyOn(client, 'listProjectAssignees')
+    render(
+      <PlanningPage
+        client={client}
+        initialProjectId="project-demo-1"
+        viewerPermissions={permissions}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /權限驗收/ }))
+    await screen.findByRole('heading', { name: /草稿案例/ })
+    return { client, plan, tasks, loadAssignees }
+  }
+  it('全權內業可見全部寫入入口，封存後可取消封存', async () => {
+    await setup(allWrites)
+    for (const name of [
+      '建立計畫',
+      '修改計畫名稱',
+      '封存計畫',
+      '＋ 新增任務',
+      '修改查核項目',
+      '派出任務',
+      '刪除草稿',
+      '修改名稱',
+      '修改地點',
+      '修改建議指派',
+      '取消任務',
+      '恢復任務',
+    ]) {
+      expect(screen.getAllByRole('button', { name })[0]).toBeVisible()
+    }
+    fireEvent.click(screen.getByRole('button', { name: '封存計畫' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    expect(
+      await screen.findByRole('button', { name: '取消封存' }),
+    ).toBeVisible()
+  })
+  it('規劃與派出三碼可建立計畫、新增任務並實際派出', async () => {
+    const { client, tasks, loadAssignees } = await setup([
+      'inspection_plan.create',
+      'inspection_task.create',
+      'inspection_task.dispatch',
+    ])
+    const dispatch = vi.spyOn(client, 'dispatchTask')
+    expect(screen.getByRole('button', { name: '建立計畫' })).toBeVisible()
+    expect(loadAssignees).toHaveBeenCalledOnce()
+    for (const name of [
+      '修改計畫名稱',
+      '封存計畫',
+      '修改查核項目',
+      '刪除草稿',
+      '修改名稱',
+      '修改地點',
+      '修改建議指派',
+      '取消任務',
+      '恢復任務',
+    ]) {
+      expect(screen.queryByRole('button', { name })).toBeNull()
+    }
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
+    expect(screen.getByRole('button', { name: '建立草稿任務' })).toBeVisible()
+    // 展開空表單後仍可派出既有完整草稿；不得依賴 plan.manage。
+    fireEvent.click(screen.getByRole('button', { name: '派出任務' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith(tasks[0].id))
+  })
+  it.each([
+    ['inspection_plan.manage', '修改計畫名稱'],
+    ['inspection_plan.archive', '封存計畫'],
+    ['inspection_task.create', '＋ 新增任務'],
+    ['inspection_task.manage', '修改查核項目'],
+    ['inspection_task.assign', '修改建議指派'],
+    ['inspection_task.dispatch', '派出任務'],
+    ['inspection_task.delete_draft', '刪除草稿'],
+    ['inspection_task.cancel', '取消任務'],
+  ])('只持 %s 時僅開放對應操作', async (code, button) => {
+    const { loadAssignees } = await setup([code])
+    expect(screen.getAllByRole('button', { name: button })[0]).toBeVisible()
+    expect(screen.queryByRole('button', { name: '建立計畫' })).toBeNull()
+    if (
+      code === 'inspection_task.create' ||
+      code === 'inspection_task.assign'
+    ) {
+      expect(loadAssignees).toHaveBeenCalledOnce()
+    } else {
+      expect(loadAssignees).not.toHaveBeenCalled()
+    }
+  })
 })

@@ -278,12 +278,7 @@ def apply_template(
         )
         return copies
 
-    # TPL-AC06、#727：持有目標系統鎖後再配號，並保留來源共享鎖。
-    system = db.scalar(
-        select(TemplateSystem)
-        .where(TemplateSystem.id == system_id)
-        .with_for_update()
-    )
+    system = db.get(TemplateSystem, system_id)
     if system is None:
         return None
     category = db.get(TemplateCategory, system.category_id)
@@ -348,7 +343,7 @@ def create_template_from_project_item(
         .with_for_update(read=True)
         .execution_options(populate_existing=True)
     )
-    # TPL-AC06、#727：持有目標系統鎖後再配號，並保留來源共享鎖。
+    # TPL-R26、#727：持有目標系統鎖後再配號，並保留來源共享鎖。
     system = db.scalar(
         select(TemplateSystem)
         .where(TemplateSystem.id == system_id)

@@ -672,10 +672,10 @@ def test_dbf_ac12_rejects_invalid_evidence_roles_and_snapshot_links(
 
 
 @pytest.mark.parametrize("existing, expected", [(True, [3, 4]), (False, [1])])
-def test_saved_template_target_sequence_tpl_ac06(
+def test_saved_template_target_sequence_tpl_r26(
     session: Session, creator: User, project: Project, existing, expected
 ) -> None:
-    """TPL-AC06、#727：兩種資料庫都依目標配號，不沿用來源序號。"""
+    """TPL-R26、#727：兩種資料庫都依目標配號，不沿用來源序號。"""
     make_system_admin(creator)
     category = _category(session, creator, "配號工程")
     system = _system(session, creator, category, "配號系統")

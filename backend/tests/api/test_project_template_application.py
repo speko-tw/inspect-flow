@@ -1475,10 +1475,10 @@ def test_failed_apply_audit_rolls_back_project_item_copies(
 
 
 @pytest.mark.parametrize("existing, expected", [(True, [3, 4]), (False, [1])])
-def test_save_template_appends_target_sequence_tpl_ac06(
+def test_save_template_appends_target_sequence_tpl_r26(
     db_session, make_client, existing, expected
 ):
-    """TPL-AC06、#727：存回範本依目標配號，不沿用來源序號。"""
+    """TPL-R26、#727：存回範本依目標配號，不沿用來源序號。"""
     world = _world(db_session, make_client)
     source_system, _ = _create_templates(world["admin"])
     applied = world["editor"].post(

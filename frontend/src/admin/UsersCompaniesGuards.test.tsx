@@ -1660,7 +1660,10 @@ describe('#727 帳號操作保護', () => {
     const box = await screen.findByRole('region', { name: '批次啟用確認' })
     expect(screen.queryByText('已停用 1 個帳號。')).toBeNull()
     fireEvent.click(within(box).getByRole('button', { name: '取消' }))
-    expect(screen.queryByText(/已啟用 .* 個帳號/)).toBeNull()
+    expect(screen.queryByRole('region', { name: '批次啟用確認' })).toBeNull()
+    expect(
+      screen.getByRole('checkbox', { name: '選取 anna.deng' }),
+    ).toBeChecked()
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })
@@ -1772,5 +1775,31 @@ describe('#727 重設確認的預覽錯誤隔離', () => {
     fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.getByRole('button', { name: '確認重設' })).toBeEnabled()
+  })
+})
+
+describe('#727c 反向批次訊息清除', () => {
+  it('啟用成功後準備停用即清除舊訊息，取消不再寫入', async () => {
+    const backend = stubBackend({
+      users: [{ ...regularUser, is_active: false }],
+    })
+    renderUsers({ onSelectUser: vi.fn() })
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '確認啟用帳號' }),
+    )
+    await screen.findByText('已啟用 1 個帳號。')
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    const box = await screen.findByRole('region', { name: '批次停用確認' })
+    expect(screen.queryByText('已啟用 1 個帳號。')).toBeNull()
+    fireEvent.click(within(box).getByRole('button', { name: '取消' }))
+    expect(backend.count('POST', /:batch-active-status$/)).toBe(1)
+    expect(screen.queryByRole('region', { name: '批次停用確認' })).toBeNull()
   })
 })
