@@ -420,6 +420,7 @@ describe('UsersPage 帳號詳情', () => {
     renderUsers({ detailUserId: 'user-1', onTemporaryPassword })
     await screen.findByRole('heading', { name: '鄧安娜' })
     fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
 
     await waitFor(() => {
       expect(
@@ -441,6 +442,7 @@ describe('UsersPage 帳號詳情', () => {
     renderUsers({ detailUserId: 'user-1', onTemporaryPassword })
     await screen.findByRole('heading', { name: '鄧安娜' })
     fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
 
     expect(await screen.findByRole('alert')).toBeVisible()
     expect(screen.getByRole('heading', { name: '鄧安娜' })).toBeVisible()
@@ -595,12 +597,12 @@ describe('UsersPage 批次停用帳號（#414）', () => {
     fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
 
     const box = await screen.findByRole('region', { name: '批次啟用確認' })
-    expect(within(box).getByText('project.use')).toBeVisible()
-    expect(within(box).getByText('inspection')).toBeVisible()
+    expect(within(box).getByText('使用專案功能')).toBeVisible()
+    expect(within(box).getByText('查核權限管理')).toBeVisible()
     expect(within(box).getByText(/P-1／測試專案/)).toBeVisible()
-    expect(within(box).getByText('未完成任務')).toBeVisible()
-    fireEvent.click(within(box).getByLabelText('project.use'))
-    fireEvent.click(within(box).getByLabelText('inspection'))
+    expect(within(box).getByText('未完成任務（待開始）')).toBeVisible()
+    fireEvent.click(within(box).getByLabelText('使用專案功能'))
+    fireEvent.click(within(box).getByLabelText('查核權限管理'))
     fireEvent.click(within(box).getByLabelText(/P-1／測試專案/))
     fireEvent.click(within(box).getByLabelText(/未完成任務/))
     fireEvent.click(within(box).getByRole('button', { name: '確認啟用帳號' }))
@@ -677,9 +679,9 @@ describe('UsersPage 批次停用帳號（#414）', () => {
     fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
 
     const box = await screen.findByRole('region', { name: '批次啟用確認' })
-    const anna = within(box).getByRole('group', { name: 'anna.deng' })
-    const bobGroup = within(box).getByRole('group', { name: 'bob.lin' })
-    fireEvent.click(within(anna).getByLabelText('project.use'))
+    const anna = within(box).getByRole('group', { name: /anna\.deng/ })
+    const bobGroup = within(box).getByRole('group', { name: /bob\.lin/ })
+    fireEvent.click(within(anna).getByLabelText('使用專案功能'))
     fireEvent.click(within(bobGroup).getByLabelText(/P-1／測試專案/))
     fireEvent.click(within(box).getByRole('button', { name: '確認啟用帳號' }))
 
@@ -1206,7 +1208,7 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
     })
     renderUsers()
     const box = await openFor(/anna\.deng/, '啟用')
-    const permission = await within(box).findByLabelText('project.use')
+    const permission = await within(box).findByLabelText('使用專案功能')
     const membership = within(box).getByLabelText(/P-1／測試專案/)
     fireEvent.click(permission)
     fireEvent.click(membership)
@@ -1257,7 +1259,7 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
     fireEvent.click(screen.getByRole('button', { name: '啟用帳號' }))
     const box = await screen.findByRole('region', { name: '操作確認' })
 
-    expect(await within(box).findByLabelText('project.use')).toBeVisible()
+    expect(await within(box).findByLabelText('使用專案功能')).toBeVisible()
     expect(within(box).getByText('選擇要恢復的權限')).toBeInTheDocument()
     expect(within(box).queryByText('選擇要恢復的委派範圍')).toBeNull()
     expect(within(box).queryByText('選擇要恢復的專案成員關係')).toBeNull()
@@ -1556,6 +1558,7 @@ describe('帳號詳情與批次的審查修正（#414）', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: '重設臨時密碼' }),
     )
+    fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
     const alert = await screen.findByRole('alert')
     expect(alert.closest('.account-detail-actions')).toBeNull()
   })
@@ -1608,6 +1611,7 @@ describe('第二輪審查的帳號錯誤隔離（#414）', () => {
         name: '重設臨時密碼',
       }),
     )
+    fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
     await screen.findByRole('alert')
     view.rerender(
       <DataMemoryRouter>
@@ -1618,5 +1622,184 @@ describe('第二輪審查的帳號錯誤隔離（#414）', () => {
     )
     await screen.findByRole('heading', { name: '另一個帳號' })
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('#727 帳號操作保護', () => {
+  it('重設密碼先確認後果，取消不發請求', async () => {
+    const backend = stubBackend()
+    renderUsers({ detailUserId: regularUser.id })
+    fireEvent.click(
+      await screen.findByRole('button', { name: '重設臨時密碼' }),
+    )
+    const box = screen.getByRole('region', { name: '操作確認' })
+    expect(box).toHaveTextContent('他目前的密碼與登入狀態會立刻失效')
+    expect(within(box).getByRole('button', { name: '確認重設' })).toHaveClass(
+      'btn-danger',
+    )
+    expect(backend.count('POST', /temporary-password$/)).toBe(0)
+    fireEvent.click(within(box).getByRole('button', { name: '取消' }))
+    expect(backend.count('POST', /temporary-password$/)).toBe(0)
+  })
+
+  it('批次停用後準備啟用及取消，清除兩種舊訊息', async () => {
+    stubBackend()
+    renderUsers({ onSelectUser: vi.fn() })
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '確認停用帳號' }),
+    )
+    await screen.findByText('已停用 1 個帳號。')
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+    const box = await screen.findByRole('region', { name: '批次啟用確認' })
+    expect(screen.queryByText('已停用 1 個帳號。')).toBeNull()
+    fireEvent.click(within(box).getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('region', { name: '批次啟用確認' })).toBeNull()
+    expect(
+      screen.getByRole('checkbox', { name: '選取 anna.deng' }),
+    ).toBeChecked()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('#727 恢復項目的共用白話內容', () => {
+  it.each(['single', 'batch'])(
+    '%s 不顯示英文碼且具姓名 legend',
+    async (mode) => {
+      stubBackend({
+        users: [{ ...regularUser, is_active: false }],
+        preview: {
+          permission_codes: ['project.use', 'inspection.use'],
+          delegated_modules: ['inspection'],
+          tasks: [
+            {
+              task_id: 't1',
+              project_id: 'project-1',
+              name: '管線查核',
+              status: 'IN_PROGRESS',
+            },
+          ],
+        },
+      })
+      renderUsers(mode === 'batch' ? { onSelectUser: vi.fn() } : {})
+      let box: HTMLElement
+      if (mode === 'batch') {
+        fireEvent.click(
+          await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+        box = await screen.findByRole('region', { name: '批次啟用確認' })
+      } else {
+        const row = await screen.findByRole('row', { name: /anna\.deng/ })
+        fireEvent.click(within(row).getByRole('button', { name: '啟用' }))
+        box = await screen.findByRole('region', { name: '操作確認' })
+        await within(box).findByText('選擇要恢復的權限')
+      }
+      expect(
+        within(box).getByRole('group', { name: '鄧安娜（anna.deng）' }),
+      ).toBeVisible()
+      expect(
+        within(box).getByRole('checkbox', { name: '使用專案功能' }),
+      ).toBeVisible()
+      expect(
+        within(box).getByRole('checkbox', { name: '使用查核功能' }),
+      ).toBeVisible()
+      expect(
+        within(box).getByRole('checkbox', { name: '查核權限管理' }),
+      ).toBeVisible()
+      expect(
+        within(box).getByRole('checkbox', { name: '管線查核（進行中）' }),
+      ).toBeVisible()
+      expect(box).not.toHaveTextContent(
+        /project\.use|inspection\.use|IN_PROGRESS/,
+      )
+    },
+  )
+})
+
+describe('#727 批次錯誤清除', () => {
+  it.each([true, false])(
+    '取消與搜尋清除批次錯誤（啟用狀態 %s）',
+    async (active) => {
+      stubBackend({
+        users: [{ ...regularUser, is_active: active }],
+        fail: (call) => call.path.endsWith(':batch-active-status'),
+      })
+      renderUsers({ onSelectUser: vi.fn() })
+      const select = await screen.findByRole('checkbox', {
+        name: '選取 anna.deng',
+      })
+      fireEvent.click(select)
+      const action = active ? '停用' : '啟用'
+      fireEvent.click(
+        screen.getByRole('button', { name: `批次${action}帳號` }),
+      )
+      const box = await screen.findByRole('region', {
+        name: `批次${action}確認`,
+      })
+      fireEvent.click(
+        within(box).getByRole('button', { name: `確認${action}帳號` }),
+      )
+      await screen.findByRole('alert')
+      fireEvent.click(within(box).getByRole('button', { name: '取消' }))
+      expect(screen.queryByRole('alert')).toBeNull()
+      fireEvent.click(
+        screen.getByRole('button', { name: `批次${action}帳號` }),
+      )
+      const retry = await screen.findByRole('region', {
+        name: `批次${action}確認`,
+      })
+      fireEvent.click(
+        within(retry).getByRole('button', { name: `確認${action}帳號` }),
+      )
+      await screen.findByRole('alert')
+      fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+    },
+  )
+})
+
+describe('#727 重設確認的預覽錯誤隔離', () => {
+  it('停用預覽失敗後改重設，不沿用停用錯誤', async () => {
+    stubBackend({ fail: (call) => call.path.endsWith('/deactivation-check') })
+    renderUsers({ detailUserId: regularUser.id })
+    fireEvent.click(await screen.findByRole('button', { name: '停用帳號' }))
+    await screen.findByRole('alert')
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: '確認重設' })).toBeEnabled()
+  })
+})
+
+describe('#727c 反向批次訊息清除', () => {
+  it('啟用成功後準備停用即清除舊訊息，取消不再寫入', async () => {
+    const backend = stubBackend({
+      users: [{ ...regularUser, is_active: false }],
+    })
+    renderUsers({ onSelectUser: vi.fn() })
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '確認啟用帳號' }),
+    )
+    await screen.findByText('已啟用 1 個帳號。')
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    const box = await screen.findByRole('region', { name: '批次停用確認' })
+    expect(screen.queryByText('已啟用 1 個帳號。')).toBeNull()
+    fireEvent.click(within(box).getByRole('button', { name: '取消' }))
+    expect(backend.count('POST', /:batch-active-status$/)).toBe(1)
+    expect(screen.queryByRole('region', { name: '批次停用確認' })).toBeNull()
   })
 })

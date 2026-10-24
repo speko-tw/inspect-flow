@@ -74,11 +74,20 @@ function AdminRouteSuspense({ children }: { children: ReactNode }) {
   return <Suspense fallback={<p>載入中…</p>}>{children}</Suspense>
 }
 
-function ProjectPlanningRoute() {
+function ProjectPlanningRoute({
+  viewerPermissions,
+}: {
+  viewerPermissions: string[]
+}) {
   const { projectId } = useParams()
+  const { user } = useCurrentUser()
   return (
     <Suspense fallback={<p>載入中…</p>}>
-      <PlanningPage key={projectId} initialProjectId={projectId} />
+      <PlanningPage
+        key={projectId}
+        initialProjectId={projectId}
+        viewerPermissions={user.is_admin ? undefined : viewerPermissions}
+      />
     </Suspense>
   )
 }
@@ -185,7 +194,9 @@ const PROJECT_ROUTES = (
     <Route
       element={
         <ProjectSectionPage section="planning">
-          <ProjectPlanningRoute />
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
         </ProjectSectionPage>
       }
       path={nestedRoutePath(ROUTES.projectPlanning, ROUTES.adminShell)}

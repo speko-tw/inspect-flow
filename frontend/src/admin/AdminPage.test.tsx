@@ -1048,6 +1048,7 @@ describe('admin user and company pages', () => {
     renderAdmin('/accounts/user-1')
     await screen.findByRole('heading', { name: '鄧安娜' })
     fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
 
     expect(
       await screen.findByRole('heading', { name: '臨時密碼已重設' }),
@@ -1074,6 +1075,7 @@ describe('admin user and company pages', () => {
     // #499：等待非同步重設完成與結果頁的導覽 guard 掛載。
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+      fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
     })
     await screen.findByRole('heading', { name: '臨時密碼已重設' })
     fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
@@ -1106,6 +1108,7 @@ describe('admin user and company pages', () => {
     // #499：等待非同步重設完成與結果頁的導覽 guard 掛載。
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+      fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
     })
     await screen.findByRole('heading', { name: '臨時密碼已重設' })
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))

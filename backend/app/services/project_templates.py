@@ -343,7 +343,12 @@ def create_template_from_project_item(
         .with_for_update(read=True)
         .execution_options(populate_existing=True)
     )
-    system = db.get(TemplateSystem, system_id)
+    # TPL-R26、#727：持有目標系統鎖後再配號，並保留來源共享鎖。
+    system = db.scalar(
+        select(TemplateSystem)
+        .where(TemplateSystem.id == system_id)
+        .with_for_update()
+    )
     if source is None or system is None:
         return None
 
@@ -425,7 +430,15 @@ def create_template_from_project_item(
         db,
         {
             "system_id": system_id,
-            "sequence": source.sequence,
+            "sequence": (
+                db.scalar(
+                    select(func.max(TemplateItem.sequence)).where(
+                        TemplateItem.system_id == system_id
+                    )
+                )
+                or 0
+            )
+            + 1,
             "title": source.title if name is None else name,
             "instruction": source.instruction,
             "inspection_points": points_data,

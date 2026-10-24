@@ -9,6 +9,7 @@ import {
 import { Link } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
+import { isNotFound } from '../../http'
 import permissionCodeContract from '../../permissionCodeContract'
 import {
   Button,
@@ -250,8 +251,10 @@ function profileRoleLabel(
   )
 }
 
+const NONMEMBER_MESSAGE = '他還不是這個專案的成員，請先到專案成員頁加入。'
+
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : '操作失敗，請重試。'
+  return managementErrorMessage(error)
 }
 
 function ModulePermissionsNavigationGuard({
@@ -450,6 +453,7 @@ function ModulePermissionsPageContent({
   )
   const [existingAccount, setExistingAccount] = useState(false)
   const [error, setError] = useState('')
+  const [nonmemberProject, setNonmemberProject] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [revoke, setRevoke] = useState<{
@@ -1195,6 +1199,8 @@ function ModulePermissionsPageContent({
   }
 
   async function diagnose() {
+    setNonmemberProject('')
+    setNotice('')
     setCandidateRoles([])
     setSelectedCandidateRole('')
     setSafeCandidateRole('')
@@ -1279,7 +1285,12 @@ function ModulePermissionsPageContent({
             : '這個專案裡沒有可以查看或執行任務的角色。',
       )
     } catch (caught) {
-      setError(message(caught))
+      if (isNotFound(caught) && needsProject && diagnosticProject) {
+        setNonmemberProject(diagnosticProject)
+        setError(NONMEMBER_MESSAGE)
+      } else {
+        setError(message(caught))
+      }
     }
   }
 
@@ -1333,7 +1344,16 @@ function ModulePermissionsPageContent({
           description="先選職務，再確認帳號實際可使用的功能。"
         />
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p role="alert">
+          {error}
+          {error === NONMEMBER_MESSAGE && nonmemberProject && (
+            <Link to={`/projects/${nonmemberProject}/members`}>
+              前往專案成員頁
+            </Link>
+          )}
+        </p>
+      )}
       {!embedded && !wizardOpen && (
         <Card>
           <h2>帳號清單</h2>
@@ -2236,6 +2256,8 @@ function ModulePermissionsPageContent({
               <select
                 value={diagnosticAction}
                 onChange={(event) => {
+                  setError('')
+                  setNonmemberProject('')
                   setDiagnosticAction(event.target.value)
                   if (!['task-list', 'members'].includes(event.target.value)) {
                     setDiagnosticProject('')
@@ -2257,6 +2279,8 @@ function ModulePermissionsPageContent({
                   value={diagnosticProject}
                   disabled={projectOptionsStatus !== 'ready'}
                   onChange={(event) => {
+                    setError('')
+                    setNonmemberProject('')
                     setDiagnosticProject(event.target.value)
                     setNotice('')
                     setCandidateRoles([])

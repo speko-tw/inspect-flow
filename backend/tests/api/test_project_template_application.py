@@ -1472,3 +1472,40 @@ def test_failed_apply_audit_rolls_back_project_item_copies(
         db_session.scalar(select(func.count()).select_from(AuditLog))
         == before_audit_count
     )
+
+
+@pytest.mark.parametrize("existing, expected", [(True, [3, 4]), (False, [1])])
+def test_save_template_appends_target_sequence_tpl_r26(
+    db_session, make_client, existing, expected
+):
+    """TPL-R26、#727：存回範本依目標配號，不沿用來源序號。"""
+    world = _world(db_session, make_client)
+    source_system, _ = _create_templates(world["admin"])
+    applied = world["editor"].post(
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template",
+        json={"system_id": source_system},
+    )
+    assert applied.status_code == 201, applied.text
+    target = source_system
+    if not existing:
+        category = world["admin"].post(
+            "/api/v1/template-categories", json={"name": "Empty"}
+        )
+        response = world["admin"].post(
+            f"/api/v1/template-categories/{category.json()['id']}/systems",
+            json={"name": "Empty system"},
+        )
+        assert response.status_code == 201, response.text
+        target = response.json()["id"]
+    for sequence in expected:
+        saved = world["admin"].post(
+            f"/api/v1/projects/{world['project'].id}/templates",
+            json={
+                "project_inspection_item_id": applied.json()[0]["id"],
+                "system_id": target,
+                "name": f"Saved {sequence}",
+            },
+        )
+        assert saved.status_code == 201, saved.text
+        assert saved.json()["sequence"] == sequence

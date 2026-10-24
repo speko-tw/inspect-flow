@@ -30,7 +30,11 @@ from app.models import (
     TemplateTextStandard,
     User,
 )
-from tests.db.conftest import create_root_user_with_company
+from app.services.project_templates import create_template_from_project_item
+from tests.db.conftest import (
+    create_root_user_with_company,
+    make_system_admin,
+)
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
@@ -665,3 +669,56 @@ def test_dbf_ac12_rejects_invalid_evidence_roles_and_snapshot_links(
             **_audit(creator),
         ),
     )
+
+
+@pytest.mark.parametrize("existing, expected", [(True, [3, 4]), (False, [1])])
+def test_saved_template_target_sequence_tpl_r26(
+    session: Session, creator: User, project: Project, existing, expected
+) -> None:
+    """TPL-R26、#727：兩種資料庫都依目標配號，不沿用來源序號。"""
+    make_system_admin(creator)
+    category = _category(session, creator, "配號工程")
+    system = _system(session, creator, category, "配號系統")
+    if existing:
+        for sequence in (1, 2):
+            item = _item(session, creator, system, f"既有 {sequence}")
+            item.sequence = sequence
+        session.flush()
+    source = ProjectInspectionItem(
+        project_id=project.id,
+        sequence=37,
+        title="來源項目",
+        instruction="來源說明",
+        source_template_name="來源範本",
+        applied_at=datetime.now(UTC),
+        **_audit(creator),
+    )
+    session.add(source)
+    session.flush()
+    point = ProjectInspectionPoint(
+        project_inspection_item_id=source.id,
+        sequence=1,
+        title="來源項次",
+        instruction="拍照",
+        **_audit(creator),
+    )
+    session.add(point)
+    session.flush()
+    session.add(
+        ProjectEvidenceRequirement(
+            inspection_point_id=point.id,
+            project_inspection_item_id=source.id,
+            evidence_type="photo",
+            min_count=1,
+            **_audit(creator),
+        )
+    )
+    session.flush()
+    for sequence in expected:
+        saved = create_template_from_project_item(
+            session, project.id, source.id, system.id, f"另存 {sequence}"
+        )
+        assert saved is not None
+        assert saved.sequence == sequence
+        assert saved.sequence != source.sequence
+        session.commit()
