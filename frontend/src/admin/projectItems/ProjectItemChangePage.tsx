@@ -78,6 +78,11 @@ const REINSPECT_YES_HINT = [
 const REINSPECT_NO_HINT =
   '只更正文字與數值標準、容差、區間；任務狀態、結果、照片與照片需求不變。'
 
+const STRUCTURE_REINSPECTION_HINT = [
+  '這次有結構變更（項次、欄位、單位、',
+  '標準種類或照片需求），一定要重新查核',
+].join('')
+
 function isReinspectionChoiceRequired(error: unknown): boolean {
   return (
     error instanceof ManagementApiError &&
@@ -237,6 +242,34 @@ function hasStructureChange(
   return false
 }
 
+function structureSignature(
+  points: InspectionPoint[],
+  photoDraft: Record<string, string>,
+): string {
+  return JSON.stringify({
+    points: points.map((point) => ({
+      id: point.id,
+      clientKey: point.clientKey,
+      numericKind: Boolean(point.numeric_standard),
+      textKind: Boolean(point.text_standard),
+      binding:
+        point.numeric_standard?.measurement_field_client_key ??
+        point.numeric_standard?.measurement_field_client_id ??
+        point.numeric_standard?.measurement_field_id ??
+        null,
+      unit: point.numeric_standard?.unit ?? null,
+      fields: point.measurement_fields.map((field) => ({
+        id: field.id,
+        clientKey: field.clientKey,
+        type: field.field_type,
+        unit: field.unit,
+      })),
+      evidence: point.evidence_requirements,
+    })),
+    photoDraft,
+  })
+}
+
 function removesStructure(
   before: InspectionPoint[],
   after: InspectionPoint[],
@@ -322,6 +355,7 @@ export default function ProjectItemChangePage({
   const [busy, setBusy] = useState(false)
   const guard = useSubmitGuard()
   const [error, setError] = useState('')
+  const [focusSaveError, setFocusSaveError] = useState(false)
   const [serverFieldErrors, setServerFieldErrors] = useState<
     Record<string, string>
   >({})
@@ -341,6 +375,7 @@ export default function ProjectItemChangePage({
   const editorRootRef = useRef<HTMLDivElement>(null)
   const actionErrorRef = useRef<HTMLParagraphElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
+  const previousStructureRef = useRef<string | null>(null)
 
   const editorValues = {
     title,
@@ -375,12 +410,25 @@ export default function ProjectItemChangePage({
   )
 
   useEffect(() => {
+    const current = structureSignature(inspectionPoints, photoDraft)
+    if (
+      previousStructureRef.current !== null &&
+      previousStructureRef.current !== current
+    ) {
+      // IP-R13/IP-R22：結構改動後不能沿用舊的「不要」決策。
+      setReinspect(null)
+    }
+    previousStructureRef.current = current
+  }, [inspectionPoints, photoDraft])
+
+  useEffect(() => {
     let active = true
     if (!projectId || !itemId) return
     void api
       .loadPreview(projectId, itemId)
       .then((loaded) => {
         if (!active) return
+        setFocusSaveError(false)
         setAccessDenied(false)
         const localized = {
           ...loaded,
@@ -403,6 +451,10 @@ export default function ProjectItemChangePage({
         setInstruction(localized.item.instruction)
         setInspectionPoints(localized.item.inspection_points)
         setPhotoDraft(photos)
+        previousStructureRef.current = structureSignature(
+          localized.item.inspection_points,
+          photos,
+        )
         setBaseline(
           JSON.stringify({
             title: localized.item.title,
@@ -413,15 +465,18 @@ export default function ProjectItemChangePage({
         )
         if (loaded.readOnly) {
           setReadOnly(true)
+          setFocusSaveError(false)
           setError('你沒有權限修改此專案查核項目。')
         }
         if (loaded.affectedTasks.some((task) => task.planArchived)) {
           setReadOnly(true)
+          setFocusSaveError(false)
           setError(ARCHIVED_PLAN_ERROR)
         }
       })
       .catch((caught: unknown) => {
         if (!active) return
+        setFocusSaveError(false)
         // 項目 id 格式不對或不存在：顯示找不到，不顯示空表單與錯誤句。
         if (isNotFound(caught)) setNotFound(true)
         if (isForbidden(caught)) setAccessDenied(true)
@@ -452,14 +507,14 @@ export default function ProjectItemChangePage({
   }, [confirming])
 
   useEffect(() => {
-    if (error && preview) {
+    if (error && preview && focusSaveError) {
       const requestError = editorRootRef.current?.querySelector<HTMLElement>(
         '.tpl-editor-footer [role="alert"]',
       )
       requestError?.scrollIntoView?.({ block: 'nearest' })
       requestError?.focus({ preventScroll: true })
     }
-  }, [error, preview])
+  }, [error, focusSaveError, preview])
 
   function applyPreview(loaded: ProjectItemPreview) {
     const localized = {
@@ -483,6 +538,10 @@ export default function ProjectItemChangePage({
     setInstruction(localized.item.instruction)
     setInspectionPoints(localized.item.inspection_points)
     setPhotoDraft(photos)
+    previousStructureRef.current = structureSignature(
+      localized.item.inspection_points,
+      photos,
+    )
     // 新一輪修改須重新選擇；純改名由編輯內容推導預設值（#435）。
     setReinspect(null)
     setBaseline(
@@ -521,6 +580,7 @@ export default function ProjectItemChangePage({
   async function save(selectedReinspect?: boolean, recheckDrafts = false) {
     if (!projectId || !itemId) return
     if (!guard.enter()) return
+    setFocusSaveError(false)
     setError('')
     setBusy(true)
     const change: ProjectItemChange = {
@@ -589,6 +649,7 @@ export default function ProjectItemChangePage({
         setError('已儲存變更，但重新載入任務狀態失敗。')
       }
     } catch (caught) {
+      setFocusSaveError(true)
       let fieldErrorsHandled = false
       if (isForbidden(caught)) {
         setReadOnly(true)
@@ -763,6 +824,11 @@ export default function ProjectItemChangePage({
           {error}
         </p>
       )}
+      {error && preview && !focusSaveError && (
+        <p className="notice-error" role="alert">
+          {error}
+        </p>
+      )}
       {preview && (
         <>
           {currentDraft && (
@@ -819,7 +885,7 @@ export default function ProjectItemChangePage({
                   })
                 }}
                 resetMode={() => {}}
-                requestError={error}
+                requestError={focusSaveError ? error : ''}
                 saveItem={submitItem}
                 saveLabel="儲存變更"
                 selected={null}
@@ -879,6 +945,7 @@ export default function ProjectItemChangePage({
               confirmDisabled={
                 readOnly ||
                 (needsChoice && reinspectionChoice === null) ||
+                // IP-R13/IP-R22：有結構變更時禁止沿用舊的「不要」決策。
                 (needsChoice &&
                   reinspectionChoice === false &&
                   hasStructuralChange)
@@ -927,7 +994,7 @@ export default function ProjectItemChangePage({
                     </label>
                     <p className="tpl-hint muted-text" id="reinspect-no-hint">
                       {hasStructuralChange
-                        ? '這次有增減項次／欄位，一定要重新查核'
+                        ? STRUCTURE_REINSPECTION_HINT
                         : REINSPECT_NO_HINT}
                     </p>
                   </fieldset>

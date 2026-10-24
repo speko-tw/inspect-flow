@@ -410,6 +410,7 @@ describe('planning management page', () => {
 
   it('keeps plans usable when zones and members return 403', async () => {
     const client = createMockPlanningClient()
+    await client.createPlan('project-demo-1', { name: '唯讀計畫' })
     client.listProjectZones = async () => {
       throw new ManagementApiError(403, 'permission.denied')
     }
@@ -424,13 +425,29 @@ describe('planning management page', () => {
     expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.click(
+      await screen.findByRole('button', { name: '唯讀計畫（草稿）' }),
+    )
+    await openTaskCreationForm()
+    const form = document.querySelector(
+      '[data-error-context="task"]',
+    ) as HTMLFormElement
+    expect(
+      within(form).getByText(ASSIGNEE_LIST_UNAVAILABLE_NOTICE),
+    ).toBeInTheDocument()
+    expect(within(form).queryByRole('button', { name: '重試' })).toBeNull()
   })
 
   it('shows unavailable assignee lookup beside the task field', async () => {
     const client = createMockPlanningClient()
     await client.createPlan('project-demo-1', { name: '人員查詢失敗' })
+    const available = await client.listProjectAssignees('project-demo-1')
+    let attempts = 0
     client.listProjectAssignees = async () => {
-      throw new ManagementApiError(503, 'inspection_task.unavailable')
+      if (attempts++ === 0) {
+        throw new ManagementApiError(503, 'inspection_task.unavailable')
+      }
+      return available
     }
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
 
@@ -448,10 +465,15 @@ describe('planning management page', () => {
       '[data-error-context="task"]',
     ) as HTMLFormElement
     const selector = within(form).getByLabelText('建議指派人')
-    const hint = within(form).getByText(ASSIGNEE_LIST_UNAVAILABLE_NOTICE)
+    const hint = within(form).getByText('成員名單暫時載入失敗')
     expect(selector).toBeDisabled()
     expect(selector).toHaveAttribute('aria-describedby', hint.id)
     expect(within(form).getByRole('option', { name: '不指定' })).toBeVisible()
+    fireEvent.click(within(form).getByRole('button', { name: '重試' }))
+    await waitFor(() => expect(selector).toBeEnabled())
+    expect(
+      within(form).queryByText('成員名單暫時載入失敗'),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })

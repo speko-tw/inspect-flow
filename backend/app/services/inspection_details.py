@@ -172,14 +172,22 @@ def project_inspection_item_details(
 
 
 def project_inspection_item_list_details(
-    db: Session, items: Sequence[ProjectInspectionItem]
+    db: Session,
+    items: Sequence[ProjectInspectionItem],
+    *,
+    include_task_count: bool,
 ) -> list[dict[str, Any]]:
-    """依 TPL-R27 為列表批次補上與 IP-R21 刪除 guard 相同的引用數。
+    """依 TPL-R27 序列化清單，僅替可編輯者批次計算引用數。
 
-    不過濾任務狀態，保留草稿、取消與歷史快照引用；單次聚合查詢避免
-    項目筆數增加時逐列查詢。
+    引用數遵守 IP-R21，含草稿、取消及歷史快照；單次聚合避免 N+1。
+    唯讀者仍可讀取項目，但不需要取得刪除操作專用的引用數。
     """
     rows = project_inspection_item_details(db, items)
+    if not include_task_count:
+        for row in rows:
+            row["task_count"] = None
+        return rows
+
     item_ids = [item.id for item in items]
     counts = {}
     if item_ids:

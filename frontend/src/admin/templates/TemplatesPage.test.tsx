@@ -7,7 +7,7 @@ import {
   within,
 } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import type { InitialEntry } from 'react-router'
+import { useLocation, type InitialEntry } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 
@@ -18,12 +18,22 @@ import TemplatesPage from './TemplatesPage'
 import wireFixture from './fixtures/template-item-payload.json'
 import type { TemplateItem } from './api'
 
+function LocationProbe() {
+  const location = useLocation()
+  return (
+    <span data-testid="route-state">{JSON.stringify(location.state)}</span>
+  )
+}
+
 function render(ui: ReactElement, initialEntries?: InitialEntry[]) {
   return renderWithoutRouter(
     <CurrentUserProvider
       value={{ user: currentUserFixture(), clear: vi.fn() }}
     >
-      <DataMemoryRouter initialEntries={initialEntries}>{ui}</DataMemoryRouter>
+      <DataMemoryRouter initialEntries={initialEntries}>
+        <LocationProbe />
+        {ui}
+      </DataMemoryRouter>
     </CurrentUserProvider>,
   )
 }
@@ -428,13 +438,23 @@ it('存檔後返回並選取新範本，顯示目標類別與系統', async () =
   expect(
     await screen.findByRole('heading', { name: '欄杆尺寸' }),
   ).toBeInTheDocument()
-  const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+  const navAfterRoute = screen.getByRole('complementary', {
+    name: '範本庫導覽',
+  })
   expect(
-    await within(nav).findByRole('button', { name: '欄杆尺寸' }),
+    await within(navAfterRoute).findByRole('button', { name: '欄杆尺寸' }),
   ).toHaveAttribute('aria-current', 'true')
   expect(
     screen.getByText('已存入『土木工程 / 護欄』：欄杆尺寸'),
   ).toHaveAttribute('role', 'status')
+  await waitFor(() =>
+    expect(screen.getByTestId('route-state')).toHaveTextContent('null'),
+  )
+  const notice = screen.getByText('已存入『土木工程 / 護欄』：欄杆尺寸')
+  fireEvent.click(
+    within(navAfterRoute).getByRole('button', { name: '土木工程' }),
+  )
+  expect(notice).not.toBeInTheDocument()
   expect(screen.getByRole('link', { name: '從專案存為範本' })).toHaveAttribute(
     'href',
     '/templates/from-project',

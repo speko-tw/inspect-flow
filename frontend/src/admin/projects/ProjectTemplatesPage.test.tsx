@@ -981,7 +981,12 @@ describe('專案範本套用與存為範本（#429）', () => {
       ),
     })
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: '存為範本' }))
+    const firstItem = (await screen.findByText('管線查核')).closest(
+      'li',
+    ) as HTMLElement
+    fireEvent.click(
+      within(firstItem).getByRole('button', { name: '存為範本' }),
+    )
     expect(
       screen.getByRole('heading', {
         name: '將「管線查核」存為範本',
@@ -1085,11 +1090,19 @@ describe('專案範本套用與存為範本（#429）', () => {
   it('存為範本後，目標系統在範本樹的項目數會重新載入（#487）', async () => {
     mockApi({
       canSave: true,
-      projectItems: [PROJECT_ITEM],
+      projectItems: [
+        PROJECT_ITEM,
+        { ...PROJECT_ITEM, id: 'item-2', title: '第二項目' },
+      ],
       secondSystemGrowsAfterSave: true,
     })
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: '存為範本' }))
+    const firstItem = (await screen.findByText('管線查核')).closest(
+      'li',
+    ) as HTMLElement
+    fireEvent.click(
+      within(firstItem).getByRole('button', { name: '存為範本' }),
+    )
     const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
     fireEvent.click(
       await within(nav).findByRole('button', { name: '建築工程' }),
@@ -1101,9 +1114,32 @@ describe('專案範本套用與存為範本（#429）', () => {
       ).toHaveTextContent('1 個查核項目'),
     )
     fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
-    expect(await screen.findByRole('status')).toHaveTextContent(
+    expect(
+      await screen.findByRole('button', { name: '儲存中…' }),
+    ).toBeDisabled()
+    const projectItemsPanel = (
+      await screen.findByRole('heading', {
+        name: '專案查核項目',
+      })
+    ).closest('section') as HTMLElement
+    expect(within(projectItemsPanel).getByRole('status')).toHaveTextContent(
       '已將「管線查核」存入「建築工程 / 電氣」。',
     )
+    expect(
+      screen.getByRole('heading', { name: '套用範本到專案' }),
+    ).toBeInTheDocument()
+    const secondItem = screen
+      .getByText('第二項目')
+      .closest('li') as HTMLElement
+    fireEvent.click(
+      within(secondItem).getByRole('button', { name: '存為範本' }),
+    )
+    fireEvent.click(within(nav).getByRole('button', { name: '建築工程' }))
+    fireEvent.click(within(nav).getByRole('button', { name: '電氣' }))
+    expect(
+      screen.queryByText('已將「管線查核」存入「建築工程 / 電氣」。'),
+    ).toBeNull()
+    expect(await screen.findByLabelText('範本名稱')).toHaveValue('第二項目')
     await waitFor(() =>
       expect(
         within(nav).getByRole('button', { name: '電氣' }),
@@ -1113,7 +1149,10 @@ describe('專案範本套用與存為範本（#429）', () => {
 
   async function saveIntoSecondSystem(): Promise<HTMLElement> {
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: '存為範本' }))
+    const item = (await screen.findByText('管線查核')).closest(
+      'li',
+    ) as HTMLElement
+    fireEvent.click(within(item).getByRole('button', { name: '存為範本' }))
     const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
     fireEvent.click(
       await within(nav).findByRole('button', { name: '建築工程' }),
@@ -1126,13 +1165,17 @@ describe('專案範本套用與存為範本（#429）', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
     const saveButton = await screen.findByRole('button', {
-      name: '存入這個系統',
+      name: '儲存中…',
     })
-    const saveCard = saveButton.closest('.tpl-card') as HTMLElement
-    expect(within(saveCard).getByRole('status')).toHaveTextContent(
+    expect(saveButton).toBeDisabled()
+    const projectItemsPanel = (
+      await screen.findByRole('heading', {
+        name: '專案查核項目',
+      })
+    ).closest('section') as HTMLElement
+    expect(within(projectItemsPanel).getByRole('status')).toHaveTextContent(
       '已將「管線查核」存入「建築工程 / 電氣」。',
     )
-    expect(saveButton).toBeDisabled()
     return nav
   }
 

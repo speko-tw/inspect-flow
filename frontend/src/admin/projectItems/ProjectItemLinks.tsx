@@ -112,7 +112,7 @@ export default function ProjectItemLinks({
         const parsedCount =
           typeof count === 'string' && /^\d+$/.test(count)
             ? Number(count)
-            : Math.max(1, deleting.task_count)
+            : Math.max(1, deleting.task_count ?? 0)
         const updated = { ...deleting, task_count: parsedCount }
         setItems((current) =>
           current.map((item) => (item.id === updated.id ? updated : item)),
@@ -170,11 +170,13 @@ export default function ProjectItemLinks({
               )}
               <div className="project-item-title">
                 <strong>{item.title}</strong>
-                {item.task_count > 0 && (
-                  <span className="project-item-usage">
-                    使用中（{item.task_count} 個任務）
-                  </span>
-                )}
+                {canEdit &&
+                  item.task_count !== null &&
+                  item.task_count > 0 && (
+                    <span className="project-item-usage">
+                      使用中（{item.task_count} 個任務）
+                    </span>
+                  )}
               </div>
               <p>{item.inspection_points.length} 個查核項次</p>
               <p>來源範本：{item.source_template_name}</p>
@@ -200,6 +202,7 @@ export default function ProjectItemLinks({
                 </Link>
                 {canManageTemplates && (
                   <Link
+                    aria-label={`將「${item.title}」存為範本`}
                     className="btn btn-sm"
                     state={{ saveItemId: item.id }}
                     to={`/projects/${projectId}/inspection-items/templates`}
@@ -216,8 +219,8 @@ export default function ProjectItemLinks({
                       deleteTrigger.current = event.currentTarget
                       setDeleting(item)
                       setDeleteError(
-                        item.task_count > 0
-                          ? blockedDeleteMessage(item.task_count)
+                        (item.task_count ?? 0) > 0
+                          ? blockedDeleteMessage(item.task_count ?? 0)
                           : '',
                       )
                       setNotice('')
@@ -235,7 +238,7 @@ export default function ProjectItemLinks({
                   role="group"
                 >
                   <p ref={deleteAlert} role="alert" tabIndex={-1}>
-                    {deleteError || blockedDeleteMessage(item.task_count)}
+                    {deleteError || blockedDeleteMessage(item.task_count ?? 0)}
                   </p>
                   <div className="project-item-actions">
                     <button

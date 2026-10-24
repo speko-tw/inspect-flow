@@ -269,6 +269,11 @@ export default function PlanningPage({
   const [projectNotFound, setProjectNotFound] = useState(false)
   const [zonesDenied, setZonesDenied] = useState(false)
   const [membersUnavailable, setMembersUnavailable] = useState(false)
+  const [membersFailure, setMembersFailure] = useState<
+    'forbidden' | 'temporary' | null
+  >(null)
+  const [retryingMembers, setRetryingMembers] = useState(false)
+  const assigneeRequest = useRef(0)
   const [error, setError] = useState('')
   const [errorContext, setErrorContext] = useState('page')
   const [fieldError, setFieldError] = useState<{ field: FieldKey } | null>(
@@ -582,12 +587,14 @@ export default function PlanningPage({
   useEffect(() => {
     if (!projectId) return
     let active = true
+    const requestId = ++assigneeRequest.current
     async function loadProjectData() {
       setLoading(true)
       setError('')
       setErrorContext('page')
       setZonesDenied(false)
       setMembersUnavailable(false)
+      setMembersFailure(null)
       const allPlans = () =>
         collectPages<InspectionPlan>((cursor) =>
           client.listPlans(projectId, cursor),
@@ -624,6 +631,9 @@ export default function PlanningPage({
           // 名單是選填查詢；失敗時保留其他頁面操作與既有表單值。
           setMembers([])
           setMembersUnavailable(true)
+          setMembersFailure(
+            isForbidden(membersResult.reason) ? 'forbidden' : 'temporary',
+          )
         }
         if (plansResult.status === 'fulfilled') {
           setPlans(plansResult.value)
@@ -641,8 +651,37 @@ export default function PlanningPage({
     void loadProjectData()
     return () => {
       active = false
+      if (assigneeRequest.current === requestId) {
+        assigneeRequest.current += 1
+      }
     }
   }, [client, projectId, reloadKey, canLoadAssignees])
+
+  async function retryAssigneeList(): Promise<void> {
+    if (!projectId || retryingMembers) return
+    const requestId = ++assigneeRequest.current
+    setRetryingMembers(true)
+    try {
+      const result = await client.listProjectAssignees(projectId)
+      if (assigneeRequest.current !== requestId) return
+      setMembers(result)
+      setMembersFailure(null)
+      setMembersUnavailable(false)
+    } catch (caught) {
+      if (assigneeRequest.current !== requestId) return
+      setMembersFailure(isForbidden(caught) ? 'forbidden' : 'temporary')
+      setMembersUnavailable(true)
+    } finally {
+      if (assigneeRequest.current === requestId) setRetryingMembers(false)
+    }
+  }
+
+  const membersFailureText =
+    membersFailure === 'forbidden'
+      ? ASSIGNEE_LIST_UNAVAILABLE_NOTICE
+      : membersFailure === 'temporary'
+        ? '成員名單暫時載入失敗'
+        : ''
 
   const [selectedPlanData, setSelectedPlanData] = useState<{
     id: string
@@ -1980,8 +2019,17 @@ export default function PlanningPage({
                                 className="assignee-list-unavailable"
                                 id={`assignee-list-unavailable-${task.id}`}
                               >
-                                {ASSIGNEE_LIST_UNAVAILABLE_NOTICE}
+                                {membersFailureText}
                               </p>
+                            )}
+                            {membersFailure === 'temporary' && (
+                              <button
+                                disabled={retryingMembers}
+                                onClick={() => void retryAssigneeList()}
+                                type="button"
+                              >
+                                {retryingMembers ? '重試中…' : '重試'}
+                              </button>
                             )}
                             {fieldErrorText('suggested-assignee')}
                             {error && errorContext === 'assignee' && (
@@ -2239,8 +2287,17 @@ export default function PlanningPage({
                       className="assignee-list-unavailable"
                       id="assignee-list-unavailable-create"
                     >
-                      {ASSIGNEE_LIST_UNAVAILABLE_NOTICE}
+                      {membersFailureText}
                     </p>
+                  )}
+                  {membersFailure === 'temporary' && (
+                    <button
+                      disabled={retryingMembers}
+                      onClick={() => void retryAssigneeList()}
+                      type="button"
+                    >
+                      {retryingMembers ? '重試中…' : '重試'}
+                    </button>
                   )}
                   {fieldErrorText('task-assignee')}
                   <button

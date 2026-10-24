@@ -23,7 +23,7 @@ export interface ProjectItemData {
 
 /** TPL-R27：只有專案項目列表回傳的全狀態任務引用數。 */
 export interface ProjectItemListData extends ProjectItemData {
-  task_count: number
+  task_count: number | null
 }
 
 interface TaskItem {

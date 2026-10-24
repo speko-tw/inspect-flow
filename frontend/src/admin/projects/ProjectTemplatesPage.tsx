@@ -319,6 +319,7 @@ export default function ProjectTemplatesPage({
     }
     if (!projectItems.some((item) => item.id === requestedId)) return
     handledSaveItemId.current = requestedId
+    // replace 清掉一次性路由指令，避免返回此頁時再次進入存檔模式。
     navigate(location.pathname, { replace: true, state: null })
   }, [
     itemsLoading,
@@ -593,6 +594,9 @@ export default function ProjectTemplatesPage({
       const systemName = destination?.name ?? '目標系統'
       setNotice(`已將「${name}」存入「${categoryName} / ${systemName}」。`)
       setSaveCompleted(true)
+      setSaveSource(null)
+      setRouteSaveItemId(null)
+      setRouteSaveName(null)
     } catch (caught) {
       setSaveError(templateErrorMessage(caught, activeSaveName.trim()))
       setSaveErrorCode(
@@ -709,6 +713,11 @@ export default function ProjectTemplatesPage({
           {!isSaveMode && (
             <section className="tpl-nav tpl-project-items">
               <h2>專案查核項目</h2>
+              {saveCompleted && notice && (
+                <p className="notice-success" role="status">
+                  {notice}
+                </p>
+              )}
               {itemsLoading && <p>載入中…</p>}
               {showEmptyProjectItems && <p>目前沒有查核項目。</p>}
               <ul>

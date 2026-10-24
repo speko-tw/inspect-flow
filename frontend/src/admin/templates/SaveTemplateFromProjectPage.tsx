@@ -27,7 +27,10 @@ import './SaveTemplateFromProjectPage.css'
 type Selection = { type: 'category' | 'system' | 'item'; id: string }
 type ErrorStep = 'projects' | 'items' | 'target' | 'save'
 
-/** 讓範本管理員從專案查核項目複製到範本庫。 */
+/**
+ * 依 TPL-R23／AC31 讓範本管理員複製專案查核項目到範本庫。
+ * 僅限 `template.manage`；非成員可讀取並複製，不可寫入專案。
+ */
 export default function SaveTemplateFromProjectPage() {
   const { user } = useCurrentUser()
   const navigate = useNavigate()
@@ -170,7 +173,9 @@ export default function SaveTemplateFromProjectPage() {
           savedCategoryId: category?.id,
           savedSystemId: system?.id,
           savedTemplateTitle: name.trim(),
-          savedTemplatePath: `${category?.name ?? '範本庫'} / ${system?.name ?? '目標系統'}`,
+          savedTemplatePath: `${category?.name ?? '範本庫'} / ${
+            system?.name ?? '目標系統'
+          }`,
         },
       })
     } catch (caught) {

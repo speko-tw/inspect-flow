@@ -106,15 +106,16 @@ function apiMessage(error: unknown): string {
 export default function TemplatesPage({ canManage }: { canManage: boolean }) {
   const location = useLocation()
   const navigateRoute = useNavigate()
-  const wizardState = location.state as {
-    savedTemplateTitle?: unknown
-    savedTemplatePath?: unknown
-  } | null
-  const wizardNotice =
-    typeof wizardState?.savedTemplateTitle === 'string' &&
-    typeof wizardState.savedTemplatePath === 'string'
-      ? `已存入『${wizardState.savedTemplatePath}』：${wizardState.savedTemplateTitle}`
+  const [wizardNotice, setWizardNotice] = useState(() => {
+    const state = location.state as {
+      savedTemplateTitle?: unknown
+      savedTemplatePath?: unknown
+    } | null
+    return typeof state?.savedTemplateTitle === 'string' &&
+      typeof state.savedTemplatePath === 'string'
+      ? `已存入『${state.savedTemplatePath}』：${state.savedTemplateTitle}`
       : ''
+  })
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [systems, setSystems] = useState<TemplateSystem[]>([])
   const [items, setItems] = useState<TemplateItem[]>([])
@@ -165,6 +166,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
     return () => query.removeEventListener?.('change', update)
   }, [])
 
+  // ref 防止 StrictMode／依賴更新重複選取；replace 清掉一次性回傳資料。
   useEffect(() => {
     const state = location.state as {
       savedTemplateId?: unknown
@@ -187,8 +189,6 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
     const savedTemplateId = state.savedTemplateId
     const savedCategoryId = state.savedCategoryId
     const savedSystemId = state.savedSystemId
-    const savedTemplateTitle = state.savedTemplateTitle
-    const savedTemplatePath = state.savedTemplatePath
     let active = true
     async function selectSavedTemplate() {
       const categoryId = savedCategoryId
@@ -210,13 +210,8 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
       setSelected({ type: 'item', id: savedTemplateId })
       setExpanded(new Set([categoryId, systemId]))
       setMobilePane('detail')
-      navigateRoute(location.pathname, {
-        replace: true,
-        state: {
-          savedTemplateTitle,
-          savedTemplatePath,
-        },
-      })
+      // ref 防止重複載入選取；replace 清掉一次性 state，避免回頁重播橫幅。
+      navigateRoute(location.pathname, { replace: true, state: null })
     }
     void selectSavedTemplate().catch((caught: unknown) => {
       if (active) fail(caught)
@@ -392,6 +387,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
   }
 
   function navigate(next: Selection): void {
+    setWizardNotice('')
     setNotice('')
     setError('')
     if (dirty) {

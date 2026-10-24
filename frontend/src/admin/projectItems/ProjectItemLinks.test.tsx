@@ -219,16 +219,14 @@ describe('#435 刪除專案查核項目', () => {
   function renderItems(
     fetchMock: ReturnType<typeof vi.fn>,
     user = currentUserFixture(),
+    permissions = ['project_inspection_item.edit'],
   ) {
     vi.stubGlobal('fetch', fetchMock)
     render(
       <CurrentUserProvider value={{ user, clear: vi.fn() }}>
         <MemoryRouter>
           <LocationProbe />
-          <ProjectItemLinks
-            projectId="p1"
-            viewerPermissions={['project_inspection_item.edit']}
-          />
+          <ProjectItemLinks projectId="p1" viewerPermissions={permissions} />
         </MemoryRouter>
       </CurrentUserProvider>,
     )
@@ -376,6 +374,16 @@ describe('#435 刪除專案查核項目', () => {
     )
   })
 
+  it('唯讀清單不顯示編輯者專用的使用中任務數', async () => {
+    renderItems(
+      vi.fn().mockResolvedValueOnce(itemList(2)),
+      currentUserFixture(),
+      ['inspection_plan.read'],
+    )
+    await screen.findByText('未使用項目')
+    expect(screen.queryByText('使用中（2 個任務）')).toBeNull()
+  })
+
   it('範本管理員可從項目卡片進入來源已指定的存為範本流程', async () => {
     renderItems(
       vi.fn().mockResolvedValueOnce(itemList()),
@@ -384,7 +392,9 @@ describe('#435 刪除專案查核項目', () => {
     const item = await screen
       .findByText('未使用項目')
       .then((title) => title.closest('li'))
-    const saveLink = within(item!).getByRole('link', { name: '存為範本' })
+    const saveLink = within(item!).getByRole('link', {
+      name: '將「未使用項目」存為範本',
+    })
     expect(saveLink).toHaveAttribute(
       'href',
       '/projects/p1/inspection-items/templates',
