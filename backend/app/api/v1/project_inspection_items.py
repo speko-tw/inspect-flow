@@ -26,7 +26,7 @@ from app.models import (
     User,
 )
 from app.services.inspection_details import (
-    project_inspection_item_details,
+    project_inspection_item_list_details,
 )
 from app.services.permissions import calculate_effective_access
 from app.services.project_templates import (
@@ -190,6 +190,10 @@ def list_project_inspection_items(
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
     if db.get(Project, project_id) is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    can_edit_items = access.is_admin or (
+        "project_inspection_item.edit"
+        in access.project_permissions_by_project.get(project_id, frozenset())
+    )
 
     return page(
         db,
@@ -197,7 +201,7 @@ def list_project_inspection_items(
         cursor=cursor,
         limit=limit,
         filters=(ProjectInspectionItem.project_id == project_id,),
-        serialize_batch=lambda items: project_inspection_item_details(
-            db, items
+        serialize_batch=lambda items: project_inspection_item_list_details(
+            db, items, include_task_count=can_edit_items
         ),
     )

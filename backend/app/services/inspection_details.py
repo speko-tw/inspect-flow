@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.time_format import format_utc
@@ -14,6 +15,7 @@ from app.models import (
     ProjectMeasurementField,
     ProjectNumericStandard,
     ProjectTextStandard,
+    TaskInspectionItem,
 )
 from app.services.batch_load import load_grouped
 
@@ -167,6 +169,43 @@ def project_inspection_item_details(
         }
         for item in items
     ]
+
+
+def project_inspection_item_list_details(
+    db: Session,
+    items: Sequence[ProjectInspectionItem],
+    *,
+    include_task_count: bool,
+) -> list[dict[str, Any]]:
+    """依 TPL-R27 序列化清單，僅替可編輯者批次計算引用數。
+
+    引用數遵守 IP-R21，含草稿、取消及歷史快照；單次聚合避免 N+1。
+    唯讀者仍可讀取項目，但不需要取得刪除操作專用的引用數。
+    """
+    rows = project_inspection_item_details(db, items)
+    if not include_task_count:
+        for row in rows:
+            row["task_count"] = None
+        return rows
+
+    item_ids = [item.id for item in items]
+    counts = {}
+    if item_ids:
+        counts = dict(
+            db.execute(
+                select(
+                    TaskInspectionItem.project_inspection_item_id,
+                    func.count(func.distinct(TaskInspectionItem.task_id)),
+                )
+                .where(
+                    TaskInspectionItem.project_inspection_item_id.in_(item_ids)
+                )
+                .group_by(TaskInspectionItem.project_inspection_item_id)
+            ).all()
+        )
+    for row in rows:
+        row["task_count"] = counts.get(row["id"], 0)
+    return rows
 
 
 def project_inspection_item_detail(

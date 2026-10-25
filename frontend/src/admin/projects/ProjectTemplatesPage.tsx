@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
 import {
   getSystemTemplates,
@@ -18,7 +18,10 @@ import { formatInspectionStandard } from '../../ui/inspectionStandard'
 import { useSubmitGuard } from '../../ui/submitGuard'
 import { ProjectNotFound } from '../../RouteNotFound'
 import { listMyProjects } from './api'
-import { listProjectItems, type ProjectItemData } from '../projectItems/api'
+import {
+  listProjectItems,
+  type ProjectItemListData,
+} from '../projectItems/api'
 import {
   applyTemplate,
   listAllProjects,
@@ -115,7 +118,13 @@ export default function ProjectTemplatesPage({
   standalone?: boolean
 }) {
   const { projectId = '' } = useParams()
+  const location = useLocation()
   const { user } = useCurrentUser()
+  const [routeSaveItemId, setRouteSaveItemId] = useState<string | null>(() => {
+    const id = (location.state as { saveItemId?: unknown } | null)?.saveItemId
+    return typeof id === 'string' ? id : null
+  })
+  const [routeSaveName, setRouteSaveName] = useState<string | null>(null)
   const navigate = useNavigate()
   const pageTitleRef = useRef<HTMLHeadingElement>(null)
   // TPL-R23、ADM-R17、F-O08：獨立頁用 h1；成員頁框已有 h1。
@@ -132,12 +141,22 @@ export default function ProjectTemplatesPage({
     new Set(),
   )
   const [loadedSystems, setLoadedSystems] = useState<Set<string>>(new Set())
-  const [projectItems, setProjectItems] = useState<ProjectItemData[]>([])
-  const [saveSource, setSaveSource] = useState<ProjectItemData | null>(null)
+  const [projectItems, setProjectItems] = useState<ProjectItemListData[]>([])
+  const [saveSource, setSaveSource] = useState<ProjectItemListData | null>(
+    null,
+  )
   const [saveName, setSaveName] = useState('')
+  const routeSaveSource = projectItems.find(
+    (item) => item.id === routeSaveItemId,
+  )
+  const activeSaveSource = routeSaveSource ?? saveSource
+  const activeSaveName = routeSaveSource
+    ? (routeSaveName ?? routeSaveSource.title)
+    : saveName
   const [applyConfirm, setApplyConfirm] = useState(false)
   const [applyError, setApplyError] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [saveCompleted, setSaveCompleted] = useState(false)
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
   const [projectLoading, setProjectLoading] = useState(true)
@@ -168,6 +187,7 @@ export default function ProjectTemplatesPage({
   const [saveErrorCode, setSaveErrorCode] = useState('')
   const conflictActionRef = useRef<HTMLButtonElement>(null)
   const saveConflictActionRef = useRef<HTMLButtonElement>(null)
+  const handledSaveItemId = useRef<string | null>(null)
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return
@@ -286,6 +306,30 @@ export default function ProjectTemplatesPage({
     }
   }, [projectId, itemsReloadKey])
 
+  useEffect(() => {
+    const requestedId = (location.state as { saveItemId?: unknown } | null)
+      ?.saveItemId
+    if (
+      !saveAllowed ||
+      itemsLoading ||
+      typeof requestedId !== 'string' ||
+      handledSaveItemId.current === requestedId
+    ) {
+      return
+    }
+    if (!projectItems.some((item) => item.id === requestedId)) return
+    handledSaveItemId.current = requestedId
+    // replace 清掉一次性路由指令，避免返回此頁時再次進入存檔模式。
+    navigate(location.pathname, { replace: true, state: null })
+  }, [
+    itemsLoading,
+    location.pathname,
+    location.state,
+    navigate,
+    projectItems,
+    saveAllowed,
+  ])
+
   async function selectNode(next: Selection) {
     setSelected(next)
     setMobilePane('detail')
@@ -293,6 +337,7 @@ export default function ProjectTemplatesPage({
     setApplyErrorCode('')
     setSaveError('')
     setSaveErrorCode('')
+    setSaveCompleted(false)
     setNotice('')
     setApplyConfirm(false)
     if (next.type === 'category') {
@@ -352,7 +397,7 @@ export default function ProjectTemplatesPage({
   const templates = selectedSystem
     ? (templatesBySystem[selectedSystem.id] ?? [])
     : []
-  const isSaveMode = saveSource !== null
+  const isSaveMode = activeSaveSource !== null
   const allTemplates = Object.values(templatesBySystem).flat()
   const projectItemNames = useMemo(
     () => new Set(projectItems.map((item) => pythonCasefold(item.title))),
@@ -470,13 +515,16 @@ export default function ProjectTemplatesPage({
     }
   }
 
-  function startSave(item: ProjectItemData) {
+  function startSave(item: ProjectItemListData) {
+    setRouteSaveItemId(null)
+    setRouteSaveName(null)
     setSaveSource(item)
     setSaveName(item.title)
     setSelected(null)
     setExpanded(new Set())
     setSaveError('')
     setSaveErrorCode('')
+    setSaveCompleted(false)
     setApplyError('')
     setApplyErrorCode('')
     setNotice('')
@@ -517,7 +565,12 @@ export default function ProjectTemplatesPage({
   }
 
   async function submitSave() {
-    if (!saveSource || selected?.type !== 'system' || busy || saveDenied) {
+    if (
+      !activeSaveSource ||
+      selected?.type !== 'system' ||
+      busy ||
+      saveDenied
+    ) {
       return
     }
     if (!guard.enter()) return
@@ -525,10 +578,10 @@ export default function ProjectTemplatesPage({
     setSaveError('')
     setNotice('')
     try {
-      const name = saveName.trim()
+      const name = activeSaveName.trim()
       await saveProjectItemAsTemplate(
         projectId,
-        saveSource.id,
+        activeSaveSource.id,
         selected.id,
         name,
       )
@@ -540,10 +593,13 @@ export default function ProjectTemplatesPage({
       const categoryName = category?.name ?? '範本庫'
       const systemName = destination?.name ?? '目標系統'
       setNotice(`已將「${name}」存入「${categoryName} / ${systemName}」。`)
+      setSaveCompleted(true)
+      setMobilePane('list')
       setSaveSource(null)
-      setSelected(null)
+      setRouteSaveItemId(null)
+      setRouteSaveName(null)
     } catch (caught) {
-      setSaveError(templateErrorMessage(caught, saveName.trim()))
+      setSaveError(templateErrorMessage(caught, activeSaveName.trim()))
       setSaveErrorCode(
         caught instanceof ProjectTemplatesApiError && caught.status === 409
           ? (caught.code ?? '')
@@ -606,7 +662,7 @@ export default function ProjectTemplatesPage({
       {project && (
         <PageHeading ref={pageTitleRef} tabIndex={-1}>
           {isSaveMode
-            ? `將「${saveSource?.title ?? ''}」存為範本`
+            ? `將「${activeSaveSource?.title ?? ''}」存為範本`
             : '套用範本到專案'}
         </PageHeading>
       )}
@@ -620,6 +676,11 @@ export default function ProjectTemplatesPage({
       {itemsDenied && (
         <p className="notice-info" role="status">
           目前只能瀏覽專案查核項目。
+        </p>
+      )}
+      {canEditProjectItems && !saveAllowed && (
+        <p className="notice-info">
+          要把項目存回範本庫，需要「管理範本庫」功能，請找系統管理者開通。
         </p>
       )}
       {error && <p role="alert">{error}</p>}
@@ -642,7 +703,7 @@ export default function ProjectTemplatesPage({
           </button>
         </div>
       )}
-      {notice && (
+      {notice && !saveCompleted && (
         <p className="notice-success" role="status">
           {notice}
         </p>
@@ -653,6 +714,11 @@ export default function ProjectTemplatesPage({
           {!isSaveMode && (
             <section className="tpl-nav tpl-project-items">
               <h2>專案查核項目</h2>
+              {saveCompleted && notice && (
+                <p className="notice-success" role="status">
+                  {notice}
+                </p>
+              )}
               {itemsLoading && <p>載入中…</p>}
               {showEmptyProjectItems && <p>目前沒有查核項目。</p>}
               <ul>
@@ -757,22 +823,32 @@ export default function ProjectTemplatesPage({
                       aria-invalid={saveConflict || undefined}
                       maxLength={256}
                       onChange={(event) => {
-                        setSaveName(event.target.value)
+                        if (routeSaveSource) {
+                          setRouteSaveName(event.target.value)
+                        } else {
+                          setSaveName(event.target.value)
+                        }
                         setSaveError('')
                         setSaveErrorCode('')
+                        setSaveCompleted(false)
+                        setNotice('')
                       }}
                       required
-                      value={saveName}
+                      value={activeSaveName}
                     />
                   </div>
                   <p>
-                    將新增「{saveName.trim()}
+                    將新增「{activeSaveName.trim()}
                     」，保留原項目的查核項次與標準。
                   </p>
                   <button
                     className="btn-primary"
                     disabled={
-                      !saveAllowed || saveDenied || busy || !saveName.trim()
+                      !saveAllowed ||
+                      saveDenied ||
+                      saveCompleted ||
+                      busy ||
+                      !activeSaveName.trim()
                     }
                     onClick={() => void submitSave()}
                     type="button"

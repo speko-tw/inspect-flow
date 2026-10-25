@@ -229,6 +229,7 @@ describe('product route metadata', () => {
       [ROUTES.dashboardTasks, '/overview/projects/p1/tasks'],
       [ROUTES.dashboardTask, '/overview/projects/p1/tasks/t1'],
       [ROUTES.adminTemplates, '/templates'],
+      [ROUTES.templateSaveFromProject, '/templates/from-project'],
       [ROUTES.projectHome, '/projects/p1'],
       [ROUTES.projectMembers, '/projects/p1/members'],
       [ROUTES.projectItems, '/projects/p1/inspection-items'],

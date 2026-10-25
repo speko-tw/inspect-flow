@@ -911,9 +911,13 @@ describe('project home', () => {
     mocks.getWorkflowSummary.mockResolvedValue(summary())
 
     renderAt()
-    const button = await screen.findByRole('button', { name: '區段選單' })
+    const button = await screen.findByRole('button', {
+      name: '切換專案頁面，目前在專案首頁',
+    })
+    expect(button).toHaveTextContent('專案首頁 ▾')
     fireEvent.click(button)
 
+    expect(button).toHaveTextContent('專案首頁 ▴')
     expect(button).toHaveAttribute('aria-expanded', 'true')
     expect(
       screen

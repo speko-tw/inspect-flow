@@ -22,3 +22,55 @@
 .project-item-list .project-item-applied-time {
   margin: 0;
 }
+
+.project-item-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.project-item-usage {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.project-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.project-item-actions > .btn {
+  min-height: var(--touch-target);
+}
+
+.project-item-delete-blocked {
+  display: grid;
+  gap: var(--space-2);
+  width: min(100%, 42rem);
+  padding: var(--space-3);
+  border: 1px solid var(--warning-border);
+  border-inline-start-width: 0.25rem;
+  border-radius: var(--radius);
+  background: var(--warning-bg);
+}
+
+.project-item-delete-blocked p {
+  color: var(--warning-text);
+}
+
+.project-item-template-hint {
+  margin-block: var(--space-2);
+  color: var(--text-muted);
+}
+
+@media (max-width: 40rem) {
+  .project-item-actions {
+    width: 100%;
+  }
+}

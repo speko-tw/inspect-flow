@@ -7,6 +7,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router'
 
 import { HttpError, isForbidden } from '../../http'
 import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
@@ -103,6 +104,18 @@ function apiMessage(error: unknown): string {
  * 只有具 `template.manage` 的使用者可寫入；唯讀狀態仍可檢視範本。
  */
 export default function TemplatesPage({ canManage }: { canManage: boolean }) {
+  const location = useLocation()
+  const navigateRoute = useNavigate()
+  const [wizardNotice, setWizardNotice] = useState(() => {
+    const state = location.state as {
+      savedTemplateTitle?: unknown
+      savedTemplatePath?: unknown
+    } | null
+    return typeof state?.savedTemplateTitle === 'string' &&
+      typeof state.savedTemplatePath === 'string'
+      ? `已存入『${state.savedTemplatePath}』：${state.savedTemplateTitle}`
+      : ''
+  })
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [systems, setSystems] = useState<TemplateSystem[]>([])
   const [items, setItems] = useState<TemplateItem[]>([])
@@ -129,6 +142,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
   const [actionError, setActionError] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const handledWizardResult = useRef(false)
   const [loading, setLoading] = useState(true)
   const [accessDenied, setAccessDenied] = useState(false)
   const [readOnly, setReadOnly] = useState(!canManage)
@@ -151,6 +165,61 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
     query.addEventListener?.('change', update)
     return () => query.removeEventListener?.('change', update)
   }, [])
+
+  // ref 防止 StrictMode／依賴更新重複選取；replace 清掉一次性回傳資料。
+  useEffect(() => {
+    const state = location.state as {
+      savedTemplateId?: unknown
+      savedCategoryId?: unknown
+      savedSystemId?: unknown
+      savedTemplateTitle?: unknown
+      savedTemplatePath?: unknown
+    } | null
+    if (!state) return
+    if (
+      handledWizardResult.current ||
+      typeof state.savedTemplateId !== 'string' ||
+      typeof state.savedCategoryId !== 'string' ||
+      typeof state.savedSystemId !== 'string' ||
+      !categories.length
+    ) {
+      return
+    }
+    handledWizardResult.current = true
+    const savedTemplateId = state.savedTemplateId
+    const savedCategoryId = state.savedCategoryId
+    const savedSystemId = state.savedSystemId
+    let active = true
+    async function selectSavedTemplate() {
+      const categoryId = savedCategoryId
+      const systemId = savedSystemId
+      const categorySystems = await listTemplateSystems(categoryId)
+      if (!active) return
+      const result = await getSystemTemplates(systemId)
+      if (!active) return
+      setSystems((current) => [
+        ...current.filter((system) => system.category_id !== categoryId),
+        ...categorySystems,
+      ])
+      setLoadedCategoryIds((current) => new Set(current).add(categoryId))
+      setItems((current) => [
+        ...current.filter((item) => item.system_id !== systemId),
+        ...result.items.map(localizeTemplateItem),
+      ])
+      setLoadedSystemIds((current) => new Set(current).add(systemId))
+      setSelected({ type: 'item', id: savedTemplateId })
+      setExpanded(new Set([categoryId, systemId]))
+      setMobilePane('detail')
+      // ref 防止重複載入選取；replace 清掉一次性 state，避免回頁重播橫幅。
+      navigateRoute(location.pathname, { replace: true, state: null })
+    }
+    void selectSavedTemplate().catch((caught: unknown) => {
+      if (active) fail(caught)
+    })
+    return () => {
+      active = false
+    }
+  }, [categories, location.pathname, location.state, navigateRoute])
 
   const categoryId =
     selected?.type === 'category'
@@ -318,6 +387,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
   }
 
   function navigate(next: Selection): void {
+    setWizardNotice('')
     setNotice('')
     setError('')
     if (dirty) {
@@ -1217,7 +1287,17 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
       <header className="tpl-page-heading">
         <h1 id="templates-heading">{PAGE_TITLES.templates}</h1>
         {readOnly && <span className="tpl-readonly">唯讀瀏覽</span>}
+        {canManage && (
+          <Link className="btn" to="/templates/from-project">
+            從專案存為範本
+          </Link>
+        )}
       </header>
+      {wizardNotice && (
+        <p className="notice-success" role="status">
+          {wizardNotice}
+        </p>
+      )}
       {loading ? (
         <p>載入中…</p>
       ) : (

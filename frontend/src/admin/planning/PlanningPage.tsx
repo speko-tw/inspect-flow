@@ -22,6 +22,14 @@ import type {
   ProjectZone,
 } from './api'
 
+import './PlanningPage.css'
+
+const READ_ONLY_NOTICE =
+  '你在這個專案只能查看計畫與任務，不能新增、修改或派出。' +
+  '需要調整請找專案內業或管理者。'
+const ASSIGNEE_LIST_UNAVAILABLE_NOTICE =
+  '看不到成員名單，這次只能選「不指定」，' + '之後請有權限的人補上。'
+
 /** 規劃頁操作與共用專案資料 API 的依賴介面。 */
 export type PlanningPageClient = PlanningClient & {
   getProject(projectId: string): Promise<Pick<Project, 'id' | 'name'>>
@@ -260,7 +268,18 @@ export default function PlanningPage({
   const [accessDenied, setAccessDenied] = useState(false)
   const [projectNotFound, setProjectNotFound] = useState(false)
   const [zonesDenied, setZonesDenied] = useState(false)
-  const [membersDenied, setMembersDenied] = useState(false)
+  const [membersUnavailable, setMembersUnavailable] = useState(false)
+  const [membersFailure, setMembersFailure] = useState<
+    'forbidden' | 'temporary' | null
+  >(null)
+  const [retryingMembers, setRetryingMembers] = useState(false)
+  const assigneeRequest = useRef(0)
+  const retryFocusTarget = useRef<{
+    projectId: string
+    select: HTMLSelectElement
+    fallback: HTMLElement
+  } | null>(null)
+  const wasRetryingMembers = useRef(false)
   const [error, setError] = useState('')
   const [errorContext, setErrorContext] = useState('page')
   const [fieldError, setFieldError] = useState<{ field: FieldKey } | null>(
@@ -332,6 +351,7 @@ export default function PlanningPage({
   const nameTrigger = useRef<HTMLButtonElement | null>(null)
   const taskItemsTrigger = useRef<HTMLButtonElement | null>(null)
   const assigneeTrigger = useRef<HTMLButtonElement | null>(null)
+  const assigneeFormHeading = useRef<HTMLHeadingElement | null>(null)
   const addTaskTrigger = useRef<HTMLButtonElement | null>(null)
   const restoreAddTaskFocus = useRef(false)
   const previousTaskFormOpen = useRef(false)
@@ -390,7 +410,16 @@ export default function PlanningPage({
   const leaveGuard = useUnsavedNavigationGuard(hasUnsavedChanges)
 
   useEffect(() => {
-    if (error && !serverFieldFocus) errorMessage.current?.focus()
+    if (!error || serverFieldFocus) return
+    const message = errorMessage.current
+    if (!message) return
+    // #734 T7：先把就近錯誤帶入視野，再避免 focus 再次捲動頁面。
+    const block =
+      message.getBoundingClientRect().height > window.innerHeight * 0.8
+        ? 'start'
+        : 'nearest'
+    message.scrollIntoView?.({ block })
+    message.focus({ preventScroll: true })
   }, [error, errorContext, serverFieldFocus])
 
   useEffect(() => {
@@ -521,6 +550,13 @@ export default function PlanningPage({
   }, [editingAssignee])
 
   useEffect(() => {
+    // 名單失敗會停用下拉，焦點改放表單標題以免落到文件頂端。
+    if (editingAssignee && membersUnavailable) {
+      assigneeFormHeading.current?.focus()
+    }
+  }, [editingAssignee, membersUnavailable])
+
+  useEffect(() => {
     let active = true
     async function loadProjectRoute() {
       setLoading(true)
@@ -557,12 +593,16 @@ export default function PlanningPage({
   useEffect(() => {
     if (!projectId) return
     let active = true
+    const requestId = ++assigneeRequest.current
     async function loadProjectData() {
       setLoading(true)
+      setRetryingMembers(false)
+      retryFocusTarget.current = null
       setError('')
       setErrorContext('page')
       setZonesDenied(false)
-      setMembersDenied(false)
+      setMembersUnavailable(false)
+      setMembersFailure(null)
       const allPlans = () =>
         collectPages<InspectionPlan>((cursor) =>
           client.listPlans(projectId, cursor),
@@ -596,12 +636,12 @@ export default function PlanningPage({
         if (membersResult.status === 'fulfilled') {
           setMembers(membersResult.value)
         } else {
+          // 名單是選填查詢；失敗時保留其他頁面操作與既有表單值。
           setMembers([])
-          if (isForbidden(membersResult.reason)) {
-            setMembersDenied(true)
-          } else {
-            setError(planningErrorMessage(membersResult.reason))
-          }
+          setMembersUnavailable(true)
+          setMembersFailure(
+            isForbidden(membersResult.reason) ? 'forbidden' : 'temporary',
+          )
         }
         if (plansResult.status === 'fulfilled') {
           setPlans(plansResult.value)
@@ -619,8 +659,66 @@ export default function PlanningPage({
     void loadProjectData()
     return () => {
       active = false
+      if (assigneeRequest.current === requestId) {
+        assigneeRequest.current += 1
+      }
     }
   }, [client, projectId, reloadKey, canLoadAssignees])
+
+  async function retryAssigneeList(
+    select: HTMLSelectElement,
+    fallback: HTMLElement,
+  ): Promise<void> {
+    if (!projectId || retryingMembers) return
+    const requestId = ++assigneeRequest.current
+    retryFocusTarget.current = { projectId, select, fallback }
+    setRetryingMembers(true)
+    try {
+      const result = await client.listProjectAssignees(projectId)
+      if (assigneeRequest.current !== requestId) return
+      setMembers(result)
+      setMembersFailure(null)
+      setMembersUnavailable(false)
+    } catch (caught) {
+      if (assigneeRequest.current !== requestId) return
+      setMembersFailure(isForbidden(caught) ? 'forbidden' : 'temporary')
+      setMembersUnavailable(true)
+    } finally {
+      if (assigneeRequest.current === requestId) setRetryingMembers(false)
+    }
+  }
+
+  useEffect(() => {
+    if (wasRetryingMembers.current && !retryingMembers) {
+      const target = retryFocusTarget.current
+      if (target?.projectId === projectId) {
+        const focusTarget = target.select.disabled
+          ? target.fallback
+          : target.select
+        if (focusTarget.isConnected) focusTarget.focus()
+      }
+      retryFocusTarget.current = null
+    }
+    wasRetryingMembers.current = retryingMembers
+  }, [projectId, retryingMembers])
+
+  function retryAssigneeListFrom(button: HTMLButtonElement, field: string) {
+    const form = button.closest('form')
+    const select = form?.querySelector<HTMLSelectElement>(
+      `[data-field="${field}"]`,
+    )
+    const fallback = form?.querySelector<HTMLElement>(
+      '.assignee-list-unavailable',
+    )
+    if (select && fallback) void retryAssigneeList(select, fallback)
+  }
+
+  const membersFailureText =
+    membersFailure === 'forbidden'
+      ? ASSIGNEE_LIST_UNAVAILABLE_NOTICE
+      : membersFailure === 'temporary'
+        ? '成員名單暫時載入失敗'
+        : ''
 
   const [selectedPlanData, setSelectedPlanData] = useState<{
     id: string
@@ -1150,17 +1248,12 @@ export default function PlanningPage({
       <h2 id="planning-heading" ref={pageHeading} tabIndex={-1}>
         計畫與任務
       </h2>
-      <p>計畫狀態由任務狀態自動推導；任務派出後才會提供給現場。</p>
+      <p>計畫的狀態會跟著任務自動更新；任務派出後，現場才看得到。</p>
       <UnsavedLeaveBox guard={leaveGuard} />
       {projects[0] && <p>專案：{projects[0].name}</p>}
       {readOnly && (
         <p className="notice-info" role="status">
-          目前為唯讀模式。
-        </p>
-      )}
-      {membersDenied && !readOnly && (
-        <p className="notice-info" role="status">
-          沒有讀取可指派帳號清單的權限；可略過建議指派。
+          {READ_ONLY_NOTICE}
         </p>
       )}
       {error && errorContext === 'page' && (
@@ -1903,15 +1996,24 @@ export default function PlanningPage({
                               )
                             }}
                           >
-                            <h5>修改任務指派</h5>
+                            <h5 ref={assigneeFormHeading} tabIndex={-1}>
+                              修改任務指派
+                            </h5>
                             <label>
                               建議指派人
                               <select
                                 autoFocus
                                 aria-describedby={
-                                  hasFieldError('suggested-assignee')
-                                    ? fieldErrorId('suggested-assignee')
-                                    : undefined
+                                  [
+                                    hasFieldError('suggested-assignee')
+                                      ? fieldErrorId('suggested-assignee')
+                                      : '',
+                                    membersUnavailable
+                                      ? `assignee-list-unavailable-${task.id}`
+                                      : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' ') || undefined
                                 }
                                 aria-invalid={hasFieldError(
                                   'suggested-assignee',
@@ -1923,10 +2025,25 @@ export default function PlanningPage({
                                   })
                                   clearFieldError('suggested-assignee')
                                 }}
+                                disabled={membersUnavailable}
                                 data-field="suggested-assignee"
                                 value={editingAssignee.assigneeId}
                               >
                                 <option value="">不指定</option>
+                                {membersUnavailable &&
+                                  editingAssignee.assigneeId &&
+                                  !members.some(
+                                    (member) =>
+                                      member.id === editingAssignee.assigneeId,
+                                  ) && (
+                                    <option value={editingAssignee.assigneeId}>
+                                      {editingAssignee.task.assignee
+                                        ?.name_zh ??
+                                        editingAssignee.task.assignee
+                                          ?.username ??
+                                        '既有指派'}
+                                    </option>
+                                  )}
                                 {members.map((member) => (
                                   <option key={member.id} value={member.id}>
                                     {member.name_zh ?? member.username}
@@ -1934,6 +2051,29 @@ export default function PlanningPage({
                                 ))}
                               </select>
                             </label>
+                            {membersUnavailable && (
+                              <p
+                                className="assignee-list-unavailable"
+                                id={`assignee-list-unavailable-${task.id}`}
+                                tabIndex={-1}
+                              >
+                                {membersFailureText}
+                              </p>
+                            )}
+                            {membersFailure === 'temporary' && (
+                              <button
+                                disabled={retryingMembers}
+                                onClick={(event) =>
+                                  retryAssigneeListFrom(
+                                    event.currentTarget,
+                                    'suggested-assignee',
+                                  )
+                                }
+                                type="button"
+                              >
+                                {retryingMembers ? '重試中…' : '重試'}
+                              </button>
+                            )}
                             {fieldErrorText('suggested-assignee')}
                             {error && errorContext === 'assignee' && (
                               <p ref={errorMessage} role="alert" tabIndex={-1}>
@@ -2157,15 +2297,23 @@ export default function PlanningPage({
                     建議指派人
                     <select
                       aria-describedby={
-                        hasFieldError('task-assignee')
-                          ? fieldErrorId('task-assignee')
-                          : undefined
+                        [
+                          hasFieldError('task-assignee')
+                            ? fieldErrorId('task-assignee')
+                            : '',
+                          membersUnavailable
+                            ? 'assignee-list-unavailable-create'
+                            : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ') || undefined
                       }
                       aria-invalid={hasFieldError('task-assignee')}
                       onChange={(event) => {
                         setAssigneeId(event.target.value)
                         clearFieldError('task-assignee')
                       }}
+                      disabled={membersUnavailable}
                       data-field="task-assignee"
                       value={assigneeId}
                     >
@@ -2177,6 +2325,29 @@ export default function PlanningPage({
                       ))}
                     </select>
                   </label>
+                  {membersUnavailable && (
+                    <p
+                      className="assignee-list-unavailable"
+                      id="assignee-list-unavailable-create"
+                      tabIndex={-1}
+                    >
+                      {membersFailureText}
+                    </p>
+                  )}
+                  {membersFailure === 'temporary' && (
+                    <button
+                      disabled={retryingMembers}
+                      onClick={(event) =>
+                        retryAssigneeListFrom(
+                          event.currentTarget,
+                          'task-assignee',
+                        )
+                      }
+                      type="button"
+                    >
+                      {retryingMembers ? '重試中…' : '重試'}
+                    </button>
+                  )}
                   {fieldErrorText('task-assignee')}
                   <button
                     className="btn-primary"
