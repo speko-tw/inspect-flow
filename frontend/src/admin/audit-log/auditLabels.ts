@@ -92,10 +92,15 @@ export const EVENT_TYPE_OPTIONS: ReadonlyArray<{
 }))
 
 function payloadOf(entry: AuditLogEntry): Record<string, unknown> {
-  const value = entry.after ?? entry.before
-  return typeof value === 'object' && value !== null
-    ? (value as Record<string, unknown>)
-    : {}
+  const before =
+    typeof entry.before === 'object' && entry.before !== null
+      ? (entry.before as Record<string, unknown>)
+      : {}
+  const after =
+    typeof entry.after === 'object' && entry.after !== null
+      ? (entry.after as Record<string, unknown>)
+      : {}
+  return { ...before, ...after }
 }
 
 /** 事件的白話名稱；停用與啟用共用一個事件碼，依改後狀態分開說。 */
@@ -133,6 +138,7 @@ export function entityLabel(
   const kind = ENTITY_LABELS[entry.entity_type] ?? '對象'
   const name =
     (typeof payload.name === 'string' && payload.name) ||
+    (typeof payload.title === 'string' && payload.title) ||
     (typeof payload.bundle_name === 'string' && payload.bundle_name) ||
     (entry.entity_type === 'project'
       ? lookup.projectName(entry.entity_id)

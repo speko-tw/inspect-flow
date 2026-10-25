@@ -16,6 +16,7 @@ export interface Role {
   permission_codes: string[]
   // 目前持有此角色的不重複使用者數（同一人跨專案只算 1 人），以及涉及的專案數（PR-18）。
   user_count: number
+  inactive_user_count: number
   project_count: number
   created_at: string
   updated_at: string

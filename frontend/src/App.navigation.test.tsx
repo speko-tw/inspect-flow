@@ -23,6 +23,8 @@ import {
 
 import App from './App'
 import type { CurrentUser } from './auth/api'
+import type { FieldTask } from './field/api'
+import { deferred } from './testing/submitGuard'
 import { rememberUser, resetSessionMemory } from './auth/sessionMemory'
 import { request } from './http'
 import {
@@ -125,6 +127,19 @@ const MY_PROJECTS = [
   }),
 ]
 
+// #489 的「不沿用全部」案例有指派資料，才能依 FUI-R02 維持我的任務。
+const ASSIGNED_FIELD_TASK: FieldTask = {
+  id: 'assigned-task',
+  name: '新帳號已指派的外牆查核',
+  project_id: 'project-a',
+  project_name: '示範工程甲',
+  status: 'PENDING',
+  dispatched_at: '2026-10-05T08:00:00Z',
+  location: { zone_name: '一樓', location_text: '東側' },
+  suggested_assignee: { name_zh: MEMBER.name_zh },
+  item_summary: { first_title: '外牆鋼筋查核', item_count: 1 },
+}
+
 const WORKFLOW_SUMMARY = {
   project: {
     id: 'project-a',
@@ -152,23 +167,32 @@ const WORKFLOW_SUMMARY = {
 }
 
 type CurrentUserBody = CurrentUser | null
+type FetchHandler = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>
 
 interface Backend {
   /** 目前登入的人；`null` 代表未登入。測試中可隨時改。 */
   me: CurrentUserBody
   /** 登入成功時回傳的人。 */
   loginAs: CurrentUser
-  fetchMock: Mock<
-    (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-  >
+  /** 目前登入者的指派資料；本替身沒有額外的他人任務。 */
+  assignedTasks: FieldTask[]
+  fetchMock: Mock<FetchHandler>
 }
 
 function stubBackend(
   me: CurrentUserBody,
   loginAs: CurrentUser = ADMIN,
 ): Backend {
-  const backend = { me, loginAs } as Backend
-  backend.fetchMock = vi.fn(
+  const backend: Backend = {
+    me,
+    loginAs,
+    assignedTasks: [],
+    fetchMock: vi.fn<FetchHandler>(),
+  }
+  backend.fetchMock.mockImplementation(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
@@ -239,7 +263,10 @@ function stubBackend(
             { status: 403 },
           )
         }
-        return Response.json({ items: [], next_cursor: null })
+        return Response.json({
+          items: backend.assignedTasks,
+          next_cursor: null,
+        })
       }
       if (url.endsWith('/workflow-summary')) {
         return Response.json(WORKFLOW_SUMMARY)
@@ -976,24 +1003,83 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
   const OTHER_FIELD = { ...MEMBER, id: 'member-2' }
   const scopeAll = () => screen.getByRole('button', { name: '全部' })
 
-  it('逾時後換了另一個人登入，即使原頁面看得到也不帶過去', async () => {
-    // 上一位（現場乙）停在「全部」任務時逾時；現場帳號甲重新登入。
-    // 兩人都看得到 `from`，所以只有換人判斷能把他擋下。
+  function fieldScopes(backend: Backend, after = 0) {
+    return backend.fetchMock.mock.calls
+      .slice(after)
+      .map(([input]) => new URL(String(input), 'http://testserver'))
+      .filter((url) => url.pathname === '/api/v1/field/inspection-tasks')
+      .map((url) => url.searchParams.get('assigned_to_me'))
+  }
+
+  async function switchFieldAccount(tasks: FieldTask[], delayed: boolean) {
     rememberUser(OTHER_FIELD.id)
-    stubBackend(null, MEMBER)
+    const backend = stubBackend(null, MEMBER)
+    backend.assignedTasks = tasks
+    const gate = deferred()
+    const requestedUsers: Array<string | null> = []
+    const original = backend.fetchMock.getMockImplementation()!
+    backend.fetchMock.mockImplementation(async (input, init) => {
+      const url = new URL(String(input), 'http://testserver')
+      if (url.pathname === '/api/v1/field/inspection-tasks') {
+        requestedUsers.push(backend.me?.id ?? null)
+        if (delayed && url.searchParams.get('assigned_to_me') === 'true') {
+          await gate.promise
+        }
+      }
+      return original(input, init)
+    })
     renderApp('/login', { from: '/tasks?scope=all' })
     await signIn()
-
     await screen.findByRole('heading', { name: '我的任務' })
-    expect(scopeAll()).toHaveAttribute('aria-pressed', 'false')
-  })
+    await waitFor(() => expect(fieldScopes(backend)[0]).toBe('true'))
+    if (delayed) {
+      expect(fieldScopes(backend)).toEqual(['true'])
+      expect(scopeAll()).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.queryByRole('region', { name: '我的任務提醒' })).toBeNull()
+    }
+    gate.resolve()
+    return { backend, requestedUsers }
+  }
+
+  it.each(['立即', '延後'])(
+    '逾時後換了另一個人登入，即使原頁面看得到也不帶過去（有指派，%s回應）',
+    async (timing) => {
+      // 等待任務資料完成；標題只代表外殼已掛載，不代表預設範圍已決定。
+      const { backend, requestedUsers } = await switchFieldAccount(
+        [ASSIGNED_FIELD_TASK],
+        timing === '延後',
+      )
+      await screen.findByText(ASSIGNED_FIELD_TASK.name)
+      expect(scopeAll()).toHaveAttribute('aria-pressed', 'false')
+      expect(fieldScopes(backend)).toEqual(['true'])
+      expect(requestedUsers).toEqual([MEMBER.id])
+      expect(screen.queryByRole('region', { name: '我的任務提醒' })).toBeNull()
+    },
+  )
+
+  it.each(['立即', '延後'])(
+    '逾時換人且新帳號無指派時，依新查詢切全部而非沿用前人篩選（%s回應）',
+    async (timing) => {
+      const { backend, requestedUsers } = await switchFieldAccount(
+        [],
+        timing === '延後',
+      )
+      await screen.findByRole('heading', { name: '目前沒有符合的任務' })
+      expect(scopeAll()).toHaveAttribute('aria-pressed', 'true')
+      expect(fieldScopes(backend)).toEqual(['true', 'false'])
+      expect(requestedUsers).toEqual([MEMBER.id, MEMBER.id])
+      expect(
+        screen.getByRole('region', { name: '我的任務提醒' }),
+      ).toHaveTextContent('目前沒有指派給你的任務')
+    },
+  )
 
   it('沒有任何記錄時（直接開深層連結），登入後回到原頁面', async () => {
     stubBackend(null, MEMBER)
     renderAppWithHistory(['/tasks?scope=all'])
     await signIn()
 
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByRole('heading', { name: '目前沒有符合的任務' })
     expect(scopeAll()).toHaveAttribute('aria-pressed', 'true')
   })
 
@@ -1002,7 +1088,8 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     ['同一個帳號', MEMBER],
   ])('登出後按上一頁，再由%s登入，落在落點', async (_name, next) => {
     // 歷史：「全部」任務 → 今日任務（登出時被取代成 /login）。
-    stubWithLogout(MEMBER, next)
+    const backend = stubWithLogout(MEMBER, next)
+    backend.assignedTasks = [ASSIGNED_FIELD_TASK]
     renderAppWithHistory(['/tasks?scope=all', '/tasks'])
     await screen.findByRole('heading', { name: '我的任務' })
 
@@ -1010,10 +1097,12 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     fireEvent.click(screen.getByRole('button', { name: '測試用上一頁' }))
     // 回到登出前的深層頁，被導去登入並帶著 from。
     await screen.findByRole('heading', { name: '登入' })
+    const beforeLogin = backend.fetchMock.mock.calls.length
     await signIn()
 
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByText(ASSIGNED_FIELD_TASK.name)
     expect(scopeAll()).toHaveAttribute('aria-pressed', 'false')
+    expect(fieldScopes(backend, beforeLogin)).toEqual(['true'])
   })
 
   it('逾時後同一個人重新登入，回到原本的頁面', async () => {

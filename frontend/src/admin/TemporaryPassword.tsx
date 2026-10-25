@@ -24,7 +24,14 @@ function CopyablePassword({ password }: { password: string }) {
 
   return (
     <>
-      <output aria-label="臨時密碼">{password}</output>
+      {/* inline 群組只加視覺間距，原生選取才不會插入空白或換行。 */}
+      <output aria-label="臨時密碼" className="temporary-password">
+        {password.match(/.{1,5}/g)?.map((group, index) => (
+          <span className="temporary-password-group" key={index}>
+            {group}
+          </span>
+        ))}
+      </output>
       <button onClick={() => void copy()} type="button">
         {state === 'copied' ? '已複製' : '複製'}
       </button>

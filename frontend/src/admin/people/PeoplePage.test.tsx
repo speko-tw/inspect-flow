@@ -315,7 +315,6 @@ describe('PeoplePage', () => {
     ['新增另一個帳號', '新增帳號'],
     ['回清單', '帳號'],
     ['查看這個帳號的能力', '詳情：person-1'],
-    ['取消', '帳號'],
   ])(
     '內部操作「%s」取消會保留密碼，確認後才執行',
     async (actionLabel, expectedAfterConfirm) => {
@@ -351,6 +350,22 @@ describe('PeoplePage', () => {
       }
     },
   )
+
+  it('有臨時密碼時隱藏頂端取消，尚未產生密碼前仍可取消', async () => {
+    peopleApiMock.request.mockResolvedValue({ items: [] })
+    render(
+      <DataMemoryRouter initialEntries={['/accounts']}>
+        <PeoplePage onTemporaryPassword={vi.fn()} />
+      </DataMemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
+    expect(screen.getByRole('button', { name: '取消' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '顯示臨時密碼' }))
+    expect(screen.getByText('temporary-secret')).toBeVisible()
+    expect(screen.queryByRole('button', { name: '取消' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
+    expect(screen.getByRole('button', { name: '回清單' })).toBeVisible()
+  })
 
   it('臨時密碼顯示時，瀏覽器返回使用指定確認文字', async () => {
     peopleApiMock.request.mockResolvedValue({ items: [] })

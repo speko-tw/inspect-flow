@@ -230,16 +230,6 @@ const DASHBOARD_NAV_ITEM = {
   label: NAV_LABELS.overview,
 }
 
-const MANAGEMENT_ITEMS = [
-  {
-    to: ROUTES.adminPeople.path.replace('/:personId?', ''),
-    label: PAGE_TITLES.account,
-  },
-  { to: ROUTES.adminCompanies.path, label: PAGE_TITLES.company },
-  { to: ROUTES.adminRoles.path, label: NAV_LABELS.roles },
-  { to: ROUTES.adminAuditLogs.path, label: NAV_LABELS.records },
-]
-
 export default function AdminPage() {
   const { user } = useCurrentUser()
   return (
@@ -278,7 +268,7 @@ function TemporaryPasswordResult({
       >
         {children}
         <button onClick={() => guard.allowNavigation(onDone)} type="button">
-          已抄下，回到帳號清單
+          已交給他，回到帳號清單
         </button>
       </section>
     </>
@@ -295,7 +285,10 @@ function AdminPageContent() {
     locationKey: string
     path: string
     source: 'created' | 'reset'
+    displayName?: string
   } | null>(null)
+  const passwordRecipient =
+    temporaryPassword?.displayName || temporaryPassword?.username
   const resultHeadingRef = useRef<HTMLHeadingElement>(null)
   const hasGlobalAccess = hasGlobalDashboardAccess(user)
   const dashboardAccess: DashboardAccessState = {
@@ -342,7 +335,6 @@ function AdminPageContent() {
           )
         }
         navItems={adminNavigationItems(user, dashboardAccess)}
-        managementItems={MANAGEMENT_ITEMS}
         navLabel="管理功能"
         user={user}
       />
@@ -369,11 +361,18 @@ function AdminPageContent() {
               tabIndex={-1}
             >
               {temporaryPassword.source === 'created'
-                ? '帳號已新增'
-                : '臨時密碼已重設'}
+                ? `已新增${passwordRecipient}的帳號`
+                : `已重設${passwordRecipient}的臨時密碼`}
             </h2>
             <p>帳號：{temporaryPassword.username}</p>
-            <p>離開此頁後無法再次查看，首次登入必須變更密碼。</p>
+            <p>
+              {temporaryPassword.source === 'created'
+                ? '他第一次登入必須先改成自己的密碼。' +
+                  '離開此頁後就看不到這組密碼。'
+                : '他舊的密碼和所有登入都已失效；' +
+                  '他下次登入必須先改成自己的密碼。' +
+                  '離開此頁後就看不到這組密碼。'}
+            </p>
             <TemporaryPassword password={temporaryPassword.password} />
           </TemporaryPasswordResult>
         ) : (
@@ -396,13 +395,19 @@ function AdminPageContent() {
               path={nestedRoutePath(ROUTES.adminPeople, ROUTES.adminShell)}
               element={
                 <PeoplePage
-                  onTemporaryPassword={(username, password, source) =>
+                  onTemporaryPassword={(
+                    username,
+                    password,
+                    source,
+                    displayName,
+                  ) =>
                     setTemporaryPassword({
                       username,
                       password,
                       locationKey: location.key,
                       path: location.pathname,
                       source: source ?? 'created',
+                      displayName,
                     })
                   }
                 />

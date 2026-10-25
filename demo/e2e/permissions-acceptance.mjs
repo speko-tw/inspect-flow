@@ -309,13 +309,14 @@ try {
   })
   await page.getByRole('button', { name: '下一步' }).click()
   await page.getByRole('button', { name: '建立帳號' }).click()
-  await page.getByRole('heading', { name: '帳號已建立' }).waitFor()
+  await page.getByRole('heading', { name: '已新增林以安的帳號' }).waitFor()
   // #713：完成頁只放臨時密碼與下一步，不出現「能做什麼」。
   assert.equal(
     await page.getByRole('heading', { name: '能做什麼' }).count(),
     0,
   )
-  const temporaryPassword = await page.getByLabel('臨時密碼').innerText()
+  const temporaryPassword = await page.getByLabel('臨時密碼').textContent()
+  assert.match(temporaryPassword, /^[0-9]{20}$/)
   assert.ok(temporaryPassword.length >= 12)
   const restrictedRole = await api('/roles', 'POST', {
     name: '示範僅查閱專案角色',
@@ -365,7 +366,7 @@ try {
   const temporaryPasswordOutputs = page.getByLabel('臨時密碼')
   assert.ok((await temporaryPasswordOutputs.count()) > 0)
   await page.getByRole('button', { name: '留在此頁' }).click()
-  await page.getByRole('heading', { name: '帳號已建立' }).waitFor()
+  await page.getByRole('heading', { name: '已新增林以安的帳號' }).waitFor()
   assert.ok(
     await temporaryPasswordOutputs.evaluateAll(
       (elements, expectedPassword) =>
@@ -375,6 +376,10 @@ try {
       temporaryPassword,
     ),
     '選擇留在此頁後仍應顯示原臨時密碼',
+  )
+  assert.ok(
+    (await page.locator('body').textContent()).includes(temporaryPassword),
+    '離頁前同一查法確實找得到連續密碼',
   )
   await page.getByRole('button', {
     name: '查看這個帳號的能力',
@@ -388,7 +393,7 @@ try {
   }).waitFor()
   // 離開完成頁後，能力摘要不得再顯示臨時密碼。
   assert.ok(
-    !(await page.locator('body').innerText()).includes(temporaryPassword),
+    !(await page.locator('body').textContent()).includes(temporaryPassword),
   )
   await page.getByRole('combobox').nth(0).selectOption('members')
   const projectSelector = page.getByRole('combobox').nth(1)

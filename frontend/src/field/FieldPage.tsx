@@ -94,7 +94,7 @@ export default function FieldPage() {
     <>
       <AppHeader
         navItems={memberNavItems(user)}
-        navLabel="我的功能"
+        navLabel={user.is_admin ? '管理功能' : '我的功能'}
         user={user}
       />
       <div className="field-shell field-redesign">
@@ -142,6 +142,10 @@ function TaskList({
   const navigate = useNavigate()
   const location = useLocation()
   const scope: Scope = params.get('scope') === 'all' ? 'all' : 'mine'
+  const allowAutoScope = !params.has('scope') && !params.has('status')
+  const noAssignedTasks =
+    (location.state as { defaultedToAll?: boolean } | null)?.defaultedToAll ===
+    true
   const rawStatus = params.get('status')
   const status: Status =
     rawStatus === 'PENDING' || rawStatus === 'IN_PROGRESS' ? rawStatus : 'all'
@@ -176,6 +180,17 @@ function TaskList({
     })
       .then((page) => {
         if (!active) return
+        // T16：先以真實指派查詢決定預設，不從管理者身分猜有沒有任務。
+        if (allowAutoScope && scope === 'mine' && page.items.length === 0) {
+          setParams(
+            { scope: 'all' },
+            {
+              replace: true,
+              state: { ...location.state, defaultedToAll: true },
+            },
+          )
+          return
+        }
         const next = {
           items: page.items,
           nextCursor: page.next_cursor,
@@ -205,6 +220,7 @@ function TaskList({
     key,
     location.pathname,
     location.search,
+    location.state,
     memory,
     navigate,
     retry,
@@ -212,13 +228,15 @@ function TaskList({
     returnKeys,
     scope,
     status,
+    allowAutoScope,
+    setParams,
   ])
 
   function updateFilter(nextScope: Scope, nextStatus: Status) {
     const next = new URLSearchParams()
-    if (nextScope === 'all') next.set('scope', 'all')
+    next.set('scope', nextScope)
     if (nextStatus !== 'all') next.set('status', nextStatus)
-    setParams(next, { state: null })
+    setParams(next, { state: { defaultedToAll: noAssignedTasks } })
   }
 
   async function loadMore() {
@@ -251,6 +269,14 @@ function TaskList({
     <>
       <h1 className="field-heading">{PAGE_TITLES.tasks}</h1>
       <p className="field-intro">已派出的未完成任務，依派送時間排列。</p>
+      {noAssignedTasks && (
+        <section className="field-notice" aria-label="我的任務提醒">
+          <p>目前沒有指派給你的任務。</p>
+          <Button onClick={() => updateFilter('all', 'all')}>
+            查看全部任務
+          </Button>
+        </section>
+      )}
       {error !== 'forbidden' && (
         <>
           <div className="field-scope" aria-label="任務範圍">
@@ -323,7 +349,11 @@ function TaskList({
           </p>
           {state.items.length === 0 ? (
             <section className="field-notice">
-              <h2>目前沒有符合的任務</h2>
+              <h2>
+                {scope === 'mine' && status === 'all'
+                  ? '目前沒有指派給你的任務'
+                  : '目前沒有符合的任務'}
+              </h2>
               <p>你有現場查核權限，但目前沒有符合範圍與狀態的任務。</p>
               {scope === 'mine' && (
                 <Button
