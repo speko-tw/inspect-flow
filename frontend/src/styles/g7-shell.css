@@ -1,4 +1,5 @@
-.app-header {
+/* UDS-R19：共用品牌外框須優先於全域基底，不依賴載入順序。 */
+header.app-header {
   border-bottom-color: var(--color-brand-accent);
   background: var(--color-brand-primary);
   color: var(--color-text-inverse);
@@ -34,14 +35,26 @@
   color: var(--color-brand-accent);
 }
 
+/* #524：只讓可 hover 的裝置提供回饋，觸控不留殘影。 */
 @media (hover: hover) {
-  .app-header .app-header-tab:hover,
+  .app-header a.app-header-tab:hover,
+  .app-header .app-header-management-trigger:hover,
   .app-header .app-header-personal-trigger:hover {
     background: var(--color-header-nav-hover);
     color: var(--color-text-inverse);
   }
 
-  .app-header .app-header-tab:active,
+  /* 全域 button:hover:not(:disabled) 不得覆蓋品牌邊框。 */
+  .app-header .app-header-personal-trigger:hover {
+    border-color: var(--color-brand-accent);
+  }
+
+  button.app-header-management-trigger:not([aria-current='page']):hover {
+    border-bottom-color: transparent;
+  }
+
+  .app-header a.app-header-tab:active,
+  .app-header .app-header-management-trigger:active,
   .app-header .app-header-personal-trigger:active {
     background: var(--color-header-nav-pressed);
   }
@@ -59,10 +72,18 @@
   outline-offset: -3px;
 }
 
-.app-header .app-header-nav-locked .app-header-tab,
+/* UDS-R11：鎖定分頁保留弱化辨識，仍須達一般文字 AA 對比。 */
+.app-header .app-header-nav-locked .app-header-tab {
+  color: color-mix(
+    in srgb,
+    var(--color-text-inverse) 70%,
+    var(--color-brand-primary)
+  );
+  opacity: 1;
+}
+
 .app-header .app-header-locked-note {
   color: var(--color-text-inverse);
-  opacity: 1;
 }
 
 .app-header-personal-trigger {

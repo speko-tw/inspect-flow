@@ -6,8 +6,8 @@
 // 單列，放不下時在列內橫向滑動，目前的分頁會被捲進可見範圍。
 // 登出失敗的錯誤顯示在頁首下方，不擠進按鈕列。
 //
-// `locked` 用在必須先完成一件事才能離開的畫面（臨時密碼結果頁，
-// ADM-R15）：保留外殼，但系統名稱不是連結、導覽變灰不能點、沒有登出鈕。
+// `locked` 是保留的元件狀態，目前正式頁面沒有傳入 true：系統名稱
+// 不連結、導覽弱化且不可操作、沒有個人選單；不代表已接上鎖定流程。
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
@@ -112,7 +112,7 @@ export default function AppHeader({
   const personalMenuButtonRef = useRef<HTMLButtonElement>(null)
   const managementMenuRef = useRef<HTMLDivElement>(null)
   const managementMenuButtonRef = useRef<HTMLButtonElement>(null)
-  // 可橫向滑動的那一列：一般模式是 <nav>，鎖定模式是灰色分頁那一列。
+  // 可橫向滑動的那一列：一般模式是 <nav>，鎖定模式是弱化分頁那一列。
   const scrollerRef = useRef<HTMLElement>(null)
   const location = useLocation()
   const { pathname } = location

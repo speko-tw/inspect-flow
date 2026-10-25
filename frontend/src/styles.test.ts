@@ -316,14 +316,17 @@ describe('Shared brand header interaction tokens', () => {
   it('loads branding from AppHeader without an overview ancestor', () => {
     const header = readFileSync('src/layout/AppHeader.tsx', 'utf8')
     expect(header).toContain("import '../styles/g7-shell.css'")
-    expect(declarationsOf('.app-header', shellCss).background).toBe(
+    expect(declarationsOf('header.app-header', shellCss).background).toBe(
       'var(--color-brand-primary)',
     )
     expect(shellCss).not.toContain('dashboard-shell')
     expect(dashboardCss).not.toContain('.app-header')
-    expect(readFileSync('src/admin/AdminPage.tsx', 'utf8')).not.toContain(
-      'dashboard-shell',
-    )
+  })
+
+  it('keeps both AdminPage shells independent of overview routing', () => {
+    const admin = readFileSync('src/admin/AdminPage.tsx', 'utf8')
+    expect(admin).not.toContain('dashboard-shell')
+    expect(admin.match(/<div className="app-shell">/g)).toHaveLength(2)
   })
 
   it('keeps brand hover, focus and locked text readable (#737)', () => {
@@ -336,7 +339,57 @@ describe('Shared brand header interaction tokens', () => {
       shellCss,
     )
     expect(locked.color).toBe('var(--color-text-inverse)')
+  })
+
+  it('preserves muted locked tabs with AA contrast (UDS-R11)', () => {
+    const locked = declarationsOf(
+      '.app-header .app-header-nav-locked .app-header-tab',
+      shellCss,
+    )
+    expect(locked.color.replace(/\s/g, '')).toBe(
+      'color-mix(insrgb,var(--color-text-inverse)70%,' +
+        'var(--color-brand-primary))',
+    )
+    expect(locked.color).not.toBe('var(--color-text-inverse)')
     expect(locked.opacity).toBe('1')
+    // 由實際 token 算 sRGB 混色，再依 WCAG 相對亮度驗算。
+    const tokenColor = (name: string) => {
+      const value = tokens.match(new RegExp(`${name}: (#\\w{6});`))?.[1]
+      expect(value).toBeDefined()
+      return [1, 3, 5].map((offset) =>
+        Number.parseInt(value!.slice(offset, offset + 2), 16),
+      )
+    }
+    const brand = tokenColor('--color-brand-primary')
+    const inverse = tokenColor('--color-text-inverse')
+    const muted = inverse.map((v, i) => v * 0.7 + brand[i] * 0.3)
+    const linear = (value: number) =>
+      value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+    const luminance = (color: number[]) =>
+      color
+        .map((v) => linear(v / 255))
+        .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0)
+    const contrast = (luminance(muted) + 0.05) / (luminance(brand) + 0.05)
+    expect(contrast).toBeGreaterThanOrEqual(4.5)
+    expect(muted).not.toEqual(inverse)
+  })
+
+  it('keeps hover borders and feedback scoped to interactive controls', () => {
+    expect(shellCss).toContain(
+      '.app-header .app-header-personal-trigger:hover {\n' +
+        '    border-color: var(--color-brand-accent);',
+    )
+    const management =
+      'button.app-header-management-trigger' +
+      ":not([aria-current='page']):hover"
+    expect(shellCss).toContain(
+      `${management} {\n    border-bottom-color: transparent;`,
+    )
+    expect(shellCss).toContain('.app-header a.app-header-tab:hover,')
+    expect(shellCss).toContain('.app-header a.app-header-tab:active,')
+    expect(shellCss).not.toMatch(
+      /\.app-header \.app-header-tab:(hover|active)/,
+    )
   })
 
   it('uses tokens for hover, pressed and current header states', () => {

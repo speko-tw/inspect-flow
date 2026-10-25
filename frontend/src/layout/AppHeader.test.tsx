@@ -1,6 +1,6 @@
 // 共用頁首（#494）：系統名稱連到各身分自己的落點、導覽的選取樣式、
-// 登出鈕固定在帳號區、登出失敗的錯誤在頁首下方，以及鎖定模式
-// （臨時密碼結果頁，ADM-R15）不能離開。
+// 登出鈕固定在帳號區、登出失敗的錯誤在頁首下方，以及元件鎖定狀態
+// 的系統名稱與分頁不能操作（目前沒有正式呼叫端）。
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
@@ -80,17 +80,6 @@ afterEach(() => {
     configurable: true,
     value: ORIGINAL_INNER_WIDTH,
   })
-})
-
-describe('全站品牌頁首（UDS-AC18）', () => {
-  it.each(['/accounts', '/projects', '/templates', '/tasks'])(
-    '%s 使用共用品牌外框，不依賴 overview 容器',
-    (path) => {
-      renderHeader(ADMIN, {}, path)
-      expect(screen.getByRole('banner')).toHaveClass('app-header')
-      expect(screen.getByRole('banner').closest('.dashboard-shell')).toBeNull()
-    },
-  )
 })
 
 describe('範本瀏覽導覽（TPL-R09）', () => {
