@@ -149,6 +149,30 @@ async function loadDeactivationPreview(
   return { ...check, reassignment_projects: projects }
 }
 
+/** 每個帳號兩個查詢；限制六個帳號，避免批次預覽壓滿連線。 */
+async function loadBatchDeactivationPreviews(users: User[]) {
+  const previews: DeactivationPreview[] = new Array(users.length)
+  let next = 0
+  let failed = false
+  let failure: unknown
+  await Promise.all(
+    Array.from({ length: Math.min(6, users.length) }, async () => {
+      while (!failed && next < users.length) {
+        const index = next++
+        try {
+          previews[index] = await loadDeactivationPreview(users[index].id)
+        } catch (caught) {
+          failed = true
+          failure = caught
+        }
+      }
+    }),
+  )
+  // 等在途工作收尾後才回報；任何失敗都不交付部分確認資料。
+  if (failed) throw failure
+  return previews
+}
+
 /** 工號衝突由 API 判斷，錯誤需提供可執行的修正方向。 */
 function companyLinkErrorMessage(error: unknown): string {
   const message = managementErrorMessage(error).replace(/[。.!?]+$/, '')
@@ -229,6 +253,8 @@ export default function UsersPage({
   const companyListRequest = useRef<Promise<void> | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
   const [detailError, setDetailError] = useState('')
+  // 詳情更新只同步快照；若把 detailUser 放入載入依賴，儲存與重查
+  // 會再次載入並重掛表單，清掉使用者正在編輯的內容。
   const detailSnapshot = useRef<User | null>(null)
   useEffect(() => {
     detailSnapshot.current = detailUser
@@ -343,6 +369,7 @@ export default function UsersPage({
       setDetailError('')
       return
     }
+    // 路由替換仍指向同一帳號時沿用快照，避免重複 GET 與表單重掛。
     if (detailSnapshot.current?.id === detailUserId) return
     let active = true
     setDetailUser((current) => (current?.id === detailUserId ? current : null))
@@ -554,9 +581,7 @@ export default function UsersPage({
     setBatchDeactivationNotice('')
     setBatchDeactivationLoading(true)
     try {
-      const checks = await Promise.all(
-        selected.map((user) => loadDeactivationPreview(user.id)),
-      )
+      const checks = await loadBatchDeactivationPreviews(selected)
       const projects = new Map<
         string,
         DeactivationCheck['last_manager_projects'][number]

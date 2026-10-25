@@ -1,6 +1,7 @@
 // 使用者與公司管理操作的確認框防護測試（#507）。
 
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -2235,4 +2236,140 @@ it('提醒背景失敗不搶搜尋焦點，主動重試失敗才聚焦錯誤', a
   fireEvent.click(screen.getByRole('button', { name: '重試' }))
   await waitFor(() => expect(screen.getByRole('alert')).toHaveFocus())
   expect(backend.count('GET', /external-without-project/)).toBe(2)
+})
+
+it('批次兩個帳號共用專案只顯示一個改派連結', async () => {
+  const other = { ...regularUser, id: 'user-2', username: 'other' }
+  const project = {
+    id: 'project-1',
+    project_code: 'P-1',
+    name: '共同工地',
+    roles: [{ id: 'field', name: '現場工程師' }],
+  }
+  stubBackend({
+    users: [regularUser, other],
+    participatingProjects: {
+      'user-1': [project],
+      'user-2': [project],
+    },
+  })
+  renderUsers()
+  for (const username of ['anna.deng', 'other'])
+    fireEvent.click(
+      await screen.findByRole('checkbox', {
+        name: `選取 ${username}`,
+      }),
+    )
+  fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+  const box = await screen.findByRole('region', { name: '批次停用確認' })
+  expect(
+    within(box).getAllByRole('link', {
+      name: '計畫與任務：P-1／共同工地',
+    }),
+  ).toHaveLength(1)
+})
+
+it.each(['清單', '批次'])(
+  '%s參與專案查詢失敗時禁止停用且顯示錯誤',
+  async (entry) => {
+    const backend = stubBackend({
+      fail: (call) => call.path.endsWith('/participating-projects'),
+    })
+    renderUsers()
+    if (entry === '批次') {
+      fireEvent.click(
+        await screen.findByRole('checkbox', {
+          name: '選取 anna.deng',
+        }),
+      )
+      fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+      const area = screen.getByRole('region', { name: '批次帳號操作' })
+      expect(await within(area).findByRole('alert')).toBeVisible()
+      expect(
+        screen.queryByRole('region', {
+          name: '批次停用確認',
+        }),
+      ).toBeNull()
+    } else {
+      fireEvent.click(await screen.findByRole('button', { name: '停用' }))
+      const box = await screen.findByRole('region', { name: '操作確認' })
+      expect(await within(box).findByRole('alert')).toBeVisible()
+      expect(
+        within(box).getByRole('button', {
+          name: '確認停用帳號',
+        }),
+      ).toBeDisabled()
+    }
+    expect(backend.calls.filter((call) => call.method !== 'GET')).toEqual([])
+  },
+)
+
+it('批次預覽同時最多六個帳號、十二個 GET 在途', async () => {
+  const users = Array.from({ length: 8 }, (_, index) => ({
+    ...regularUser,
+    id: `user-${index + 1}`,
+    username: `person-${index + 1}`,
+  }))
+  const gates = users.map(() => deferred<void>())
+  stubBackend({
+    users,
+    hold: (call) => {
+      if (!/\/(deactivation-check|participating-projects)$/.test(call.path))
+        return undefined
+      return gates[Number(call.path.split('/')[4].split('-')[1]) - 1]
+    },
+  })
+  const original = globalThis.fetch
+  let inFlight = 0
+  let maximum = 0
+  const accounts = new Map<string, number>()
+  let maximumAccounts = 0
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (...args: Parameters<typeof fetch>) => {
+      const path = new URL(String(args[0]), 'http://localhost').pathname
+      if (!/\/(deactivation-check|participating-projects)$/.test(path))
+        return original(...args)
+      const id = path.split('/')[4]
+      accounts.set(id, (accounts.get(id) ?? 0) + 1)
+      maximumAccounts = Math.max(maximumAccounts, accounts.size)
+      maximum = Math.max(maximum, ++inFlight)
+      try {
+        return await original(...args)
+      } finally {
+        inFlight--
+        const count = accounts.get(id)! - 1
+        if (count) accounts.set(id, count)
+        else accounts.delete(id)
+      }
+    }),
+  )
+  renderUsers()
+  for (const user of users)
+    fireEvent.click(
+      await screen.findByRole('checkbox', {
+        name: `選取 ${user.username}`,
+      }),
+    )
+  fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+  try {
+    await waitFor(() => expect(inFlight).toBeGreaterThanOrEqual(12))
+    expect(maximumAccounts).toBe(6)
+    expect(maximum).toBe(12)
+    await act(async () => {
+      gates[0].resolve()
+    })
+    await waitFor(() => expect(accounts.has('user-7')).toBe(true))
+    expect(maximumAccounts).toBe(6)
+    expect(maximum).toBe(12)
+  } finally {
+    await act(async () => {
+      gates.forEach((gate) => gate.resolve())
+    })
+  }
+  expect(
+    await screen.findByRole('region', {
+      name: '批次停用確認',
+    }),
+  ).toBeVisible()
 })
