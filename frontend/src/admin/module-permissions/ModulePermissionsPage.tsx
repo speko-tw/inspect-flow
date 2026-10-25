@@ -1345,7 +1345,11 @@ function ModulePermissionsPageContent({
     })
   }
 
-  async function diagnose(repaired?: string) {
+  // 寫入成功不等於有效權限已生效；層別用來核對重查後的缺口。
+  async function diagnose(repaired?: {
+    layer: 'module' | 'project_role'
+    label: string
+  }) {
     const selection = diagnosticSelection.current
     if (
       selection.selectedUser !== selectedUser ||
@@ -1369,6 +1373,37 @@ function ModulePermissionsPageContent({
       return
     }
     setDiagnosticError('')
+    const recheckFailed = () => {
+      if (repaired)
+        setOperationNotice(
+          'diagnostic',
+          `已補上${repaired.label}，但重新檢查失敗，請重試檢查。`,
+        )
+    }
+    // 只依重查結果描述剩餘缺口，避免把成功寫入誤報為補救完成。
+    const repairFeedback = (remaining: {
+      module?: boolean
+      project_role?: boolean
+      project_member?: boolean
+    }) => {
+      if (!repaired) return
+      const gaps = [
+        remaining.module ? '功能權限' : '',
+        remaining.project_role ? '專案角色' : '',
+        remaining.project_member ? '專案成員身分' : '',
+      ].filter(Boolean)
+      const stillMissing =
+        remaining[repaired.layer] ||
+        (repaired.layer === 'project_role' && remaining.project_member)
+      setOperationNotice(
+        'diagnostic',
+        stillMissing
+          ? `補救已送出，但仍缺${gaps.join('與')}，請重試檢查。`
+          : `已補上${repaired.label}${
+              gaps.length ? `；還缺${gaps.join('與')}。` : '。'
+            }`,
+      )
+    }
     try {
       const access = await refreshEffectiveAccess()
       if (!access || !active()) return
@@ -1386,12 +1421,13 @@ function ModulePermissionsPageContent({
       )
       if (!diagnostic) {
         setNotice('目前無法檢查這項操作的有效權限。')
+        recheckFailed()
         return
       }
       if (diagnostic.allowed) {
         setCandidateRoles([])
         setNotice('這個人具備此操作所需的有效權限。')
-        if (repaired) setOperationNotice('diagnostic', `已補上${repaired}。`)
+        repairFeedback({})
         return
       }
       const roleMissing = diagnostic.missing_layers.includes('project_role')
@@ -1466,19 +1502,12 @@ function ModulePermissionsPageContent({
             : '這個專案裡沒有可以查看或執行任務的角色。',
         nonmember: false,
       })
-      if (repaired) {
-        const remaining = [
+      repairFeedback({
+        module:
           diagnostic.missing_layers.includes('module') ||
-          missingModuleCodes.length
-            ? '功能權限'
-            : '',
-          roleMissing ? '專案角色' : '',
-        ].filter(Boolean)
-        setOperationNotice(
-          'diagnostic',
-          `已補上${repaired}；還缺${remaining.join('與')}。`,
-        )
-      }
+          missingModuleCodes.length > 0,
+        project_role: roleMissing,
+      })
     } catch (caught) {
       if (!active()) return
       if (isNotFound(caught) && needsProject && diagnosticProject) {
@@ -1503,17 +1532,14 @@ function ModulePermissionsPageContent({
             roleMessage: '',
             nonmember: true,
           })
-          if (repaired) {
-            setOperationNotice(
-              'diagnostic',
-              `已補上${repaired}；還缺專案成員身分。`,
-            )
-          }
+          repairFeedback({ module: missing, project_member: true })
         } catch (permissionError) {
           if (!active()) return
+          recheckFailed()
           setDiagnosticError(message(permissionError))
         }
       } else {
+        recheckFailed()
         setDiagnosticError(message(caught))
       }
     }
@@ -1545,7 +1571,7 @@ function ModulePermissionsPageContent({
           ),
         ]),
       ])
-      await diagnose('功能權限')
+      await diagnose({ layer: 'module', label: '功能權限' })
     } catch (caught) {
       if (stillCurrent()) setDiagnosticError(message(caught))
     } finally {
@@ -1588,7 +1614,10 @@ function ModulePermissionsPageContent({
       // 補上角色後，「參與專案與角色」清單要跟著更新，
       // 否則畫面會一直顯示補上前的角色（#708）。
       setParticipationReload((current) => current + 1)
-      await diagnose(`「${candidate.name}」角色`)
+      await diagnose({
+        layer: 'project_role',
+        label: `「${candidate.name}」角色`,
+      })
     } catch (caught) {
       setOperationError('diagnostic', message(caught))
     } finally {

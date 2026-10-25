@@ -287,3 +287,5 @@ ADM-AC50 是目前 UI 路由、登入落點及導覽權限的權威驗收；ADM-
 - 規格澄清（#734、#735 第二輪）：停用確認統一四項條列後果與最後管理者警告；建立／重設密碼結果標題帶姓名及本人改密碼說明；提醒自動載入、空時隱藏；批次啟用排除已到期者並提供到期日編輯連結；診斷以結構化功能／角色缺口逐項提供直接補救，任何補救後自動重查。依[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)及追加單。
 
 - 範圍變更（負責人指示，#734）：ADM-R28 將重新查核選擇放在儲存確認框內，未選時停用確認鈕 — https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650
+
+- 規格澄清（[#728](https://github.com/speko-tw/inspect-flow/issues/728)）：ADM-AC49 補明功能與專案角色缺口須合併為一句白話提示；補救後依重查結果保留尚缺項目，不改既有授權規則。
