@@ -2042,7 +2042,6 @@ it.each(['詳情', '清單', '批次'])(
       fireEvent.click(
         await screen.findByRole('button', {
           name: entry === '詳情' ? '停用帳號' : '停用',
-          exact: true,
         }),
       )
     }
