@@ -38,6 +38,7 @@ function displayJson(value: unknown): string {
 export default function AuditLogPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([])
   const [optionsError, setOptionsError] = useState('')
   const [projectId, setProjectId] = useState('')
   const [actorId, setActorId] = useState('')
@@ -56,6 +57,13 @@ export default function AuditLogPage() {
 
   useEffect(() => {
     let active = true
+    void listAllPages<{ id: string; name: string }>('/roles')
+      .then((rows) => {
+        if (active) setRoles(rows)
+      })
+      .catch(() => {
+        /* 舊紀錄名稱不可得時使用已刪除角色的白話備援。 */
+      })
     void Promise.all([
       listAllPages<Project>('/projects'),
       listAllPages<User>('/users'),
@@ -187,6 +195,8 @@ export default function AuditLogPage() {
               <dd>
                 {entityLabel(entry, {
                   userName,
+                  roleName: (id) =>
+                    roles.find((role) => role.id === id)?.name ?? null,
                   projectName: (id) => {
                     const project = projects.find(
                       (candidate) => candidate.id === id,
@@ -202,9 +212,12 @@ export default function AuditLogPage() {
           <details>
             <summary>查看改前與改後內容</summary>
             <AuditChanges
+              eventType={entry.event_type}
               before={entry.before}
               after={entry.after}
               lookup={{
+                roleName: (id) =>
+                  roles.find((role) => role.id === id)?.name ?? null,
                 userName,
                 projectName: (id) => {
                   const project = projects.find((item) => item.id === id)

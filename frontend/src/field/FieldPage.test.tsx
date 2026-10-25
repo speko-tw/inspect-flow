@@ -416,9 +416,7 @@ describe('今日任務首頁', () => {
     )
     renderPage()
     expect(await screen.findByText('目前沒有符合的任務')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: '查看全部任務' }),
-    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '查看全部任務' })).toBeNull()
   })
 
   it('沒有查核權限但有專案權限時，不呼叫任務 API 並提供專案入口', () => {
@@ -717,11 +715,8 @@ it('管理者沒有指派任務時預設全部，仍有共用管理選單與 Adm
     'aria-pressed',
     'true',
   )
-  const notice = screen.getByRole('region', { name: '我的任務提醒' })
-  expect(notice).toHaveTextContent('目前沒有指派給你的任務')
-  expect(
-    within(notice).getByRole('button', { name: '查看全部任務' }),
-  ).toBeVisible()
+  expect(screen.queryByRole('region', { name: '我的任務提醒' })).toBeNull()
+  expect(screen.getByRole('heading', { name: '全部任務' })).toBeVisible()
   expect(screen.getByText('Admin')).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: '管理 ▾' }))
   expect(screen.getByRole('link', { name: '帳號' })).toHaveAttribute(

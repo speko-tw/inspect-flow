@@ -219,7 +219,10 @@ def test_draft_task_items_are_replaced_with_current_snapshots_and_audited(
     )
     assert audit is not None
     assert audit.before == {"items": {str(first.id): "舊項目"}}
-    assert audit.after == {"items": {str(second.id): "新項目"}}
+    assert audit.after == {
+        "items": {str(second.id): "新項目"},
+        "task_name": task.name,
+    }
 
 
 def test_draft_task_item_updates_reject_invalid_state_archive_and_permissions(

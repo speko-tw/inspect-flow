@@ -101,7 +101,9 @@ describe('SaveTemplateFromProjectPage', () => {
     })
 
     renderPage(true)
-    expect(await screen.findByText('步驟 1／3')).toBeVisible()
+    expect(
+      await screen.findByRole('heading', { name: '選擇專案' }),
+    ).toBeVisible()
     const projectButton = await screen.findByRole('button', {
       name: 'P-1 · 工程一',
     })
@@ -297,7 +299,7 @@ describe('SaveTemplateFromProjectPage', () => {
 
     const targetStep = screen
       .getByRole('heading', {
-        name: '3. 選擇範本庫位置',
+        name: '選擇範本庫位置',
       })
       .closest('li')
     expect(targetStep).not.toBeNull()

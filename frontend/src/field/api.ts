@@ -22,7 +22,7 @@ export interface FieldTask {
   status: 'PENDING' | 'IN_PROGRESS'
   dispatched_at: string
   location: { zone_name: string | null; location_text: string | null }
-  suggested_assignee: { name_zh: string | null } | null
+  suggested_assignee: { name_zh: string | null; is_active?: boolean } | null
   item_summary: { first_title: string | null; item_count: number }
 }
 
@@ -31,8 +31,9 @@ export interface FieldTaskPage {
   next_cursor: string | null
 }
 
-/** 詳情只給顯示名稱與「是否為本人」，不給使用者 ID 或帳號。 */
+/** 詳情只給顯示名稱、啟用狀態與「是否為本人」，不給 ID 或帳號。 */
 export interface FieldPerson {
+  is_active?: boolean
   name_zh: string | null
   is_me: boolean
 }

@@ -579,7 +579,7 @@ export default function ProjectTemplatesPage({
     setNotice('')
     try {
       const name = activeSaveName.trim()
-      await saveProjectItemAsTemplate(
+      const saved = await saveProjectItemAsTemplate(
         projectId,
         activeSaveSource.id,
         selected.id,
@@ -592,6 +592,18 @@ export default function ProjectTemplatesPage({
       )
       const categoryName = category?.name ?? '範本庫'
       const systemName = destination?.name ?? '目標系統'
+      if (routeSaveSource) {
+        navigate(`/projects/${projectId}/inspection-items`, {
+          state: {
+            savedFromItemId: activeSaveSource.id,
+            savedTemplateTitle: name,
+            savedTemplateId: saved.id,
+            savedCategoryId: category?.id,
+            savedSystemId: destination?.id,
+          },
+        })
+        return
+      }
       setNotice(`已將「${name}」存入「${categoryName} / ${systemName}」。`)
       setSaveCompleted(true)
       setMobilePane('list')

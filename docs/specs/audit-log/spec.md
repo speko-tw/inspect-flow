@@ -92,7 +92,7 @@
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
-| ALG-R22 | 0.5.x 管理後台**必須**提供 Admin 專用的稽核紀錄查詢頁與唯讀 API；未登入者與非 Admin 不得取得紀錄，查詢不得新增、修改或刪除紀錄 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；[ADM-R07](../admin-dashboard/spec.md#需求)、ALG-R04 | ALG-AC17；ADM-AC06 |
+| ALG-R22 | 0.5.x 管理後台**必須**提供 Admin 專用的稽核紀錄查詢頁與唯讀 API；未登入者與非 Admin 不得取得紀錄，查詢不得新增、修改或刪除紀錄 操作紀錄的人讀摘要以專案角色名稱呈現 role_ids，查不到則顯示「已刪除的角色」，不得顯示 UUID；user.password_set 依 is_temporary 以「已重設臨時密碼（不記錄密碼內容）」或「已變更密碼（不記錄密碼內容）」說明。對象優先取快照名稱；新寫入的任務取消、刪除、恢復、地點與項目變更附 task_name 快照（可選欄位以相容舊紀錄）。 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；[ADM-R07](../admin-dashboard/spec.md#需求)、ALG-R04 | ALG-AC17；ADM-AC06 |
 | ALG-R23 | 查詢**必須**支援專案、操作者、時間範圍、事件類型的多條件篩選與穩定 cursor 分頁；具體參數、排序、回應與錯誤契約依[查詢 API](#查詢-api)及 [ADM-R08](../admin-dashboard/spec.md#需求)。格式正確但不存在的 `project_id` 必須回 200 空頁 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定了篩選與唯讀畫面；[ADM-R08](../admin-dashboard/spec.md#需求)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、API-R08；查詢 API 的具體比對、時間邊界、排序、page size、錯誤與不存在專案空頁均為規格設計（非負責人裁定），細節見[查詢 API](#查詢-api) | ALG-AC18；ADM-AC07、ADM-AC13 |
 | ALG-R24 | 事件目錄**必須**以 `project_scoped` 標記具專案脈絡的事件（包含 `project.*`）；一般與獨立交易寫入入口收到這類事件但未提供 `project_id` 時**必須**在寫入或延後寫入前拒絕。寫入時**必須**將事件當下的專案 UUID 寫入 `AuditLog.project_id`：`project.*` 取該專案本身的 UUID；已登記的 `project_member.*`、`project_zone.*`、`inspection_task.*`、`project_inspection_item.*` 取其所屬專案，`template_item.created_from_project` 取來源專案；日後登記的 Plan／Task 事件若具專案脈絡，須標 `project_scoped` 並填入。無專案脈絡的 `role.*`、`user.*` 等寫空值。刪除或修改事件即使 `before`／`after` 未列 `project_id`，仍須從被操作資料的所屬專案取得。帶 `project_id` 篩選只回欄位相符的紀錄，排除空值；不帶時回全部。既有紀錄不回填，歷史事件的 `project_id` 為空，無法由專案篩選找回 | 必須 | 規格設計（非負責人裁定）：為 [ALG-Q2](#alg-q2) 的專案篩選建立明確、可索引且不依賴已刪除 entity 的依據；不回填避免猜測歷史事件的專案歸屬 | ALG-AC18 |
 | ALG-R25 | `User.is_active` 改變（停用或啟用）成功時，**必須**在同一個交易裡寫恰好一筆 `user.active_changed`；改前改後相同不寫；被拒絕（例如停用最後一位 Admin、內建 `admin`）不寫。經由停用公司而一併停用的人員，逐人各寫一筆（DOM-R33）。重新啟用時，事件另記下 Admin 勾選的恢復項目與被移除的項目（含模組委派，DOM-R67），未勾選而被收回與移除的項目另依各自事件（`module_permission.revoked`、`module_delegation.revoked`、`project_member.removed`）在同一交易寫稽核；外部協作人員的自動停用是系統事件，到期只寫一次（DOM-R75） | 必須 | 負責人裁定（[#538 第 5 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）、負責人裁定（[#538 第 23 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（補停用與啟用稽核事件、重新啟用前勾選確認）；「恰好一筆」比照 ALG-R14；逐人各寫與恢復項目的記錄方式是規格設計（非負責人裁定） | ALG-AC19 |
@@ -213,12 +213,12 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 | `project_zone.created` | 新增專案分區 | `project_zone` | 空值 | `project_id`、`name` |
 | `project_zone.updated` | 修改分區名稱 | `project_zone` | 有變動的 `name` | 同左 |
 | `project_zone.deleted` | 刪除未被 Task 引用的專案分區 | `project_zone` | `project_id`、`name` | 空值 |
-| `inspection_task.deleted` | 硬刪除 DRAFT Task | `inspection_task` | `project_id`、`status`、`item_count` | 空值 |
-| `inspection_task.cancelled` | 取消 PENDING／IN_PROGRESS Task | `inspection_task` | 變更前 `status` | `CANCELLED`、取消原因 |
-| `inspection_task.restored` | 恢復已取消 Task | `inspection_task` | `CANCELLED` | 恢復後 `status` |
-| `inspection_task.location_updated` | 修改 Task 地點 | `inspection_task` | 有變動的 `zone_id`、`location_text` | 同左 |
+| `inspection_task.deleted` | 硬刪除 DRAFT Task | `inspection_task` | `project_id`、`status`、`item_count`；可選 task_name 保存事件當下任務名稱 | 空值 |
+| `inspection_task.cancelled` | 取消 PENDING／IN_PROGRESS Task | `inspection_task` | 變更前 `status` | `CANCELLED`、取消原因；可選 task_name 保存事件當下任務名稱 |
+| `inspection_task.restored` | 恢復已取消 Task | `inspection_task` | `CANCELLED` | 恢復後 `status`；可選 task_name 保存事件當下任務名稱 |
+| `inspection_task.location_updated` | 修改 Task 地點 | `inspection_task` | 有變動的 `zone_id`、`location_text` | 同左；可選 task_name 保存事件當下任務名稱 |
 | `inspection_task.renamed` | 修改 Task 名稱且新舊名稱不同（名稱未變不寫） | `inspection_task` | 修改前的 `name` | 修改後的 `name` |
-| `inspection_task.items_updated` | 替換 DRAFT Task 的查核項目集合（新集合與目前相同時不寫） | `inspection_task` | 修改前的項目，格式為 `items`：`{項目 ID: 名稱}` 對照 | 修改後的項目，格式同左 |
+| `inspection_task.items_updated` | 替換 DRAFT Task 的查核項目集合（新集合與目前相同時不寫） | `inspection_task` | 修改前的項目，格式為 `items`：`{項目 ID: 名稱}` 對照 | 修改後的項目，格式同左；可選 task_name 保存事件當下任務名稱 |
 | `project_inspection_item.updated` | 修改專案查核項目並選擇是否重新查核 | `project_inspection_item` | 有變動的 `title`／`instruction`，以及重新查核選擇 | 修改後欄位與重新查核選擇 |
 | `project_inspection_item.deleted` | 刪除未被任何 Task 明細引用的專案查核項目（IP-R21）；含草稿與已取消的引用一律拒絕 | `project_inspection_item` | `project_id`、`title` | 空值 |
 
@@ -321,7 +321,7 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 | ALG-AC14 | 初始化後的資料庫；具 Admin 權限的操作者 A、本系統帳號 U（`username = anna.deng`）；`domain-model` 的使用者 Service 可用 | 以 A 把 U 的 `username` 改為 `Anna.D`；再改為 `anna.d`（與上一次存放的值相同）；以 A 嘗試改成已被使用的名稱；掃描事件目錄中這兩種事件的宣告欄位 | 第一次恰有一筆 `user.username_changed`，`entity_id` 是 U，`created_by` 是 A，`before.username` 為 `anna.deng`、`after.username` 為 `anna.d`（小寫）；第二次、被拒絕的那次都沒有紀錄；事件代碼符合 ALG-R07 格式，宣告欄位沒有 `password`、`secret`、`token`、`session` 字樣 | ALG-R14、ALG-R19 |
 | ALG-AC15 | 公司 A、B；具 Admin 權限的操作者 A0；本系統帳號 U 屬於公司 A，`employee_no`、`department`、`location` 都有值；沒有公司的帳號 V | 以 A0 依序：把 U 的 `company_id` 改為 B；把 U 的 `department` 單獨改成新值（`company_id` 不變）；為 U 重新填入三個欄位後把 `company_id` 改為空值；把 V 的 `company_id` 設為 A；以會使工號重複的值把 U 改到 A（被資料庫拒絕） | 第一次恰有一筆 `user.company_changed`，`before` 是 A 與三個欄位的原值，`after` 是 B 與三個空值；第二次沒有紀錄；第三次一筆，`after.company_id` 為空值、三欄為空值；第四次一筆，`before.company_id` 為空值；被拒絕的那次沒有紀錄；`created_by` 都是 A0 | ALG-R14、ALG-R19、ALG-R20 |
 | ALG-AC16 | 初始化後的資料庫；`admin` 已設定過一次密碼 | 執行 `admin` 重設指令一次（兩次輸入相同的有效密碼）；再執行一次兩次輸入不同的指令 | 第一次恰有一筆 `user.password_set`，`entity_id` 是內建 `admin`，`created_by` 是內建 `admin`，`after.is_temporary` 為 `false`；事件目錄沒有為重設指令新增的事件代碼；第二次沒有紀錄 | ALG-R21 |
-| ALG-AC17 | 已有稽核紀錄；Admin、非 Admin 及未登入者 | 分別開啟稽核查詢頁並呼叫查詢 API，再比對查詢前後的紀錄 | Admin 可唯讀查詢；未登入回 401、非 Admin 回 403，均不回稽核內容；查詢不新增、修改或刪除紀錄 | ALG-R22；ADM-AC06 |
+| ALG-AC17 | 已有稽核紀錄；Admin、非 Admin 及未登入者 | 分別開啟稽核查詢頁並呼叫查詢 API，再比對查詢前後的紀錄 | Admin 可唯讀查詢；未登入回 401、非 Admin 回 403，均不回稽核內容；查詢不新增、修改或刪除紀錄。驗證角色名稱與已刪除備援、密碼事件白話及任務名稱快照；歷史紀錄沒有名稱時保留類型，不猜測。 | ALG-R22；ADM-AC06 |
 | ALG-AC18 | 多筆跨專案、不同操作者與事件類型的紀錄，含相同事件時間；混入 `role.*`／`user.*` 無專案事件與 migration 前既有的歷史紀錄；另有不存在的合法專案 UUID | 組合專案、操作者、時間、事件類型篩選並跨 cursor 翻頁；以不存在的 `project_id` 查詢；不帶專案篩選再查；送無效篩選、cursor／limit 及 `from` 大於 `to`；遍歷事件目錄檢查 `project_scoped` 標記；以一般與延後寫入兩種方式寫入缺少 `project_id` 的專案事件 | 遍歷事件目錄，全部具專案脈絡的事件均標為 `project_scoped`；一般與獨立交易寫入缺少 `project_id` 時拒絕且不留紀錄或延後寫入項目；新的有專案事件寫入正確 `project_id`，無專案事件及未回填的歷史紀錄為空值；帶專案篩選只回欄位相符的紀錄，排除無專案與歷史紀錄，不帶時均可查到；`actor_id` 精確比對 `created_by`、`event_type` 完全相符；結果符合 AND 篩選、`(created_at,id)` 降冪且跨頁無重複遺漏；不存在的專案回 200、`items: []`、`next_cursor: null`；無效格式與反向時間範圍回 422 且符合 API-R05 錯誤 envelope | ALG-R01、ALG-R23、ALG-R24；ADM-AC07、ADM-AC13 |
 | ALG-AC19 | 非 Admin 的使用者 U、已停用的 V、被停用公司 C 一併選中的兩位人員；U 有模組權限、專案成員身分與未完成任務 | 停用 U；對已啟用的 U 再次「啟用」；停用後重新啟用 U 並只勾選部分恢復項目；嘗試停用最後一位 Admin；停用公司 C 並一併停用兩位人員 | 停用與啟用各恰有一筆 `user.active_changed`（`before`、`after` 為 `is_active` 的前後值），重新啟用的事件另含恢復與移除的項目；重複啟用與被拒絕的停用不寫；一併停用的兩位人員各一筆 | ALG-R25 |
 | ALG-AC20 | Admin A；被委派 `template` 的 D；使用者 W；事件目錄已登記模組權限事件 | A 為 W 授予 `template.use` 與重複授予一次；A 授予 W `project.create`（自動蘊含 `project.use`）；D 收回後重複收回；A 指派 D 的委派後重複指派；A 收回委派；D 授予時看紀錄的 `created_by`；D 嘗試授予專案模組代碼與替自己授權（被拒絕） | 每次成功的授予、收回、委派指派與收回各恰有一筆對應事件，授權事件含 `source`；`project.create` 與蘊含的 `project.use` 各一筆；重複與被拒絕的操作不留紀錄；D 授予的紀錄 `created_by` 是 D；集合欄位為排序後的陣列 | ALG-R26 |
@@ -388,3 +388,5 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 - 整合 main（#622）：為保留 #712 帳號稽核的 ALG-R31／ALG-AC30，將 #382 範本稽核改編 ALG-R32／ALG-AC31，並同步範本規格與計畫引用；行為與驗收內容不變。
 
 - 範圍變更（負責人指示，#515）：納入本人外觀偏好的稽核邊界，保存修改紀錄但不新增稽核事件 — [負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)
+
+- 規格澄清（負責人試用回饋 #734，W-734R）：ALG-R22、ALG-AC17 補明發版前重測行為，依 [#734](https://github.com/speko-tw/inspect-flow/issues/734) 同步實作與驗收。

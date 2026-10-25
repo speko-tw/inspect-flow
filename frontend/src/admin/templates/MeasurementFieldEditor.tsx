@@ -139,7 +139,8 @@ export function MeasurementFieldEditor({
               <p className="tpl-hint muted-text">此欄位用於數值標準。</p>
             )}
             {confirmField === `${pointIndex}:${fieldIndex}` &&
-            !structureLocked ? (
+            !structureLocked &&
+            !bound ? (
               <ConfirmBox
                 confirmLabel="移除欄位"
                 label="移除欄位確認"
@@ -154,6 +155,7 @@ export function MeasurementFieldEditor({
                 disabled={structureLocked}
                 onClick={() => {
                   if (bound) {
+                    setConfirmField('')
                     setActionErrors({
                       [`${base}:remove`]:
                         '這個欄位仍綁定數值標準，請先解除綁定後再移除。',
@@ -169,10 +171,26 @@ export function MeasurementFieldEditor({
                 移除欄位
               </button>
             )}
-            {actionErrors[`${base}:remove`] && (
-              <p className="field-error" role="alert">
-                {actionErrors[`${base}:remove`]}
-              </p>
+            {bound && actionErrors[`${base}:remove`] && (
+              <div role="alert">
+                <p className="field-error">{actionErrors[`${base}:remove`]}</p>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    const standard = event.currentTarget
+                      .closest('.tpl-point-section')
+                      ?.parentElement?.querySelector<HTMLElement>(
+                        '[aria-label="判定標準"]',
+                      )
+                    standard?.scrollIntoView?.({ block: 'nearest' })
+                    standard
+                      ?.querySelector<HTMLInputElement>('input:checked')
+                      ?.focus()
+                  }}
+                >
+                  前往判定標準
+                </button>
+              </div>
             )}
           </div>
         )

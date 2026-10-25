@@ -173,10 +173,14 @@ export default function ChangePasswordPage() {
           <BackLink to={target}>返回{landingLabel(target)}</BackLink>
         )
       }
-      title={PAGE_TITLES.personalSettings}
+      title={
+        user.must_change_password
+          ? '請先設定新密碼'
+          : PAGE_TITLES.personalSettings
+      }
       lead={
         user.must_change_password
-          ? '請輸入目前密碼，並設定新的密碼。'
+          ? '你用的是管理者給的臨時密碼，設定自己的密碼後才能繼續使用。'
           : '調整外觀或變更密碼。'
       }
     >
@@ -217,7 +221,7 @@ export default function ChangePasswordPage() {
         />
         <FormGroup title="設定新密碼" description="請依序輸入目前與新密碼。">
           <FormField
-            label="目前密碼"
+            label={user.must_change_password ? '臨時密碼' : '目前密碼'}
             id="change-password-current"
             required
             error={errorField === 'current' ? (error ?? undefined) : undefined}

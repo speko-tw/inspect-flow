@@ -1069,6 +1069,8 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(
       screen.queryByRole('button', { name: '存為範本' }),
     ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+    expect(await screen.findByText('PROJECT_DETAIL')).toBeVisible()
   })
 
   it('可編輯項目但無範本管理權限時只提示一次存回範本需求', async () => {

@@ -402,7 +402,11 @@ def _task_summaries(
                 "zone": {"id": zone.id, "name": zone.name} if zone else None,
                 "location_text": task.location_text,
                 "assignee_id": task.assignee_id,
-                "assignee": _person(assignee) if assignee else None,
+                "assignee": (
+                    {**_person(assignee), "is_active": assignee.is_active}
+                    if assignee
+                    else None
+                ),
                 "started_by": task.started_by,
                 "completed_by": task.completed_by,
                 "cancellation_reason": task.cancellation_reason,
@@ -445,7 +449,9 @@ def _field_task_summary(
             "location_text": task.location_text,
         },
         "suggested_assignee": (
-            {"name_zh": assignee.name_zh} if assignee else None
+            {"name_zh": assignee.name_zh, "is_active": assignee.is_active}
+            if assignee
+            else None
         ),
     }
     if not detail:

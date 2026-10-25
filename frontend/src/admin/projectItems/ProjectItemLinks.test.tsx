@@ -103,7 +103,12 @@ describe('ProjectItemLinks', () => {
           initialEntries={[
             {
               pathname: '/projects/project-1',
-              state: { highlightedItemIds: ['copy-1'] },
+              state: {
+                highlightedItemIds: ['copy-1'],
+                savedFromItemId: 'copy-1',
+                savedTemplateTitle: '示範範本',
+                savedTemplateId: 'template-1',
+              },
             },
           ]}
         >
@@ -127,6 +132,10 @@ describe('ProjectItemLinks', () => {
       screen.getByText('來源分類／系統： 建築設備 / 給排水系統'),
     ).toBeInTheDocument()
     expect(screen.getByText('剛套用')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '到範本庫查看' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '刪除「管線查核」' }))
+    expect(screen.queryByRole('link', { name: '到範本庫查看' })).toBeNull()
+
     expect(screen.getByText(/套用時間：/).closest('time')).toHaveAttribute(
       'datetime',
       '2026-10-05T01:00:00Z',

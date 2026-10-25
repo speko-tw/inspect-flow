@@ -2500,10 +2500,12 @@ def test_field_task_detail_shows_starter_name_and_cancel_reason_only(
     assert before["cancellation_reason"] is None
     assert before["suggested_assignee"] == {
         "name_zh": "示範查核員乙",
+        "is_active": True,
         "is_me": False,
     }
     assert world["field_two"].get(url).json()["suggested_assignee"] == {
         "name_zh": "示範查核員乙",
+        "is_active": True,
         "is_me": True,
     }
 
@@ -4676,3 +4678,32 @@ def test_draft_task_items_api_checks_state_before_validating_items(
         assert response.status_code == 409, response.text
         assert response.json()["error"]["code"] == "inspection_plan.archived"
     assert _task_state(db_session, draft.json()["id"]) == draft_before
+
+
+def test_assignee_summary_keeps_inactive_status(db_session, make_client):
+    """停用後保留建議人，API 提供明確狀態且事件保留任務名稱（#734）。"""
+    world = _planning_world(db_session, make_client)
+    person = world["field_user_two"]
+    _, task_id = _dispatched_field_task(world, "停用改派", person.id)
+    person.is_active = False
+    db_session.commit()
+    admin = world["admin"]
+    response = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert response.status_code == 200
+    assert response.json()["assignee"]["is_active"] is False
+    field = world["field"].get(f"/api/v1/field/inspection-tasks/{task_id}")
+    assert field.status_code == 200
+    assert field.json()["suggested_assignee"]["is_active"] is False
+    cancelled = admin.post(
+        f"/api/v1/inspection-tasks/{task_id}:cancel",
+        json={"reason": "停用後重新安排"},
+    )
+    assert cancelled.status_code == 200
+    audit = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.entity_id == UUID(task_id),
+            AuditLog.event_type == "inspection_task.cancelled",
+        )
+    )
+    assert audit is not None
+    assert audit.after["task_name"] == response.json()["name"]

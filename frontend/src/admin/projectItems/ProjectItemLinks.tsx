@@ -6,6 +6,7 @@ import { useCurrentUser } from '../../auth/useCurrentUser'
 import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { httpErrorMessage, isForbidden } from '../../http'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { revealElement } from '../../ui/reveal'
 import { ManagementApiError } from '../api'
 import {
   deleteProjectItem,
@@ -34,10 +35,19 @@ export default function ProjectItemLinks({
   const [deleteError, setDeleteError] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  const [dismissedSaveKey, setDismissedSaveKey] = useState<string | null>(null)
+  const savedNotice = useRef<HTMLParagraphElement | null>(null)
   const deleteTrigger = useRef<HTMLButtonElement | null>(null)
   const heading = useRef<HTMLHeadingElement | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
-  const routeState = location.state as { highlightedItemIds?: unknown } | null
+  const routeState = location.state as {
+    highlightedItemIds?: unknown
+    savedFromItemId?: string
+    savedTemplateTitle?: string
+    savedTemplateId?: string
+    savedCategoryId?: string
+    savedSystemId?: string
+  } | null
   const highlightedItemIds = new Set(
     Array.isArray(routeState?.highlightedItemIds)
       ? routeState.highlightedItemIds.filter(
@@ -49,6 +59,10 @@ export default function ProjectItemLinks({
   const canManageTemplates = canManageTemplateLibrary(user)
   const isInUse = (deleting?.task_count ?? 0) > 0
   const deleteAlert = useRef<HTMLParagraphElement | null>(null)
+
+  useEffect(() => {
+    if (!loading) revealElement(savedNotice.current)
+  }, [loading, location.key])
 
   useEffect(() => {
     if (!deleteError || !deleteAlert.current) return
@@ -168,6 +182,26 @@ export default function ProjectItemLinks({
                   剛套用
                 </p>
               )}
+              {routeState?.savedFromItemId === item.id &&
+                dismissedSaveKey !== location.key && (
+                  <p
+                    className="notice-success"
+                    ref={savedNotice}
+                    role="status"
+                  >
+                    已將「{routeState.savedTemplateTitle}」存為範本。{' '}
+                    <Link
+                      to="/templates"
+                      state={{
+                        savedTemplateId: routeState.savedTemplateId,
+                        savedCategoryId: routeState.savedCategoryId,
+                        savedSystemId: routeState.savedSystemId,
+                      }}
+                    >
+                      到範本庫查看
+                    </Link>
+                  </p>
+                )}
               <div className="project-item-title">
                 <strong>{item.title}</strong>
                 {canEdit &&
@@ -218,6 +252,7 @@ export default function ProjectItemLinks({
                     onClick={(event) => {
                       deleteTrigger.current = event.currentTarget
                       setDeleting(item)
+                      setDismissedSaveKey(location.key)
                       setDeleteError(
                         (item.task_count ?? 0) > 0
                           ? blockedDeleteMessage(item.task_count ?? 0)

@@ -663,7 +663,7 @@ describe('出路與 404（#480）', () => {
     stubBackend({ ...MEMBER, must_change_password: true })
     renderApp('/settings')
 
-    await screen.findByRole('heading', { name: '個人設定' })
+    await screen.findByRole('heading', { name: '請先設定新密碼' })
     expect(screen.queryByRole('link', { name: /^返回/ })).toBeNull()
   })
 
@@ -1068,9 +1068,8 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
       expect(scopeAll()).toHaveAttribute('aria-pressed', 'true')
       expect(fieldScopes(backend)).toEqual(['true', 'false'])
       expect(requestedUsers).toEqual([MEMBER.id, MEMBER.id])
-      expect(
-        screen.getByRole('region', { name: '我的任務提醒' }),
-      ).toHaveTextContent('目前沒有指派給你的任務')
+      expect(screen.queryByRole('region', { name: '我的任務提醒' })).toBeNull()
+      expect(screen.getByRole('heading', { name: '全部任務' })).toBeVisible()
     },
   )
 
@@ -1112,7 +1111,7 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: '我的任務' }),
+      await screen.findByRole('heading', { name: '全部任務' }),
     ).toBeVisible()
     expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute(
       'aria-pressed',

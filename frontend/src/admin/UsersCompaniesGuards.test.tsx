@@ -352,7 +352,7 @@ describe('UsersPage 帳號詳情', () => {
 
     const box = await screen.findByRole('region', { name: '操作確認' })
     expect(box).toHaveTextContent(
-      '停用鄧安娜（anna.deng）他會立刻被登出，之後不能再登入。',
+      '要停用的帳號：鄧安娜（anna.deng）他會立刻被登出，之後不能再登入。',
     )
     expect(box).toHaveTextContent(
       '他的功能權限與專案成員關係會先留著，重新啟用時由你逐項決定要不要恢復。',
@@ -1861,6 +1861,12 @@ describe('#734 T1/T2/T3 帳號批次回饋', () => {
         name: `批次${action}確認`,
       })
       if (active) {
+        expect(
+          within(box).getByRole('heading', { name: '停用 1 個帳號？' }),
+        ).toBeVisible()
+        expect(
+          within(box).getByRole('list', { name: '要停用的帳號' }),
+        ).toHaveTextContent('anna.deng')
         expect(box).toHaveTextContent('會立刻被登出，之後不能再登入')
         expect(box).toHaveTextContent('功能權限與專案成員關係會先留著')
         expect(box).toHaveTextContent(

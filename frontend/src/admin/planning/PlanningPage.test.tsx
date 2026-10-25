@@ -2123,7 +2123,8 @@ describe('planning forms guard (#507)', () => {
       const form = within(article).getByRole('heading', {
         name: '修改草稿任務的查核項目',
       }).parentElement as HTMLElement
-      expect(within(form).getByText(/本計畫已有 1 筆任務/)).toBeVisible()
+      expect(within(form).queryByText(/本計畫已有 1 筆任務/)).toBeNull()
+      expect(within(form).getAllByText(/本計畫已有 0 筆任務/)).toHaveLength(3)
 
       const secondItem = within(form).getByLabelText(/鋼筋保護層/)
       fireEvent.click(secondItem)
@@ -3003,4 +3004,38 @@ describe('#727c 各動作依實際權限', () => {
       expect(loadAssignees).not.toHaveBeenCalled()
     }
   })
+})
+
+it('停用的建議指派人顯示改派提醒並靠近修改入口', async () => {
+  const client = createMockPlanningClient()
+  const plan = await client.createPlan('project-demo-1', { name: '停用改派' })
+  const [item] = await client.listProjectItems('project-demo-1')
+  await client.createTask(plan.id, {
+    name: '檢查管線',
+    item_ids: [item.id],
+    suggested_assignee_id: 'project-a-member-1',
+    zone_id: null,
+    location_text: '一樓',
+  })
+  const original = client.getPlan.bind(client)
+  vi.spyOn(client, 'getPlan').mockImplementation(async (id) => {
+    const result = await original(id)
+    return {
+      ...result,
+      tasks: result.tasks?.map((task) => ({
+        ...task,
+        assignee: task.assignee
+          ? { ...task.assignee, is_active: false }
+          : null,
+      })),
+    }
+  })
+  render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+  fireEvent.click(await screen.findByRole('button', { name: /停用改派（/ }))
+  expect(await screen.findByText('（已停用，請改派）')).toBeVisible()
+  expect(
+    screen.getByRole('button', {
+      name: '修改建議指派（已停用，請改派）',
+    }),
+  ).toBeVisible()
 })
