@@ -284,3 +284,131 @@ def test_activation_audit_noop_and_atomic_rollback(
     db_session.expire_all()
     assert db_session.get(ProjectInspectionItem, item_id).is_active is True
     assert count() == before_count
+
+
+@pytest.mark.parametrize("operation", ["rename", "apply"])
+@pytest.mark.parametrize("active_conflict", [False, True])
+def test_mixed_name_conflicts_prefer_active(
+    world, db_session, operation, active_conflict
+):
+    """同名集合只要含啟用項目，就不能引導至恢復。"""
+    admin = world["admin"]
+    _, ids = _create_templates(admin)
+    base = f"/api/v1/projects/{world['project'].id}/inspection-items"
+    copied = admin.post(f"{base}:apply-template", json={"template_id": ids[0]})
+    assert copied.status_code == 201, copied.text
+    copy = db_session.get(ProjectInspectionItem, UUID(copied.json()[0]["id"]))
+    assert copy is not None
+    title = copy.title
+    copy.is_active = False
+    # 舊資料允許同名，模擬正規化後混合啟用／停用的衝突集合。
+    world["item"].title = f" {title.upper()} "
+    world["item"].is_active = active_conflict
+    db_session.commit()
+    response = (
+        admin.patch(_path(world, "item_two"), json={"title": title})
+        if operation == "rename"
+        else admin.post(f"{base}:apply-template", json={"template_id": ids[0]})
+    )
+    assert response.status_code == 409, response.text
+    suffix = "duplicate_name" if active_conflict else "inactive_name"
+    assert response.json()["error"]["code"] == (
+        f"project_inspection_item.{suffix}"
+    )
+
+
+@pytest.mark.parametrize("operation", ["create", "draft"])
+@pytest.mark.parametrize("invalid_id", [False, True])
+def test_item_validation_precedence(world, db_session, operation, invalid_id):
+    """跨專案／不存在優先，其次停用，最後才驗證項次。"""
+    from sqlalchemy import delete
+
+    from app.models import ProjectInspectionPoint
+
+    plan_id, task = _task(world)
+    item = world["item_two"]
+    item.is_active = False
+    db_session.execute(
+        delete(ProjectInspectionPoint).where(
+            ProjectInspectionPoint.project_inspection_item_id == item.id
+        )
+    )
+    db_session.commit()
+    ids = [str(item.id)] + ([str(uuid4())] if invalid_id else [])
+    response = (
+        world["admin"].post(
+            f"/api/v1/inspection-plans/{plan_id}/tasks",
+            json={"name": "檢查順序", "item_ids": ids},
+        )
+        if operation == "create"
+        else world["admin"].put(
+            f"/api/v1/inspection-tasks/{task['id']}/items",
+            json={"item_ids": ids},
+        )
+    )
+    expected = (
+        "inspection_task.invalid_project_item"
+        if invalid_id
+        else "project_inspection_item.inactive"
+    )
+    assert response.status_code == (422 if invalid_id else 409), response.text
+    assert response.json()["error"]["code"] == expected
+    # 啟用後同一個空項目才回項次錯誤，證明第三階段仍有效。
+    item.is_active = True
+    db_session.commit()
+    if not invalid_id:
+        response = (
+            world["admin"].post(
+                f"/api/v1/inspection-plans/{plan_id}/tasks",
+                json={"name": "空項次", "item_ids": ids},
+            )
+            if operation == "create"
+            else world["admin"].put(
+                f"/api/v1/inspection-tasks/{task['id']}/items",
+                json={"item_ids": ids},
+            )
+        )
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == (
+            "inspection_task.item_without_points"
+        )
+
+
+def test_workflow_counts_only_active_items(world):
+    """全停用回到新增項目步驟，恢復後重新計入。"""
+    url = f"/api/v1/projects/{world['project'].id}/workflow-summary"
+    admin = world["admin"]
+    assert admin.get(url).json()["inspection_item_count"] == 2
+    for key in ("item", "item_two"):
+        assert admin.post(f"{_path(world, key)}:deactivate").status_code == 200
+    summary = admin.get(url)
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["inspection_item_count"] == 0
+    assert summary.json()["primary_step"] == "add_inspection_items"
+    assert admin.post(f"{_path(world)}:activate").status_code == 200
+    assert admin.get(url).json()["inspection_item_count"] == 1
+
+
+def test_system_apply_mixed_conflict_names(world, db_session):
+    """整系統多個不同名稱的衝突，也以啟用者優先且不部分新增。"""
+    admin = world["admin"]
+    system_id, _ = _create_templates(admin)
+    base = f"/api/v1/projects/{world['project'].id}/inspection-items"
+    applied = admin.post(
+        f"{base}:apply-template", json={"system_id": system_id}
+    )
+    assert applied.status_code == 201, applied.text
+    rows = applied.json()
+    source = db_session.get(ProjectInspectionItem, UUID(rows[0]["id"]))
+    assert source is not None
+    source.is_active = False
+    db_session.commit()
+    count = len(admin.get(base).json()["items"])
+    rejected = admin.post(
+        f"{base}:apply-template", json={"system_id": system_id}
+    )
+    assert rejected.status_code == 409, rejected.text
+    assert rejected.json()["error"]["code"] == (
+        "project_inspection_item.duplicate_name"
+    )
+    assert len(admin.get(base).json()["items"]) == count

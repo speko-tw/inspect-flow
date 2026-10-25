@@ -73,8 +73,8 @@ def _reject_duplicate_names(
         ).where(ProjectInspectionItem.project_id == project_id)
     ).all()
     names = {title.strip().casefold() for title, _ in existing}
-    inactive_names = {
-        title.strip().casefold() for title, active in existing if not active
+    active_names = {
+        title.strip().casefold() for title, active in existing if active
     }
     conflicts = [
         template.title
@@ -84,8 +84,8 @@ def _reject_duplicate_names(
     if conflicts:
         raise DuplicateProjectItemError(
             conflicts,
-            inactive=any(
-                name.strip().casefold() in inactive_names for name in conflicts
+            inactive=not any(
+                name.strip().casefold() in active_names for name in conflicts
             ),
         )
 

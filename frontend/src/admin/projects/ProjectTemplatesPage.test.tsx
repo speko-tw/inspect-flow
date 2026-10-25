@@ -1421,3 +1421,33 @@ describe('專案範本套用與存為範本：防連點（#507）', () => {
     expect(container.querySelector('form')).toBeNull()
   })
 })
+
+it('R2：停用同名提供恢復連結，啟用同名保留改名提示', async () => {
+  mockApi({
+    projectItems: [{ ...PROJECT_ITEM, is_active: false }],
+  })
+  renderPage()
+  await chooseSystem()
+  const radio = screen.getByLabelText('單一項目：管線查核')
+  expect(radio).toBeDisabled()
+  expect(screen.getByText('同名項目已停用，可在已停用清單恢復')).toBeVisible()
+  const link = screen.getByRole('link', { name: '前往已停用清單' })
+  expect(link).toHaveAttribute('href', '/projects/project-1/inspection-items')
+  expect(screen.queryByText('專案已有同名項目，需要第二份請先改名')).toBeNull()
+  fireEvent.click(link)
+  expect(await screen.findByText('PROJECT_DETAIL')).toBeVisible()
+})
+
+it('R2：專案存為範本清單不列停用項目並提示恢復', async () => {
+  mockApi({
+    canSave: true,
+    projectItems: [
+      PROJECT_ITEM,
+      { ...PROJECT_ITEM, id: 'inactive', title: '停用來源', is_active: false },
+    ],
+  })
+  renderPage()
+  expect(await screen.findByRole('button', { name: '存為範本' })).toBeEnabled()
+  expect(screen.queryByText('停用來源')).toBeNull()
+  expect(screen.getByText('停用項目須先恢復，才能存為範本。')).toBeVisible()
+})

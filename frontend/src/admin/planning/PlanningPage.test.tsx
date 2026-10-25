@@ -3058,4 +3058,50 @@ it('IP-AC24：新增不選停用項目，草稿只保留原有停用項目', asy
     within(editForm).getByLabelText(new RegExp(items[1].title)),
   ).not.toBeChecked()
   expect(within(editForm).queryByLabelText(/其他停用項目/)).toBeNull()
+  expect(within(editForm).getByText(/已停用/)).toBeVisible()
+  expect(within(editForm).getByText('取消勾選後無法再加回。')).toBeVisible()
+  fireEvent.click(within(editForm).getByLabelText(new RegExp(items[0].title)))
+  expect(
+    within(editForm).queryByLabelText(new RegExp(items[0].title)),
+  ).toBeNull()
+})
+
+it('R2：項目重載裁除剛停用的勾選，提交只含啟用項目', async () => {
+  const client = createMockPlanningClient()
+  const projectId = 'project-demo-1'
+  const items = await client.listProjectItems(projectId)
+  const plan = await client.createPlan(projectId, { name: '重載測試' })
+  const create = vi.spyOn(client, 'createTask')
+  const view = render(
+    <PlanningPage client={client} initialProjectId={projectId} />,
+  )
+  fireEvent.click(await screen.findByRole('button', { name: /重載測試（/ }))
+  await openTaskCreationForm()
+  fireEvent.click(screen.getByLabelText(new RegExp(items[0].title)))
+  fireEvent.click(screen.getByLabelText(new RegExp(items[1].title)))
+  const reloaded = {
+    ...client,
+    listProjectItems: vi.fn(async () => [
+      { ...items[0], is_active: false },
+      items[1],
+    ]),
+  }
+  view.rerender(
+    <PlanningPage client={reloaded} initialProjectId={projectId} />,
+  )
+  expect(
+    await screen.findByText(`已移除剛停用的項目：${items[0].title}`),
+  ).toBeVisible()
+  expect(screen.queryByLabelText(new RegExp(items[0].title))).toBeNull()
+  expect(screen.getByLabelText(new RegExp(items[1].title))).toBeChecked()
+  fireEvent.change(screen.getByLabelText('補充地點'), {
+    target: { value: '工地' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
+  await waitFor(() =>
+    expect(create).toHaveBeenCalledWith(
+      plan.id,
+      expect.objectContaining({ item_ids: [items[1].id] }),
+    ),
+  )
 })

@@ -39,6 +39,7 @@ export default function ProjectItemLinks({
     active: boolean
   } | null>(null)
   const [activationError, setActivationError] = useState('')
+  const activationAlert = useRef<HTMLParagraphElement | null>(null)
   const [notice, setNotice] = useState('')
   const deleteTrigger = useRef<HTMLButtonElement | null>(null)
   const heading = useRef<HTMLHeadingElement | null>(null)
@@ -67,6 +68,18 @@ export default function ProjectItemLinks({
     alert.scrollIntoView?.({ block })
     alert.focus({ preventScroll: true })
   }, [deleteError, deleting?.id, isInUse])
+
+  useEffect(() => {
+    const alert = activationAlert.current
+    if (!activationError || !alert) return
+    // 讓就近確認區的停用／恢復錯誤可見，並讓鍵盤使用者接續操作。
+    const block =
+      alert.getBoundingClientRect().height > window.innerHeight * 0.8
+        ? 'start'
+        : 'nearest'
+    alert.scrollIntoView?.({ block })
+    alert.focus({ preventScroll: true })
+  }, [activationError])
 
   useEffect(() => {
     let active = true
@@ -198,7 +211,11 @@ export default function ProjectItemLinks({
             ? '恢復後會重新出現在新任務的選單，既有任務與查核紀錄不變。'
             : '停用後不會出現在新任務的選單，既有任務與查核紀錄不受影響，之後可以恢復。'}
         </p>
-        {activationError && <p role="alert">{activationError}</p>}
+        {activationError && (
+          <p ref={activationAlert} role="alert" tabIndex={-1}>
+            {activationError}
+          </p>
+        )}
       </ConfirmBox>
     )
   }

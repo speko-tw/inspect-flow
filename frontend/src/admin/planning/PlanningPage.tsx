@@ -306,6 +306,12 @@ export default function PlanningPage({
   const [editingPlanName, setEditingPlanName] = useState(false)
   const [updatedPlanName, setUpdatedPlanName] = useState('')
   const [taskItems, setTaskItems] = useState<string[]>([])
+  const [removedTaskItems, setRemovedTaskItems] = useState<string[]>([])
+  // 重載完成時讀最新勾選，避免非同步請求保留較舊的選擇。
+  const taskItemsRef = useRef(taskItems)
+  useEffect(() => {
+    taskItemsRef.current = taskItems
+  }, [taskItems])
   const [taskName, setTaskName] = useState('')
   // 只有使用者碰過名稱欄才採用手動值，避免項目變動覆寫自訂名稱。
   const [taskNameTouched, setTaskNameTouched] = useState(false)
@@ -622,7 +628,23 @@ export default function PlanningPage({
       if (active) {
         const [itemsResult, zonesResult, membersResult, plansResult] = results
         if (itemsResult.status === 'fulfilled') {
-          setItems(itemsResult.value)
+          const loaded = itemsResult.value
+          const selected = taskItemsRef.current
+          const activeIds = new Set(
+            loaded
+              .filter((item) => item.is_active !== false)
+              .map((item) => item.id),
+          )
+          setRemovedTaskItems(
+            loaded
+              .filter(
+                (item) =>
+                  item.is_active === false && selected.includes(item.id),
+              )
+              .map((item) => item.title),
+          )
+          setTaskItems(selected.filter((id) => activeIds.has(id)))
+          setItems(loaded)
         } else {
           setItems([])
           setError(planningErrorMessage(itemsResult.reason))
@@ -1127,6 +1149,7 @@ export default function PlanningPage({
     setTaskFormOpen(false)
     taskFormFocus.current = null
     setTaskItems([])
+    setRemovedTaskItems([])
     setTaskName('')
     setTaskNameTouched(false)
     setTaskZoneId('')
@@ -1782,9 +1805,7 @@ export default function PlanningPage({
                                 .filter(
                                   (item) =>
                                     item.is_active !== false ||
-                                    editingTaskItems.task.items.some(
-                                      (selected) => selected.id === item.id,
-                                    ),
+                                    editingTaskItems.itemIds.includes(item.id),
                                 )
                                 .map((item) => {
                                   const existingTasks = tasksForItem(item.id)
@@ -1817,7 +1838,13 @@ export default function PlanningPage({
                                               item.instruction,
                                             ].join(' — ')
                                           : item.title}
+                                        {item.is_active === false && (
+                                          <span>（已停用）</span>
+                                        )}
                                       </label>
+                                      {item.is_active === false && (
+                                        <p>取消勾選後無法再加回。</p>
+                                      )}
                                       <details>
                                         <summary style={{ minHeight: 44 }}>
                                           本計畫已有 {existingTasks.length}{' '}
@@ -2201,6 +2228,11 @@ export default function PlanningPage({
                     <p className="field-hint" id="task-items-hint">
                       至少選擇一筆查核項目。
                     </p>
+                    {removedTaskItems.length > 0 && (
+                      <p role="status">
+                        已移除剛停用的項目：{removedTaskItems.join('、')}
+                      </p>
+                    )}
                     {items
                       .filter((item) => item.is_active !== false)
                       .map((item) => {

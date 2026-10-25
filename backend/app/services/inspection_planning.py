@@ -463,6 +463,7 @@ def _lock_project_items_for_snapshot(
     project_id: uuid.UUID,
     item_ids: list[uuid.UUID],
     allow_inactive: bool = False,
+    check_points: bool = True,
 ) -> list[uuid.UUID]:
     """依 IP-R03 先鎖來源項目再鎖 Plan，避免快照讀到舊標準。
 
@@ -475,7 +476,7 @@ def _lock_project_items_for_snapshot(
       ``inspection_task.invalid_project_item``。
     - 任一項目沒有任何點位：``inspection_task.item_without_points``。
     """
-    from app.models import ProjectInspectionItem, ProjectInspectionPoint
+    from app.models import ProjectInspectionItem
 
     unique_ids = list(dict.fromkeys(item_ids))
     if not unique_ids:
@@ -494,19 +495,27 @@ def _lock_project_items_for_snapshot(
         raise PlanningError("inspection_task.invalid_project_item")
     if not allow_inactive and any(not source.is_active for source in sources):
         raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE, 409)
+    if check_points:
+        _ensure_project_items_have_points(session, unique_ids)
+    return unique_ids
+
+
+def _ensure_project_items_have_points(
+    session: Session, item_ids: list[uuid.UUID]
+) -> None:
+    """IP-R20：持有來源鎖且確認可選用後，才檢查點位完整性。"""
+    from app.models import ProjectInspectionPoint
+
     source_ids_with_points = set(
         session.scalars(
             select(ProjectInspectionPoint.project_inspection_item_id).where(
-                ProjectInspectionPoint.project_inspection_item_id.in_(
-                    unique_ids
-                )
+                ProjectInspectionPoint.project_inspection_item_id.in_(item_ids)
             )
         ).all()
     )
     # IP-R14：先鎖住來源項目再查點位，避免與項目 PATCH 並行時建立空快照。
-    if source_ids_with_points != set(unique_ids):
+    if source_ids_with_points != set(item_ids):
         raise PlanningError("inspection_task.item_without_points")
-    return unique_ids
 
 
 def _current_inspection_level(session: Session, project_id: uuid.UUID) -> str:
@@ -867,6 +876,7 @@ def update_draft_task_items(
         project_id=task.project_id,
         item_ids=item_ids,
         allow_inactive=True,
+        check_points=False,
     )
     plan = _lock_plan(session, task_reference.plan_id)
     locked_task = _lock_task(session, task.id)
@@ -899,6 +909,7 @@ def update_draft_task_items(
         is not None
     ):
         raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE, 409)
+    _ensure_project_items_have_points(session, item_ids)
     # 集合相同就不重建：DRAFT 的快照由 IP-R04 隨來源項目修改同步，
     # 內容必已是最新；重建只會換掉 id 並留下沒有意義的稽核。
     if set(old_ids) == set(item_ids):
@@ -1458,7 +1469,7 @@ def edit_project_inspection_item(
             if conflicts:
                 raise APIError(
                     ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE_NAME
-                    if not all(conflicts)
+                    if not any(conflicts)
                     else ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
                     409,
                     details=[title],

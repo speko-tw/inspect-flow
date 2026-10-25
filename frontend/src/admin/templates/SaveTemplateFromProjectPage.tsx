@@ -242,21 +242,24 @@ export default function SaveTemplateFromProjectPage() {
             {loading ? <p role="status">載入中…</p> : null}
             {!loading && (
               <ul>
-                {projectItems.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      aria-pressed={source?.id === item.id}
-                      disabled={busy}
-                      onClick={() => void chooseSource(item)}
-                      type="button"
-                    >
-                      {item.title}（{item.inspection_points.length}{' '}
-                      個查核項次； 來源範本：{item.source_template_name}）
-                    </button>
-                  </li>
-                ))}
+                {projectItems
+                  .filter((item) => item.is_active !== false)
+                  .map((item) => (
+                    <li key={item.id}>
+                      <button
+                        aria-pressed={source?.id === item.id}
+                        disabled={busy}
+                        onClick={() => void chooseSource(item)}
+                        type="button"
+                      >
+                        {item.title}（{item.inspection_points.length}{' '}
+                        個查核項次； 來源範本：{item.source_template_name}）
+                      </button>
+                    </li>
+                  ))}
               </ul>
             )}
+            <p>停用項目須先恢復，才能存為範本。</p>
           </li>
         )}
         {source && (

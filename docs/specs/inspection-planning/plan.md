@@ -131,3 +131,7 @@ Issue #406 補齊以下測試對應，不變更產品行為：
 - 驗證 IP-AC23～IP-AC26：`test_project_item_activation.py`、`test_project_item_activation_migration.py`、`ProjectItemActivation.test.tsx`、`PlanningPage.test.tsx`、既有名稱錯誤與稽核標籤測試、demo 真 Chrome E2E；1280 淺色與 360 深色各拍停用確認、停用清單與恢復結果。
 - 新增檔案之外，涉及專案項目的 model、service、API、錯誤碼及清單序列化；不修改帳號、角色、權限或範本頁。
 - 整合回歸補齊 `tests/contract/test_route_access.py` 的兩個專案項目動作權限宣告；`tests/db/test_migrations.py` 的三個舊版測試以實際歷史欄位及既有綁定型別種入項目，避免目前 ORM 的 `is_active` Python 預設值滲入尚無此欄位的舊 schema，原 migration 與驗收斷言不變。
+
+## #717 第 2 輪審查修正
+
+依負責人工作單修正既有停用範圍的規格澄清與驗收：錯誤優先序、啟用同名優先、摘要只計啟用項目、選單重載裁除、草稿停用標示、兩個存為範本入口過濾、錯誤聚焦，以及 PostgreSQL 雙連線鎖等待。不新增或重用 R／AC 編號；仍為規格設計（非負責人裁定），沿用 #717 的負責人指示範圍。

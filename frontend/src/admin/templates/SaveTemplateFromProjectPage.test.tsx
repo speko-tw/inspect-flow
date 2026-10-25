@@ -313,3 +313,30 @@ describe('SaveTemplateFromProjectPage', () => {
     expect(within(targetStep!).queryByRole('alert')).toBeNull()
   })
 })
+
+it('R2：跨專案存為範本不列停用來源', async () => {
+  vi.mocked(listAllProjects).mockResolvedValue([
+    { id: 'p1', project_code: 'P-1', name: '工程一' },
+  ])
+  vi.mocked(listTemplateCategories).mockResolvedValue([])
+  const source = {
+    id: 'active',
+    project_id: 'p1',
+    sequence: 1,
+    title: '啟用來源',
+    instruction: '',
+    source_template_name: '範本',
+    applied_at: '2026-10-01T00:00:00Z',
+    task_count: 0,
+    inspection_points: [],
+  }
+  vi.mocked(listProjectItems).mockResolvedValue([
+    source,
+    { ...source, id: 'inactive', title: '停用來源', is_active: false },
+  ])
+  renderPage(true)
+  fireEvent.click(await screen.findByRole('button', { name: 'P-1 · 工程一' }))
+  expect(await screen.findByRole('button', { name: /啟用來源/ })).toBeVisible()
+  expect(screen.queryByRole('button', { name: /停用來源/ })).toBeNull()
+  expect(screen.getByText('停用項目須先恢復，才能存為範本。')).toBeVisible()
+})

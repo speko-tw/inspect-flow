@@ -122,6 +122,9 @@ describe('IP-AC23：停用與恢復', () => {
             }),
       ),
     )
+    const scroll = vi.fn()
+    const originalScroll = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView = scroll
     const view = renderItems()
     const summary = await screen.findByText('已停用（1）')
     fireEvent.click(summary)
@@ -133,6 +136,10 @@ describe('IP-AC23：停用與恢復', () => {
     expect(await within(confirm).findByRole('alert')).toHaveTextContent(
       '你沒有權限停用或恢復',
     )
+    const alert = within(confirm).getByRole('alert')
+    await waitFor(() => expect(alert).toHaveFocus())
+    expect(scroll).toHaveBeenCalled()
+    HTMLElement.prototype.scrollIntoView = originalScroll
     view.unmount()
     renderItems(false)
     fireEvent.click(await screen.findByText('已停用（1）'))

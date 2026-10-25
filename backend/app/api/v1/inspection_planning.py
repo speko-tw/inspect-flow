@@ -1609,7 +1609,7 @@ def deactivate_project_item(
     project_inspection_item_id: UUID,
     db: Session = _db_dependency,
 ) -> dict:
-    """依 IP-R23 由後端切換項目的可選用狀態。"""
+    """依 IP-R23 停用項目，保留既有任務與查核紀錄。"""
     return _call(
         set_project_inspection_item_active,
         db,
@@ -1638,7 +1638,7 @@ def activate_project_item(
     project_inspection_item_id: UUID,
     db: Session = _db_dependency,
 ) -> dict:
-    """依 IP-R23 由後端切換項目的可選用狀態。"""
+    """依 IP-R23 恢復項目，重新開放選用與編輯。"""
     return _call(
         set_project_inspection_item_active,
         db,

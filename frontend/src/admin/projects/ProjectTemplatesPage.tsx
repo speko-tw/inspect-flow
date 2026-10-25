@@ -208,7 +208,9 @@ export default function ProjectTemplatesPage({
   const currentItemsLoadError =
     itemsLoadError?.projectId === projectId ? itemsLoadError.message : ''
   const showEmptyProjectItems =
-    !itemsLoading && !currentItemsLoadError && projectItems.length === 0
+    !itemsLoading &&
+    !currentItemsLoadError &&
+    projectItems.every((item) => item.is_active === false)
 
   useEffect(() => {
     if (applyConflict) conflictActionRef.current?.focus()
@@ -404,6 +406,19 @@ export default function ProjectTemplatesPage({
     () => new Set(projectItems.map((item) => pythonCasefold(item.title))),
     [projectItems],
   )
+  const activeProjectItemNames = useMemo(
+    () =>
+      new Set(
+        projectItems
+          .filter((item) => item.is_active !== false)
+          .map((item) => pythonCasefold(item.title)),
+      ),
+    [projectItems],
+  )
+  const projectItemsPath = `/projects/${projectId}/inspection-items`
+  const isInactiveConflict = (item: TemplateItem) =>
+    isAlreadyApplied(item, projectItemNames) &&
+    !isAlreadyApplied(item, activeProjectItemNames)
   const appliedItemIds = useMemo(
     () =>
       new Set(
@@ -723,29 +738,32 @@ export default function ProjectTemplatesPage({
               {itemsLoading && <p>載入中…</p>}
               {showEmptyProjectItems && <p>目前沒有查核項目。</p>}
               <ul>
-                {projectItems.map((item) => (
-                  <li key={item.id}>
-                    <strong>{item.title}</strong>
-                    <span>來源範本：{item.source_template_name}</span>
-                    <time dateTime={item.applied_at}>
-                      {formatTime(item.applied_at)}
-                    </time>
-                    {saveAllowed &&
-                      !readDenied &&
-                      !saveDenied &&
-                      !itemsDenied && (
-                        <button
-                          className="card-action"
-                          disabled={busy}
-                          onClick={() => startSave(item)}
-                          type="button"
-                        >
-                          存為範本
-                        </button>
-                      )}
-                  </li>
-                ))}
+                {projectItems
+                  .filter((item) => item.is_active !== false)
+                  .map((item) => (
+                    <li key={item.id}>
+                      <strong>{item.title}</strong>
+                      <span>來源範本：{item.source_template_name}</span>
+                      <time dateTime={item.applied_at}>
+                        {formatTime(item.applied_at)}
+                      </time>
+                      {saveAllowed &&
+                        !readDenied &&
+                        !saveDenied &&
+                        !itemsDenied && (
+                          <button
+                            className="card-action"
+                            disabled={busy}
+                            onClick={() => startSave(item)}
+                            type="button"
+                          >
+                            存為範本
+                          </button>
+                        )}
+                    </li>
+                  ))}
               </ul>
+              <p>停用項目須先恢復，才能存為範本。</p>
             </section>
           )}
         </div>
@@ -999,7 +1017,9 @@ export default function ProjectTemplatesPage({
                             <span>單一項目：{item.title}</span>
                             {isAlreadyApplied(item, projectItemNames) && (
                               <span className="tpl-applied-status muted-text">
-                                已套用
+                                {isInactiveConflict(item)
+                                  ? '已停用'
+                                  : '已套用'}
                               </span>
                             )}
                           </label>
@@ -1008,7 +1028,16 @@ export default function ProjectTemplatesPage({
                               className="tpl-conflict-hint muted-text"
                               id={`applied-template-${item.id}`}
                             >
-                              專案已有同名項目，需要第二份請先改名
+                              {isInactiveConflict(item) ? (
+                                <>
+                                  同名項目已停用，可在已停用清單恢復{' '}
+                                  <Link to={projectItemsPath}>
+                                    前往已停用清單
+                                  </Link>
+                                </>
+                              ) : (
+                                '專案已有同名項目，需要第二份請先改名'
+                              )}
                             </p>
                           )}
                         </div>
