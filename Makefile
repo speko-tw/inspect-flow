@@ -164,7 +164,8 @@ check-backend:
 	cd backend && uv run --locked pytest
 	cd backend && uv run --locked python -m compileall -q app
 
-# PostgreSQL compatibility check (DBF-R10, DBF-AC08). Uses
+# PostgreSQL compatibility check (DBF-R10, DBF-AC08). Includes
+# role API regressions alongside migration and tests/db (#741). Uses
 # INSPECTFLOW_TEST_POSTGRES_URL rather than INSPECTFLOW_DATABASE_URL
 # because this check drops and recreates the target database's
 # entire `public` schema -- a developer's configured
