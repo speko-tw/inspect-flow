@@ -1345,7 +1345,7 @@ function ModulePermissionsPageContent({
     })
   }
 
-  async function diagnose() {
+  async function diagnose(repaired?: string) {
     const selection = diagnosticSelection.current
     if (
       selection.selectedUser !== selectedUser ||
@@ -1391,6 +1391,7 @@ function ModulePermissionsPageContent({
       if (diagnostic.allowed) {
         setCandidateRoles([])
         setNotice('這個人具備此操作所需的有效權限。')
+        if (repaired) setOperationNotice('diagnostic', `已補上${repaired}。`)
         return
       }
       const roleMissing = diagnostic.missing_layers.includes('project_role')
@@ -1465,6 +1466,19 @@ function ModulePermissionsPageContent({
             : '這個專案裡沒有可以查看或執行任務的角色。',
         nonmember: false,
       })
+      if (repaired) {
+        const remaining = [
+          diagnostic.missing_layers.includes('module') ||
+          missingModuleCodes.length
+            ? '功能權限'
+            : '',
+          roleMissing ? '專案角色' : '',
+        ].filter(Boolean)
+        setOperationNotice(
+          'diagnostic',
+          `已補上${repaired}；還缺${remaining.join('與')}。`,
+        )
+      }
     } catch (caught) {
       if (!active()) return
       if (isNotFound(caught) && needsProject && diagnosticProject) {
@@ -1489,6 +1503,12 @@ function ModulePermissionsPageContent({
             roleMessage: '',
             nonmember: true,
           })
+          if (repaired) {
+            setOperationNotice(
+              'diagnostic',
+              `已補上${repaired}；還缺專案成員身分。`,
+            )
+          }
         } catch (permissionError) {
           if (!active()) return
           setDiagnosticError(message(permissionError))
@@ -1525,7 +1545,7 @@ function ModulePermissionsPageContent({
           ),
         ]),
       ])
-      await diagnose()
+      await diagnose('功能權限')
     } catch (caught) {
       if (stillCurrent()) setDiagnosticError(message(caught))
     } finally {
@@ -1568,8 +1588,7 @@ function ModulePermissionsPageContent({
       // 補上角色後，「參與專案與角色」清單要跟著更新，
       // 否則畫面會一直顯示補上前的角色（#708）。
       setParticipationReload((current) => current + 1)
-      await diagnose()
-      setOperationNotice('diagnostic', '已更新專案角色。')
+      await diagnose(`「${candidate.name}」角色`)
     } catch (caught) {
       setOperationError('diagnostic', message(caught))
     } finally {
@@ -2749,7 +2768,10 @@ function ModulePermissionsPageContent({
                     )}
                     {diagnosticResult.moduleMessage && (
                       <li>
-                        {diagnosticResult.moduleMessage}
+                        {diagnosticResult.missingRole
+                          ? diagnosticResult.moduleMessage.replace(/。$/, '') +
+                            `；${diagnosticResult.roleMessage}`
+                          : diagnosticResult.moduleMessage}
                         {diagnosticResult.missingModuleCodes.length > 0 && (
                           <Button
                             disabled={busy}
@@ -2768,7 +2790,8 @@ function ModulePermissionsPageContent({
                     )}
                     {diagnosticResult.missingRole && (
                       <li>
-                        {diagnosticResult.roleMessage}
+                        {!diagnosticResult.moduleMessage &&
+                          diagnosticResult.roleMessage}
                         {diagnosticRoleChoices}
                       </li>
                     )}

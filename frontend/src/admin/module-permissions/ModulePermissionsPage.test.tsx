@@ -2224,6 +2224,9 @@ describe('ModulePermissionsPage', () => {
         ),
       ).toBe(true)
     })
+    expect(
+      await within(summary).findByText('已補上功能權限；還缺專案角色。'),
+    ).toBeVisible()
     // T6：補上功能後自動重查，無須再按檢查，並只列剩下的角色缺口。
     expect(
       await within(summary).findByText(
@@ -3083,7 +3086,9 @@ describe('#734 T5/T6 診斷區塊與完整缺口', () => {
     const area = await openDiagnostic()
     const result = await within(area).findByRole('status')
     expect(result).toHaveTextContent('缺少查核功能的權限')
-    expect(result).toHaveTextContent('沒有可以查看或執行任務的角色')
+    expect(result).toHaveTextContent(
+      '缺少查核功能的權限；這個專案裡沒有可以查看或執行任務的角色。',
+    )
     fireEvent.click(
       within(area).getByRole('button', {
         name: '補上「現場工程師」角色',
@@ -3091,7 +3096,11 @@ describe('#734 T5/T6 診斷區塊與完整缺口', () => {
     )
     expect(await within(area).findByText('缺少查核功能的權限。')).toBeVisible()
     expect(within(area).queryByText(/沒有可以查看或執行任務的角色/)).toBeNull()
-    expect(await within(area).findByText('已更新專案角色。')).toBeVisible()
+    expect(
+      await within(area).findByText(
+        '已補上「現場工程師」角色；還缺功能權限。',
+      ),
+    ).toBeVisible()
     expect(
       calls.filter(
         (call) => call.method === 'POST' && call.path.endsWith('/members'),
@@ -3105,7 +3114,7 @@ describe('#734 T5/T6 診斷區塊與完整缺口', () => {
     ).toHaveLength(0)
     fireEvent.click(within(area).getByRole('button', { name: '檢查' }))
     await within(area).findByText('缺少查核功能的權限。')
-    expect(within(area).queryByText('已更新專案角色。')).toBeNull()
+    expect(within(area).queryByText(/已補上.*角色；還缺/)).toBeNull()
   })
 })
 
