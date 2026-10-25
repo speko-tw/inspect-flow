@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 
 import TemporaryPassword from '../admin/TemporaryPassword'
@@ -6,7 +12,7 @@ import { ConfirmBox } from './ConfirmBox'
 
 afterEach(() => Reflect.deleteProperty(navigator, 'clipboard'))
 
-it('hideConfirm 只保留取消與自訂操作，隱含表單送出也不確認', () => {
+it('hideConfirm 只保留取消與自訂操作，隱含表單送出也不確認', async () => {
   const confirm = vi.fn()
   const cancel = vi.fn()
   const custom = vi.fn()
@@ -30,7 +36,9 @@ it('hideConfirm 只保留取消與自訂操作，隱含表單送出也不確認'
       name: '不應出現的確認',
     }),
   ).toBeNull()
-  expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
+  await waitFor(() =>
+    expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus(),
+  )
   fireEvent.submit(box)
   expect(confirm).not.toHaveBeenCalled()
   fireEvent.click(within(box).getByRole('button', { name: '改到期日' }))

@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
@@ -87,12 +93,14 @@ describe('ConfirmBox', () => {
     expect(onConfirm).toHaveBeenCalledOnce()
   })
 
-  it('puts the focus on cancel by default', () => {
+  it('puts the focus on cancel by default', async () => {
     setup()
-    expect(screen.getByRole('button', { name: '取消' })).toHaveFocus()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '取消' })).toHaveFocus(),
+    )
   })
 
-  it('can focus the heading, or leave focus to the caller', () => {
+  it('can focus the heading, or leave focus to the caller', async () => {
     const first = render(
       <ConfirmBox
         confirmLabel="確認"
@@ -102,7 +110,11 @@ describe('ConfirmBox', () => {
         title="請確認操作"
       />,
     )
-    expect(screen.getByRole('heading', { name: '請確認操作' })).toHaveFocus()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: '請確認操作' }),
+      ).toHaveFocus(),
+    )
     first.unmount()
     render(
       <ConfirmBox

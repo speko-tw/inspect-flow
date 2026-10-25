@@ -1066,7 +1066,7 @@ describe('#734 T7 角色操作回饋位置', () => {
       }),
     )
     const input = screen.getByLabelText('角色名稱')
-    expect(input).toHaveFocus()
+    await waitFor(() => expect(input).toHaveFocus())
     const form = input.closest('form') as HTMLFormElement
     fireEvent.change(input, { target: { value: 'Reader' } })
     fireEvent.click(within(form).getByRole('button', { name: '儲存角色' }))
@@ -1095,7 +1095,9 @@ describe('#734 T7 角色操作回饋位置', () => {
     const box = await within(cell).findByRole('region', {
       name: '刪除「Viewer」',
     })
-    expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
+    await waitFor(() => {
+      expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
+    })
   })
 })
 

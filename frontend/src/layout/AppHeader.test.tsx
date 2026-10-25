@@ -2,7 +2,13 @@
 // 登出鈕固定在帳號區、登出失敗的錯誤在頁首下方，以及元件鎖定狀態
 // 的系統名稱與分頁不能操作（目前沒有正式呼叫端）。
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -191,7 +197,7 @@ describe('AppHeader', () => {
     expect(memberNavItems(user).map((item) => item.label)).toEqual(labels)
   })
 
-  it('管理下拉僅有可見子項，支援鍵盤、Esc、目前頁狀態與空清單隱藏', () => {
+  it('管理下拉僅有可見子項，支援鍵盤、Esc、目前頁狀態與空清單隱藏', async () => {
     renderHeader(
       OFFICE,
       {
@@ -216,7 +222,9 @@ describe('AppHeader', () => {
     trigger.focus()
     fireEvent.keyDown(trigger, { key: 'ArrowDown' })
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('link', { name: '公司' })).toHaveFocus()
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: '公司' })).toHaveFocus(),
+    )
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
     expect(trigger).toHaveFocus()
@@ -398,7 +406,7 @@ describe('AppHeader', () => {
     expect(names(screen.getByRole('navigation'))).toEqual(['任務'])
   })
 
-  it('個人選單可用鍵盤開啟，Esc 關閉並把焦點還給登入者按鈕', () => {
+  it('個人選單可用鍵盤開啟，Esc 關閉並把焦點還給登入者按鈕', async () => {
     renderHeader(FIELD)
     const trigger = screen.getByRole('button', {
       name: '示範使用者 ▾',
@@ -408,7 +416,7 @@ describe('AppHeader', () => {
 
     const passwordLink = screen.getByRole('link', { name: '設定' })
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
-    expect(passwordLink).toHaveFocus()
+    await waitFor(() => expect(passwordLink).toHaveFocus())
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('link', { name: '設定' })).toBeNull()
     expect(trigger).toHaveAttribute('aria-expanded', 'false')

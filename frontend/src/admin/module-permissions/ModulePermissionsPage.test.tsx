@@ -1881,7 +1881,7 @@ describe('ModulePermissionsPage', () => {
       expect(field).toBeInvalid()
       expect(field).toHaveAccessibleDescription(`請填寫${label}。`)
     }
-    expect(summary).toHaveFocus()
+    await waitFor(() => expect(summary).toHaveFocus())
 
     fireEvent.change(screen.getByLabelText('姓名'), {
       target: { value: '林沐青' },
@@ -3216,7 +3216,9 @@ describe('#734 T7 其他權限寫入的就近回饋', () => {
     const box = within(row).getByRole('region', {
       name: '刪除權限組合定義',
     })
-    expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
+    await waitFor(() =>
+      expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus(),
+    )
   })
 })
 

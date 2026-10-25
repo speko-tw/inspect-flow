@@ -107,7 +107,7 @@ describe('AUT-R55 三態外觀', () => {
     expect(initial).toHaveFocus()
     await keyboard.keyboard('{ArrowRight}')
     expect(light).toBeChecked()
-    expect(light).toHaveFocus()
+    await waitFor(() => expect(light).toHaveFocus())
     await keyboard.keyboard('{ArrowRight}{ArrowRight}')
     expect(light).toBeChecked()
     expect(light).toHaveFocus()
@@ -118,7 +118,7 @@ describe('AUT-R55 三態外觀', () => {
     expect(light).toHaveFocus()
     await keyboard.keyboard('{ArrowRight}')
     await waitFor(() => expect(dark).toBeChecked())
-    expect(dark).toHaveFocus()
+    await waitFor(() => expect(dark).toHaveFocus())
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
@@ -142,7 +142,7 @@ describe('AUT-R55 三態外觀', () => {
     await waitFor(() => expect(live).toHaveTextContent('已回復原設定'))
     expect(view.container.querySelector('[aria-live="polite"]')).toBe(live)
     expect(screen.getByLabelText('淺色')).toBeChecked()
-    expect(screen.getByLabelText('淺色')).toHaveFocus()
+    await waitFor(() => expect(screen.getByLabelText('淺色')).toHaveFocus())
     expect(screen.getByRole('group', { name: '外觀' })).toHaveClass(
       'form-pattern-group',
     )

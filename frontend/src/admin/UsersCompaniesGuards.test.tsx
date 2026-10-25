@@ -1952,7 +1952,7 @@ describe('#734 T7 公司操作回饋位置', () => {
     renderCompanies()
     fireEvent.click(await screen.findByRole('button', { name: '改名稱' }))
     const input = screen.getByLabelText('公司名稱')
-    expect(input).toHaveFocus()
+    await waitFor(() => expect(input).toHaveFocus())
     const form = input.closest('form') as HTMLElement
     fireEvent.change(input, { target: { value: '新公司名稱' } })
     fireEvent.click(within(form).getByRole('button', { name: '儲存名稱' }))

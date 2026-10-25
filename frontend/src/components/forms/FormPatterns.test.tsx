@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { FormErrorSummary, FormField, FormGroup } from './FormPatterns'
@@ -29,7 +29,7 @@ describe('FormPatterns', () => {
     ).toHaveAccessibleDescription('供登入與通知使用。')
   })
 
-  it('錯誤摘要聚焦自身並可導向欄位', () => {
+  it('錯誤摘要聚焦自身並可導向欄位', async () => {
     render(
       <>
         <input id="email-input" />
@@ -47,7 +47,7 @@ describe('FormPatterns', () => {
     )
 
     const summary = screen.getByRole('alert')
-    expect(summary).toHaveFocus()
+    await waitFor(() => expect(summary).toHaveFocus())
     fireEvent.click(screen.getByRole('link', { name: /Email/ }))
     expect(screen.getByRole('textbox')).toHaveFocus()
   })

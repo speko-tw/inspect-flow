@@ -116,7 +116,7 @@ describe('UserForm 帳號名稱規則說明（#284 第 6 項）', () => {
 })
 
 describe('UserForm 帳號類型（DOM-R71）', () => {
-  it('未選帳號類型時顯示欄位錯誤並聚焦第一個選項', () => {
+  it('未選帳號類型時顯示欄位錯誤並聚焦第一個選項', async () => {
     renderForm()
     fireEvent.change(screen.getByLabelText(/^帳號名稱/), {
       target: { value: 'ben.lin' },
@@ -133,7 +133,9 @@ describe('UserForm 帳號類型（DOM-R71）', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       '帳號類型尚未選擇。請選擇內部帳號或外部協作人員。',
     )
-    expect(screen.getByRole('radio', { name: '內部帳號' })).toHaveFocus()
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: '內部帳號' })).toHaveFocus(),
+    )
   })
 
   it('中文姓名錯誤以帳號用語說明欄位需求', () => {
@@ -209,7 +211,7 @@ describe('UserForm 帳號類型（DOM-R71）', () => {
     })
   })
 
-  it('必填錯誤顯示在欄旁與摘要，聚焦第一個欄位並保留已輸入內容', () => {
+  it('必填錯誤顯示在欄旁與摘要，聚焦第一個欄位並保留已輸入內容', async () => {
     renderForm()
     const username = screen.getByLabelText(/^帳號名稱/)
     fireEvent.change(username, { target: { value: 'ab' } })
@@ -219,7 +221,7 @@ describe('UserForm 帳號類型（DOM-R71）', () => {
       '帳號名稱格式不符。請依欄位說明修正後再試一次。',
     )
     expect(username).toHaveAttribute('aria-invalid', 'true')
-    expect(username).toHaveFocus()
+    await waitFor(() => expect(username).toHaveFocus())
     expect(username).toHaveValue('ab')
     fireEvent.click(screen.getByRole('link', { name: /帳號名稱/ }))
     expect(username).toHaveFocus()
