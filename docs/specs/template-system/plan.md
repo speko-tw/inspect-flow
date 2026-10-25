@@ -117,31 +117,32 @@
 
 ## 0.6.x 範本建議與核准（#314）
 
-依 [TPL-R28～R35／AC32～AC41](spec.md#template-suggestions)及該節四則負責人裁定拆分。這裡只規劃未來實作，不在本次文件工作建立資料表、migration、API、UI 或新 issue。原 T1～T14 不改為「尚未完成」；下列任務另以 task issue 開立，issue 只追蹤交付工作，規格仍以文件為準。開工前等待本次規格內容的後續整合審查；重大 UI 仍需人工核可原型。
+依 [TPL-R28～R35／AC32～AC42](spec.md#template-suggestions)及該節四則負責人裁定拆分。這裡只規劃未來實作，不在本次文件工作建立資料表、migration、API、UI 或新 issue。原 T1～T14 不改為「尚未完成」；下列任務另以 task issue 開立，issue 只追蹤交付工作，規格仍以文件為準。依已凍結規格開工；重大 UI 仍需人工核可原型。
 
 | ID | 0.6.x 內容 | 預定獨占檔案／共用責任 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T15 | 建議主件、不可變修訂／審核／狀態歷程資料與一致性約束；來源刪除隔離、內容快照及穩定邏輯識別；SQLite／PostgreSQL migration 測試，不新增正式範本版本表 | 新 `backend/app/models/template_suggestions.py`、一支 `backend/alembic/versions/` migration、`backend/app/models/__init__.py` 只加匯出、新 `backend/tests/db/test_template_suggestions.py`；migration 鏈單獨一波，先查最新 head | 本節整合審查；現有 template-system schema | TPL-AC33～AC35（資料約束）、AC38（唯一性） | 待開 task |
-| T16 | 本人 API：一致性複製來源、草擬修訂、送審／退回後重送、撤回、本人清單與各版歷程；重用共用授權與結構驗證、expected 欄位／主列鎖；同步六種專屬稽核事件登記（本次文件已列目錄，實作時核對） | 新 `backend/app/services/template_suggestions.py`、`backend/app/api/v1/template_suggestions.py`、新 API／service 測試；`main.py` 只加路由註冊、`api/errors.py` 只登記本功能錯誤碼、`services/audit.py` 只加本功能事件；`test_route_access.py` 本功能存取宣告由本任務一次登記 | T15；既有專案項目來源共享鎖／結構驗證與兩層授權 | TPL-AC32～AC35、AC40、AC41（本人操作事件） | 待開 task |
-| T17 | 管理 API：曾送審件清單、待審計數、修訂比較、修改、附原因退回與同交易核准入庫；沿用既有名稱／結構／配號規則；故障注入及固定交錯驗證核准、撤回、修訂競爭；新增範本與核准事件一起回滾 | 接續 T16 的同兩個服務／API 模組，重用 `services/template_library.py` 的驗證與建庫函式，必要時只抽共用入口；新 `test_template_suggestion_review.py` API／DB 測試；稽核欄位僅限本功能 | T16（同檔，不能同波）；既有範本建立與稽核機制 | TPL-AC35～AC41（含 SQLite／PostgreSQL 併發與回滾） | 待開 task |
-| T18 | 【人工關卡】提議入口、個人清單與各版原因、待審數量／清單、兩版比較、修改後核准、同名與欄位錯誤的可點原型及試用腳本；先討論設計，負責人親手操作核可，涵蓋 360px 與鍵盤 | `docs/specs/template-system/ui-suggestion-prototype.html`（新增）與本計畫試用腳本，僅本功能區段 | 本節整合審查；可與 T15～T17 後端分波工作並行 | TPL-AC39、AC41（只取得 UI 設計核可，不冒充產品 PASS） | 待開 task |
-| T19 | 接真 API 的提議／個人歷程／待審審核畫面；共用既有項目結構編輯器但不改正式範本版本模型；成功刷新計數、失敗保留草稿／目標並就近提示；操作前顯示對象／影響與確認 | 新 `frontend/src/admin/templates/suggestions/`、對應元件／契約測試；`TemplatesPage.tsx` 只加本功能入口與待審數量、專案 `projectItems/` 只加有權限者的提議入口、`App.tsx` 只加 route、`frontend/src/layout/AppHeader.tsx` 只加登入後的「我的範本建議」入口（不能依來源專案或 template.use 隱藏）、`styles.css` 只加本頁樣式；開 task 前列實際檔案鎖 | T17 真 API；T18 人工核可；上述共用前端檔案當時責任線先合併 | TPL-AC32、AC35、AC39～AC41（UI 與真後端契約） | 待開 task |
-| T20 | 真後端整合：來源改刪不影響待審、退回兩次重送、管理者修改後核准、撤回競爭、同名與故障回滾、稽核追溯；桌面／360px／鍵盤走查，整理 0.6.x AC 證據與規格索引 | 新本功能 integration／demo 腳本及測試資料；截圖／log 放 repo 外工作目錄；規格與索引只更新本功能完成證據 | T15～T19；驗收用獨立 SQLite／PostgreSQL 測試庫，不與其他線共用會重建的 schema | TPL-AC32～AC41（彙整） | 待開 task |
+| T15 | 建議主件、不可變修訂／審核／狀態歷程資料與一致性約束；來源刪除隔離、內容快照及穩定邏輯識別；SQLite／PostgreSQL migration 測試，不新增正式範本版本表 | 新 `backend/app/models/template_suggestions.py`、一支 `backend/alembic/versions/` migration、`backend/app/models/__init__.py` 只加匯出、新 `backend/tests/db/test_template_suggestions.py`；migration 鏈單獨一波，先查最新 head | 本節已凍結規格；現有 template-system schema | TPL-AC33～AC35（資料約束）、AC38（唯一性） | 待開 task |
+| T16 | 本人 API：一致性複製來源並建立即送審、退回修訂與重送、撤回、本人清單與各版歷程（從首次送審起）；重用共用授權與結構驗證、expected 欄位／主列鎖；同步五種專屬稽核事件登記（本次文件已列目錄，實作時核對） | 新 `backend/app/services/template_suggestions.py`、`backend/app/api/v1/template_suggestions.py`、新 API／service 測試；`main.py` 只加路由註冊、`api/errors.py` 只登記本功能錯誤碼、`services/audit.py` 只加本功能事件；`test_route_access.py` 本功能存取宣告由本任務一次登記 | T15；既有專案項目來源共享鎖／結構驗證與兩層授權 | TPL-AC32～AC35、AC40、AC41（本人操作事件） | 待開 task |
+| T17 | 管理 API：曾送審件清單、待審計數、修訂比較、修改、附原因退回與同交易核准入庫；沿用既有名稱／結構／配號規則；故障注入及固定交錯驗證核准、撤回、修訂競爭；新增範本與核准事件一起回滾 | 接續 T16 的同兩個服務／API 模組，重用 `services/template_library.py` 的驗證與建庫函式，必要時只抽共用入口；新 `test_template_suggestion_review.py` API／DB 測試；稽核欄位僅限本功能 | T16（同檔，不能同波）；既有範本建立與稽核機制 | TPL-AC35～AC42（含 SQLite／PostgreSQL 併發與回滾） | 待開 task |
+| T18 | 【人工關卡】提議入口、個人清單與各版原因、待審數量／清單、兩版比較、修改後核准、同名與欄位錯誤的可點原型及試用腳本；先討論設計，負責人親手操作核可，涵蓋 360px 與鍵盤 | `docs/specs/template-system/ui-suggestion-prototype.html`（新增）與本計畫試用腳本，僅本功能區段 | 本節已凍結規格；可與 T15～T17 後端分波工作並行 | TPL-AC39、AC41（只取得 UI 設計核可，不冒充產品 PASS） | 待開 task |
+| T19 | 接真 API 的提議／個人歷程／待審審核畫面；共用既有項目結構編輯器但不改正式範本版本模型；成功刷新計數、失敗保留草稿／目標並就近提示；操作前顯示對象／影響與確認 | 新 `frontend/src/admin/templates/suggestions/`、對應元件／契約測試；`TemplatesPage.tsx` 只加本功能入口與待審數量、專案 `projectItems/` 只對可編輯者加提議入口與「我的範本建議（N）」連結至 `/settings#template-suggestions`（沿用 ADM-R50 的 `/settings` 路由，不新增全域入口或 Field 首頁入口）、既有 `frontend/src/auth/AppearanceSettings.tsx`（`/settings`）新增只對曾提議者顯示的「我的範本建議」區塊（不要求仍具來源專案／template.use）、`styles.css` 只加本頁樣式；開 task 前列實際檔案鎖 | T17 真 API；T18 人工核可；上述共用前端檔案當時責任線先合併 | TPL-AC32、AC35、AC39～AC41（UI 與真後端契約） | 待開 task |
+| T20 | 真後端整合：來源改刪不影響待審，核准後來源改刪亦不影響入庫範本與已核准件、退回兩次重送、管理者修改後核准、撤回競爭、同名與故障回滾、稽核追溯；桌面／360px／鍵盤走查，整理 0.6.x AC 證據與規格索引 | 新本功能 integration／demo 腳本及測試資料；截圖／log 放 repo 外工作目錄；規格與索引只更新本功能完成證據 | T15～T19；驗收用獨立 SQLite／PostgreSQL 測試庫，不與其他線共用會重建的 schema | TPL-AC32～AC42（彙整） | 待開 task |
 
 ### 分波與共用檔案
 
 1. T15 單獨處理 migration／model registry；T18 原型只寫獨立文件，可與後端工作並行。
 2. T16 → T17 依序：兩者改相同 service／API 模組，不拆成同波寫入；router、錯誤碼與存取分類登記只由 T16 負責，T17 不再改第二份。
-3. T18 核可且 T17 完成後才做 T19；與其他前端線協調 TemplatesPage、projectItems、App、共用頁首、styles 的責任波次，不動 lockfile。
+3. T18 核可且 T17 完成後才做 T19；與其他前端線協調 TemplatesPage、projectItems、settings、styles 的責任波次，不動 lockfile。
 4. T20 在最終來源跑整合驗收；每支 migration 接最新鏈、不改舊 migration，不為本功能新增跨模組狀態或稽核慣例。
 
 ### 驗證對照與風險
 
 - AC32／AC40：API 權限矩陣與本人歷史隔離，含失去來源專案權限、只有委派、只有範本管理權、跨件 revision 與偽造身分欄位。
 - AC33：控制來源共享讀與刪除先後；確認原項目、現場值、照片不受影響，後續改源不改待審 JSON。
-- AC34／AC35：完整合法／非法轉換、至少兩次退回與重送、每次內容／原因／審核人的不可覆寫、提議人可讀與兩版比較；私稿尚未送審不對管理清單暴露。
+- AC34／AC35：完整合法／非法轉換、至少兩次退回與重送、每次內容／原因／審核人的不可覆寫、提議人可讀與前後兩版比較（非相鄰拒絕）；版本從首次送審起保存。
 - AC36／AC37：退回原因必填、結構驗證／同名／錯誤目標，配號沿用目標系統最大序號；審核者不需要來源專案角色，審核也不授予該角色。
 - AC38：SQLite／PostgreSQL 固定交錯的兩人核准、核准對撤回／修訂，以及各寫入點故障；斷言恰一個新範本或全部回滾，不只檢查 HTTP 成功。
-- AC39／AC41：跨頁／搜尋不影響待審總數、動作後刷新、無通知功能、核准新範本事件與六種建議事件追溯；真 API／元件與瀏覽器各負責適合層級，原型不是產品通過證據。
+- AC42：核准後修改再刪除來源項目，逐欄比較已入庫範本與已核准件／各版／審核／目的地快照完全不變。
+- AC39／AC41：跨頁／搜尋不影響待審總數、動作後刷新、無通知功能、settings 曾提議者區塊、專案本人件數連結且全域／Field 無入口；核准新範本事件形狀不改、project_id 空值，五種建議事件均標專案脈絡且僅 approved 保存新範本關聯；真 API／元件與瀏覽器各負責適合層級，原型不是產品通過證據。
 - 版本不限次數可能成長：歷程採 cursor 分頁、不默默清除；提議／核准紀錄沿既有不可刪稽核政策保存。正式範本仍不版本化，不能為方便讀歷程而復活 Template Version。
 - 自訂 JSON 只存建議結構快照；核准必須轉成既有正規化範本子表並重驗，不把審核 JSON 直接當正式範本資料模型。共享規格只補本功能責任指向與事件區段，無新共用慣例。

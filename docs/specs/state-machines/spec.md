@@ -20,7 +20,7 @@
 
 **不包含**：
 
-- 0.6.x `Template Suggestion` 的草擬／待審／退回／核准／撤回狀態由 [template-system 專節](../template-system/spec.md#template-suggestions)負責（TPL-R30、AC34）；它是獨立待審件，不是 Inspection Template 的狀態或版本，不改 STM-R06，也不擴大本規格凍結範圍。依據：[負責人 #314 裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)。
+- 0.6.x `Template Suggestion` 的待審／退回／核准／撤回狀態由 [template-system 專節](../template-system/spec.md#template-suggestions)負責（TPL-R30、AC34）；它是獨立待審件，不是 Inspection Template 的狀態或版本，不改 STM-R06，也不擴大本規格凍結範圍。依據：[負責人 #314 裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)。
 
 - 實體欄位、關聯與完整資料模型（由 [domain-model](../domain-model/spec.md) 負責）。
 - API 的共通格式（由 [api-conventions](../api-conventions/spec.md) 負責）。
