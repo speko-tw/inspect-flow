@@ -107,6 +107,8 @@ const TASK_CANCEL_BINDINGS: FieldErrorBinding[] = [
 // 聚焦（ADM-R28）；IP-AC15 的零點位項目錯誤也屬於查核項目欄位。
 // 各表單欄位不同，所以每個表單各一張表。
 const TASK_CODE_MESSAGES: Record<string, string> = {
+  'project_inspection_item.inactive':
+    '所選查核項目已停用，請重新載入並選擇啟用項目。',
   'inspection_task.invalid_zone': '所選分區不屬於這個專案，請重新選擇。',
   'inspection_task.invalid_assignee':
     '建議指派人不是這個專案的成員，請重新選擇。',
@@ -121,6 +123,7 @@ const TASK_CODE_MESSAGES: Record<string, string> = {
   'inspection_task.invalid_name': '任務名稱需為 1 到 128 個字元。',
 }
 const TASK_CREATE_CODE_FIELDS: Record<string, FieldKey> = {
+  'project_inspection_item.inactive': 'task-items',
   'inspection_task.invalid_name': 'task-name',
   'inspection_task.invalid_zone': 'task-zone',
   'inspection_task.invalid_assignee': 'task-assignee',
@@ -133,6 +136,7 @@ const TASK_RENAME_CODE_FIELDS: Record<string, FieldKey> = {
   'inspection_task.invalid_name': 'task-rename',
 }
 const TASK_ITEMS_CODE_FIELDS: Record<string, FieldKey> = {
+  'project_inspection_item.inactive': 'edit-task-items',
   'inspection_task.items_required': 'edit-task-items',
   'inspection_task.item_without_points': 'edit-task-items',
   'inspection_task.invalid_project_item': 'edit-task-items',
@@ -1774,59 +1778,70 @@ export default function PlanningPage({
                               >
                                 至少選擇一筆查核項目。
                               </p>
-                              {items.map((item) => {
-                                const existingTasks = tasksForItem(item.id)
-                                const selected =
-                                  editingTaskItems.itemIds.includes(item.id)
-                                return (
-                                  <div key={item.id}>
-                                    <label>
-                                      <input
-                                        checked={selected}
-                                        onChange={(event) => {
-                                          const selectedIds =
-                                            editingTaskItems.itemIds
-                                          setEditingTaskItems({
-                                            ...editingTaskItems,
-                                            itemIds: event.target.checked
-                                              ? [...selectedIds, item.id]
-                                              : selectedIds.filter(
-                                                  (id) => id !== item.id,
-                                                ),
-                                          })
-                                          clearFieldError('edit-task-items')
-                                        }}
-                                        type="checkbox"
-                                        value={item.id}
-                                      />
-                                      {item.instruction
-                                        ? `${item.title} — ${item.instruction}`
-                                        : item.title}
-                                    </label>
-                                    <details>
-                                      <summary style={{ minHeight: 44 }}>
-                                        本計畫已有 {existingTasks.length}{' '}
-                                        筆任務
-                                      </summary>
-                                      {existingTasks.length > 0 ? (
-                                        <ul>
-                                          {existingTasks.map((existing) => (
-                                            <li key={existing.id}>
-                                              {taskTitle(existing) ||
-                                                '未命名任務'}
-                                              {existing.zone
-                                                ? `（${existing.zone.name}）`
-                                                : ''}
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      ) : (
-                                        <p>目前沒有使用此項目的任務。</p>
-                                      )}
-                                    </details>
-                                  </div>
+                              {items
+                                .filter(
+                                  (item) =>
+                                    item.is_active !== false ||
+                                    editingTaskItems.task.items.some(
+                                      (selected) => selected.id === item.id,
+                                    ),
                                 )
-                              })}
+                                .map((item) => {
+                                  const existingTasks = tasksForItem(item.id)
+                                  const selected =
+                                    editingTaskItems.itemIds.includes(item.id)
+                                  return (
+                                    <div key={item.id}>
+                                      <label>
+                                        <input
+                                          checked={selected}
+                                          onChange={(event) => {
+                                            const selectedIds =
+                                              editingTaskItems.itemIds
+                                            setEditingTaskItems({
+                                              ...editingTaskItems,
+                                              itemIds: event.target.checked
+                                                ? [...selectedIds, item.id]
+                                                : selectedIds.filter(
+                                                    (id) => id !== item.id,
+                                                  ),
+                                            })
+                                            clearFieldError('edit-task-items')
+                                          }}
+                                          type="checkbox"
+                                          value={item.id}
+                                        />
+                                        {item.instruction
+                                          ? [
+                                              item.title,
+                                              item.instruction,
+                                            ].join(' — ')
+                                          : item.title}
+                                      </label>
+                                      <details>
+                                        <summary style={{ minHeight: 44 }}>
+                                          本計畫已有 {existingTasks.length}{' '}
+                                          筆任務
+                                        </summary>
+                                        {existingTasks.length > 0 ? (
+                                          <ul>
+                                            {existingTasks.map((existing) => (
+                                              <li key={existing.id}>
+                                                {taskTitle(existing) ||
+                                                  '未命名任務'}
+                                                {existing.zone
+                                                  ? `（${existing.zone.name}）`
+                                                  : ''}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          <p>目前沒有使用此項目的任務。</p>
+                                        )}
+                                      </details>
+                                    </div>
+                                  )
+                                })}
                             </fieldset>
                             {fieldErrorText('edit-task-items')}
                             {error && errorContext === 'items' && (
@@ -2186,52 +2201,56 @@ export default function PlanningPage({
                     <p className="field-hint" id="task-items-hint">
                       至少選擇一筆查核項目。
                     </p>
-                    {items.map((item) => {
-                      const existingTasks = tasksForItem(item.id)
-                      const selected = taskItems.includes(item.id)
-                      return (
-                        <div key={item.id}>
-                          <label>
-                            <input
-                              checked={selected}
-                              onChange={(event) => {
-                                toggleItem(item.id, event.target.checked)
-                                clearFieldError('task-items')
-                              }}
-                              type="checkbox"
-                              value={item.id}
-                            />
-                            {item.instruction
-                              ? `${item.title} — ${item.instruction}`
-                              : item.title}
-                          </label>
-                          {/* IP-R02 允許同項目建立多筆任務，所以只標示已有
+                    {items
+                      .filter((item) => item.is_active !== false)
+                      .map((item) => {
+                        const existingTasks = tasksForItem(item.id)
+                        const selected = taskItems.includes(item.id)
+                        return (
+                          <div key={item.id}>
+                            <label>
+                              <input
+                                checked={selected}
+                                onChange={(event) => {
+                                  toggleItem(item.id, event.target.checked)
+                                  clearFieldError('task-items')
+                                }}
+                                type="checkbox"
+                                value={item.id}
+                              />
+                              {item.instruction
+                                ? [item.title, item.instruction].join(' — ')
+                                : item.title}
+                            </label>
+                            {/* IP-R02 允許同項目建立多筆任務，所以只標示已有
                               幾筆、不擋選擇，讓使用者自己避開重複任務。 */}
-                          <details>
-                            <summary style={{ minHeight: 44 }}>
-                              本計畫已有 {existingTasks.length} 筆任務
-                            </summary>
-                            {existingTasks.length > 0 ? (
-                              <ul>
-                                {existingTasks.map((task) => (
-                                  <li key={task.id}>
-                                    {taskTitle(task) || '未命名任務'}
-                                    {task.zone ? `（${task.zone.name}）` : ''}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p>目前沒有使用此項目的任務。</p>
+                            <details>
+                              <summary style={{ minHeight: 44 }}>
+                                本計畫已有 {existingTasks.length} 筆任務
+                              </summary>
+                              {existingTasks.length > 0 ? (
+                                <ul>
+                                  {existingTasks.map((task) => (
+                                    <li key={task.id}>
+                                      {taskTitle(task) || '未命名任務'}
+                                      {task.zone
+                                        ? `（${task.zone.name}）`
+                                        : ''}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p>目前沒有使用此項目的任務。</p>
+                              )}
+                            </details>
+                            {selected && existingTasks.length > 0 && (
+                              <p className="field-hint">
+                                此項目已在本計畫任務中使用；仍可建立另一筆任務。
+                              </p>
                             )}
-                          </details>
-                          {selected && existingTasks.length > 0 && (
-                            <p className="field-hint">
-                              此項目已在本計畫任務中使用；仍可建立另一筆任務。
-                            </p>
-                          )}
-                        </div>
-                      )
-                    })}
+                          </div>
+                        )
+                      })}
                   </fieldset>
                   {fieldErrorText('task-items')}
                   {zones.length > 0 && !zonesDenied && (

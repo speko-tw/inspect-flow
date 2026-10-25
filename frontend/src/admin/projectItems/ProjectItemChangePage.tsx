@@ -101,6 +101,10 @@ function errorMessage(error: unknown): string {
   return httpErrorMessage(error, {
     codes: {
       'inspection_plan.archived': ARCHIVED_PLAN_ERROR,
+      'project_inspection_item.inactive_name':
+        '同名項目已停用，可在已停用清單恢復。',
+      'project_inspection_item.inactive':
+        '此查核項目已停用，請先在已停用清單恢復。',
       'project_inspection_item.duplicate_name':
         '這個專案已有同名查核項目，請換個名稱。',
       'project_inspection_item.structure_locked': [
@@ -466,7 +470,11 @@ export default function ProjectItemChangePage({
         if (loaded.readOnly) {
           setReadOnly(true)
           setFocusSaveError(false)
-          setError('你沒有權限修改此專案查核項目。')
+          setError(
+            loaded.item.is_active === false
+              ? '此查核項目已停用，請先在已停用清單恢復。'
+              : '你沒有權限修改此專案查核項目。',
+          )
         }
         if (loaded.affectedTasks.some((task) => task.planArchived)) {
           setReadOnly(true)

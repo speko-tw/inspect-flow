@@ -3004,3 +3004,58 @@ describe('#727c 各動作依實際權限', () => {
     }
   })
 })
+
+it('IP-AC24：新增不選停用項目，草稿只保留原有停用項目', async () => {
+  const client = createMockPlanningClient()
+  const projectId = 'project-demo-1'
+  const items = await client.listProjectItems(projectId)
+  const plan = await client.createPlan(projectId, { name: '停用保留計畫' })
+  await client.createTask(plan.id, {
+    name: '保留原項目',
+    item_ids: [items[0].id],
+    zone_id: null,
+    location_text: '工地',
+    suggested_assignee_id: null,
+  })
+  client.listProjectItems = vi.fn(async () => [
+    { ...items[0], is_active: false },
+    { ...items[1], is_active: true },
+    {
+      ...items[1],
+      id: 'other-inactive',
+      title: '其他停用項目',
+      is_active: false,
+    },
+  ])
+  render(<PlanningPage client={client} initialProjectId={projectId} />)
+  fireEvent.click(
+    await screen.findByRole('button', { name: /停用保留計畫（/ }),
+  )
+  await openTaskCreationForm()
+  const newForm = document.querySelector(
+    '[data-error-context="task"]',
+  ) as HTMLFormElement
+  expect(
+    within(newForm).queryByLabelText(new RegExp(items[0].title)),
+  ).toBeNull()
+  expect(within(newForm).queryByLabelText(/其他停用項目/)).toBeNull()
+  expect(
+    within(newForm).getByLabelText(new RegExp(items[1].title)),
+  ).not.toBeChecked()
+  const article = (
+    await screen.findByRole('heading', { name: /保留原項目/ })
+  ).closest('article')!
+  fireEvent.click(
+    within(article).getByRole('button', { name: '修改查核項目' }),
+  )
+  const editForm = document.querySelector(
+    '[data-error-context="items"]',
+  ) as HTMLFormElement
+  expect(
+    within(editForm).getByLabelText(new RegExp(items[0].title)),
+  ).toBeChecked()
+  expect(
+    within(editForm).getByLabelText(new RegExp(items[1].title)),
+  ).not.toBeChecked()
+  expect(within(editForm).queryByLabelText(/其他停用項目/)).toBeNull()
+})

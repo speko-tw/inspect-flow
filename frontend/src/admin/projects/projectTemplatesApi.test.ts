@@ -38,3 +38,14 @@ describe('templateErrorMessage', () => {
     )
   })
 })
+
+it('IP-AC25：套用與存為範本共用停用名稱的恢復提示', () => {
+  expect(
+    templateErrorMessage(
+      new ProjectTemplatesApiError(
+        409,
+        'project_inspection_item.inactive_name',
+      ),
+    ),
+  ).toBe('同名項目已停用，可在已停用清單恢復。')
+})

@@ -198,3 +198,7 @@ R 新增一支 migration；與其他新增 migration 的任務不同波（共用
 ### PR #740 第一輪審查修正（#735）
 
 角色 API 停用統計納入到期未寫回帳號，API 檔案以 SQLite 與明確選用 PostgreSQL 雙路實跑。
+
+## #717 專案項目啟用旗標
+
+DOM-R79、DOM-AC78 由 inspection-planning #717 實作；一支 migration 附加 is_active，既有項目 true，驗證 SQLite／PostgreSQL 非空、預設與保留關聯的升降版。

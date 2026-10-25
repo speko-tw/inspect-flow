@@ -112,6 +112,18 @@ for _event, _entity, _kind, _fields in (
         ("items",),
     ),
     (
+        "project_inspection_item.deactivated",
+        "project_inspection_item",
+        AuditEventKind.UPDATED,
+        ("title", "is_active"),
+    ),
+    (
+        "project_inspection_item.reactivated",
+        "project_inspection_item",
+        AuditEventKind.UPDATED,
+        ("title", "is_active"),
+    ),
+    (
         "project_inspection_item.deleted",
         "project_inspection_item",
         AuditEventKind.DELETED,
@@ -132,6 +144,12 @@ for _event, _entity, _kind, _fields in (
         project_scoped=True,
         always_recorded=("reinspection_required",)
         if _event == "project_inspection_item.updated"
+        else ("title",)
+        if _event
+        in {
+            "project_inspection_item.deactivated",
+            "project_inspection_item.reactivated",
+        }
         else (),
         nullable_fields=("reinspection_required",)
         if _event == "project_inspection_item.updated"
@@ -444,6 +462,7 @@ def _lock_project_items_for_snapshot(
     *,
     project_id: uuid.UUID,
     item_ids: list[uuid.UUID],
+    allow_inactive: bool = False,
 ) -> list[uuid.UUID]:
     """依 IP-R03 先鎖來源項目再鎖 Plan，避免快照讀到舊標準。
 
@@ -473,6 +492,8 @@ def _lock_project_items_for_snapshot(
     ).all()
     if {source.id for source in sources} != set(unique_ids):
         raise PlanningError("inspection_task.invalid_project_item")
+    if not allow_inactive and any(not source.is_active for source in sources):
+        raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE, 409)
     source_ids_with_points = set(
         session.scalars(
             select(ProjectInspectionPoint.project_inspection_item_id).where(
@@ -842,7 +863,10 @@ def update_draft_task_items(
     # 鎖序為來源項目 → Plan → Task，與建立任務及修改來源項目相同，
     # 重建快照才不會讀到併發修改前的標準（#555）。
     _lock_project_items_for_snapshot(
-        session, project_id=task.project_id, item_ids=item_ids
+        session,
+        project_id=task.project_id,
+        item_ids=item_ids,
+        allow_inactive=True,
     )
     plan = _lock_plan(session, task_reference.plan_id)
     locked_task = _lock_task(session, task.id)
@@ -860,6 +884,21 @@ def update_draft_task_items(
         .execution_options(populate_existing=True)
     ).all()
     old_ids = [row.project_inspection_item_id for row in old_items]
+    # IP-R24：持鎖後以真正的舊集合判定保留，不能新加入停用項目。
+    newly_selected = set(item_ids) - set(old_ids)
+    if (
+        newly_selected
+        and session.scalar(
+            select(ProjectInspectionItem.id)
+            .where(
+                ProjectInspectionItem.id.in_(newly_selected),
+                ProjectInspectionItem.is_active.is_(False),
+            )
+            .limit(1)
+        )
+        is not None
+    ):
+        raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE, 409)
     # 集合相同就不重建：DRAFT 的快照由 IP-R04 隨來源項目修改同步，
     # 內容必已是最新；重建只會換掉 id 並留下沒有意義的稽核。
     if set(old_ids) == set(item_ids):
@@ -1393,6 +1432,8 @@ def edit_project_inspection_item(
     )
     if item is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    if not item.is_active:
+        raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE, 409)
     if body.title is not None:
         title = body.title.strip()
         if not title:
@@ -1400,18 +1441,25 @@ def edit_project_inspection_item(
         # #435：舊資料可能已有同名；沒有改變正規化名稱時，
         # 不讓既有重複名稱阻擋說明、標準或點位的更正。
         if title.casefold() != item.title.strip().casefold():
-            existing_names = db.scalars(
-                select(ProjectInspectionItem.title).where(
+            existing = db.execute(
+                select(
+                    ProjectInspectionItem.title,
+                    ProjectInspectionItem.is_active,
+                ).where(
                     ProjectInspectionItem.project_id == project_id,
                     ProjectInspectionItem.id != item.id,
                 )
-            )
-            if any(
-                name.strip().casefold() == title.casefold()
-                for name in existing_names
-            ):
+            ).all()
+            conflicts = [
+                active
+                for name, active in existing
+                if name.strip().casefold() == title.casefold()
+            ]
+            if conflicts:
                 raise APIError(
-                    ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
+                    ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE_NAME
+                    if not all(conflicts)
+                    else ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
                     409,
                     details=[title],
                 )
@@ -2047,3 +2095,48 @@ def delete_project_inspection_item(
         before=before,
         after=None,
     )
+
+
+def set_project_inspection_item_active(
+    db: Session,
+    *,
+    project_id: UUID,
+    project_inspection_item_id: UUID,
+    active: bool,
+) -> dict[str, Any]:
+    """依 IP-R23 切換選用狀態；與項目編輯、Task 選用共用來源鎖。"""
+    operator_id = _require_permission(
+        db, project_id, "project_inspection_item.edit"
+    )
+    item = db.scalar(
+        select(ProjectInspectionItem)
+        .where(
+            ProjectInspectionItem.project_id == project_id,
+            ProjectInspectionItem.id == project_inspection_item_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if item is None:
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    if item.is_active == active:
+        return project_inspection_item_detail(db, item)
+    before = {
+        "title": item.title,
+        "is_active": item.is_active,
+    }
+    item.is_active = active
+    item.updated_by = operator_id
+    item.updated_at = utc_now()
+    db.flush()
+    record_audit_event(
+        db,
+        "project_inspection_item.reactivated"
+        if active
+        else "project_inspection_item.deactivated",
+        entity_id=item.id,
+        project_id=project_id,
+        before=before,
+        after={**before, "is_active": active},
+    )
+    return project_inspection_item_detail(db, item)

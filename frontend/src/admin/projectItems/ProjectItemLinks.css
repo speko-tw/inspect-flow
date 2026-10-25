@@ -74,3 +74,12 @@
     width: 100%;
   }
 }
+
+.project-item-inactive {
+  margin-block-start: var(--space-4);
+}
+
+.project-item-inactive > summary {
+  min-height: var(--touch-target);
+  cursor: pointer;
+}

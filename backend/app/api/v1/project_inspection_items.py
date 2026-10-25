@@ -121,7 +121,9 @@ def apply_template_to_project(
         )
     except DuplicateProjectItemError as exc:
         raise APIError(
-            ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
+            ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE_NAME
+            if exc.inactive
+            else ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
             409,
             details=exc.names,
         ) from exc
@@ -175,6 +177,7 @@ def list_project_inspection_items(
     project_id: UUID,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
+    active_only: bool = False,
     db: Session = Depends(get_db, scope="function"),  # noqa
     user: User = Depends(require_login_access, scope="function"),  # noqa
 ) -> dict:
@@ -201,7 +204,10 @@ def list_project_inspection_items(
         ProjectInspectionItem,
         cursor=cursor,
         limit=limit,
-        filters=(ProjectInspectionItem.project_id == project_id,),
+        filters=(ProjectInspectionItem.project_id == project_id,)
+        + (
+            (ProjectInspectionItem.is_active.is_(True),) if active_only else ()
+        ),
         serialize_batch=lambda items: project_inspection_item_list_details(
             db, items, include_task_count=can_edit_items
         ),

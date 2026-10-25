@@ -1688,3 +1688,24 @@ it.each([false, true])('標準值變更須明確選擇，含改名=%s', async (r
   ).toBeDisabled()
   expect(api.update).not.toHaveBeenCalled()
 })
+
+it('IP-AC25：改名遇停用同名項目時保留輸入並引導恢復', async () => {
+  const api = apiWith({
+    update: vi
+      .fn()
+      .mockRejectedValue(
+        new ManagementApiError(409, 'project_inspection_item.inactive_name'),
+      ),
+  })
+  renderPage(api)
+  fireEvent.change(await screen.findByLabelText('查核項目名稱'), {
+    target: { value: '停用的同名項目' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+  const dialog = await screen.findByRole('dialog')
+  fireEvent.click(within(dialog).getByRole('button', { name: '確認儲存' }))
+  expect(
+    await screen.findByText('同名項目已停用，可在已停用清單恢復。'),
+  ).toBeVisible()
+  expect(screen.getByLabelText('查核項目名稱')).toHaveValue('停用的同名項目')
+})

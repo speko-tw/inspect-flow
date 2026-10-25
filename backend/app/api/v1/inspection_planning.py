@@ -83,6 +83,7 @@ from app.services.inspection_planning import (
     rename_inspection_task,
     rename_project_zone,
     restore_inspection_task,
+    set_project_inspection_item_active,
     start_inspection_task,
     update_draft_task_items,
     update_task_location,
@@ -1586,4 +1587,62 @@ def delete_project_item(
         db,
         project_id=project_id,
         project_inspection_item_id=project_inspection_item_id,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/inspection-items/"
+    "{project_inspection_item_id}:deactivate",
+    dependencies=[
+        Depends(
+            require_project_permission(
+                "project_inspection_item.edit",
+                param_name="project_id",
+                uuid_path_params=("project_inspection_item_id",),
+            ),
+            scope="function",
+        )
+    ],
+)
+def deactivate_project_item(
+    project_id: UUID,
+    project_inspection_item_id: UUID,
+    db: Session = _db_dependency,
+) -> dict:
+    """依 IP-R23 由後端切換項目的可選用狀態。"""
+    return _call(
+        set_project_inspection_item_active,
+        db,
+        project_id=project_id,
+        project_inspection_item_id=project_inspection_item_id,
+        active=False,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/inspection-items/"
+    "{project_inspection_item_id}:activate",
+    dependencies=[
+        Depends(
+            require_project_permission(
+                "project_inspection_item.edit",
+                param_name="project_id",
+                uuid_path_params=("project_inspection_item_id",),
+            ),
+            scope="function",
+        )
+    ],
+)
+def activate_project_item(
+    project_id: UUID,
+    project_inspection_item_id: UUID,
+    db: Session = _db_dependency,
+) -> dict:
+    """依 IP-R23 由後端切換項目的可選用狀態。"""
+    return _call(
+        set_project_inspection_item_active,
+        db,
+        project_id=project_id,
+        project_inspection_item_id=project_inspection_item_id,
+        active=True,
     )

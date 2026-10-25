@@ -74,6 +74,9 @@ export function templateErrorMessage(
   conflictingTemplateName?: string,
 ): string {
   if (error instanceof HttpError) {
+    if (error.code === 'project_inspection_item.inactive_name') {
+      return '同名項目已停用，可在已停用清單恢復。'
+    }
     if (
       error.status === 409 &&
       error.code === 'project_inspection_item.duplicate_name'

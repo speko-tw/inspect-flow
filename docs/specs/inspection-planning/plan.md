@@ -119,3 +119,15 @@ Issue #406 補齊以下測試對應，不變更產品行為：
 - 舊資料已有同名時，正規化標題未變的編輯仍可成功；新增 API 與 PostgreSQL 重用驗收。
 - 存為範本持來源 `FOR SHARE` 到複製及稽核完成；PostgreSQL 以固定交錯及 `pg_stat_activity` 驗證兩種先後均互斥：先存完整複製、先刪回 404。
 - 先紅後綠，補主線的未選阻擋測試；完整 `make check` 使用 `inspectflow_test_622` 與 4 個前端 worker。
+
+## Issue #717：專案查核項目停用與恢復
+
+延續 #435 的刪除限制；該次未做停用的範圍限制只適用原任務。
+
+- 一支線性 migration `d717a4c9e201`，來源項目新增預設 true 的 `is_active`，SQLite／PostgreSQL 升降版保留來源與任務。
+- 服務層沿用來源項目鎖；停用／恢復與稽核原子寫入；草稿持鎖後判定原集合，允許保留而不允許新加入停用項目。不得改派出 guard 去阻擋既有停用項目。
+- 名稱檢查仍包含所有項目；停用名稱衝突用專用錯誤，存為範本選到停用來源時引導先恢復。
+- 前端只修改 projectItems、projects、planning 的項目選單過濾；auditLabels 兩檔各純新增兩筆；既有說明面板接就近確認及停用收合區。
+- 驗證 IP-AC23～IP-AC26：`test_project_item_activation.py`、`test_project_item_activation_migration.py`、`ProjectItemActivation.test.tsx`、`PlanningPage.test.tsx`、既有名稱錯誤與稽核標籤測試、demo 真 Chrome E2E；1280 淺色與 360 深色各拍停用確認、停用清單與恢復結果。
+- 新增檔案之外，涉及專案項目的 model、service、API、錯誤碼及清單序列化；不修改帳號、角色、權限或範本頁。
+- 整合回歸補齊 `tests/contract/test_route_access.py` 的兩個專案項目動作權限宣告；`tests/db/test_migrations.py` 的三個舊版測試以實際歷史欄位及既有綁定型別種入項目，避免目前 ORM 的 `is_active` Python 預設值滲入尚無此欄位的舊 schema，原 migration 與驗收斷言不變。

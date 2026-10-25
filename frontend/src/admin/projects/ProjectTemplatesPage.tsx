@@ -199,7 +199,8 @@ export default function ProjectTemplatesPage({
   }, [])
 
   const applyConflict =
-    applyErrorCode === 'project_inspection_item.duplicate_name'
+    applyErrorCode === 'project_inspection_item.duplicate_name' ||
+    applyErrorCode === 'project_inspection_item.inactive_name'
   const canEditProjectItems =
     user.is_admin || viewerPermissions.includes('project_inspection_item.edit')
   const saveConflict = saveErrorCode === 'template.name_conflict'
