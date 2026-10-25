@@ -893,19 +893,26 @@ describe('admin user and company pages', () => {
 
     expect(await screen.findByText('目標公司0')).toBeInTheDocument()
     expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    // #744：清單有 51 個公司的操作鈕，直接定位續載鈕避免全頁角色掃描。
+    fireEvent.click(screen.getByText('載入更多', { selector: 'button' }))
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('搜尋公司'), {
       target: { value: '目標公司' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    fireEvent.click(
+      within(screen.getByLabelText('搜尋公司').closest('form')!).getByRole(
+        'button',
+        { name: '搜尋' },
+      ),
+    )
     expect(await screen.findByText('目標公司0')).toBeInTheDocument()
     expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('搜尋公司'), {
       target: { value: '草稿不應套用' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    // #744：清單有 51 個公司的操作鈕，直接定位續載鈕避免全頁角色掃描。
+    fireEvent.click(screen.getByText('載入更多', { selector: 'button' }))
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
   })
 
