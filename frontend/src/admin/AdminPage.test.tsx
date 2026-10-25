@@ -487,6 +487,9 @@ function managementFetch({
             companies.find((c) => c.id === row?.company_id)?.name ?? null,
         })
       }
+      if (parsed.pathname.endsWith('/participating-projects')) {
+        return Response.json({ items: [] })
+      }
       if (url.endsWith('/users/user-1/deactivation-check')) {
         return Response.json({ user_id: 'user-1', last_manager_projects: [] })
       }

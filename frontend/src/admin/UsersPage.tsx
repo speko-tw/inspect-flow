@@ -47,6 +47,7 @@ import {
   type User,
   type UserDetail,
 } from './api'
+import { getUserParticipatingProjects } from './module-permissions/api'
 import { useCursorList } from './useCursorList'
 import UserForm from './UserForm'
 import { ACCOUNT_LABEL } from '../layout/navigationLabels'
@@ -107,6 +108,45 @@ function DeactivationWarning({
       </ul>
     </div>
   )
+}
+
+/** ADM-R33：改派入口適用所有成員，不只最後一位管理成員。 */
+function DeactivationReassignmentLinks({
+  projects,
+}: {
+  projects: DeactivationCheck['last_manager_projects']
+}) {
+  if (!projects.length) return null
+  return (
+    <section aria-label="改派未完成任務">
+      <p>請由內業前往計畫與任務改派未完成任務。</p>
+      <ul>
+        {projects.map((project) => (
+          <li key={project.id}>
+            <Link to={`/projects/${project.id}/planning`}>
+              計畫與任務：{project.project_code}／{project.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+/** 停用確認的頁面資料；保留 API 原有的最後管理者警告契約。 */
+type DeactivationPreview = DeactivationCheck & {
+  reassignment_projects: DeactivationCheck['last_manager_projects']
+}
+
+/** ADM-R33：整合既有查詢，讓一般成員也能直接前往參與專案改派。 */
+async function loadDeactivationPreview(
+  userId: string,
+): Promise<DeactivationPreview> {
+  const [check, projects] = await Promise.all([
+    getDeactivationCheck(userId),
+    getUserParticipatingProjects(userId),
+  ])
+  return { ...check, reassignment_projects: projects }
 }
 
 /** 工號衝突由 API 判斷，錯誤需提供可執行的修正方向。 */
@@ -232,7 +272,7 @@ export default function UsersPage({
     message: string
   } | null>(null)
   const [actionPreview, setActionPreview] = useState<
-    DeactivationCheck | RestorePreview | null
+    DeactivationPreview | RestorePreview | null
   >(null)
   const [previewError, setPreviewError] = useState('')
   const [selectedBatchUserIds, setSelectedBatchUserIds] = useState<string[]>(
@@ -246,6 +286,7 @@ export default function UsersPage({
   const [batchDeactivationPreview, setBatchDeactivationPreview] = useState<{
     users: User[]
     projects: DeactivationCheck['last_manager_projects']
+    reassignmentProjects: DeactivationCheck['last_manager_projects']
   } | null>(null)
   const [batchActivationLoading, setBatchActivationLoading] = useState(false)
   const [batchActivationBusy, setBatchActivationBusy] = useState(false)
@@ -371,7 +412,7 @@ export default function UsersPage({
     setPreviewError('')
     setActionPreview(null)
     if (pendingAction.kind === 'deactivate') {
-      void getDeactivationCheck(pendingAction.user.id)
+      void loadDeactivationPreview(pendingAction.user.id)
         .then((data) => active && setActionPreview(data))
         .catch((caught: unknown) => {
           if (active) setPreviewError(managementErrorMessage(caught))
@@ -514,13 +555,20 @@ export default function UsersPage({
     setBatchDeactivationLoading(true)
     try {
       const checks = await Promise.all(
-        selected.map((user) => getDeactivationCheck(user.id)),
+        selected.map((user) => loadDeactivationPreview(user.id)),
       )
       const projects = new Map<
         string,
         DeactivationCheck['last_manager_projects'][number]
       >()
+      const reassignmentProjects = new Map<
+        string,
+        DeactivationCheck['last_manager_projects'][number]
+      >()
       checks.forEach((check) => {
+        check.reassignment_projects.forEach((project) =>
+          reassignmentProjects.set(project.id, project),
+        )
         check.last_manager_projects.forEach((project) =>
           projects.set(project.id, project),
         )
@@ -528,6 +576,7 @@ export default function UsersPage({
       setBatchDeactivationPreview({
         users: selected,
         projects: [...projects.values()],
+        reassignmentProjects: [...reassignmentProjects.values()],
       })
     } catch (caught) {
       setBatchDeactivationError(managementErrorMessage(caught))
@@ -934,9 +983,14 @@ export default function UsersPage({
                   {pendingAction.kind === 'deactivate' &&
                     actionPreview &&
                     'last_manager_projects' in actionPreview && (
-                      <DeactivationWarning
-                        projects={actionPreview.last_manager_projects}
-                      />
+                      <>
+                        <DeactivationWarning
+                          projects={actionPreview.last_manager_projects}
+                        />
+                        <DeactivationReassignmentLinks
+                          projects={actionPreview.reassignment_projects}
+                        />
+                      </>
                     )}
                   {pendingAction.kind === 'activate' &&
                     actionPreview &&
@@ -1301,11 +1355,18 @@ export default function UsersPage({
                                     actionPreview &&
                                     'last_manager_projects' in
                                       actionPreview && (
-                                      <DeactivationWarning
-                                        projects={
-                                          actionPreview.last_manager_projects
-                                        }
-                                      />
+                                      <>
+                                        <DeactivationWarning
+                                          projects={
+                                            actionPreview.last_manager_projects
+                                          }
+                                        />
+                                        <DeactivationReassignmentLinks
+                                          projects={
+                                            actionPreview.reassignment_projects
+                                          }
+                                        />
+                                      </>
                                     )}
                                   {pendingAction.kind === 'activate' &&
                                     actionPreview &&
@@ -1557,6 +1618,11 @@ export default function UsersPage({
                       >
                         <DeactivationConsequences
                           count={batchDeactivationPreview.users.length}
+                        />
+                        <DeactivationReassignmentLinks
+                          projects={
+                            batchDeactivationPreview.reassignmentProjects
+                          }
                         />
                         <ul>
                           {batchDeactivationPreview.users.map((user) => (

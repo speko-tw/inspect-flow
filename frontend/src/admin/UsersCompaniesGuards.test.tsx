@@ -22,6 +22,7 @@ import {
 import CompaniesPage from './CompaniesPage'
 import UsersPage from './UsersPage'
 import type { Company, RestorePreview, User } from './api'
+import type { ParticipatingProject } from './module-permissions/api'
 
 const company: Company = { id: 'company-1', name: '示範公司', is_active: true }
 
@@ -89,6 +90,7 @@ function stubBackend(
     >
     preview?: Partial<RestorePreview>
     previews?: Record<string, Partial<RestorePreview>>
+    participatingProjects?: Record<string, ParticipatingProject[]>
     lastManagerProjects?: Array<{
       id: string
       project_code: string
@@ -125,6 +127,12 @@ function stubBackend(
         }
         if (call.path === '/api/v1/companies') {
           return Response.json({ items: companies, next_cursor: null })
+        }
+        if (call.path.endsWith('/participating-projects')) {
+          const userId = call.path.split('/')[4]
+          return Response.json({
+            items: options.participatingProjects?.[userId] ?? [],
+          })
         }
         if (call.path.endsWith('/deactivation-check')) {
           return Response.json({
@@ -2007,6 +2015,65 @@ it('詳情停用確認也顯示最後管理者專案警告，四項後果各自�
   expect(within(consequences).getAllByRole('listitem')).toHaveLength(4)
   expect(consequences).toHaveTextContent('過去的查核紀錄與專案資料都會保留')
   expect(consequences).toHaveTextContent('請通知內業改派')
+})
+
+it.each(['詳情', '清單', '批次'])(
+  '一般成員的%s停用確認提供改派連結，取消不寫入',
+  async (entry) => {
+    const backend = stubBackend({
+      participatingProjects: {
+        'user-1': [
+          {
+            id: 'project-1',
+            project_code: 'P-1',
+            name: '示範工地',
+            roles: [{ id: 'field', name: '現場工程師' }],
+          },
+        ],
+      },
+    })
+    renderUsers(entry === '詳情' ? { detailUserId: 'user-1' } : {})
+    if (entry === '批次') {
+      fireEvent.click(
+        await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+      )
+      fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    } else {
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: entry === '詳情' ? '停用帳號' : '停用',
+          exact: true,
+        }),
+      )
+    }
+    const box = await screen.findByRole('region', {
+      name: entry === '批次' ? '批次停用確認' : '操作確認',
+    })
+    expect(
+      await within(box).findByRole('link', {
+        name: '計畫與任務：P-1／示範工地',
+      }),
+    ).toHaveAttribute('href', '/projects/project-1/planning')
+    expect(box).not.toHaveTextContent('將沒有啟用中的管理成員')
+    fireEvent.click(within(box).getByRole('button', { name: '取消' }))
+    expect(backend.calls.filter((call) => call.method !== 'GET')).toEqual([])
+  },
+)
+
+it('改派專案載入失敗時保留確認，禁止在影響資料未齊時停用', async () => {
+  const backend = stubBackend({
+    fail: (call) => call.path.endsWith('/participating-projects'),
+  })
+  renderUsers({ detailUserId: 'user-1' })
+  fireEvent.click(await screen.findByRole('button', { name: '停用帳號' }))
+  const box = await screen.findByRole('region', { name: '操作確認' })
+  await within(box).findByRole('alert')
+  const confirm = within(box).getByRole('button', { name: '確認停用帳號' })
+  expect(confirm).toBeDisabled()
+  fireEvent.click(confirm)
+  expect(backend.calls.filter((call) => call.method !== 'GET')).toEqual([])
+  fireEvent.click(within(box).getByRole('button', { name: '取消' }))
+  expect(screen.queryByRole('region', { name: '操作確認' })).toBeNull()
 })
 
 it('提醒自動載入失敗才顯示錯誤與重試，重試成功無提醒則隱藏', async () => {
