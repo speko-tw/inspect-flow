@@ -15,6 +15,7 @@ function getJson<T>(path: string): Promise<T> {
 }
 
 export interface FieldTask {
+  plan_archived?: boolean
   id: string
   project_id: string
   project_name: string

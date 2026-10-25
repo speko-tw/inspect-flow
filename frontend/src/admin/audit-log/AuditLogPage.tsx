@@ -39,6 +39,9 @@ export default function AuditLogPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([])
+  const [rolesState, setRolesState] = useState<'loading' | 'ready' | 'error'>(
+    'loading',
+  )
   const [optionsError, setOptionsError] = useState('')
   const [projectId, setProjectId] = useState('')
   const [actorId, setActorId] = useState('')
@@ -59,10 +62,13 @@ export default function AuditLogPage() {
     let active = true
     void listAllPages<{ id: string; name: string }>('/roles')
       .then((rows) => {
-        if (active) setRoles(rows)
+        if (active) {
+          setRoles(rows)
+          setRolesState('ready')
+        }
       })
       .catch(() => {
-        /* 舊紀錄名稱不可得時使用已刪除角色的白話備援。 */
+        if (active) setRolesState('error')
       })
     void Promise.all([
       listAllPages<Project>('/projects'),
@@ -155,6 +161,11 @@ export default function AuditLogPage() {
     setHistory((previous) => previous.slice(0, -1))
   }
 
+  function roleName(id: string): string | null {
+    if (rolesState !== 'ready') return '角色名稱暫時無法顯示'
+    return roles.find((role) => role.id === id)?.name ?? null
+  }
+
   function actorName(id: string): string {
     return userName(id) ?? '未知帳號'
   }
@@ -195,8 +206,7 @@ export default function AuditLogPage() {
               <dd>
                 {entityLabel(entry, {
                   userName,
-                  roleName: (id) =>
-                    roles.find((role) => role.id === id)?.name ?? null,
+                  roleName,
                   projectName: (id) => {
                     const project = projects.find(
                       (candidate) => candidate.id === id,
@@ -216,8 +226,7 @@ export default function AuditLogPage() {
               before={entry.before}
               after={entry.after}
               lookup={{
-                roleName: (id) =>
-                  roles.find((role) => role.id === id)?.name ?? null,
+                roleName,
                 userName,
                 projectName: (id) => {
                   const project = projects.find((item) => item.id === id)

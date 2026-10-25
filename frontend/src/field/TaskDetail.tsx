@@ -172,7 +172,11 @@ export default function TaskDetail({
                 value={
                   <span className="field-detail-values">
                     <span>
-                      <SuggestedAssignee person={task.suggested_assignee} />
+                      <SuggestedAssignee
+                        person={task.suggested_assignee}
+                        status={task.status}
+                        archived={Boolean(task.plan_archived)}
+                      />
                     </span>
                     {task.status === 'PENDING' &&
                       task.suggested_assignee &&

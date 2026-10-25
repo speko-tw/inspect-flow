@@ -715,9 +715,6 @@ export default function UsersPage({
         '你會拿到一組只顯示一次的臨時密碼，他下次登入必須改密碼。',
       ].join('')
     }
-    if (kind === 'deactivate') {
-      return `停用${name}（${user.username}）`
-    }
     if (kind === 'activate') {
       return `重新啟用${name}（${user.username}）後，他可以再次登入。`
     }

@@ -128,6 +128,7 @@ for _event, _entity, _kind, _fields in (
         _event,
         entity_type=_entity,
         kind=_kind,
+        # ALG-R22：名稱快照避免任務刪除後無法辨認；舊事件得不帶此欄。
         fields=(*_fields, "task_name")
         if _entity == "inspection_task"
         else _fields,

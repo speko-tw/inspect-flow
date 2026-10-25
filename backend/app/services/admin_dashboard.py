@@ -429,6 +429,7 @@ def _dashboard_task_item(
     *,
     zone: ProjectZone | None,
     assignee: User | None,
+    plan_archived: bool,
 ) -> dict[str, object]:
     """序列化 ADM-AC05 的任務白名單欄位。"""
     if zone is not None and zone.project_id != task.project_id:
@@ -436,6 +437,7 @@ def _dashboard_task_item(
     return {
         "task_id": task.id,
         "status": task.status,
+        "plan_archived": plan_archived,
         "location": {
             "zone_name": zone.name if zone is not None else None,
             "location_text": task.location_text,
@@ -444,6 +446,7 @@ def _dashboard_task_item(
             {
                 "user_id": assignee.id,
                 "name_zh": assignee.name_zh,
+                "is_active": assignee.is_active,
             }
             if assignee is not None
             else None
@@ -504,11 +507,25 @@ def list_dashboard_tasks(
         if assignee_ids
         else {}
     )
+    # IP-R12：批次讀取封存狀態，提醒判斷不得引入逐任務查詢。
+    plans = (
+        {
+            plan.id: plan
+            for plan in session.scalars(
+                select(InspectionPlan).where(
+                    InspectionPlan.id.in_({task.plan_id for task in task_rows})
+                )
+            ).all()
+        }
+        if task_rows
+        else {}
+    )
     result["items"] = [
         _dashboard_task_item(
             task,
             zone=zones.get(task.zone_id),
             assignee=assignees.get(task.assignee_id),
+            plan_archived=plans[task.plan_id].is_archived,
         )
         for task in task_rows
     ]
@@ -546,4 +563,10 @@ def get_dashboard_task(
         if task.assignee_id is not None
         else None
     )
-    return _dashboard_task_item(task, zone=zone, assignee=assignee)
+    plan = session.get(InspectionPlan, task.plan_id)
+    return _dashboard_task_item(
+        task,
+        zone=zone,
+        assignee=assignee,
+        plan_archived=bool(plan and plan.is_archived),
+    )

@@ -4707,3 +4707,22 @@ def test_assignee_summary_keeps_inactive_status(db_session, make_client):
     )
     assert audit is not None
     assert audit.after["task_name"] == response.json()["name"]
+
+
+def test_field_assignee_summary_exposes_archive_context(
+    db_session, make_client
+):
+    """現場唯讀歷史任務需區分封存計畫，避免錯誤要求改派（#734）。"""
+    from app.models import InspectionPlan
+
+    world = _planning_world(db_session, make_client)
+    plan_id, task_id = _dispatched_field_task(
+        world, "封存提醒", world["field_user_two"].id
+    )
+    plan = db_session.get(InspectionPlan, UUID(plan_id))
+    assert plan is not None
+    plan.is_archived = True
+    db_session.commit()
+    response = world["field"].get(f"/api/v1/field/inspection-tasks/{task_id}")
+    assert response.status_code == 200
+    assert response.json()["plan_archived"] is True

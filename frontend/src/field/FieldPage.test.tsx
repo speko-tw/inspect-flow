@@ -754,3 +754,48 @@ it('有指派的人維持預設我的任務，明確切換不被自動覆蓋', a
   await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
   expect(screen.getByTestId('location')).toHaveTextContent('scope=mine')
 })
+
+it('我的任務空清單只在空狀態說明，不重複顯示頂部橫幅', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        items: [],
+        next_cursor: null,
+      }),
+    ),
+  )
+  renderPage()
+  await screen.findByText('目前沒有符合的任務')
+  fireEvent.click(screen.getByRole('button', { name: '我的任務' }))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', {
+        name: '我的任務',
+      }),
+    ).toHaveAttribute('aria-pressed', 'true'),
+  )
+  expect(screen.queryByRole('region', { name: '我的任務提醒' })).toBeNull()
+})
+
+it('現場清單的停用建議人顯示改派提醒', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        items: [
+          {
+            ...TASK,
+            suggested_assignee: {
+              name_zh: '示範同事',
+              is_active: false,
+            },
+          },
+        ],
+        next_cursor: null,
+      }),
+    ),
+  )
+  renderPage()
+  expect(await screen.findByText('（已停用，請改派）')).toBeVisible()
+})

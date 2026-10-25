@@ -444,7 +444,7 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     )
     alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain(
-      '目前密碼錯誤。請確認目前密碼後再試一次。',
+      '臨時密碼錯誤。請確認臨時密碼後再試一次。',
     )
     const currentPassword = screen.getByLabelText(/^(目前密碼|臨時密碼)$/)
     expect(currentPassword).toHaveAttribute(
@@ -483,7 +483,7 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     )
     alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain(
-      '新密碼與目前密碼相同。請改用不同的新密碼。',
+      '新密碼與臨時密碼相同。請改用不同的新密碼。',
     )
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(postCallCount).toBe(3)
@@ -688,4 +688,48 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
     )
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
+})
+
+it('無功能權限帳號完成強制改密碼後切回一般設定文案', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (requestUrl(input).endsWith('/auth/password'))
+        return new Response(null, { status: 204 })
+      return jsonResponse({ ...NO_FEATURE_USER, must_change_password: true })
+    }),
+  )
+  renderPage()
+  await screen.findByRole('heading', { name: '請先設定新密碼' })
+  fireEvent.change(screen.getByLabelText('臨時密碼'), {
+    target: { value: 'temporary' },
+  })
+  fireEvent.change(screen.getByLabelText('新密碼'), {
+    target: { value: 'new-password' },
+  })
+  fireEvent.change(screen.getByLabelText('再輸入一次新密碼'), {
+    target: { value: 'new-password' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
+  expect(await screen.findByText('密碼已變更。')).toBeVisible()
+  expect(screen.getByRole('heading', { name: '個人設定' })).toBeVisible()
+  expect(screen.getByLabelText('目前密碼')).toBeVisible()
+  expect(screen.queryByText(/你用的是管理者給的臨時密碼/)).toBeNull()
+})
+
+it('強制模式的必填錯誤、摘要與表單說明使用臨時密碼', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => jsonResponse(TEMP_PASSWORD_USER)),
+  )
+  await renderReadyPage()
+  fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
+  expect(screen.getByRole('link', { name: /臨時密碼/ })).toBeVisible()
+  expect(
+    screen.getAllByText('臨時密碼尚未填寫。請輸入臨時密碼。').length,
+  ).toBeGreaterThan(0)
+  expect(screen.getByRole('group', { name: '密碼資料' })).toBeVisible()
+  expect(
+    screen.getByText('請輸入臨時密碼，再設定自己的新密碼。'),
+  ).toBeVisible()
 })

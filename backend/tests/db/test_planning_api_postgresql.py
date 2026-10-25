@@ -212,11 +212,13 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
                 "project_name",
                 "name",
                 "status",
+                "plan_archived",
                 "dispatched_at",
                 "location",
                 "suggested_assignee",
                 "item_summary",
             }
+            assert row["plan_archived"] is False
         seen.extend(row["id"] for row in page["items"])
         cursor = page["next_cursor"]
         if cursor is None:

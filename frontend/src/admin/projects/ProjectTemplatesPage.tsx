@@ -1,3 +1,4 @@
+import type * as SaveNotice from '../projectItems/templateSaveNotice'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
@@ -594,13 +595,14 @@ export default function ProjectTemplatesPage({
       const systemName = destination?.name ?? '目標系統'
       if (routeSaveSource) {
         navigate(`/projects/${projectId}/inspection-items`, {
+          replace: true,
           state: {
             savedFromItemId: activeSaveSource.id,
             savedTemplateTitle: name,
             savedTemplateId: saved.id,
             savedCategoryId: category?.id,
             savedSystemId: destination?.id,
-          },
+          } satisfies SaveNotice.ProjectItemsLocationState,
         })
         return
       }

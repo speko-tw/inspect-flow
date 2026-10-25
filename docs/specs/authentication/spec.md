@@ -159,7 +159,7 @@
 | AUT-R29 | 前端**必須**提供登入頁，欄位為「帳號名稱或 email」與密碼，送出到登入 API；認證失敗（401）時只顯示一種通用訊息（「帳號或密碼錯誤」），不得透露帳號是否存在或鎖定；伺服器暫時無法處理（503）時顯示「伺服器暫時忙碌，請稍後再試。」登入成功後的落點、登入後導回、登出與換帳號例外依 `admin-dashboard` ADM-R50；變更密碼入口依 AUT-R53。Admin Web 另**必須**提供首次設定頁：`GET /api/v1/setup/status` 回 `setup_required = true` 時，未登入的使用者被導向此頁，輸入首次登入碼與新密碼（兩次），送出到 AUT-R44 的路由；`invalid_code` 只顯示一種通用訊息，設定成功後（已登入）進入新增第一個使用者的步驟，由首次設定流程提供，呼叫新增使用者 API（[#263](https://github.com/speko-tw/inspect-flow/issues/263)）；一般的使用者與公司管理頁屬 [#265](https://github.com/speko-tw/inspect-flow/issues/265)。`setup_required = false` 時，首次設定頁不可進入 | 必須 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)；架構基準 §17；通用訊息依 AUT-R06；[KD-45](../../intents/03-decisions-and-stack.md#kd-45)、[KD-43](../../intents/03-decisions-and-stack.md#kd-43)；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）；[PR #311 審查建議（規格澄清）](https://github.com/speko-tw/inspect-flow/pull/311#pullrequestreview-5393249857) |
 | AUT-R30 | 前端**不得**讀取、儲存或自行傳送登入 token（Cookie 由瀏覽器自動帶），也**不得**把登入資訊寫入 `localStorage`、`sessionStorage`；前端**必須**提供登出操作 | 必須 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)（不把長效 token 放在 browser localStorage）、[認證與授權卡片](../../intents/03-decisions-and-stack.md#stack-auth)「不要用」 |
 | AUT-R31 | 前端依目前使用者隱藏無權使用的功能，只是方便；**不得**取代 AUT-R18～AUT-R22 的後端檢查 | 必須 | [PR-01](../../intents/02-principles.md#pr-01) |
-| AUT-R38 | 前端**必須**在 `/settings` 個人設定頁提供變更密碼（目前密碼、新密碼、再輸入一次新密碼），兩次新密碼不同時不送出；依 AUT-R34 的錯誤碼顯示對應訊息。目前使用者 API 回傳 `must_change_password = true` 時，前端**必須**導向此頁，變更成功後依 AUT-R53 回到原本仍可存取的頁面。前端**得**在個人設定頁提供主動變更入口。強制改密碼時標題為「請先設定新密碼」，說明「你用的是管理者給的臨時密碼，設定自己的密碼後才能繼續使用。」，目前密碼欄標為「臨時密碼」；一般設定維持原文案。 | 必須；得（主動變更的入口） | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（變更密碼的頁面）；路徑及回程依 #705、AUT-R53；後端的強制仍以 AUT-R33 為準（[PR-01](../../intents/02-principles.md#pr-01)） |
+| AUT-R38 | 前端**必須**在 `/settings` 個人設定頁提供變更密碼（目前密碼、新密碼、再輸入一次新密碼），兩次新密碼不同時不送出；依 AUT-R34 的錯誤碼顯示對應訊息。目前使用者 API 回傳 `must_change_password = true` 時，前端**必須**導向此頁，變更成功後依 AUT-R53 回到原本仍可存取的頁面。前端**得**在個人設定頁提供主動變更入口。強制改密碼時標題為「請先設定新密碼」，說明「你用的是管理者給的臨時密碼，設定自己的密碼後才能繼續使用。」，目前密碼欄標為「臨時密碼」；一般設定維持原文案。 強制模式的必填、目前密碼錯誤與摘要連結均稱「臨時密碼」，欄位群組用「密碼資料」避免重複標題。沒有功能權限者改密碼成功後留在設定頁，立即改用一般標題、說明與目前密碼欄名。 | 必須；得（主動變更的入口） | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（變更密碼的頁面）；路徑及回程依 #705、AUT-R53；後端的強制仍以 AUT-R33 為準（[PR-01](../../intents/02-principles.md#pr-01)） |
 
 ## 資料
 
@@ -341,7 +341,7 @@
 | AUT-AC28 | 目前使用者 API 的測試替身回 401 | 分別渲染 `/tasks/123` 與 `/projects/456` | 兩者都導向 `/login`，並保留原本的路徑；登入 API 的替身回 200 後送出表單，畫面回到原本且仍可存取的路徑 | AUT-R29、AUT-R53 |
 | AUT-AC29 | 登入 API 的測試替身回 401 `auth.invalid_credentials` | 在登入頁送出表單 | 顯示一則通用錯誤訊息，文字不因失敗原因而不同；密碼欄位的 `type` 為 `password` | AUT-R29 |
 | AUT-AC30 | 已登入的畫面；測試監看 `localStorage`、`sessionStorage` 與 `fetch` | 完成登入、瀏覽、登出 | 登入與登出請求以 `credentials: 'same-origin'`（或預設）送出，前端沒有自行設定 Cookie 或 `Authorization` 標頭；`sessionStorage` 未被寫入，`localStorage` 只允許 AUT-R55 的外觀快取，不含登入資訊；登出後呼叫了登出 API 並導向 `/login` | AUT-R30 |
-| AUT-AC41 | 目前使用者 API 的測試替身回 200、`must_change_password` 為 `true` | 分別從 `/tasks/123` 與 `/projects/456` 進入；在 `/settings` 的變更密碼表單送出，API 替身回 204 且目前使用者的替身改回 `must_change_password` 為 `false` | 兩者都在 `/settings` 強制變更密碼，保留原目的路徑；成功後回到原本且仍可存取的路徑。強制情境使用新標題、臨時密碼說明及欄名；嘗試其他功能路由仍返回設定頁，一般設定保留原標題與欄名。 | AUT-R38、AUT-R53 |
+| AUT-AC41 | 目前使用者 API 的測試替身回 200、`must_change_password` 為 `true` 另有 must_change_password=true 且沒有功能權限的帳號。 | 分別從 `/tasks/123` 與 `/projects/456` 進入；在 `/settings` 的變更密碼表單送出，API 替身回 204 且目前使用者的替身改回 `must_change_password` 為 `false` 先提交空白／錯誤臨時密碼，再成功設定新密碼。 | 兩者都在 `/settings` 強制變更密碼，保留原目的路徑；成功後回到原本且仍可存取的路徑。強制情境使用新標題、臨時密碼說明及欄名；嘗試其他功能路由仍返回設定頁，一般設定保留原標題與欄名。 錯誤與摘要使用臨時密碼，成功後留在設定並恢復一般文案。 | AUT-R38、AUT-R53 |
 | AUT-AC42 | 變更密碼頁；變更密碼 API 的替身依序回 400 `auth.current_password_incorrect`、422 `auth.password_invalid`、422 `auth.password_unchanged` | 先在兩個新密碼欄位輸入不同的值送出；再輸入相同的值送出三次 | 兩次新密碼不同時沒有呼叫 API，並顯示不一致的訊息；三次錯誤各顯示一則不同的訊息；三個密碼欄位的 `type` 都是 `password` | AUT-R38 |
 
 ### 資料表
@@ -451,3 +451,5 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - 範圍變更（負責人指示，#515）：新增本人外觀讀寫契約 AUT-R55、AUT-AC80～82，登入與目前使用者回傳 appearance，保留臨時密碼 gate — [負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)
 
 - 規格澄清（負責人試用回饋 #734，W-734R）：AUT-R38、AUT-AC41 補明發版前重測行為，依 [#734](https://github.com/speko-tw/inspect-flow/issues/734) 同步實作與驗收。
+
+- 規格澄清（#734，第 2 輪審查）：補齊強制改密碼的錯誤用詞及成功後切回一般模式的 R／AC。

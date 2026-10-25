@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 
 import { canManageTemplateLibrary } from '../../auth/landing'
 import { useCurrentUser } from '../../auth/useCurrentUser'
@@ -13,6 +13,10 @@ import {
   listProjectItems,
   type ProjectItemListData,
 } from './api'
+import {
+  withoutTemplateSaveNotice,
+  type ProjectItemsLocationState,
+} from './templateSaveNotice'
 import './ProjectItemLinks.css'
 
 /**
@@ -27,6 +31,7 @@ export default function ProjectItemLinks({
   viewerPermissions: string[]
 }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { user } = useCurrentUser()
   const [items, setItems] = useState<ProjectItemListData[]>([])
   const [loading, setLoading] = useState(true)
@@ -35,19 +40,26 @@ export default function ProjectItemLinks({
   const [deleteError, setDeleteError] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
-  const [dismissedSaveKey, setDismissedSaveKey] = useState<string | null>(null)
+
   const savedNotice = useRef<HTMLParagraphElement | null>(null)
   const deleteTrigger = useRef<HTMLButtonElement | null>(null)
   const heading = useRef<HTMLHeadingElement | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
-  const routeState = location.state as {
-    highlightedItemIds?: unknown
-    savedFromItemId?: string
-    savedTemplateTitle?: string
-    savedTemplateId?: string
-    savedCategoryId?: string
-    savedSystemId?: string
-  } | null
+  const routeState = location.state as ProjectItemsLocationState | null
+  const [saveResult, setSaveResult] = useState(() =>
+    routeState?.savedFromItemId ? routeState : null,
+  )
+  useEffect(() => {
+    if (!routeState?.savedFromItemId) return
+    navigate(
+      {
+        pathname: location.pathname,
+        search: location.search,
+        hash: location.hash,
+      },
+      { replace: true, state: withoutTemplateSaveNotice(routeState) },
+    )
+  }, [routeState, location.pathname, location.search, location.hash, navigate])
   const highlightedItemIds = new Set(
     Array.isArray(routeState?.highlightedItemIds)
       ? routeState.highlightedItemIds.filter(
@@ -182,26 +194,21 @@ export default function ProjectItemLinks({
                   剛套用
                 </p>
               )}
-              {routeState?.savedFromItemId === item.id &&
-                dismissedSaveKey !== location.key && (
-                  <p
-                    className="notice-success"
-                    ref={savedNotice}
-                    role="status"
+              {saveResult?.savedFromItemId === item.id && (
+                <p className="notice-success" ref={savedNotice} role="status">
+                  已將「{saveResult.savedTemplateTitle}」存為範本。{' '}
+                  <Link
+                    to="/templates"
+                    state={{
+                      savedTemplateId: saveResult.savedTemplateId,
+                      savedCategoryId: saveResult.savedCategoryId,
+                      savedSystemId: saveResult.savedSystemId,
+                    }}
                   >
-                    已將「{routeState.savedTemplateTitle}」存為範本。{' '}
-                    <Link
-                      to="/templates"
-                      state={{
-                        savedTemplateId: routeState.savedTemplateId,
-                        savedCategoryId: routeState.savedCategoryId,
-                        savedSystemId: routeState.savedSystemId,
-                      }}
-                    >
-                      到範本庫查看
-                    </Link>
-                  </p>
-                )}
+                    到範本庫查看
+                  </Link>
+                </p>
+              )}
               <div className="project-item-title">
                 <strong>{item.title}</strong>
                 {canEdit &&
@@ -252,7 +259,7 @@ export default function ProjectItemLinks({
                     onClick={(event) => {
                       deleteTrigger.current = event.currentTarget
                       setDeleting(item)
-                      setDismissedSaveKey(location.key)
+                      setSaveResult(null)
                       setDeleteError(
                         (item.task_count ?? 0) > 0
                           ? blockedDeleteMessage(item.task_count ?? 0)

@@ -272,7 +272,7 @@ function TaskList({
         {scope === 'all' ? '全部任務' : PAGE_TITLES.tasks}
       </h1>
       <p className="field-intro">已派出的未完成任務，依派送時間排列。</p>
-      {noAssignedTasks && scope === 'mine' && (
+      {noAssignedTasks && scope === 'mine' && Boolean(state?.items.length) && (
         <section className="field-notice" aria-label="我的任務提醒">
           <p>目前沒有指派給你的任務。</p>
           <Button onClick={() => updateFilter('all', 'all')}>
@@ -413,7 +413,11 @@ function TaskList({
                     )}
                     <span>
                       建議指派：
-                      <SuggestedAssignee person={task.suggested_assignee} />
+                      <SuggestedAssignee
+                        person={task.suggested_assignee}
+                        status={task.status}
+                        archived={Boolean(task.plan_archived)}
+                      />
                     </span>
                   </span>
                   <span className="field-card-foot">

@@ -328,6 +328,8 @@ function ProgressList({
                   建議指派：
                   <SuggestedAssignee
                     person={task.assignee}
+                    status={task.status}
+                    archived={task.plan.archived}
                     unassignedLabel="未指派"
                   />
                 </span>
@@ -481,6 +483,8 @@ function ProgressDetail({
             <dd>
               <SuggestedAssignee
                 person={task.assignee}
+                status={task.status}
+                archived={task.plan.archived}
                 unassignedLabel="未指派"
               />
             </dd>

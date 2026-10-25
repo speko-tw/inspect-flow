@@ -433,10 +433,13 @@ def _field_task_summary(
 ) -> dict[str, Any]:
     project = db.get(Project, task.project_id)
     assignee = db.get(User, task.assignee_id) if task.assignee_id else None
+    # IP-R12：清單已排除封存計畫；詳情需讀封存狀態以中性呈現歷史任務。
+    plan = db.get(InspectionPlan, task.plan_id) if detail else None
     result: dict[str, Any] = {
         "id": task.id,
         "project_id": task.project_id,
         "project_name": project.name if project else None,
+        "plan_archived": bool(plan and plan.is_archived),
         "name": task.name,
         "status": task.status,
         "dispatched_at": (
@@ -456,7 +459,8 @@ def _field_task_summary(
     }
     if not detail:
         return result
-    # 現場只需辨認顯示名稱；省略帳號與 id，避免推測他人身分。
+    # IP-R12：現場保留 is_active 與封存狀態，才能區分待改派與歷史紀錄。
+    # 顯示名稱足以辨認建議人；省略帳號與 id，避免推測他人身分。
     # is_me 讓使用者辨認自己，而不必用可能重複的名稱比較。
     if assignee is not None and result["suggested_assignee"] is not None:
         result["suggested_assignee"]["is_me"] = assignee.id == viewer_id

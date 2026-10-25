@@ -3039,3 +3039,45 @@ it('停用的建議指派人顯示改派提醒並靠近修改入口', async () =
     }),
   ).toBeVisible()
 })
+
+it.each([
+  ['COMPLETED', false],
+  ['CANCELLED', false],
+  ['PENDING', true],
+] as const)(
+  '停用建議人於 %s、封存 %s 只顯示中性狀態',
+  async (status, archived) => {
+    const client = createMockPlanningClient()
+    const plan = await client.createPlan('project-demo-1', {
+      name: '歷史計畫',
+    })
+    const [item] = await client.listProjectItems('project-demo-1')
+    await client.createTask(plan.id, {
+      name: '歷史任務',
+      item_ids: [item.id],
+      suggested_assignee_id: 'project-a-member-1',
+      zone_id: null,
+      location_text: '一樓',
+    })
+    const original = client.getPlan.bind(client)
+    vi.spyOn(client, 'getPlan').mockImplementation(async (id) => {
+      const result = await original(id)
+      return {
+        ...result,
+        archived,
+        tasks: result.tasks?.map((task) => ({
+          ...task,
+          status,
+          plan: { ...task.plan, archived },
+          assignee: task.assignee
+            ? { ...task.assignee, is_active: false }
+            : null,
+        })),
+      }
+    })
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.click(await screen.findByRole('button', { name: /歷史計畫（/ }))
+    expect(await screen.findByText('（已停用）')).toBeVisible()
+    expect(screen.queryByText(/請改派/)).toBeNull()
+  },
+)

@@ -5,7 +5,13 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
@@ -460,4 +466,78 @@ describe('#435 刪除專案查核項目', () => {
     expect(screen.queryByRole('group')).toBeNull()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+})
+
+it('存檔提示只顯示一次，清 history state 並保留其他欄位', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        items: [
+          {
+            id: 'copy',
+            title: '來源項目',
+            inspection_points: [],
+            applied_at: '2026-10-01T00:00:00Z',
+            task_count: 0,
+          },
+        ],
+        next_cursor: null,
+      }),
+    ),
+  )
+  function Probe() {
+    const location = useLocation()
+    const navigate = useNavigate()
+    return (
+      <>
+        <output data-testid="notice-state">
+          {JSON.stringify(location.state)}
+        </output>
+        <button onClick={() => navigate('/outside')}>離開清單</button>
+        <button onClick={() => navigate(-1)}>返回前頁</button>
+      </>
+    )
+  }
+  render(
+    <CurrentUserProvider
+      value={{ user: currentUserFixture(), clear: vi.fn() }}
+    >
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/items',
+            state: {
+              savedFromItemId: 'copy',
+              savedTemplateTitle: '示範範本',
+              savedTemplateId: 'new-template',
+              highlightedItemIds: ['copy'],
+              keep: true,
+            },
+          },
+        ]}
+      >
+        <Probe />
+        <Routes>
+          <Route
+            path="/items"
+            element={
+              <ProjectItemLinks projectId="p1" viewerPermissions={[]} />
+            }
+          />
+          <Route path="/outside" element={<p>其他頁面</p>} />
+        </Routes>
+      </MemoryRouter>
+    </CurrentUserProvider>,
+  )
+  expect(
+    await screen.findByRole('link', { name: '到範本庫查看' }),
+  ).toBeVisible()
+  const state = JSON.parse(screen.getByTestId('notice-state').textContent!)
+  expect(state).toEqual({ highlightedItemIds: ['copy'], keep: true })
+  fireEvent.click(screen.getByRole('button', { name: '離開清單' }))
+  await screen.findByText('其他頁面')
+  fireEvent.click(screen.getByRole('button', { name: '返回前頁' }))
+  await screen.findByText('來源項目')
+  expect(screen.queryByRole('link', { name: '到範本庫查看' })).toBeNull()
 })
