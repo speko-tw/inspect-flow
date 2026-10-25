@@ -694,7 +694,7 @@ describe('ProjectItemChangePage', () => {
     const footer = editor.querySelector('.tpl-editor-footer') as HTMLElement
     const requestError = await within(footer).findByRole('alert')
     expect(requestError).toHaveTextContent('伺服器暫時無法處理，請稍後再試。')
-    expect(requestError).toHaveFocus()
+    await waitFor(() => expect(requestError).toHaveFocus())
     expect(
       editor.querySelector('.tpl-editor-heading [role="alert"]'),
     ).toBeNull()

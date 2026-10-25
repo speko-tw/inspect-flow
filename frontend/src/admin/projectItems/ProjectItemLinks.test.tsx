@@ -333,7 +333,8 @@ describe('#435 刪除專案查核項目', () => {
     const panel = within(item!).getByRole('group', {
       name: '無法刪除查核項目',
     })
-    expect(within(panel).getByRole('alert')).toHaveTextContent(
+    const alert = within(panel).getByRole('alert')
+    expect(alert).toHaveTextContent(
       '已有 2 個任務使用這個項目，為保留查核紀錄不能刪除；草稿與已取消的任務也算。若只是寫錯名稱或標準，請改用『修改』。若都是草稿，到計畫與任務刪除草稿後即可刪除。',
     )
     expect(within(panel).getByRole('button', { name: '知道了' })).toBeVisible()
@@ -343,7 +344,7 @@ describe('#435 刪除專案查核項目', () => {
     expect(
       within(panel).queryByRole('button', { name: '確認刪除' }),
     ).toBeNull()
-    expect(panel.querySelector('[role="alert"]')).toHaveFocus()
+    await waitFor(() => expect(alert).toHaveFocus())
     fireEvent.click(within(panel).getByRole('button', { name: '知道了' }))
     expect(within(item!).queryByRole('group')).toBeNull()
     expect(within(item!).getByText('未使用項目')).toBeInTheDocument()

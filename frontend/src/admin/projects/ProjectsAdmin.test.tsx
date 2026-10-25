@@ -1039,7 +1039,7 @@ describe('admin projects page', () => {
 
     const alert = await within(form).findByRole('alert')
     expect(alert).toHaveTextContent('伺服器暫時無法處理，請稍後再試。')
-    expect(alert).toHaveFocus()
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(
       alert.compareDocumentPosition(
         within(form).getByRole('button', { name: '新增專案' }),

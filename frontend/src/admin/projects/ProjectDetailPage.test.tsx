@@ -174,7 +174,7 @@ describe('專案成員批次角色（#414）', () => {
     const section = screen.getByRole('region', { name: '批次角色操作' })
     const alert = await within(section).findByRole('alert')
     expect(alert).toBeVisible()
-    expect(alert).toHaveFocus()
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(screen.getAllByText('檢視者').length).toBe(3)
     expect(screen.getByRole('checkbox', { name: /林鮑伯/ })).toBeChecked()
     expect(

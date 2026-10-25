@@ -303,7 +303,7 @@ describe('SaveTemplateFromProjectPage', () => {
     expect(targetStep).not.toBeNull()
     const alert = await within(targetStep!).findByRole('alert')
     expect(alert).toHaveTextContent('儲存失敗，請稍後重試。')
-    expect(alert).toHaveFocus()
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(
       document.querySelector('.save-template-page > [role="alert"]'),
     ).toBeNull()
