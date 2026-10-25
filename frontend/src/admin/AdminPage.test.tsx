@@ -290,6 +290,7 @@ function managementFetch({
               name: '專案工程師',
               permission_codes: ['project_member.manage'],
               user_count: 0,
+              inactive_user_count: 0,
               project_count: 0,
               created_at: '',
               updated_at: '',
@@ -996,7 +997,7 @@ describe('admin user and company pages', () => {
     await createAccountThroughWizard('bob.lee')
 
     const passwordHeading = await screen.findByRole('heading', {
-      name: '帳號已建立',
+      name: '已新增李柏的帳號',
       level: 2,
     })
     expect(
@@ -1026,7 +1027,9 @@ describe('admin user and company pages', () => {
       }),
     )
     expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
-    expect(screen.queryByRole('heading', { name: '帳號已新增' })).toBeNull()
+    expect(
+      screen.getAllByRole('heading', { name: '已新增李柏的帳號' }),
+    ).toHaveLength(1)
     expectNoPasswordPersistence(password)
     fireEvent.click(screen.getByRole('button', { name: '回清單' }))
     expect(
@@ -1051,18 +1054,21 @@ describe('admin user and company pages', () => {
     fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
 
     expect(
-      await screen.findByRole('heading', { name: '臨時密碼已重設' }),
+      await screen.findByRole('heading', { name: '已重設鄧安娜的臨時密碼' }),
     ).toBeVisible()
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
       'reset-once-123',
     )
+    expect(screen.getByText('帳號：anna.deng')).toBeVisible()
+    expect(screen.getByText(/他下次登入必須先改成自己的密碼/)).toBeVisible()
+    expect(screen.queryByText(/首次登入必須變更密碼/)).toBeNull()
     expect(
       fetchMock.mock.calls.filter(([input]) =>
         String(input).endsWith('/api/v1/users/user-1/temporary-password'),
       ),
     ).toHaveLength(1)
     fireEvent.click(
-      screen.getByRole('button', { name: '已抄下，回到帳號清單' }),
+      screen.getByRole('button', { name: '已交給他，回到帳號清單' }),
     )
     expect(await screen.findByRole('heading', { name: '帳號' })).toBeVisible()
     expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
@@ -1077,7 +1083,7 @@ describe('admin user and company pages', () => {
       fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
       fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
     })
-    await screen.findByRole('heading', { name: '臨時密碼已重設' })
+    await screen.findByRole('heading', { name: '已重設鄧安娜的臨時密碼' })
     fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
     expect(
       await screen.findByRole('heading', {
@@ -1110,7 +1116,7 @@ describe('admin user and company pages', () => {
       fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
       fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
     })
-    await screen.findByRole('heading', { name: '臨時密碼已重設' })
+    await screen.findByRole('heading', { name: '已重設鄧安娜的臨時密碼' })
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     await waitFor(() =>
       expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？'),
@@ -1210,7 +1216,10 @@ describe('admin user and company pages', () => {
       'leave-page-password',
     )
     expect(
-      await screen.findByRole('heading', { name: '帳號已建立', level: 2 }),
+      await screen.findByRole('heading', {
+        name: '已新增李柏的帳號',
+        level: 2,
+      }),
     ).toBeVisible()
     fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
     expect(
@@ -1220,6 +1229,7 @@ describe('admin user and company pages', () => {
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
       'leave-page-password',
     )
+    expect(document.body.textContent).toContain('leave-page-password')
 
     fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
     fireEvent.click(screen.getByRole('button', { name: '離開此頁' }))
@@ -1230,7 +1240,7 @@ describe('admin user and company pages', () => {
       screen.queryByRole('heading', { name: '有尚未儲存的變更' }),
     ).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.queryByText('leave-page-password')).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('leave-page-password')
     expectNoPasswordPersistence('leave-page-password')
   })
 
@@ -1251,22 +1261,20 @@ describe('admin user and company pages', () => {
       index: 1,
     })
     await createAccountThroughWizard('bob.lee')
-    expect(
-      await screen.findByText('back-navigation-password'),
-    ).toBeInTheDocument()
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'back-navigation-password',
+    )
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     await waitFor(() =>
       expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？'),
     )
-    expect(screen.getByText('back-navigation-password')).toBeInTheDocument()
+    expect(screen.getByLabelText('臨時密碼')).toBeInTheDocument()
     confirm.mockReturnValue(true)
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     expect(
       await screen.findByRole('heading', { name: '公司管理' }),
     ).toBeInTheDocument()
-    expect(
-      screen.queryByText('back-navigation-password'),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
     expectNoPasswordPersistence('back-navigation-password')
   })
 
@@ -1503,7 +1511,7 @@ describe('admin user and company pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
     const switched = screen.getByRole('region', { name: '操作確認' })
     expect(switched).toHaveTextContent(
-      '停用鄧安娜（anna.new）後，他將無法登入',
+      '停用鄧安娜（anna.new）他會立刻被登出，之後不能再登入',
     )
     await waitFor(() =>
       expect(
@@ -1579,9 +1587,9 @@ describe('admin user and company pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
     const deactivation = screen.getByRole('region', { name: '操作確認' })
     expect(deactivation).toHaveTextContent('anna.new')
-    expect(deactivation).toHaveTextContent('無法登入')
+    expect(deactivation).toHaveTextContent('不能再登入')
     expect(
-      within(deactivation).getByRole('button', { name: '確認' }),
+      within(deactivation).getByRole('button', { name: '確認停用帳號' }),
     ).toHaveClass('btn-danger')
     fireEvent.click(within(deactivation).getByRole('button', { name: '取消' }))
     expect(
@@ -1597,11 +1605,15 @@ describe('admin user and company pages', () => {
     })
     await waitFor(() =>
       expect(
-        within(disableConfirmation).getByRole('button', { name: '確認' }),
+        within(disableConfirmation).getByRole('button', {
+          name: '確認停用帳號',
+        }),
       ).toBeEnabled(),
     )
     fireEvent.click(
-      within(disableConfirmation).getByRole('button', { name: '確認' }),
+      within(disableConfirmation).getByRole('button', {
+        name: '確認停用帳號',
+      }),
     )
     await waitFor(() => {
       expect(screen.getByText('狀態：已停用')).toBeInTheDocument()
@@ -2608,4 +2620,36 @@ describe('直接開啟帳號詳情（#414）', () => {
       ),
     ).toBe(false)
   })
+})
+
+it('建立完成有臨時密碼時標題帶姓名，頂端取消隱藏', async () => {
+  managementFetch({
+    onCreate: (body) => ({
+      ...regularUser,
+      id: 'created-trial-person',
+      username: String(body.username),
+      email: String(body.email),
+      name_zh: String(body.name_zh),
+      temporary_password: '01234567890123456789',
+    }),
+  })
+  renderAdmin()
+  await createAccountThroughWizard('trial.new', 'trial@example.test', '王新進')
+  const done = await screen.findByRole('region', { name: '建立完成' })
+  expect(
+    within(done).getByRole('heading', { name: '已新增王新進的帳號' }),
+  ).toBeVisible()
+  expect(within(done).getByText('帳號：trial.new')).toBeVisible()
+  expect(
+    within(done).getByRole('heading').nextElementSibling,
+  ).toHaveTextContent('帳號：trial.new')
+  expect(done).toHaveTextContent('他第一次登入必須先改成自己的密碼')
+  expect(done.textContent).not.toContain('王新進 的')
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('button', {
+        name: '取消',
+      }),
+    ).toBeNull(),
+  )
 })

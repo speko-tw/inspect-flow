@@ -344,3 +344,71 @@ describe('稽核查詢頁', () => {
     expect(screen.getByRole('button', { name: '下一頁' })).toBeDisabled()
   })
 })
+
+it('T13：範本快照先顯示白話欄位，識別碼只在進階原文', async () => {
+  const systemId = '00000000-0000-0000-0000-000000000735'
+  const before = { system_id: systemId, title: '排水管坡度檢查', sequence: 1 }
+  const after = {
+    system_id: systemId,
+    title: '排水管坡度檢查（業主版）',
+    sequence: 1,
+    instruction: '確認排水方向。',
+    inspection_points: {
+      items: [
+        {
+          sequence: 1,
+          title: '量測坡度',
+          instruction: '以水平儀測量。',
+          measurement_fields: [
+            {
+              name: '坡度',
+              field_type: 'number',
+              unit: '%',
+              sort_order: 1,
+            },
+          ],
+          numeric_standard: { value: '2', condition: '>=', unit: '%' },
+        },
+      ],
+    },
+  }
+  mockFetch(() =>
+    Response.json(
+      auditLogPageFixture({
+        items: [
+          auditLogEntryFixture({
+            event_type: 'template_item.updated',
+            entity_type: 'template_item',
+            before,
+            after,
+          }),
+        ],
+      }),
+    ),
+  )
+  render(<AuditLogPage />)
+  const heading = await screen.findByRole('heading', { name: '修改範本項目' })
+  const card = heading.closest('article') as HTMLElement
+  expect(
+    within(card).getByText('範本項目：排水管坡度檢查（業主版）'),
+  ).toBeVisible()
+  fireEvent.click(within(card).getByText('查看改前與改後內容'))
+  const column = within(card).getByRole('region', { name: '改了什麼' })
+  const changedName = within(column).getByRole('row', { name: /名稱/ })
+  expect(changedName).toHaveTextContent('排水管坡度檢查（業主版）')
+  expect(
+    within(column).getByRole('row', { name: /查核項次/ }),
+  ).toHaveTextContent('1 項')
+  expect(within(column).queryByRole('row', { name: /順序/ })).toBeNull()
+  expect(column.textContent).not.toMatch(/system_id|field_type|title/)
+  expect(column.textContent).not.toContain(systemId)
+  const advanced = within(card)
+    .getByText('技術細節（工程人員用）')
+    .closest('details') as HTMLDetailsElement
+  expect(advanced).not.toHaveAttribute('open')
+  fireEvent.click(within(advanced).getByText('技術細節（工程人員用）'))
+  const originals = advanced.querySelectorAll('pre')
+  expect(originals[0]).toHaveTextContent(systemId)
+  expect(originals[1].textContent).toBe(JSON.stringify(after, null, 2))
+  expect(originals[1]).toBeVisible()
+})

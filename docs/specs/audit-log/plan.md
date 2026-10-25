@@ -167,3 +167,7 @@ SQLite 得以 batch migration 設 NOT NULL 或移除欄位。交易失敗即
 - spec 事件目錄補 `project_inspection_item.deleted`，保留刪除前 `project_id`、`title`，`after` 為空；與項目及變更紀錄刪除同交易。
 - `template_item.created_from_project` 的 `after` 補最終保存名稱 `title`，與 #434 實作及 TPL-R26 一致。
 - 依既有 `test_delete_unused_item_clears_changes_and_records_audit`、`test_save_as_template_uses_optional_trimmed_name_and_audits_it` 與完整 `make check` 驗收；不新增事件碼或 migration。
+
+## #735 第二輪查詢呈現澄清
+
+T13 純前端沿用事件目錄：只列變動且認得的欄位，既有帳號／專案對照換名稱，未知 ID 不顯示；查核項次以數量摘要，新增／刪除另列內容，原始 JSON 收進「技術細節（工程人員用）」。窄螢幕每欄位一張卡片；不增加後端快照資料。

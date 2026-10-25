@@ -47,6 +47,7 @@ export function PeoplePage({
     username: string,
     password: string,
     source?: 'created' | 'reset',
+    displayName?: string,
   ) => void
 }) {
   const location = useLocation()
@@ -168,12 +169,14 @@ export function PeoplePage({
           </Link>
         </p>
       ) : createWizardOpen ? (
-        <button
-          onClick={() => requestPasswordLeave(() => setWizardRequest(0))}
-          type="button"
-        >
-          取消
-        </button>
+        !wizardHasTemporaryPassword && (
+          <button
+            onClick={() => requestPasswordLeave(() => setWizardRequest(0))}
+            type="button"
+          >
+            取消
+          </button>
+        )
       ) : (
         user.is_admin && (
           <button onClick={() => setWizardRequest((value) => value + 1)}>

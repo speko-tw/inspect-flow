@@ -2129,7 +2129,8 @@ a.app-header-tab[aria-current='page'] {
 }
 
 .tpl-live-preview ol {
-  padding-left: var(--space-5);
+  list-style: none;
+  padding-left: 0;
 }
 
 .tpl-preview-title,
@@ -2325,3 +2326,133 @@ a.app-header-tab[aria-current='page'] {
 }
 
 /* 欄位說明與範本灰字共用顏色；尺寸由各元件規則決定（#490）。 */
+
+/* UDS-R18：就近回饋留出閱讀空間，使用一般文流而非固定工具列。 */
+.confirm-box,
+.notice,
+.shared-form-error,
+.field-error {
+  scroll-margin-block: var(--space-4);
+}
+
+.notice {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow-wrap: anywhere;
+}
+
+.notice-success {
+  color: var(--color-status-success);
+  background: var(--color-status-success-bg);
+}
+
+.notice-error {
+  color: var(--color-status-danger);
+  background: var(--color-status-danger-bg);
+}
+
+.batch-action-bar {
+  display: grid;
+  gap: var(--space-3);
+  margin-block: var(--space-3);
+}
+
+.batch-action-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.notice-success {
+  border-color: var(--color-status-success-border);
+}
+
+.notice-error {
+  border-color: var(--color-status-danger-border);
+}
+
+.notice-info {
+  color: var(--color-status-info);
+  background: var(--color-status-info-bg);
+  border-color: var(--color-status-info-border);
+}
+
+.batch-action-bar-actions > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .batch-action-bar-actions > button {
+    flex: 1 1 100%;
+    min-block-size: 44px;
+  }
+}
+
+/* 公司確認框需佔滿窄螢幕的操作列，不能被桌機表格欄寬擠成直排。 */
+@media (max-width: 40rem) {
+  .companies-table,
+  .companies-table tbody,
+  .companies-table tr,
+  .companies-table th,
+  .companies-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .companies-table {
+    overflow: visible;
+  }
+
+  .companies-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .companies-table tbody tr {
+    margin-block-end: var(--space-3);
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .companies-table tbody td::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+
+  .companies-table td button {
+    width: 100%;
+    min-block-size: 44px;
+  }
+}
+
+/* B2：只以版面間距分組，DOM 及剪貼簿仍是連續密碼。 */
+output.temporary-password {
+  display: block;
+}
+
+.temporary-password-group + .temporary-password-group::before {
+  content: '';
+  display: inline-block;
+  width: 0.5ch;
+}
+
+.temporary-password-group {
+  display: inline;
+  white-space: nowrap;
+}
+
+.tpl-tree-row,
+.tpl-detail-list button {
+  justify-content: flex-start;
+}

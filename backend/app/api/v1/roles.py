@@ -68,7 +68,7 @@ class RoleUpdateRequest(BaseModel):
 
 
 class RoleResponse(BaseModel):
-    """Public role representation."""
+    """角色回應：總人數保留停用者，另附已停用人數。"""
 
     id: UUID
     name: str
@@ -76,6 +76,7 @@ class RoleResponse(BaseModel):
     is_assignable: bool
     is_external_allowed: bool
     user_count: int
+    inactive_user_count: int
     project_count: int
     created_at: str
     updated_at: str
@@ -117,6 +118,7 @@ def _role_response(role: Role, usage: RoleUsage) -> RoleResponse:
         is_assignable=role.is_assignable,
         is_external_allowed=role.is_external_allowed,
         user_count=usage.user_count,
+        inactive_user_count=usage.inactive_user_count,
         project_count=usage.project_count,
         created_at=format_utc(role.created_at),
         updated_at=format_utc(role.updated_at),

@@ -36,6 +36,7 @@
 | T21 | 專案進度區段前端：區段導覽的「進度」（`inspection_task.read`）、七個篩選與數字、網址 `?status=`、卡片清單與載入更多、全頁唯讀詳情、返回保留篩選／已載入頁數／捲動位置；首頁關鍵數字可點、「追蹤進度」與待重查步驟改連進度區段；任務名稱在 [#497](https://github.com/speko-tw/inspect-flow/issues/497) 合併前用項目摘要；先以 mock 接版型，`inspection-planning` T13 合併後接真 client 並以真後端走查；補元件測試與契約 fixture | 依當時程式碼盤點，預計 `frontend/src/admin/progress/`（新增）、`frontend/src/admin/projectHome/`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/styles.css`、相關測試 | T10、T20；`inspection-planning` T13（IP-R18、IP-R19）；任務名稱依 #497 另行調整 | ADM-AC15、ADM-AC16、ADM-AC25、ADM-AC42～ADM-AC44 | [#452](https://github.com/speko-tw/inspect-flow/issues/452) |
 | T22 | 管理者查詢他人有效權限的唯讀 API：集中使用 `calculate_effective_access`、保留模組權限來源與指定專案角色代碼，回傳四項固定診斷；Admin 全量、委派者依 ADM-R45 嚴格切片；委派者查 Admin 一律 403、查自己允許；補 SQLite 與 PostgreSQL API 測試 | `docs/specs/admin-dashboard/spec.md`、本檔、 `backend/app/api/v1/users.py`、相關 API 測試 | #582／#576 兩層權限 規則、ADM-R45 | ADM-AC46 | #702 |
 | T23 | G7 易用性修正：個人選單、帳號清單／新增精靈／詳情、權限明確開通、白話有效權限與診斷、批次參與專案角色摘要、唯讀入口、任務標題與專案角色頁；補前後端行為測試及八身分真瀏覽器驗收 | `docs/intents/07-permission-model.md`、`docs/specs/admin-dashboard/spec.md`、本檔、`backend/app/api/v1/users.py`、`backend/tests/api/`、`frontend/src/admin/`、`frontend/src/layout/`、`frontend/src/styles/` 及相關測試 | #702 有效權限查詢；G6 導覽與帳號／權限模型（#582／#583／#584／#704）；G7 定案修正清單 | ADM-AC49 | #582、#583、#584、#704 |
+| T24 | #734 帳號與權限區試用修正：批次與單筆回饋就近、白話停用後果、清單訊息生命週期、臨時密碼姓名與文案、雙層缺口診斷與分區補救、角色／公司確認、稽核快照白話呈現；共用規則由 UDS T11 承接 | `frontend/src/admin/UsersPage.tsx`、`AdminPage.tsx`、`people/`、`module-permissions/`、`roles/`、`CompaniesPage.tsx`、`audit-log/` 與相關測試；本規格 | #734 負責人裁定；既有權限與稽核 API；UDS T11 同單實作；專案／範本區由 #736 負責 | ADM-AC27；UDS-AC17 | #735 |
 
 - 每個 task 一個 PR 即可單獨驗收；每個 AC 至少由一個 task 涵蓋。
 - T5a 是已裁定選項 C 的 audit-log 契約同步，T5b 是依同步契約進行實作；兩者不得合併成同一 PR。決議已完成，T5b 只等待 T5a 合併。
@@ -98,3 +99,12 @@
 | ADM-AC47 | SQLite 與 PostgreSQL API 測試：委派者查專案內與專案外 Admin 均回與無權限相同的 403 body，且不含目標欄位；委派者查自己回 200；Admin 查 Admin 維持成功 |
 | ADM-AC49 | `UsersPage`、`PeoplePage`、`ModulePermissionsPage`、`RolesPage`、`AppHeader`、Dashboard 與專案首頁的前端測試：開通前不寫入、成功文案、精確搜尋、個人選單 aria／鍵盤、清單提醒與卡片、精靈焦點／stepper／欄位、停用確認、角色卡片、有效權限診斷、參與專案角色與空狀態、唯讀入口和任務標題；API 測試驗證 Admin 專用批次端點、無角色結果、委派者最小詳情及 Admin 目標 403、可省略專案 ID 的診斷及專案內查詢必要範圍；依 G7 work order 完成八身分 1280px／360px 淺／深真瀏覽器走查與點擊數比較 |
 純文件規格 PR 不跑 `make setup`／`make check`。產品實作 task 依範圍執行必要檢查及資料庫驗收；PostgreSQL 未設定時記為 SKIPPED，不能當成 PASS。
+
+## #735 第二輪追加
+
+承接 T24：以共用四項停用後果與管理者警告防止詳情遺漏；密碼結果帶姓名、五碼視覺分組及持續的一次性顯示；診斷直接補救與自動重查；提醒自動載入與重試；到期者不進批次啟用請求；角色總人數另標停用人數；操作紀錄以變更欄位對照表摘要，原 JSON 留技術細節。每項加入同容器與副作用測試，並重跑四種視窗／主題與完整 make check、demo E2E。
+
+
+### PR #740 第一輪審查修正（#735）
+
+同步 PR #740 審查：密碼原生選取、有效否定斷言、組合重查、收回焦點、到期參數一次消費與舊診斷退路；使用指南同步新畫面。

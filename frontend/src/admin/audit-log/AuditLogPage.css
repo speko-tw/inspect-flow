@@ -85,3 +85,54 @@
   gap: 1rem;
   margin-block: 1.5rem;
 }
+
+.audit-readable-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+}
+
+.audit-readable-fields ol {
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}
+
+.audit-entry-changes {
+  display: block;
+}
+
+.audit-entry .audit-summary-fields {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 40rem) {
+  .audit-diff,
+  .audit-diff tbody,
+  .audit-diff tr,
+  .audit-diff th,
+  .audit-diff td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .audit-diff thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .audit-diff tr {
+    padding: var(--space-2);
+    margin-block: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .audit-diff td::before {
+    content: attr(data-label) '：';
+    font-weight: 700;
+  }
+}

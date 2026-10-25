@@ -646,6 +646,11 @@ def get_user(
     return _serialize_user_page(db, [_get_user(db, user_id)])[0]
 
 
+def _temporary_password() -> str:
+    """#734 B2：以安全亂數產生可口述的 20 碼數字，保留開頭的零。"""
+    return "".join(str(secrets.randbelow(10)) for _ in range(20))
+
+
 @router.post("", response_model=CreatedUserResponse, status_code=201)
 def add_user(
     body: CreateUserRequest,
@@ -672,7 +677,7 @@ def add_user(
         )
         if body.is_admin:
             set_is_admin(db, user, True)
-        password = secrets.token_urlsafe(24)
+        password = _temporary_password()
         set_password(db, user, password, is_temporary=True)
         return user, password
 
@@ -710,7 +715,7 @@ def reset_temporary_password(
         )
     if user.is_system or user.auth_source != "local":
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-    password = secrets.token_urlsafe(24)
+    password = _temporary_password()
     write_call(
         lambda: set_password(db, user, password, is_temporary=True),
         error_mapper=management_api_error,

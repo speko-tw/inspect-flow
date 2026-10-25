@@ -74,6 +74,8 @@ def test_dom_ac46_first_user_and_temporary_password(admin_client, db_session):
     assert response.status_code == 201
     body = response.json()
     password = body.pop("temporary_password")
+    assert len(password) == 20
+    assert password.isascii() and password.isdecimal()
     assert MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH
     assert response.headers["cache-control"] == "no-store"
     assert body["is_admin"] is True
@@ -173,6 +175,9 @@ def test_admin_temporary_password_reset_is_one_time_and_revokes_sessions(
     assert reset.status_code == 200, reset.text
     body = reset.json()
     password = body.pop("temporary_password")
+    assert len(password) == 20
+    assert password.isascii() and password.isdecimal()
+    assert MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH
     assert body == {
         "user_id": str(user_id),
         "username": "reset.target",
@@ -926,6 +931,9 @@ def test_aut_ac61_default_user_password_and_change_gate(
     assert response.status_code == 201
     body = response.json()
     password = body.pop("temporary_password")
+    assert len(password) == 20
+    assert password.isascii() and password.isdecimal()
+    assert MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH
     user_id = UUID(body["id"])
     assert body["is_admin"] is False
     assert MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH
@@ -1916,3 +1924,14 @@ def test_batch_company_selected_user_total_limit(
         assert db_session.scalar(
             select(func.count()).select_from(AuditLog)
         ) == (before)
+
+
+def test_temporary_password_keeps_leading_zeroes(monkeypatch):
+    """B2：數字密碼仍是字串；開頭的零不能被數值轉換吃掉。"""
+    from app.api.v1 import users
+    from app.auth.passwords import check_password_length
+
+    monkeypatch.setattr(users.secrets, "randbelow", lambda _bound: 0)
+    password = users._temporary_password()
+    assert password == "0" * 20
+    assert check_password_length(password)

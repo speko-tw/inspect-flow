@@ -25,6 +25,7 @@ import {
 import { blockImeEnter, useSubmitGuard } from './submitGuard'
 import { FormError } from './Form'
 import { GENERIC_FAILURE_MESSAGE } from '../http'
+import { revealElement, type Reveal } from './reveal'
 
 /**
  * 依 ADM-R37，danger 用於立即收回他人權限、讓他人工作失效或
@@ -53,6 +54,10 @@ export type ConfirmBoxProps = {
   cancelRef?: Ref<HTMLButtonElement>
   /** 掛載時把焦點放哪；預設取消。呼叫端自己管理焦點時傳 `none`。 */
   initialFocus?: 'cancel' | 'heading' | 'none'
+  /** UDS-R18：掛載時先捲入視窗；modal 預設不捲動，可明確覆寫。 */
+  reveal?: Reveal
+  /** 影響範圍載入完成時遞增，沿用共用捲動與焦點順序。 */
+  revealRequest?: number
   /** 蓋住整頁的 modal（計畫頁專用）；其餘一律原地展開。 */
   modal?: boolean
   /** 內容含必填欄位時，用 form 包起來，確認鈕改成 submit。 */
@@ -67,6 +72,8 @@ export type ConfirmBoxProps = {
   confirmLabel: string
   busy?: boolean
   confirmDisabled?: boolean
+  /** 只保留取消及內容中的自訂操作，不接受隱含的確認送出。 */
+  hideConfirm?: boolean
   onCancel: () => void
   /** 回傳 Promise 時，到它完成為止都不接受第二次確認。 */
   onConfirm: () => void | Promise<unknown>
@@ -88,30 +95,39 @@ export function ConfirmBox({
   cancelRef,
   initialFocus = 'cancel',
   modal = false,
+  reveal = modal ? false : 'nearest',
+  revealRequest = 0,
   asForm = false,
   noValidate = false,
   cancelLabel = '取消',
   confirmLabel,
   busy = false,
   confirmDisabled = false,
+  hideConfirm = false,
   onCancel,
   onConfirm,
   children,
 }: ConfirmBoxProps) {
   const headingId = useId()
+  const localRoot = useRef<HTMLElement | null>(null)
   const localCancel = useRef<HTMLButtonElement | null>(null)
   const localHeading = useRef<HTMLHeadingElement | null>(null)
   const guard = useSubmitGuard()
   const [confirmError, setConfirmError] = useState('')
 
   useEffect(() => {
-    if (initialFocus === 'cancel') localCancel.current?.focus()
-    else if (initialFocus === 'heading') localHeading.current?.focus()
-    // 只在掛載時決定一次焦點；之後的焦點交給使用者與呼叫端。
+    revealElement(localRoot.current, reveal)
+    if (initialFocus === 'cancel') {
+      localCancel.current?.focus({ preventScroll: true })
+    } else if (initialFocus === 'heading') {
+      localHeading.current?.focus({ preventScroll: true })
+    }
+    // 掛載或影響資料就緒才重設位置與焦點，其餘互動交回使用者。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [revealRequest])
 
   async function confirm() {
+    if (hideConfirm) return
     setConfirmError('')
     try {
       await guard.run(onConfirm)
@@ -172,17 +188,24 @@ export function ConfirmBox({
         >
           {cancelLabel}
         </button>
-        <button
-          className={variant === 'danger' ? 'btn-danger' : 'btn-primary'}
-          disabled={busy || confirmDisabled}
-          onClick={asForm ? undefined : confirm}
-          type={asForm ? 'submit' : 'button'}
-        >
-          {confirmLabel}
-        </button>
+        {!hideConfirm && (
+          <button
+            className={variant === 'danger' ? 'btn-danger' : 'btn-primary'}
+            disabled={busy || confirmDisabled}
+            onClick={asForm ? undefined : confirm}
+            type={asForm ? 'submit' : 'button'}
+          >
+            {confirmLabel}
+          </button>
+        )}
       </div>
     </>
   )
+
+  function setRoot(node: HTMLDivElement | HTMLFormElement | null) {
+    localRoot.current = node
+    assignRef(rootRef as Ref<HTMLElement> | undefined, node)
+  }
 
   const common = {
     'aria-label': title ? undefined : label,
@@ -202,14 +225,14 @@ export function ConfirmBox({
           event.preventDefault()
           void confirm()
         }}
-        ref={rootRef as Ref<HTMLFormElement>}
+        ref={setRoot}
       >
         {body}
       </form>
     )
   }
   return (
-    <div {...common} ref={rootRef}>
+    <div {...common} ref={setRoot}>
       {body}
     </div>
   )

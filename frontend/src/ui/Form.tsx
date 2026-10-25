@@ -15,6 +15,7 @@ import { blockImeEnter } from './submitGuard'
 import type { SubmitGuard } from './submitGuard'
 import { GENERIC_FAILURE_MESSAGE } from '../http'
 import './Form.css'
+import { revealElement } from './reveal'
 
 /** 必填欄位的視覺標記；真正的必填語意由欄位驗證提供。 */
 export function RequiredMark() {
@@ -30,6 +31,7 @@ export type FormProps = Omit<
   'onSubmit'
 > & {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<unknown>
+  ref?: Ref<HTMLFormElement>
   error?: ReactNode
   errorFocusRequest?: number
   errorTabIndex?: number
@@ -165,8 +167,9 @@ function useRequestedFocus(
     if (focusRequest === undefined) return
     const target = focusTarget?.current ?? elementRef.current
     if (!target) return
+    revealElement(target)
     if (document.activeElement === target) target.blur()
-    target.focus()
+    target.focus({ preventScroll: true })
   }, [elementRef, focusRequest, focusTarget])
 }
 

@@ -112,3 +112,19 @@ describe('稽核事件白話對照', () => {
     expect(label).not.toMatch(/[a-z_]+\.[a-z_]+/)
   })
 })
+
+it.each([
+  { before: null, after: { title: '排水管坡度檢查' } },
+  { before: { title: '排水管坡度檢查' }, after: null },
+  { before: { title: '排水管坡度檢查' }, after: {} },
+])('範本對象從既有 title 快照取得名稱', (payload) => {
+  expect(
+    entityLabel(
+      auditLogEntryFixture({
+        entity_type: 'template_item',
+        ...payload,
+      }),
+      noLookup,
+    ),
+  ).toBe('範本項目：排水管坡度檢查')
+})

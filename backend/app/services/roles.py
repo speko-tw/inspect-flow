@@ -40,7 +40,7 @@ import uuid
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import case, distinct, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
@@ -49,8 +49,10 @@ from app.models import (
     ProjectMemberRole,
     Role,
     RolePermission,
+    User,
 )
 from app.services import UNSET, _Unset
+from app.services.account_status import effectively_active_user_clause
 from app.services.audit import record_audit_event
 from app.services.module_permissions import (
     CreatorRoleInUseError,
@@ -75,25 +77,25 @@ class RoleUnchangedError(ValueError):
 
 @dataclass(frozen=True)
 class RoleUsage:
-    """How widely a ``Role`` is held right now (PR-18's influence
-    range shown before a role is changed or deleted):
-    ``user_count`` is the number of distinct ``User``s holding it
-    (one person holding it on two projects counts once),
-    ``project_count`` the number of distinct ``Project``s those
-    memberships belong to. Both are ``0`` when nobody holds the role.
+    """角色目前的不重複持有人與涉及專案數。
+
+    同一人跨專案只算一次；user_count 包含已停用者，
+    inactive_user_count 包含已到期但尚未寫回停用狀態者。
+    無持有人時均為零。
     """
 
     user_count: int
     project_count: int
+    # #734 B4：總人數保留停用者，另列不重複的停用持有人數。
+    inactive_user_count: int = 0
 
 
 def role_usages(
     session: Session, role_ids: Collection[uuid.UUID]
 ) -> dict[uuid.UUID, RoleUsage]:
-    """Return :class:`RoleUsage` for every id in ``role_ids`` with
-    one grouped query (roles nobody holds map to zeros). Read-only:
-    runs inside ``no_autoflush`` so it never writes a caller's
-    pending changes.
+    """用單一分組查詢取得影響範圍，不因角色數增加查詢次數。
+
+    no_autoflush 保證盤點不寫入呼叫端尚未送出的變更。
     """
     usages = {role_id: RoleUsage(0, 0) for role_id in role_ids}
     if not usages:
@@ -104,16 +106,24 @@ def role_usages(
                 ProjectMemberRole.role_id,
                 func.count(distinct(ProjectMember.user_id)),
                 func.count(distinct(ProjectMember.project_id)),
+                func.count(
+                    distinct(
+                        case((~effectively_active_user_clause(), User.id))
+                    )
+                ),
             )
             .join(
                 ProjectMember,
                 ProjectMember.id == ProjectMemberRole.project_member_id,
             )
+            .join(User, User.id == ProjectMember.user_id)
             .where(ProjectMemberRole.role_id.in_(list(usages)))
             .group_by(ProjectMemberRole.role_id)
         ).all()
-    for role_id, user_count, project_count in rows:
-        usages[role_id] = RoleUsage(user_count, project_count)
+    for role_id, user_count, project_count, inactive_user_count in rows:
+        usages[role_id] = RoleUsage(
+            user_count, project_count, inactive_user_count
+        )
     return usages
 
 

@@ -12,6 +12,9 @@ import { useCurrentUser } from '../auth/useCurrentUser'
 import { FormErrorSummary, FormField, FormGroup } from '../components'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
+import { BatchActionBar } from '../ui/BatchActionBar'
+import { Notice } from '../ui/Notice'
+import { revealElement } from '../ui/reveal'
 import { Form, FormError, FormSubmitButton } from '../ui/Form'
 import permissionCodeContract from '../permissionCodeContract'
 import { STATUS_BADGES, type BadgeStatus } from '../ui/statusBadge'
@@ -67,6 +70,44 @@ function emptyRestorePreviewSelection(): RestorePreviewSelection {
 
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
+/** T2：單人及批次共用四項後果，避免詳情與清單文案分歧。 */
+function DeactivationConsequences({ count }: { count?: number }) {
+  const subject = count === undefined ? '他' : `這 ${count} 個帳號`
+  return (
+    <ul>
+      <li>{subject}會立刻被登出，之後不能再登入。</li>
+      <li>過去的查核紀錄與專案資料都會保留。</li>
+      <li>
+        {`${subject}的功能權限與專案成員關係會先留著，` +
+          '重新啟用時由你逐項決定要不要恢復。'}
+      </li>
+      <li>{subject}手上已派出但沒做完的任務不會自動轉走，請通知內業改派。</li>
+    </ul>
+  )
+}
+
+/** T2：詳情、列表共用最後管理者警告，連到可安排接手者的專案。 */
+function DeactivationWarning({
+  projects,
+}: {
+  projects: DeactivationCheck['last_manager_projects']
+}) {
+  if (!projects.length) return null
+  return (
+    <div>
+      <p>停用後下列專案將沒有啟用中的管理成員；請先安排接手者。</p>
+      <ul>
+        {projects.map((project) => (
+          <li key={project.id}>
+            <Link to={`/projects/${project.id}/planning`}>
+              {project.project_code}／{project.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 /** 工號衝突由 API 判斷，錯誤需提供可執行的修正方向。 */
 function companyLinkErrorMessage(error: unknown): string {
@@ -111,6 +152,7 @@ export default function UsersPage({
     username: string,
     password: string,
     source?: 'created' | 'reset',
+    displayName?: string,
   ) => void
   detailUserId?: string | null
   initialQuery?: string
@@ -123,6 +165,10 @@ export default function UsersPage({
   const { user: currentUser } = useCurrentUser()
   const location = useLocation()
   const navigate = useNavigate()
+  const editExpiryRequested =
+    new URLSearchParams(location.search).get('edit') === 'expiry'
+  const consumedExpiryRequest = useRef('')
+  const [expiryEditorUser, setExpiryEditorUser] = useState<string | null>(null)
   const userList = useCursorList(listUsersPage, managementErrorMessage)
   const {
     items: users,
@@ -154,6 +200,7 @@ export default function UsersPage({
   const [lifecycleLoaded, setLifecycleLoaded] = useState(false)
   const [lifecycleLoading, setLifecycleLoading] = useState(false)
   const [lifecycleError, setLifecycleError] = useState('')
+  const [lifecycleInteractive, setLifecycleInteractive] = useState(false)
   const [companyListError, setCompanyListError] = useState('')
   // 修改資料與公司連結的存檔錯誤：顯示在那一列的表單裡並聚焦。放在頁頂
   // 的話，列表一長就在視窗外，螢幕閱讀器使用者也不會被帶過去（F-O02）。
@@ -241,9 +288,30 @@ export default function UsersPage({
       setDetailError('')
       return
     }
+    const applyDetail = (user: User) => {
+      setDetailUser(user)
+      if (
+        editExpiryRequested &&
+        consumedExpiryRequest.current !== location.key
+      ) {
+        consumedExpiryRequest.current = location.key
+        setExpiryEditorUser(user.id)
+        setEditingUser(user.id)
+        const params = new URLSearchParams(location.search)
+        params.delete('edit')
+        navigate(
+          {
+            pathname: location.pathname,
+            search: params.toString(),
+            hash: location.hash,
+          },
+          { replace: true, state: location.state, preventScrollReset: true },
+        )
+      }
+    }
     const listed = users.find((user) => user.id === detailUserId)
     if (listed) {
-      setDetailUser(listed)
+      applyDetail(listed)
       setDetailError('')
       return
     }
@@ -251,22 +319,35 @@ export default function UsersPage({
     setDetailUser(null)
     setDetailError('')
     void request<UserDetail>(`/users/${encodeURIComponent(detailUserId)}`)
-      .then((user) => active && setDetailUser(user))
+      .then((user) => active && applyDetail(user))
       .catch((caught: unknown) => {
         if (active) setDetailError(managementErrorMessage(caught))
       })
     return () => {
       active = false
     }
-  }, [detailUserId, users])
+  }, [
+    detailUserId,
+    users,
+    editExpiryRequested,
+    location.key,
+    location.search,
+    location.pathname,
+    location.hash,
+    location.state,
+    navigate,
+  ])
 
   useEffect(() => {
-    if (!pendingAction) return
-    confirmationRef.current?.scrollIntoView?.({
-      block: 'center',
-      inline: 'start',
-    })
-  }, [pendingAction])
+    // T3：清單結果不屬於詳情或另一頁，不能隨共用頁面狀態留下。
+    setBatchDeactivationError('')
+    setBatchDeactivationNotice('')
+    setBatchActivationError('')
+    setBatchActivationNotice('')
+    setBatchActivationPreview(null)
+    setBatchDeactivationPreview(null)
+    setSelectedBatchUserIds([])
+  }, [detailUserId, location.key, appliedQuery])
 
   useEffect(() => {
     if (!pendingAction || ['admin', 'reset'].includes(pendingAction.kind)) {
@@ -326,8 +407,8 @@ export default function UsersPage({
     return companyOptionsRequest
   }, [])
 
-  const loadLifecycleLists = useCallback(async () => {
-    if (lifecycleLoading) return
+  const loadLifecycleLists = useCallback(async (interactive = false) => {
+    setLifecycleInteractive(interactive)
     setLifecycleLoading(true)
     setLifecycleError('')
     try {
@@ -343,7 +424,11 @@ export default function UsersPage({
     } finally {
       setLifecycleLoading(false)
     }
-  }, [lifecycleLoading])
+  }, [])
+
+  useEffect(() => {
+    if (!detailUserId) void loadLifecycleLists()
+  }, [detailUserId, loadLifecycleLists])
 
   useEffect(() => {
     return () => {
@@ -388,7 +473,12 @@ export default function UsersPage({
     setBusyUser(user.id)
     try {
       const result = await resetUserTemporaryPassword(user.id)
-      onTemporaryPassword(user.username, result.temporary_password, 'reset')
+      onTemporaryPassword(
+        user.username,
+        result.temporary_password,
+        'reset',
+        user.name_zh || user.username,
+      )
     } catch (caught) {
       setPasswordResetError({
         userId: user.id,
@@ -493,7 +583,15 @@ export default function UsersPage({
   async function confirmBatchActivation() {
     clearBatchMessages()
     if (!batchActivationPreview || batchActivationBusy) return
-    const { users: selected } = batchActivationPreview
+    const expiredIds = new Set(
+      batchActivationPreview.previews
+        .filter((preview) => preview.account_expired)
+        .map((preview) => preview.user_id),
+    )
+    const selected = batchActivationPreview.users.filter(
+      (user) => !expiredIds.has(user.id),
+    )
+    if (!selected.length) return
     const restore = selected.map((user) => ({
       user_id: user.id,
       restore:
@@ -612,7 +710,7 @@ export default function UsersPage({
       ].join('')
     }
     if (kind === 'deactivate') {
-      return `停用${name}（${user.username}）後，他將無法登入；過去的查核紀錄與專案資料都會保留。`
+      return `停用${name}（${user.username}）`
     }
     if (kind === 'activate') {
       return `重新啟用${name}（${user.username}）後，他可以再次登入。`
@@ -628,6 +726,7 @@ export default function UsersPage({
   function requestAction(user: User, kind: PendingAction['kind']) {
     setActionError('')
     setPreviewError('')
+    setActionPreview(null)
     setPendingAction({ user, kind })
   }
 
@@ -655,12 +754,30 @@ export default function UsersPage({
       : ''
   }
 
-  function created(user: { username: string; temporary_password: string }) {
+  function created(user: {
+    username: string
+    temporary_password: string
+    name_zh?: string | null
+  }) {
     setDirtyForms({})
-    onTemporaryPassword(user.username, user.temporary_password, 'created')
+    onTemporaryPassword(
+      user.username,
+      user.temporary_password,
+      'created',
+      user.name_zh || user.username,
+    )
     void reload()
     void loadCompanies()
   }
+
+  const expiredBatchUsers =
+    batchActivationPreview?.users.filter((user) =>
+      batchActivationPreview.previews.some(
+        (preview) => preview.user_id === user.id && preview.account_expired,
+      ),
+    ) ?? []
+  const eligibleBatchCount =
+    (batchActivationPreview?.users.length ?? 0) - expiredBatchUsers.length
 
   const detail = detailUserId ? detailUser : null
 
@@ -685,88 +802,6 @@ export default function UsersPage({
       {!externalNavigationGuard && (
         <UsersNavigationGuard hasUnsavedChanges={hasDirtyForms} />
       )}
-      {batchDeactivationError && <p role="alert">{batchDeactivationError}</p>}
-      {batchDeactivationNotice && (
-        <p role="status">{batchDeactivationNotice}</p>
-      )}
-      {batchActivationError && <p role="alert">{batchActivationError}</p>}
-      {batchActivationNotice && <p role="status">{batchActivationNotice}</p>}
-      {batchActivationPreview && (
-        <ConfirmBox
-          busy={batchActivationBusy}
-          confirmDisabled={batchActivationPreview.previews.some(
-            (preview) => preview.account_expired,
-          )}
-          confirmLabel={batchActivationBusy ? '正在啟用帳號…' : '確認啟用帳號'}
-          label="批次啟用確認"
-          onCancel={() => {
-            setBatchActivationPreview(null)
-            clearBatchMessages()
-          }}
-          onConfirm={confirmBatchActivation}
-          role="region"
-        >
-          <p>請逐一確認每個帳號要恢復的權限、成員身分與未完成任務。</p>
-          {batchActivationPreview.previews.map((preview) => (
-            <RestoreChoices
-              key={preview.user_id}
-              name={
-                batchActivationPreview.users.find(
-                  (user) => user.id === preview.user_id,
-                )?.name_zh ?? preview.username
-              }
-              preview={preview}
-              selection={
-                batchRestoreSelections[preview.user_id] ??
-                emptyRestorePreviewSelection()
-              }
-              disabled={batchActivationBusy}
-              onChange={(selection) =>
-                setBatchRestoreSelections((current) => ({
-                  ...current,
-                  [preview.user_id]: selection,
-                }))
-              }
-            />
-          ))}
-        </ConfirmBox>
-      )}
-      {batchDeactivationPreview && (
-        <ConfirmBox
-          busy={batchDeactivationBusy}
-          confirmLabel={
-            batchDeactivationBusy ? '正在停用帳號…' : '確認停用帳號'
-          }
-          label="批次停用確認"
-          onCancel={cancelBatchDeactivation}
-          onConfirm={confirmBatchDeactivation}
-          role="region"
-          variant="danger"
-        >
-          <p>停用後，這些帳號的登入工作階段會立即失效，且無法再次登入。</p>
-          <ul>
-            {batchDeactivationPreview.users.map((user) => (
-              <li key={user.id}>
-                {user.name_zh || user.username}（{user.username}）
-              </li>
-            ))}
-          </ul>
-          {batchDeactivationPreview.projects.length > 0 && (
-            <div>
-              <p>停用後下列專案將沒有啟用中的管理成員；請先安排接手者。</p>
-              <ul>
-                {batchDeactivationPreview.projects.map((project) => (
-                  <li key={project.id}>
-                    <Link to={`/projects/${project.id}/planning`}>
-                      {project.project_code}／{project.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </ConfirmBox>
-      )}
       {detailUserId ? (
         <section aria-labelledby="person-basic-heading">
           {detailError && <p role="alert">{detailError}</p>}
@@ -784,7 +819,10 @@ export default function UsersPage({
               <div className="account-detail-actions">
                 <button
                   disabled={detail.is_system || detail.auth_source !== 'local'}
-                  onClick={() => setEditingUser(detail.id)}
+                  onClick={() => {
+                    setExpiryEditorUser(null)
+                    setEditingUser(detail.id)
+                  }}
                   type="button"
                 >
                   修改資料
@@ -838,12 +876,10 @@ export default function UsersPage({
                 <p className="field-hint">請到設定變更自己的密碼。</p>
               )}
               {passwordResetError?.userId === detail.id && (
-                <p role="alert">{passwordResetError.message}</p>
+                <Notice variant="error">{passwordResetError.message}</Notice>
               )}
               {actionNotice?.userId === detail.id && (
-                <p className="notice-success" role="status">
-                  {actionNotice.message}
-                </p>
+                <Notice>{actionNotice.message}</Notice>
               )}
               {pendingAction?.user.id === detail.id && (
                 <ConfirmBox
@@ -858,18 +894,37 @@ export default function UsersPage({
                   }
                   key={`${detail.id}:${pendingAction.kind}`}
                   confirmLabel={
-                    pendingAction.kind === 'reset' ? '確認重設' : '確認'
+                    pendingAction.kind === 'reset'
+                      ? '確認重設'
+                      : pendingAction.kind === 'deactivate'
+                        ? '確認停用帳號'
+                        : '確認'
                   }
                   label="操作確認"
                   onCancel={cancelPendingAction}
                   onConfirm={confirmAction}
                   role="region"
+                  revealRequest={actionPreview ? 1 : 0}
                   rootRef={confirmationRef}
                   variant={confirmVariant(pendingAction)}
                 >
                   <p>{actionMessage(pendingAction)}</p>
-                  {previewError && <p role="alert">{previewError}</p>}
-                  {actionError && <p role="alert">{actionError}</p>}
+                  {pendingAction.kind === 'deactivate' && (
+                    <DeactivationConsequences />
+                  )}
+                  {previewError && (
+                    <Notice variant="error">{previewError}</Notice>
+                  )}
+                  {actionError && (
+                    <Notice variant="error">{actionError}</Notice>
+                  )}
+                  {pendingAction.kind === 'deactivate' &&
+                    actionPreview &&
+                    'last_manager_projects' in actionPreview && (
+                      <DeactivationWarning
+                        projects={actionPreview.last_manager_projects}
+                      />
+                    )}
                   {pendingAction.kind === 'activate' &&
                     actionPreview &&
                     'permission_codes' in actionPreview && (
@@ -887,10 +942,14 @@ export default function UsersPage({
               )}
               {editingUser === detail.id && (
                 <UserDetailsForm
+                  focusExpiry={expiryEditorUser === detail.id}
                   busy={busyUser !== null}
                   error={rowError(detail.id, 'details')}
                   errorFocusRequest={saveError?.request}
-                  onCancel={() => setEditingUser(null)}
+                  onCancel={() => {
+                    setExpiryEditorUser(null)
+                    setEditingUser(null)
+                  }}
                   onDirtyChange={(dirty) =>
                     reportDirty(`details:${detail.id}`, dirty)
                   }
@@ -984,30 +1043,20 @@ export default function UsersPage({
               )}
             </details>
           )}
-          <button
-            disabled={lifecycleLoading}
-            onClick={() => void loadLifecycleLists()}
-            type="button"
-          >
-            {lifecycleLoading ? '正在檢查提醒…' : '檢查帳號與專案提醒'}
-          </button>
           {lifecycleError && (
             <div>
-              <FormError>{lifecycleError}</FormError>
+              <Notice variant="error" autoReveal={lifecycleInteractive}>
+                {lifecycleError}
+              </Notice>
               <button
                 disabled={lifecycleLoading}
-                onClick={() => void loadLifecycleLists()}
+                onClick={() => void loadLifecycleLists(true)}
                 type="button"
               >
-                重試檢查
+                重試
               </button>
             </div>
           )}
-          {lifecycleLoaded &&
-            externalNoProject.length === 0 &&
-            unmanagedProjects.length === 0 && (
-              <p role="status">沒有需要處理的帳號或專案提醒。</p>
-            )}
           {loading ? <p>載入中…</p> : null}
           <div>
             {!embeddedList && <h1 id="users-heading">{ACCOUNT_LABEL}清單</h1>}
@@ -1144,6 +1193,7 @@ export default function UsersPage({
                                 }
                                 onClick={() => {
                                   setSaveError(null)
+                                  setExpiryEditorUser(null)
                                   setEditingUser(
                                     editingUser === user.id ? null : user.id,
                                   )
@@ -1213,48 +1263,36 @@ export default function UsersPage({
                                   confirmLabel={
                                     pendingAction.kind === 'reset'
                                       ? '確認重設'
-                                      : '確認'
+                                      : pendingAction.kind === 'deactivate'
+                                        ? '確認停用帳號'
+                                        : '確認'
                                   }
                                   label="操作確認"
                                   onCancel={cancelPendingAction}
                                   onConfirm={confirmAction}
                                   role="region"
+                                  revealRequest={actionPreview ? 1 : 0}
                                   rootRef={confirmationRef}
                                   variant={confirmVariant(pendingAction)}
                                 >
                                   <p>{actionMessage(pendingAction)}</p>
+                                  {pendingAction.kind === 'deactivate' && (
+                                    <DeactivationConsequences />
+                                  )}
                                   {previewError && (
-                                    <p role="alert">{previewError}</p>
+                                    <Notice variant="error">
+                                      {previewError}
+                                    </Notice>
                                   )}
                                   {pendingAction.kind === 'deactivate' &&
                                     actionPreview &&
-                                    'last_manager_projects' in actionPreview &&
-                                    actionPreview.last_manager_projects
-                                      .length > 0 && (
-                                      <div>
-                                        <p>
-                                          停用後下列專案將沒有啟用中的管理成員；
-                                          請先安排接手者。
-                                        </p>
-                                        <ul>
-                                          {actionPreview.last_manager_projects.map(
-                                            (project) => (
-                                              <li key={project.id}>
-                                                <Link
-                                                  to={[
-                                                    '/projects',
-                                                    project.id,
-                                                    'planning',
-                                                  ].join('/')}
-                                                >
-                                                  {project.project_code}／
-                                                  {project.name}
-                                                </Link>
-                                              </li>
-                                            ),
-                                          )}
-                                        </ul>
-                                      </div>
+                                    'last_manager_projects' in
+                                      actionPreview && (
+                                      <DeactivationWarning
+                                        projects={
+                                          actionPreview.last_manager_projects
+                                        }
+                                      />
                                     )}
                                   {pendingAction.kind === 'activate' &&
                                     actionPreview &&
@@ -1270,7 +1308,9 @@ export default function UsersPage({
                                       />
                                     )}
                                   {actionError && (
-                                    <p role="alert">{actionError}</p>
+                                    <Notice variant="error">
+                                      {actionError}
+                                    </Notice>
                                   )}
                                 </ConfirmBox>
                               </td>
@@ -1342,45 +1382,202 @@ export default function UsersPage({
             {nextCursor && (
               <button
                 disabled={loading || loadingMore}
-                onClick={() => void loadMore()}
+                onClick={() => {
+                  clearBatchMessages()
+                  void loadMore()
+                }}
                 type="button"
               >
                 {loadingMore ? '載入中…' : '載入更多'}
               </button>
             )}
             {users.length > 0 && !detailUserId && (
-              <div aria-label="批次帳號操作">
-                <p>已選取 {selectedBatchUserIds.length} 個帳號。</p>
-                <button
-                  disabled={
-                    selectedBatchUserIds.length === 0 ||
-                    users
-                      .filter((user) => selectedBatchUserIds.includes(user.id))
-                      .some((user) => !user.is_active || user.is_system) ||
-                    batchDeactivationLoading ||
-                    batchDeactivationBusy ||
-                    batchActivationBusy
-                  }
-                  onClick={() => void prepareBatchDeactivation()}
-                  type="button"
-                >
-                  {batchDeactivationLoading ? '正在檢查帳號…' : '批次停用帳號'}
-                </button>
-                {selectedBatchUserIds.length > 0 &&
-                  users
-                    .filter((user) => selectedBatchUserIds.includes(user.id))
-                    .every((user) => !user.is_active && !user.is_system) && (
+              <BatchActionBar
+                label="批次帳號操作"
+                actions={
+                  <>
+                    <p>已選取 {selectedBatchUserIds.length} 個帳號。</p>
                     <button
-                      disabled={batchActivationLoading || batchActivationBusy}
-                      onClick={() => void prepareBatchActivation()}
+                      disabled={
+                        selectedBatchUserIds.length === 0 ||
+                        users
+                          .filter((user) =>
+                            selectedBatchUserIds.includes(user.id),
+                          )
+                          .some((user) => !user.is_active || user.is_system) ||
+                        batchDeactivationLoading ||
+                        batchDeactivationBusy ||
+                        batchActivationBusy
+                      }
+                      onClick={() => void prepareBatchDeactivation()}
                       type="button"
                     >
-                      {batchActivationLoading
-                        ? '正在載入恢復項目…'
-                        : '批次啟用帳號'}
+                      {batchDeactivationLoading
+                        ? '正在檢查帳號…'
+                        : '批次停用帳號'}
                     </button>
-                  )}
-              </div>
+                    {selectedBatchUserIds.length > 0 &&
+                      users
+                        .filter((user) =>
+                          selectedBatchUserIds.includes(user.id),
+                        )
+                        .every(
+                          (user) => !user.is_active && !user.is_system,
+                        ) && (
+                        <button
+                          disabled={
+                            batchActivationLoading || batchActivationBusy
+                          }
+                          onClick={() => void prepareBatchActivation()}
+                          type="button"
+                        >
+                          {batchActivationLoading
+                            ? '正在載入恢復項目…'
+                            : '批次啟用帳號'}
+                        </button>
+                      )}
+                  </>
+                }
+                feedback={
+                  <>
+                    {batchDeactivationError && (
+                      <Notice variant="error">{batchDeactivationError}</Notice>
+                    )}
+                    {batchDeactivationNotice && (
+                      <Notice>{batchDeactivationNotice}</Notice>
+                    )}
+                    {batchActivationError && (
+                      <Notice variant="error">{batchActivationError}</Notice>
+                    )}
+                    {batchActivationNotice && (
+                      <Notice>{batchActivationNotice}</Notice>
+                    )}
+                  </>
+                }
+                confirmation={
+                  <>
+                    {batchActivationPreview && (
+                      <ConfirmBox
+                        busy={batchActivationBusy}
+                        confirmDisabled={eligibleBatchCount === 0}
+                        confirmLabel={
+                          batchActivationBusy
+                            ? '正在啟用帳號…'
+                            : expiredBatchUsers.length
+                              ? `確認啟用其餘 ${eligibleBatchCount} 個帳號`
+                              : '確認啟用帳號'
+                        }
+                        label="批次啟用確認"
+                        onCancel={() => {
+                          setBatchActivationPreview(null)
+                          clearBatchMessages()
+                        }}
+                        onConfirm={confirmBatchActivation}
+                        role="region"
+                      >
+                        {expiredBatchUsers.length > 0 && (
+                          <div className="notice-warning" role="status">
+                            <p>
+                              {expiredBatchUsers.length} 個外部帳號已過到期日，
+                              這次不會啟用：
+                              {expiredBatchUsers
+                                .map((user) => user.name_zh || user.username)
+                                .join('、')}
+                            </p>
+                            <ul>
+                              {expiredBatchUsers.map((user) => (
+                                <li key={user.id}>
+                                  <Link
+                                    to={`/accounts/${user.id}?edit=expiry`}
+                                  >
+                                    改到期日：{user.name_zh || user.username}
+                                  </Link>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {eligibleBatchCount > 0 && (
+                          <p>
+                            請逐一確認每個帳號要恢復的權限、成員身分與未完成任務。
+                          </p>
+                        )}
+                        {batchActivationPreview.previews
+                          .filter((preview) => !preview.account_expired)
+                          .map((preview) => (
+                            <RestoreChoices
+                              key={preview.user_id}
+                              name={
+                                batchActivationPreview.users.find(
+                                  (user) => user.id === preview.user_id,
+                                )?.name_zh ?? preview.username
+                              }
+                              preview={preview}
+                              selection={
+                                batchRestoreSelections[preview.user_id] ??
+                                emptyRestorePreviewSelection()
+                              }
+                              disabled={batchActivationBusy}
+                              onChange={(selection) =>
+                                setBatchRestoreSelections((current) => ({
+                                  ...current,
+                                  [preview.user_id]: selection,
+                                }))
+                              }
+                            />
+                          ))}
+                      </ConfirmBox>
+                    )}
+                    {batchDeactivationPreview && (
+                      <ConfirmBox
+                        busy={batchDeactivationBusy}
+                        confirmLabel={
+                          batchDeactivationBusy
+                            ? '正在停用帳號…'
+                            : '確認停用帳號'
+                        }
+                        label="批次停用確認"
+                        onCancel={cancelBatchDeactivation}
+                        onConfirm={confirmBatchDeactivation}
+                        role="region"
+                        variant="danger"
+                      >
+                        <DeactivationConsequences
+                          count={batchDeactivationPreview.users.length}
+                        />
+                        <ul>
+                          {batchDeactivationPreview.users.map((user) => (
+                            <li key={user.id}>
+                              {user.name_zh || user.username}（{user.username}
+                              ）
+                            </li>
+                          ))}
+                        </ul>
+                        {batchDeactivationPreview.projects.length > 0 && (
+                          <div>
+                            <p>
+                              停用後下列專案將沒有啟用中的管理成員；請先安排接手者。
+                            </p>
+                            <ul>
+                              {batchDeactivationPreview.projects.map(
+                                (project) => (
+                                  <li key={project.id}>
+                                    <Link
+                                      to={`/projects/${project.id}/planning`}
+                                    >
+                                      {project.project_code}／{project.name}
+                                    </Link>
+                                  </li>
+                                ),
+                              )}
+                            </ul>
+                          </div>
+                        )}
+                      </ConfirmBox>
+                    )}
+                  </>
+                }
+              />
             )}
           </div>
           {!hideCreateForm && (
@@ -1539,6 +1736,7 @@ function UsersNavigationGuard({
 }
 
 function UserDetailsForm({
+  focusExpiry = false,
   user,
   busy,
   error,
@@ -1547,6 +1745,7 @@ function UserDetailsForm({
   onSave,
   onDirtyChange,
 }: {
+  focusExpiry?: boolean
   user: User
   /** 任何一個動作進行中就停用儲存，與送出防護的範圍一致。 */
   busy: boolean
@@ -1566,6 +1765,12 @@ function UserDetailsForm({
   const [email, setEmail] = useState(user.email ?? '')
   const [nameZh, setNameZh] = useState(user.name_zh ?? '')
   const [nameEn, setNameEn] = useState(user.name_en ?? '')
+  const expiryRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!focusExpiry) return
+    revealElement(expiryRef.current)
+    expiryRef.current?.focus({ preventScroll: true })
+  }, [focusExpiry])
   const [expiresOn, setExpiresOn] = useState(user.account_expires_on ?? '')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [errorAttempt, setErrorAttempt] = useState(0)
@@ -1752,6 +1957,7 @@ function UserDetailsForm({
             {(control) => (
               <input
                 {...control}
+                ref={expiryRef}
                 onChange={(event) => setExpiresOn(event.target.value)}
                 type="date"
                 value={expiresOn}

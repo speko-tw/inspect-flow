@@ -12,6 +12,9 @@ import {
 import { PAGE_TITLES } from '../../terms'
 import { entityLabel, EVENT_TYPE_OPTIONS, eventLabel } from './auditLabels'
 import './AuditLogPage.css'
+import { AuditChanges } from './AuditSnapshot'
+import { Notice } from '../../ui/Notice'
+import { revealElement } from '../../ui/reveal'
 
 const emptyFilters: AuditLogFilters = {
   project_id: '',
@@ -110,8 +113,9 @@ export default function AuditLogPage() {
     setFilterErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
       setError('')
-      if (nextErrors.from) fromRef.current?.focus()
-      else toRef.current?.focus()
+      const target = nextErrors.from ? fromRef.current : toRef.current
+      revealElement(target)
+      target?.focus({ preventScroll: true })
       return
     }
     setLoading(true)
@@ -197,16 +201,24 @@ export default function AuditLogPage() {
           </dl>
           <details>
             <summary>查看改前與改後內容</summary>
-            <div className="audit-entry-changes">
-              <div>
-                <h3>改前</h3>
-                <pre>{displayJson(entry.before)}</pre>
-              </div>
-              <div>
-                <h3>改後</h3>
-                <pre>{displayJson(entry.after)}</pre>
-              </div>
-            </div>
+            <AuditChanges
+              before={entry.before}
+              after={entry.after}
+              lookup={{
+                userName,
+                projectName: (id) => {
+                  const project = projects.find((item) => item.id === id)
+                  return project?.name ?? null
+                },
+              }}
+            />
+            <details>
+              <summary>技術細節（工程人員用）</summary>
+              <h3>改前原文</h3>
+              <pre>{displayJson(entry.before)}</pre>
+              <h3>改後原文</h3>
+              <pre>{displayJson(entry.after)}</pre>
+            </details>
           </details>
         </article>
       </li>
@@ -324,7 +336,7 @@ export default function AuditLogPage() {
         )}
         <button type="submit">查詢</button>
       </form>
-      {error && <p role="alert">{error}</p>}
+      {error && <Notice variant="error">{error}</Notice>}
       {loading ? (
         <p role="status">載入稽核紀錄中…</p>
       ) : result?.items.length ? (

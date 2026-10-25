@@ -17,7 +17,7 @@ import { landingPath } from '../auth/landing'
 import LogoutButton from '../auth/LogoutButton'
 import '../styles/g7-shell.css'
 import { canAccessRoute, ROUTES } from '../routes'
-import { NAV_LABELS } from '../terms'
+import { NAV_LABELS, PAGE_TITLES } from '../terms'
 
 export const SYSTEM_NAME = 'InspectFlow 工程查核系統'
 
@@ -41,6 +41,14 @@ type HeaderUser = Pick<
   | 'can_manage_template_library'
   | 'delegated_modules'
 >
+
+/** T16：各外殼共用管理入口，任務頁不再遺漏管理選單。 */
+const ADMIN_MANAGEMENT_ITEMS: HeaderNavItem[] = [
+  { to: '/accounts', label: PAGE_TITLES.account },
+  { to: ROUTES.adminCompanies.path, label: PAGE_TITLES.company },
+  { to: ROUTES.adminRoles.path, label: NAV_LABELS.roles },
+  { to: ROUTES.adminAuditLogs.path, label: NAV_LABELS.records },
+]
 
 /**
  * 非系統管理者（內業、現場、範本管理、混合）共用的導覽項目：只列後端
@@ -74,7 +82,7 @@ export default function AppHeader({
   user,
   navLabel,
   navItems,
-  managementItems = [],
+  managementItems = user.is_admin ? ADMIN_MANAGEMENT_ITEMS : [],
   badge,
   locked = false,
   lockedNote,
@@ -199,7 +207,8 @@ export default function AppHeader({
               {SYSTEM_NAME}
             </Link>
           )}
-          {badge}
+          {badge ??
+            (user.is_admin ? <p className="topbar-badge">Admin</p> : null)}
           <div className="app-header-account">
             {locked ? (
               <span className="topbar-user">登入者：{name}</span>
