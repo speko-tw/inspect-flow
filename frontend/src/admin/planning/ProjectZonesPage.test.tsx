@@ -484,7 +484,12 @@ describe('adding and renaming zones', () => {
     const trigger = within(rowOf('北側')).getByRole('button', {
       name: '重新命名',
     })
+    // 先完成上一輪回焦，再以已取得焦點的輸入框接收鍵盤操作。
+    await waitFor(() => expect(trigger).toHaveFocus())
     fireEvent.click(trigger)
+    await waitFor(() =>
+      expect(screen.getByLabelText('分區名稱')).toHaveFocus(),
+    )
     fireEvent.change(screen.getByLabelText('分區名稱'), {
       target: { value: '取消的名稱' },
     })

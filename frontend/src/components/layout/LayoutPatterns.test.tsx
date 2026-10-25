@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { FormErrorSummary as SharedSummary } from '../forms/FormPatterns'
@@ -146,7 +146,7 @@ describe('ListStatus', () => {
 })
 
 describe('ConfirmationPanel', () => {
-  it('uses a neutral primary confirmation for non-destructive changes', () => {
+  it('uses a neutral primary confirmation for non-destructive changes', async () => {
     const onCancel = vi.fn()
     const onConfirm = vi.fn()
     const returnFocus = vi.fn(() => {
@@ -178,7 +178,7 @@ describe('ConfirmationPanel', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(panel).not.toHaveAttribute('aria-modal')
     const cancelButton = screen.getByRole('button', { name: '取消' })
-    expect(cancelButton).toHaveFocus()
+    await waitFor(() => expect(cancelButton).toHaveFocus())
 
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(onCancel).toHaveBeenCalledOnce()
@@ -268,7 +268,7 @@ describe('ConfirmationPanel', () => {
     expect(screen.getByRole('button', { name: '背景操作' })).toHaveFocus()
   })
 
-  it('moves focus to progress without later focus jumps', () => {
+  it('moves focus to progress without later focus jumps', async () => {
     const props = {
       tone: 'danger' as const,
       title: '刪除範本',
@@ -311,7 +311,7 @@ describe('ConfirmationPanel', () => {
     const status = screen.getByRole('status')
     expect(status).toHaveTextContent('確認中…')
     expect(status).toHaveAttribute('tabindex', '-1')
-    expect(status).toHaveFocus()
+    await waitFor(() => expect(status).toHaveFocus())
     fireEvent.keyDown(loadingButton, { key: 'Escape' })
     expect(props.onCancel).not.toHaveBeenCalled()
 

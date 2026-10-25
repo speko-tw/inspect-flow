@@ -10,6 +10,8 @@ const dashboardCss = readFileSync(
   'utf8',
 )
 
+const shellCss = readFileSync('src/styles/g7-shell.css', 'utf8')
+
 // 取出頂層規則（行首的選擇器）的宣告，轉成 屬性 -> 值；比對值而不是原始
 // 字串，格式或宣告順序調整時測試不會誤報。
 function declarationsOf(selector: string, source = css) {
@@ -287,7 +289,7 @@ describe('app header navigation', () => {
   })
 })
 
-describe('Dashboard header interaction tokens', () => {
+describe('Shared brand header interaction tokens', () => {
   it('shares the approved neutral values across light and dark themes', () => {
     const root = tokens.slice(0, tokens.indexOf("\n:root[data-theme='dark']"))
     expect(root).toContain(
@@ -306,23 +308,94 @@ describe('Dashboard header interaction tokens', () => {
 
   it('styles only the personal menu trigger, never its items (#713)', () => {
     // 選單項目畫在淺色面板上，若吃到白字會變成白底白字。
-    expect(dashboardCss).not.toMatch(/\.app-header-account button/)
-    expect(dashboardCss).toContain(
-      '.dashboard-shell .app-header-personal-trigger {',
+    expect(shellCss).not.toMatch(/\.app-header-account button/)
+    expect(shellCss).toContain('.app-header .app-header-personal-trigger {')
+    expect(shellCss).not.toMatch(/app-header-personal-menu/)
+  })
+
+  it('loads branding from AppHeader without an overview ancestor', () => {
+    const header = readFileSync('src/layout/AppHeader.tsx', 'utf8')
+    expect(header).toContain("import '../styles/g7-shell.css'")
+    expect(declarationsOf('header.app-header', shellCss).background).toBe(
+      'var(--color-brand-primary)',
     )
-    expect(dashboardCss).not.toMatch(/app-header-personal-menu/)
+    expect(shellCss).not.toContain('dashboard-shell')
+    expect(dashboardCss).not.toContain('.app-header')
+  })
+
+  it('keeps both AdminPage shells independent of overview routing', () => {
+    const admin = readFileSync('src/admin/AdminPage.tsx', 'utf8')
+    expect(admin).not.toContain('dashboard-shell')
+    expect(admin.match(/<div className="app-shell">/g)).toHaveLength(2)
+  })
+
+  it('keeps brand hover, focus and locked text readable (#737)', () => {
+    expect(css).toContain(
+      'a.topbar-brand:hover {\n    color: var(--color-text-inverse);',
+    )
+    expect(shellCss).toContain('outline: 3px solid var(--color-brand-accent);')
+    const locked = declarationsOf(
+      '.app-header .app-header-locked-note',
+      shellCss,
+    )
+    expect(locked.color).toBe('var(--color-text-inverse)')
+  })
+
+  it('preserves muted locked tabs with AA contrast (UDS-R11)', () => {
+    const locked = declarationsOf(
+      '.app-header .app-header-nav-locked .app-header-tab',
+      shellCss,
+    )
+    expect(locked.color.replace(/\s/g, '')).toBe(
+      'color-mix(insrgb,var(--color-text-inverse)70%,' +
+        'var(--color-brand-primary))',
+    )
+    expect(locked.color).not.toBe('var(--color-text-inverse)')
+    expect(locked.opacity).toBe('1')
+    // 由實際 token 算 sRGB 混色，再依 WCAG 相對亮度驗算。
+    const tokenColor = (name: string) => {
+      const value = tokens.match(new RegExp(`${name}: (#\\w{6});`))?.[1]
+      expect(value).toBeDefined()
+      return [1, 3, 5].map((offset) =>
+        Number.parseInt(value!.slice(offset, offset + 2), 16),
+      )
+    }
+    const brand = tokenColor('--color-brand-primary')
+    const inverse = tokenColor('--color-text-inverse')
+    const muted = inverse.map((v, i) => v * 0.7 + brand[i] * 0.3)
+    const linear = (value: number) =>
+      value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+    const luminance = (color: number[]) =>
+      color
+        .map((v) => linear(v / 255))
+        .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0)
+    const contrast = (luminance(muted) + 0.05) / (luminance(brand) + 0.05)
+    expect(contrast).toBeGreaterThanOrEqual(4.5)
+    expect(muted).not.toEqual(inverse)
+  })
+
+  it('keeps hover borders and feedback scoped to interactive controls', () => {
+    expect(shellCss).toContain(
+      '.app-header .app-header-personal-trigger:hover {\n' +
+        '    border-color: var(--color-brand-accent);',
+    )
+    const management =
+      'button.app-header-management-trigger' +
+      ":not([aria-current='page']):hover"
+    expect(shellCss).toContain(
+      `${management} {\n    border-bottom-color: transparent;`,
+    )
+    expect(shellCss).toContain('.app-header a.app-header-tab:hover,')
+    expect(shellCss).toContain('.app-header a.app-header-tab:active,')
+    expect(shellCss).not.toMatch(
+      /\.app-header \.app-header-tab:(hover|active)/,
+    )
   })
 
   it('uses tokens for hover, pressed and current header states', () => {
-    expect(dashboardCss).toContain(
-      'background: var(--color-header-nav-hover);',
-    )
-    expect(dashboardCss).toContain(
-      'background: var(--color-header-nav-pressed);',
-    )
-    expect(dashboardCss).toContain(
-      'background: var(--color-header-nav-current);',
-    )
+    expect(shellCss).toContain('background: var(--color-header-nav-hover);')
+    expect(shellCss).toContain('background: var(--color-header-nav-pressed);')
+    expect(shellCss).toContain('background: var(--color-header-nav-current);')
   })
 })
 
@@ -330,7 +403,7 @@ describe('Dashboard header interaction tokens', () => {
 // :hover 規則都必須包在 @media (hover: hover) 裡，只給有滑鼠的裝置。
 describe('hover rules', () => {
   it('keeps every :hover rule inside @media (hover: hover)', () => {
-    const lines = css.split('\n')
+    const lines = `${css}\n${shellCss}`.split('\n')
     let inHoverMedia = false
     const outside: string[] = []
     lines.forEach((line, index) => {

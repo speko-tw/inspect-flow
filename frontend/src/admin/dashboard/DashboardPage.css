@@ -7,53 +7,6 @@
   color: var(--color-text-primary);
 }
 
-.dashboard-shell .app-header {
-  border-bottom-color: var(--color-brand-accent);
-  background: var(--color-brand-primary);
-  color: var(--color-text-inverse);
-}
-
-.dashboard-shell .topbar-brand,
-.dashboard-shell .topbar-user,
-.dashboard-shell .app-header-tab {
-  color: var(--color-text-inverse);
-}
-
-.dashboard-shell .app-header-management-trigger {
-  border: 0;
-  border-bottom: 3px solid transparent;
-  background: transparent;
-}
-
-.dashboard-shell .topbar-badge {
-  border-color: var(--color-brand-accent);
-  color: var(--color-brand-accent);
-}
-
-/* 只套在選單觸發鈕：選單項目在淺色面板上，不能跟著變白字。 */
-.dashboard-shell .app-header-personal-trigger {
-  border-color: var(--color-brand-accent);
-  background: transparent;
-  color: var(--color-text-inverse);
-}
-
-.dashboard-shell .app-header-tab[aria-current='page'] {
-  border-bottom-color: var(--color-brand-accent);
-  background: var(--color-header-nav-current);
-  color: var(--color-brand-accent);
-}
-
-.dashboard-shell .app-header-tab:hover,
-.dashboard-shell .app-header-personal-trigger:hover {
-  background: var(--color-header-nav-hover);
-  color: var(--color-text-inverse);
-}
-
-.dashboard-shell .app-header-tab:active,
-.dashboard-shell .app-header-personal-trigger:active {
-  background: var(--color-header-nav-pressed);
-}
-
 .dashboard-heading {
   display: flex;
   align-items: end;

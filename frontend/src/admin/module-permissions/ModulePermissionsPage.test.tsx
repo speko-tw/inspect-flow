@@ -1625,7 +1625,10 @@ describe('ModulePermissionsPage', () => {
     expect(
       await screen.findByRole('button', { name: '重試未完成的步驟' }),
     ).toBeVisible()
-    expect(onTemporaryPasswordVisible).toHaveBeenLastCalledWith(true)
+    // 按鈕出現不代表被動 effect 已通知密碼可見；等回呼進入終態。
+    await waitFor(() => {
+      expect(onTemporaryPasswordVisible).toHaveBeenLastCalledWith(true)
+    })
     expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
       'temporary-secret',
     )
@@ -1638,6 +1641,12 @@ describe('ModulePermissionsPage', () => {
     expect(
       await screen.findByRole('heading', { name: '已新增林沐青的帳號' }),
     ).toBeVisible()
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'temporary-secret',
+    )
+    await waitFor(() => {
+      expect(onTemporaryPasswordVisible).toHaveBeenLastCalledWith(true)
+    })
     expect(
       calls.filter((call) => call.path === '/users' && call.method === 'POST'),
     ).toHaveLength(1)
@@ -1872,7 +1881,7 @@ describe('ModulePermissionsPage', () => {
       expect(field).toBeInvalid()
       expect(field).toHaveAccessibleDescription(`請填寫${label}。`)
     }
-    expect(summary).toHaveFocus()
+    await waitFor(() => expect(summary).toHaveFocus())
 
     fireEvent.change(screen.getByLabelText('姓名'), {
       target: { value: '林沐青' },
@@ -3207,7 +3216,9 @@ describe('#734 T7 其他權限寫入的就近回饋', () => {
     const box = within(row).getByRole('region', {
       name: '刪除權限組合定義',
     })
-    expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
+    await waitFor(() =>
+      expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus(),
+    )
   })
 })
 

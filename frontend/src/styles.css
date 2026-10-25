@@ -1325,7 +1325,7 @@ output {
 
 @media (hover: hover) {
   a.topbar-brand:hover {
-    color: var(--primary);
+    color: var(--color-text-inverse);
     text-decoration: underline;
   }
 }
@@ -1547,14 +1547,12 @@ a.app-header-tab[aria-current='page'] {
   font-weight: 700;
 }
 
-/* 必須先完成才能離開的畫面（臨時密碼結果頁）：導覽灰字、不能點。 */
+/* AppHeader 的鎖定狀態：分頁不可操作，弱化色與對比由品牌樣式提供。 */
 .app-header-nav-locked .app-header-tab {
-  color: var(--text-muted);
-  opacity: 0.6;
   cursor: not-allowed;
 }
 
-/* 鎖定時要讀完整句說明：導覽列允許換行，灰色分頁自成一列可橫向滑動。 */
+/* 鎖定時要讀完整句說明：導覽列允許換行，分頁自成一列可橫向滑動。 */
 .app-header-nav-locked {
   flex-wrap: wrap;
   overflow-x: visible;

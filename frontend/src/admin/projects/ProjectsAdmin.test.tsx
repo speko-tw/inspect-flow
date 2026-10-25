@@ -1237,7 +1237,9 @@ describe('admin projects page', () => {
         .getAllByRole('button')
         .map((button) => button.textContent),
     ).toEqual(['取消', '確認'])
-    expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
+    await waitFor(() =>
+      expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus(),
+    )
 
     // 取消：不送請求，焦點回到角色欄。
     fireEvent.click(within(box).getByRole('button', { name: '取消' }))

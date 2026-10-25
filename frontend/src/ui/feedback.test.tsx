@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BatchActionBar } from './BatchActionBar'
@@ -49,7 +49,7 @@ function confirmation(reveal: false | 'nearest' = 'nearest') {
 }
 
 describe('UDS-R18 回饋的可見性與焦點', () => {
-  it('先就近捲入確認框，再聚焦取消，避免焦點把頁面捲回別處', () => {
+  it('先就近捲入確認框，再聚焦取消，避免焦點把頁面捲回別處', async () => {
     const focus = vi.spyOn(HTMLElement.prototype, 'focus')
     render(confirmation())
     expect(scroll).toHaveBeenCalledWith({ block: 'nearest' })
@@ -57,7 +57,9 @@ describe('UDS-R18 回饋的可見性與焦點', () => {
     expect(scroll.mock.invocationCallOrder[0]).toBeLessThan(
       focus.mock.invocationCallOrder[0],
     )
-    expect(screen.getByRole('button', { name: '取消' })).toHaveFocus()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '取消' })).toHaveFocus(),
+    )
   })
 
   it('高於視窗八成的確認框從開頭閱讀', () => {
@@ -76,11 +78,13 @@ describe('UDS-R18 回饋的可見性與焦點', () => {
     expect(scroll).toHaveBeenCalledWith({ block: 'start' })
   })
 
-  it('modal 可關掉捲動，焦點仍由確認框管理', () => {
+  it('modal 可關掉捲動，焦點仍由確認框管理', async () => {
     render(confirmation(false))
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true')
     expect(scroll).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: '取消' })).toHaveFocus()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '取消' })).toHaveFocus(),
+    )
   })
 
   it('成功會捲入視窗、持續顯示，且不搶目前焦點', () => {
@@ -98,17 +102,17 @@ describe('UDS-R18 回饋的可見性與焦點', () => {
     first.unmount()
   })
 
-  it('錯誤會捲入並聚焦，資訊結果保持 status', () => {
+  it('錯誤會捲入並聚焦，資訊結果保持 status', async () => {
     const first = render(<Notice variant="error">儲存失敗。</Notice>)
     expect(screen.getByRole('alert')).toHaveAttribute('tabindex', '-1')
-    expect(screen.getByRole('alert')).toHaveFocus()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveFocus())
     first.unmount()
     render(<Notice variant="info">他還不是專案成員。</Notice>)
     expect(screen.getByRole('status')).toHaveTextContent('還不是專案成員')
     expect(screen.getByRole('status')).not.toHaveFocus()
   })
 
-  it('每次表單錯誤要求都捲動，再以 preventScroll 聚焦', () => {
+  it('每次表單錯誤要求都捲動，再以 preventScroll 聚焦', async () => {
     const focus = vi.spyOn(HTMLElement.prototype, 'focus')
     const view = render(
       <FormError focusRequest={1} tabIndex={-1}>
@@ -123,7 +127,7 @@ describe('UDS-R18 回饋的可見性與焦點', () => {
       </FormError>,
     )
     expect(scroll).toHaveBeenCalledTimes(2)
-    expect(screen.getByRole('alert')).toHaveFocus()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveFocus())
   })
 
   it('批次操作、結果與確認留在同一容器且依閱讀順序排列', () => {
@@ -172,7 +176,7 @@ it('同一錯誤重繪不搶回使用者正在操作的焦點', () => {
   expect(scroll).not.toHaveBeenCalled()
 })
 
-it('非同步影響範圍就緒後再捲入確認框並聚焦取消，普通重繪不重設', () => {
+it('非同步影響範圍就緒後再捲入確認框並聚焦取消，普通重繪不重設', async () => {
   const focus = vi.spyOn(HTMLElement.prototype, 'focus')
   const box = (request: number) => (
     <ConfirmBox
@@ -194,13 +198,15 @@ it('非同步影響範圍就緒後再捲入確認框並聚焦取消，普通重�
   expect(scroll.mock.invocationCallOrder[0]).toBeLessThan(
     focus.mock.invocationCallOrder[0],
   )
-  expect(screen.getByRole('button', { name: '取消' })).toHaveFocus()
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '取消' })).toHaveFocus(),
+  )
   scroll.mockClear()
   view.rerender(box(1))
   expect(scroll).not.toHaveBeenCalled()
 })
 
-it('modal 未指定 reveal 也不捲動，仍聚焦取消', () => {
+it('modal 未指定 reveal 也不捲動，仍聚焦取消', async () => {
   render(
     <ConfirmBox
       modal
@@ -212,10 +218,12 @@ it('modal 未指定 reveal 也不捲動，仍聚焦取消', () => {
     />,
   )
   expect(scroll).not.toHaveBeenCalled()
-  expect(screen.getByRole('button', { name: '取消' })).toHaveFocus()
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '取消' })).toHaveFocus(),
+  )
 })
 
-it('背景錯誤不捲動或聚焦；切為主動操作才處理同一錯誤', () => {
+it('背景錯誤不捲動或聚焦；切為主動操作才處理同一錯誤', async () => {
   const view = render(
     <>
       <input aria-label="搜尋" />
@@ -235,5 +243,5 @@ it('背景錯誤不捲動或聚焦；切為主動操作才處理同一錯誤', (
     </>,
   )
   expect(scroll).toHaveBeenCalledTimes(1)
-  expect(screen.getByRole('alert')).toHaveFocus()
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveFocus())
 })
