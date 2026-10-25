@@ -316,13 +316,7 @@ function AdminPageContent() {
   }
 
   return (
-    <div
-      className={
-        location.pathname.startsWith(ROUTES.dashboard.path.replace('/*', ''))
-          ? 'app-shell dashboard-shell'
-          : 'app-shell'
-      }
-    >
+    <div className="app-shell">
       <AppHeader
         badge={
           isProjectSectionRoute ? (
@@ -471,13 +465,7 @@ function MemberAdminShell({
     registeredRoute && !canAccessRoute(user, registeredRoute),
   )
   return (
-    <div
-      className={
-        location.pathname.startsWith(ROUTES.dashboard.path.replace('/*', ''))
-          ? 'app-shell dashboard-shell'
-          : 'app-shell'
-      }
-    >
+    <div className="app-shell">
       <AppHeader
         navItems={memberNavigationItems(user, dashboardAccess)}
         managementItems={

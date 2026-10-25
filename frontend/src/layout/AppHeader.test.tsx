@@ -82,6 +82,17 @@ afterEach(() => {
   })
 })
 
+describe('全站品牌頁首（UDS-AC18）', () => {
+  it.each(['/accounts', '/projects', '/templates', '/tasks'])(
+    '%s 使用共用品牌外框，不依賴 overview 容器',
+    (path) => {
+      renderHeader(ADMIN, {}, path)
+      expect(screen.getByRole('banner')).toHaveClass('app-header')
+      expect(screen.getByRole('banner').closest('.dashboard-shell')).toBeNull()
+    },
+  )
+})
+
 describe('範本瀏覽導覽（TPL-R09）', () => {
   it('template.use-only 使用者不會看到範本管理導覽', () => {
     renderHeader(TEMPLATE_USE_ONLY)

@@ -1325,7 +1325,7 @@ output {
 
 @media (hover: hover) {
   a.topbar-brand:hover {
-    color: var(--primary);
+    color: var(--color-text-inverse);
     text-decoration: underline;
   }
 }

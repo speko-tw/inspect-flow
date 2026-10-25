@@ -1,3 +1,70 @@
+.app-header {
+  border-bottom-color: var(--color-brand-accent);
+  background: var(--color-brand-primary);
+  color: var(--color-text-inverse);
+}
+
+.app-header .topbar-brand,
+.app-header .topbar-user,
+.app-header .app-header-tab {
+  color: var(--color-text-inverse);
+}
+
+.app-header .app-header-management-trigger {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+}
+
+.app-header .topbar-badge {
+  border-color: var(--color-brand-accent);
+  color: var(--color-brand-accent);
+}
+
+/* 只套在選單觸發鈕：選單項目在淺色面板上，不能跟著變白字。 */
+.app-header .app-header-personal-trigger {
+  border-color: var(--color-brand-accent);
+  background: transparent;
+  color: var(--color-text-inverse);
+}
+
+.app-header .app-header-tab[aria-current='page'] {
+  border-bottom-color: var(--color-brand-accent);
+  background: var(--color-header-nav-current);
+  color: var(--color-brand-accent);
+}
+
+@media (hover: hover) {
+  .app-header .app-header-tab:hover,
+  .app-header .app-header-personal-trigger:hover {
+    background: var(--color-header-nav-hover);
+    color: var(--color-text-inverse);
+  }
+
+  .app-header .app-header-tab:active,
+  .app-header .app-header-personal-trigger:active {
+    background: var(--color-header-nav-pressed);
+  }
+}
+
+/* UDS-R19：只覆寫品牌表面的焦點，浮層仍沿用各主題焦點。 */
+.app-header .topbar-brand:focus-visible,
+.app-header .app-header-tab:focus-visible,
+.app-header .app-header-personal-trigger:focus-visible {
+  outline: 3px solid var(--color-brand-accent);
+}
+
+/* 導覽可捲動，輪廓留在分頁內側以免被裁切。 */
+.app-header .app-header-tab:focus-visible {
+  outline-offset: -3px;
+}
+
+.app-header .app-header-nav-locked .app-header-tab,
+.app-header .app-header-locked-note {
+  color: var(--color-text-inverse);
+  opacity: 1;
+}
+
 .app-header-personal-trigger {
   min-height: 2.75rem;
   border: 1px solid var(--border-strong);
