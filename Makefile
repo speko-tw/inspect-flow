@@ -180,7 +180,9 @@ check-postgres:
 	cd backend && uv run --locked python -m tests.db.reset_postgres_schema && \
 	INSPECTFLOW_DATABASE_URL="$$INSPECTFLOW_TEST_POSTGRES_URL" \
 		uv run --locked alembic upgrade head && \
-	uv run --locked pytest tests/db --db-backend=postgresql
+	uv run --locked pytest tests/db --db-backend=postgresql && \
+	INSPECTFLOW_TEST_ROLE_API_POSTGRES=1 \
+		uv run --locked pytest tests/api/test_roles_api.py
 
 # Fails fast if frontend deps are missing. Not auto-installed here:
 # CI runs its own `npm ci`, so installing on demand would hide

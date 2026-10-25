@@ -81,6 +81,7 @@ function stubBackend(
     failureCode?: string
     failureStatus?: number
     users?: User[]
+    detailUser?: User
     companies?: Company[]
     activeCompanyUsers?: Record<
       string,
@@ -223,7 +224,7 @@ function stubBackend(
         ) {
           target.is_active = true
         }
-        return Response.json(target ?? regularUser)
+        return Response.json(target ?? options.detailUser ?? regularUser)
       }
       return Response.json(company)
     },
@@ -2116,6 +2117,41 @@ it('到期參數 replace 消費一次，取消重開不再聚焦日期', async (
   await waitFor(() =>
     expect(screen.getByLabelText('測試網址')).toHaveTextContent('/before'),
   )
+})
+
+it('清單外的到期詳情只載入一次，消費參數不重掛表單', async () => {
+  const listGate = deferred()
+  const backend = stubBackend({
+    users: [],
+    detailUser: { ...regularUser, is_external_collaborator: true },
+    hold: (call) => (call.path === '/api/v1/users' ? listGate : undefined),
+  })
+  function LocationProbe() {
+    const location = useLocation()
+    return <output aria-label="測試網址">{location.search}</output>
+  }
+  const view = render(
+    <DataMemoryRouter initialEntries={['/accounts/user-1?edit=expiry']}>
+      <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+        <UsersPage detailUserId="user-1" onTemporaryPassword={vi.fn()} />
+        <LocationProbe />
+      </CurrentUserProvider>
+    </DataMemoryRouter>,
+  )
+  const date = await screen.findByLabelText(/外部帳號到期日/)
+  await waitFor(() => expect(date).toHaveFocus())
+  const form = date.closest('form')
+  fireEvent.change(date, { target: { value: '2030-01-01' } })
+  await waitFor(() =>
+    expect(screen.getByLabelText('測試網址')).toBeEmptyDOMElement(),
+  )
+  // 清單仍在載入，replace 不得重取詳情或重掛表單（#741）。
+  expect(backend.count('GET', '/api/v1/users/user-1')).toBe(1)
+  expect(screen.getByLabelText(/外部帳號到期日/)).toBe(date)
+  expect(date.closest('form')).toBe(form)
+  expect(date).toHaveValue('2030-01-01')
+  view.unmount()
+  listGate.resolve()
 })
 
 it('提醒背景失敗不搶搜尋焦點，主動重試失敗才聚焦錯誤', async () => {

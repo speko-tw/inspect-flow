@@ -189,6 +189,14 @@ export default function UsersPage({
   const companyListRequest = useRef<Promise<void> | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
   const [detailError, setDetailError] = useState('')
+  const detailSnapshot = useRef<User | null>(null)
+  useEffect(() => {
+    detailSnapshot.current = detailUser
+  }, [detailUser])
+  const detailRequest = useRef<{
+    id: string
+    promise: Promise<UserDetail>
+  } | null>(null)
   const [passwordResetError, setPasswordResetError] = useState<{
     userId: string
     message: string
@@ -288,55 +296,60 @@ export default function UsersPage({
       setDetailError('')
       return
     }
-    const applyDetail = (user: User) => {
-      setDetailUser(user)
-      if (
-        editExpiryRequested &&
-        consumedExpiryRequest.current !== location.key
-      ) {
-        consumedExpiryRequest.current = location.key
-        setExpiryEditorUser(user.id)
-        setEditingUser(user.id)
-        const params = new URLSearchParams(location.search)
-        params.delete('edit')
-        navigate(
-          {
-            pathname: location.pathname,
-            search: params.toString(),
-            hash: location.hash,
-          },
-          { replace: true, state: location.state, preventScrollReset: true },
-        )
-      }
-    }
     const listed = users.find((user) => user.id === detailUserId)
     if (listed) {
-      applyDetail(listed)
+      setDetailUser(listed)
       setDetailError('')
       return
     }
+    if (detailSnapshot.current?.id === detailUserId) return
     let active = true
-    setDetailUser(null)
+    setDetailUser((current) => (current?.id === detailUserId ? current : null))
     setDetailError('')
-    void request<UserDetail>(`/users/${encodeURIComponent(detailUserId)}`)
-      .then((user) => active && applyDetail(user))
+    // 清單初次清空亦會更新 users；同一筆在途詳情可由新 effect 接手。
+    if (detailRequest.current?.id !== detailUserId) {
+      const promise = request<UserDetail>(
+        `/users/${encodeURIComponent(detailUserId)}`,
+      )
+      detailRequest.current = { id: detailUserId, promise }
+    }
+    const pending = detailRequest.current
+    void pending.promise
+      .then((user) => active && setDetailUser(user))
       .catch((caught: unknown) => {
         if (active) setDetailError(managementErrorMessage(caught))
+      })
+      .finally(() => {
+        if (detailRequest.current === pending) detailRequest.current = null
       })
     return () => {
       active = false
     }
-  }, [
-    detailUserId,
-    users,
-    editExpiryRequested,
-    location.key,
-    location.search,
-    location.pathname,
-    location.hash,
-    location.state,
-    navigate,
-  ])
+  }, [detailUserId, users])
+
+  useEffect(() => {
+    // 到期日捷徑只消費網址；replace 不得重載詳情或重掛表單（#741）。
+    if (
+      !detailUser ||
+      detailUser.id !== detailUserId ||
+      !editExpiryRequested ||
+      consumedExpiryRequest.current === location.key
+    )
+      return
+    consumedExpiryRequest.current = location.key
+    setExpiryEditorUser(detailUser.id)
+    setEditingUser(detailUser.id)
+    const params = new URLSearchParams(location.search)
+    params.delete('edit')
+    navigate(
+      {
+        pathname: location.pathname,
+        search: params.toString(),
+        hash: location.hash,
+      },
+      { replace: true, state: location.state, preventScrollReset: true },
+    )
+  }, [detailUser, detailUserId, editExpiryRequested, location, navigate])
 
   useEffect(() => {
     // T3：清單結果不屬於詳情或另一頁，不能隨共用頁面狀態留下。
