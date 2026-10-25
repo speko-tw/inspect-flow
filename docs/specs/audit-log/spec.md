@@ -167,6 +167,22 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 
 `template_item.inspection_points` 以順序保存各查核項次、檢查標準、實測欄位與照片需求；不含資料庫主鍵或稽核欄位。`project.template_applied` 的 `entity_id` 與 `project_id` 都是目標專案 UUID。
 
+<a id="template-suggestion-事件"></a>
+### 0.6.x 範本建議事件（#314）
+
+依 [TPL-R34](../template-system/spec.md#template-suggestions)登記，依據負責人[版本與審核留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)及 [#314 流程範圍](https://github.com/speko-tw/inspect-flow/issues/314)。只新增本功能事件，沿用 ALG-R06／R09 的同交易、實際變動與回滾規則；`entity_type` 為 `template_suggestion`、`entity_id` 為建議 ID、`project_id` 為來源專案 ID。共用 actor／時間欄位照舊；不得覆寫或刪除歷次事件。完整內容由不可變修訂及審核紀錄保存，事件用 ID／雜湊串接，不重複保存整份結構。
+
+| 事件代碼 | 什麼時候寫 | before | after |
+|---|---|---|---|
+| `template_suggestion.created` | 建立草擬與初版 | 空值 | proposer_id、來源專案／項目 ID、revision_id、content_sha256、status=DRAFT |
+| `template_suggestion.revised` | 保存不同內容修訂 | 原 revision_id、content_sha256、status | 新 revision_id、content_sha256、相同 status |
+| `template_suggestion.submitted` | 初次送審或每次重送 | revision_id、status=DRAFT／RETURNED | 同 revision_id、status=PENDING |
+| `template_suggestion.returned` | 管理者附原因退回 | 受審 revision_id、status=PENDING | 同 revision_id、review_id、reviewer_id、reason、status=RETURNED |
+| `template_suggestion.approved` | 核准並建立新範本 | 受審 revision_id、status=PENDING | 同 revision_id、review_id、reviewer_id、template_id、category_id、system_id、status=APPROVED |
+| `template_suggestion.withdrawn` | 本人撤回未核准件 | revision_id、status=DRAFT／PENDING／RETURNED | 同 revision_id、status=WITHDRAWN |
+
+核准的同一交易另寫既有 `template_item.created`（TPL-R25／ALG-R32），其 `entity_id` 是新範本，`project_id` 同樣保留來源專案，並在 after 補 suggestion_id、revision_id 以對照核准事件；不是直接讀專案來源，不寫 created_from_project。失敗、非法轉換、過期 expected 欄位與無變更保存不寫成功事件；任一事件寫入失敗，核准及新範本一起回滾。驗收由 TPL-AC38、TPL-AC41 及 0.6.x 計畫 T16／T17 承接；本次只提交事件規格，未宣稱事件已實作。
+
 <a id="模組權限事件"></a>
 ## 模組權限事件
 
@@ -388,3 +404,5 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 - 整合 main（#622）：為保留 #712 帳號稽核的 ALG-R31／ALG-AC30，將 #382 範本稽核改編 ALG-R32／ALG-AC31，並同步範本規格與計畫引用；行為與驗收內容不變。
 
 - 範圍變更（負責人指示，#515）：納入本人外觀偏好的稽核邊界，保存修改紀錄但不新增稽核事件 — [負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)
+
+- 範圍變更跟進（負責人既有裁定，#314）：在 template-system 事件目錄增列六種建議／審核專屬事件，核准串接既有 template_item.created；沿用共用同交易與回滾規則，驗收由 TPL-AC38、AC41 承接，未新增跨模組慣例。依據：[版本與審核留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)。
