@@ -564,7 +564,7 @@ export function TemplateItemEditor({
       </fieldset>
       <div className="tpl-editor-footer">
         {requestError && (
-          <p className="field-error" role="alert">
+          <p className="field-error" role="alert" tabIndex={-1}>
             {requestError}
           </p>
         )}

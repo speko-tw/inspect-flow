@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -165,7 +171,10 @@ describe('專案成員批次角色（#414）', () => {
       await screen.findByRole('button', { name: '批次指派角色' }),
     )
 
-    expect(await screen.findByRole('alert')).toBeVisible()
+    const section = screen.getByRole('region', { name: '批次角色操作' })
+    const alert = await within(section).findByRole('alert')
+    expect(alert).toBeVisible()
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(screen.getAllByText('檢視者').length).toBe(3)
     expect(screen.getByRole('checkbox', { name: /林鮑伯/ })).toBeChecked()
     expect(

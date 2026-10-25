@@ -22,6 +22,7 @@ const item = {
   source_category_name: '土建工程',
   source_system_name: '混凝土系統',
   applied_at: '2026-10-05T00:00:00Z',
+  task_count: 0,
   inspection_points: [
     {
       id: 'point-1',

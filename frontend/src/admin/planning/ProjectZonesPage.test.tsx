@@ -757,11 +757,15 @@ describe('deleting zones', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '分區已有任務使用，無法刪除。',
-    )
-    expect(screen.queryByRole('group')).toBeNull()
-    expect(screen.getByText('北區')).toBeVisible()
+    const row = rowOf('北區')
+    const box = within(row).getByRole('group', {
+      name: '刪除分區「北區」？',
+    })
+    const alert = await within(box).findByRole('alert')
+    expect(alert).toHaveTextContent('分區已有任務使用，無法刪除。')
+    await waitFor(() => expect(alert).toHaveFocus())
+    expect(within(row).getByText('北區')).toBeVisible()
+    expect(within(row).getByRole('button', { name: '確認刪除' })).toBeVisible()
   })
 
   it('does not claim the page became read-only when a write returns 403', async () => {
@@ -774,9 +778,15 @@ describe('deleting zones', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
 
-    const alert = await screen.findByRole('alert')
+    const row = rowOf('北區')
+    const box = within(row).getByRole('group', {
+      name: '刪除分區「北區」？',
+    })
+    const alert = await within(box).findByRole('alert')
     expect(alert).toHaveTextContent('你沒有權限變更這個專案的分區')
     expect(alert).not.toHaveTextContent('唯讀')
+    await waitFor(() => expect(alert).toHaveFocus())
+    expect(within(row).getByRole('button', { name: '確認刪除' })).toBeVisible()
   })
 
   it('does not claim read-only when adding a zone returns 403 either', async () => {

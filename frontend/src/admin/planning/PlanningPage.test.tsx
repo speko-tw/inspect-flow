@@ -23,6 +23,12 @@ import taskCreateValidation from './fixtures/task-create-validation-422.json'
 import taskLocationValidation from './fixtures/task-location-validation-422.json'
 import PlanningPage, { type PlanningPageClient } from './PlanningPage'
 
+const READ_ONLY_NOTICE =
+  '你在這個專案只能查看計畫與任務，不能新增、修改或派出。' +
+  '需要調整請找專案內業或管理者。'
+const ASSIGNEE_LIST_UNAVAILABLE_NOTICE =
+  '看不到成員名單，這次只能選「不指定」，' + '之後請有權限的人補上。'
+
 function validationError(fixture: {
   error: { code: string; fields: Array<{ path: string; code: string }> }
 }) {
@@ -241,11 +247,12 @@ describe('planning management page', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('唯讀模式')
+    const readOnlyNotice = await screen.findByRole('status')
+    expect(readOnlyNotice).toHaveTextContent(READ_ONLY_NOTICE)
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '建立計畫' })).toBeNull()
     })
-    expect(screen.getByRole('status')).toHaveTextContent('唯讀模式')
+    expect(screen.getByRole('status')).toHaveTextContent(READ_ONLY_NOTICE)
   })
 
   it('shows a permission page when planning reads return 403', async () => {
@@ -403,6 +410,7 @@ describe('planning management page', () => {
 
   it('keeps plans usable when zones and members return 403', async () => {
     const client = createMockPlanningClient()
+    await client.createPlan('project-demo-1', { name: '唯讀計畫' })
     client.listProjectZones = async () => {
       throw new ManagementApiError(403, 'permission.denied')
     }
@@ -415,7 +423,140 @@ describe('planning management page', () => {
       await screen.findByRole('heading', { name: '查核計畫' }),
     ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
-    expect(await screen.findAllByRole('status')).toHaveLength(1)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.click(
+      await screen.findByRole('button', { name: '唯讀計畫（草稿）' }),
+    )
+    await openTaskCreationForm()
+    const form = document.querySelector(
+      '[data-error-context="task"]',
+    ) as HTMLFormElement
+    expect(
+      within(form).getByText(ASSIGNEE_LIST_UNAVAILABLE_NOTICE),
+    ).toBeInTheDocument()
+    expect(within(form).queryByRole('button', { name: '重試' })).toBeNull()
+  })
+
+  it('shows unavailable assignee lookup beside the task field', async () => {
+    const client = createMockPlanningClient()
+    await client.createPlan('project-demo-1', { name: '人員查詢失敗' })
+    const available = await client.listProjectAssignees('project-demo-1')
+    let attempts = 0
+    client.listProjectAssignees = async () => {
+      if (attempts++ === 0) {
+        throw new ManagementApiError(503, 'inspection_task.unavailable')
+      }
+      return available
+    }
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+
+    expect(
+      await screen.findByText(
+        '計畫的狀態會跟著任務自動更新；任務派出後，現場才看得到。',
+      ),
+    ).toBeVisible()
+    fireEvent.click(
+      await screen.findByRole('button', { name: '人員查詢失敗（草稿）' }),
+    )
+    await openTaskCreationForm()
+
+    const form = document.querySelector(
+      '[data-error-context="task"]',
+    ) as HTMLFormElement
+    const selector = within(form).getByLabelText('建議指派人')
+    const hint = within(form).getByText('成員名單暫時載入失敗')
+    expect(selector).toBeDisabled()
+    expect(selector).toHaveAttribute('aria-describedby', hint.id)
+    expect(within(form).getByRole('option', { name: '不指定' })).toBeVisible()
+    fireEvent.click(within(form).getByRole('button', { name: '重試' }))
+    await waitFor(() => expect(selector).toBeEnabled())
+    await waitFor(() => expect(selector).toHaveFocus())
+    expect(
+      within(form).queryByText('成員名單暫時載入失敗'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('focuses the assignee field after a retry fails', async () => {
+    const client = createMockPlanningClient()
+    await client.createPlan('project-demo-1', { name: '重試失敗' })
+    let attempts = 0
+    client.listProjectAssignees = async () => {
+      attempts += 1
+      throw new ManagementApiError(503, 'inspection_task.unavailable')
+    }
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '重試失敗（草稿）' }),
+    )
+    await openTaskCreationForm()
+    const form = document.querySelector(
+      '[data-error-context="task"]',
+    ) as HTMLFormElement
+    const selector = within(form).getByLabelText('建議指派人')
+    const hint = within(form).getByText('成員名單暫時載入失敗')
+    fireEvent.click(within(form).getByRole('button', { name: '重試' }))
+    await waitFor(() =>
+      expect(within(form).getByRole('button', { name: '重試' })).toBeEnabled(),
+    )
+    expect(selector).toBeDisabled()
+    await waitFor(() => expect(hint).toHaveFocus())
+    expect(attempts).toBe(2)
+  })
+
+  it('clears retrying members when switching projects during a retry', async () => {
+    const client = createMockPlanningClient()
+    await client.createPlan('project-demo-1', { name: 'A 專案' })
+    await client.createPlan('project-demo-2', { name: 'B 專案' })
+    const retryRequest =
+      deferred<Awaited<ReturnType<PlanningClient['listProjectAssignees']>>>()
+    let projectOneRequests = 0
+    client.listProjectAssignees = async (projectId) => {
+      if (projectId === 'project-demo-2') {
+        throw new ManagementApiError(503, 'inspection_task.unavailable')
+      }
+      if (projectOneRequests++ === 0) {
+        throw new ManagementApiError(503, 'inspection_task.unavailable')
+      }
+      return retryRequest.promise
+    }
+    const { rerender } = render(
+      <PlanningPage client={client} initialProjectId="project-demo-1" />,
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'A 專案（草稿）' }),
+    )
+    await openTaskCreationForm()
+    const form = document.querySelector(
+      '[data-error-context="task"]',
+    ) as HTMLFormElement
+    fireEvent.click(within(form).getByRole('button', { name: '重試' }))
+    expect(
+      await within(form).findByRole('button', { name: '重試中…' }),
+    ).toBeDisabled()
+
+    rerender(
+      <PlanningPage client={client} initialProjectId="project-demo-2" />,
+    )
+    expect(await screen.findByText('專案：示範工程 B')).toBeInTheDocument()
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'B 專案（草稿）' }),
+    )
+    await openTaskCreationForm()
+    const nextForm = document.querySelector(
+      '[data-error-context="task"]',
+    ) as HTMLFormElement
+    await waitFor(() =>
+      expect(
+        within(nextForm).getByRole('button', { name: '重試' }),
+      ).toBeEnabled(),
+    )
+    expect(
+      within(nextForm).queryByRole('button', { name: '重試中…' }),
+    ).toBeNull()
+    retryRequest.resolve([])
   })
 
   it('deletes draft tasks through a confirmation dialog', async () => {
@@ -1148,6 +1289,39 @@ describe('planning forms guard (#507)', () => {
     document.querySelector(
       `[data-error-context="${context}"]`,
     ) as HTMLFormElement
+
+  it('preserves assignments when assignee lookup fails', async () => {
+    const { client, task } = await seeded()
+    await client.setSuggestedAssignee(task.id, 'project-a-member-1')
+    const saveAssignee = vi.spyOn(client, 'setSuggestedAssignee')
+    client.listProjectAssignees = async () => {
+      throw new ManagementApiError(503, 'inspection_task.unavailable')
+    }
+    const article = await openPlan(client)
+    fireEvent.click(
+      within(article).getByRole('button', { name: '修改建議指派' }),
+    )
+
+    const form = formByContext('assignee')
+    const selector = within(form).getByLabelText('建議指派人')
+    const formHeading = within(form).getByRole('heading', {
+      name: '修改任務指派',
+    })
+    await waitFor(() => expect(formHeading).toHaveFocus())
+    expect(selector).toBeDisabled()
+    expect(selector).toHaveValue('project-a-member-1')
+    expect(selector).toHaveAttribute(
+      'aria-describedby',
+      `assignee-list-unavailable-${task.id}`,
+    )
+    expect(saveAssignee).not.toHaveBeenCalled()
+
+    fireEvent.click(within(form).getByRole('button', { name: '儲存指派' }))
+
+    await expectNotice('已更新建議指派。')
+    expect(saveAssignee).toHaveBeenCalledOnce()
+    expect(saveAssignee).toHaveBeenCalledWith(task.id, 'project-a-member-1')
+  })
 
   it('confirms plan switches with a dirty task form (ADM-R38)', async () => {
     const { client } = await seeded()
@@ -2296,7 +2470,7 @@ describe('planning forms guard (#507)', () => {
       )
 
       await waitFor(() => expect(formByContext('plan-rename')).toBeNull())
-      expect(screen.getByRole('status')).toHaveTextContent('唯讀模式')
+      expect(screen.getByRole('status')).toHaveTextContent(READ_ONLY_NOTICE)
       expect(screen.queryByLabelText(/計畫名稱/)).toBeNull()
       const unload = new Event('beforeunload', {
         cancelable: true,
@@ -2323,7 +2497,7 @@ describe('planning forms guard (#507)', () => {
 
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
       expect(await screen.findByRole('alert')).toBeVisible()
-      expect(screen.getByText('目前為唯讀模式。')).toBeVisible()
+      expect(screen.getByRole('status')).toHaveTextContent(READ_ONLY_NOTICE)
       expect(assignees).toHaveBeenCalledOnce()
     })
   })
@@ -2694,7 +2868,9 @@ describe('#727 唯讀身分', () => {
       )
       fireEvent.click(await screen.findByRole('button', { name: /既有計畫/ }))
       await screen.findByRole('heading', { name: plan.name })
-      expect(screen.getByText('目前為唯讀模式。')).toBeVisible()
+      expect(screen.getByRole('status')).toHaveTextContent(
+        '你在這個專案只能查看計畫與任務，不能新增、修改或派出。需要調整請找專案內業或管理者。',
+      )
       expect(screen.queryByRole('button', { name: '建立計畫' })).toBeNull()
       expect(screen.queryByRole('button', { name: '＋ 新增任務' })).toBeNull()
       expect(screen.queryByRole('button', { name: '修改計畫名稱' })).toBeNull()

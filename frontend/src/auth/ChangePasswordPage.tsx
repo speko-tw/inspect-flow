@@ -184,7 +184,7 @@ export default function ChangePasswordPage() {
         <p role="status">尚未開通任何功能，請洽系統管理者</p>
       )}
       {!user.must_change_password && <AppearanceSettings />}
-      {success && <p role="status">{success}</p>}
+      {success && user.must_change_password && <p role="status">{success}</p>}
       <UnsavedLeaveBox guard={leaveGuard} />
       <Form
         onSubmit={handleSubmit}
@@ -291,6 +291,9 @@ export default function ChangePasswordPage() {
             {error}
           </FormError>
         ) : null}
+        {success && !user.must_change_password && (
+          <p role="status">{success}</p>
+        )}
         <FormSubmitButton className="btn-primary">變更密碼</FormSubmitButton>
       </Form>
       <LogoutButton />

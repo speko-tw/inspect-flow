@@ -6,8 +6,10 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import event, select
 
+from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.db.engine import get_engine
 from app.models import (
+    InspectionTask,
     Project,
     ProjectInspectionItem,
     ProjectInspectionPoint,
@@ -143,6 +145,44 @@ def test_list_select_count_does_not_grow_with_page_size(world, name):
     assert large_items > middle_items
     assert small == middle == large
     assert large <= _MAX_SELECTS
+
+
+def test_project_item_list_includes_batched_distinct_task_counts(
+    world, db_session
+):
+    """驗證 TPL-R27 列表涵蓋 IP-R21 刪除 guard 的各種任務狀態。"""
+    tasks = db_session.scalars(
+        select(InspectionTask)
+        .where(InspectionTask.plan_id == UUID(world["plan_id"]))
+        .order_by(InspectionTask.id)
+    ).all()
+    for index, task in enumerate(tasks):
+        task.status = [
+            "CANCELLED",
+            "COMPLETED",
+            "DRAFT",
+            "IN_PROGRESS",
+            "PENDING",
+            "COMPLETED",
+        ][index]
+        if task.status == "CANCELLED":
+            task.cancelled_from_status = "PENDING"
+            task.cancellation_reason = "測試取消"
+    db_session.commit()
+
+    admin = world["admin"]
+    url = _urls(world)["project items"]
+    small_count, small_rows = select_count(admin, url, limit=1)
+    large_count, large_rows = select_count(admin, url, limit=100)
+    assert small_rows == 1
+    assert large_rows >= 5
+    assert small_count > 0
+    assert small_count == large_count
+    items = admin.get(url, params={"limit": 100}).json()["items"]
+    counts = {row["id"]: row["task_count"] for row in items}
+    assert counts[str(world["item"].id)] == _TASKS
+    assert counts[str(world["item_two"].id)] == _TASKS
+    assert counts[str(items[-1]["id"])] == 0
 
 
 def test_plan_detail_select_count_is_fixed_for_many_tasks(world):
@@ -557,3 +597,91 @@ def test_locked_item_patch_batches_evidence_lookup(db_session, make_client):
     # 兩種點數下都不得逐點查詢，依項目整批的查詢次數也不隨點數增加。
     assert counts[0][0] == counts[1][0] == 0
     assert counts[0][1] == counts[1][1]
+
+
+def test_project_item_task_counts_are_only_computed_for_editors(
+    world, db_session, make_client
+):
+    """TPL-R27：唯讀項目清單不計算編輯專用的引用數。"""
+    project_id = world["project"].id
+    url = f"/api/v1/projects/{project_id}/inspection-items"
+    editor = create_root_user_with_company(db_session, "COUNT-EDITOR")
+    role = Role(
+        name="Item editor",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+        permission_codes=[RolePermission(code="project_inspection_item.edit")],
+    )
+    db_session.add(role)
+    db_session.flush()
+    db_session.add(
+        ProjectMember(
+            project_id=project_id,
+            user_id=editor.id,
+            created_by=world["admin_user"].id,
+            updated_by=world["admin_user"].id,
+            role_assignments=[ProjectMemberRole(role_id=role.id)],
+        )
+    )
+    manager = create_root_user_with_company(db_session, "COUNT-MANAGER")
+    db_session.add(
+        UserModulePermission(
+            user_id=manager.id,
+            permission_code="template.manage",
+            source="manual",
+        )
+    )
+    db_session.commit()
+
+    editor_client = make_client()
+    editor_client.cookies.set(
+        SESSION_COOKIE_NAME, create_session(db_session, editor)[1]
+    )
+    manager_client = make_client()
+    manager_client.cookies.set(
+        SESSION_COOKIE_NAME, create_session(db_session, manager)[1]
+    )
+    db_session.commit()
+
+    def get_with_sql(client):
+        statements: list[str] = []
+
+        def record(conn, cursor, statement, parameters, context, many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        engine = get_engine()
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            response = client.get(url)
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+        return response, statements
+
+    for client in (world["admin"], editor_client):
+        response, statements = get_with_sql(client)
+        assert response.status_code == 200, response.text
+        counts = {
+            row["id"]: row["task_count"] for row in response.json()["items"]
+        }
+        assert counts[str(world["item"].id)] == _TASKS
+        assert counts[str(world["item_two"].id)] == _TASKS
+        assert statements
+        assert any(
+            "task_inspection_items" in statement.lower()
+            and "group by" in statement.lower()
+            for statement in statements
+        )
+
+    for client in (world["field"], world["plain"], manager_client):
+        response, statements = get_with_sql(client)
+        assert response.status_code == 200, response.text
+        assert statements
+        assert all(
+            row["task_count"] is None for row in response.json()["items"]
+        )
+        assert not any(
+            "task_inspection_items" in statement.lower()
+            and "group by" in statement.lower()
+            for statement in statements
+        )

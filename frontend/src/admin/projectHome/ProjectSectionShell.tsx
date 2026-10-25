@@ -5,6 +5,8 @@ import { BackLink } from '../../layout/BackLink'
 import { ROUTES } from '../../routes'
 import { PAGE_TITLES } from '../../terms'
 
+import './ProjectSectionShell.css'
+
 const SECTIONS = [
   { id: 'home', label: PAGE_TITLES.projectHome, route: ROUTES.projectHome },
   {
@@ -77,6 +79,8 @@ export default function ProjectSectionShell({
         (id): id is string => typeof id === 'string',
       )
     : []
+  const currentSection =
+    SECTIONS.find((section) => section.id === activeSection) ?? SECTIONS[0]
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -124,11 +128,12 @@ export default function ProjectSectionShell({
       <button
         aria-expanded={menuOpen}
         aria-controls="project-mobile-sections"
+        aria-label={`切換專案頁面，目前在${currentSection.label}`}
         className="project-section-menu-button"
         onClick={() => setMenuOpen((open) => !open)}
         type="button"
       >
-        {menuOpen ? '關閉區段選單' : '區段選單'}
+        {currentSection.label} {menuOpen ? '▴' : '▾'}
       </button>
       <div className="project-home-body">
         <aside className="project-section-sidebar">{navigation}</aside>

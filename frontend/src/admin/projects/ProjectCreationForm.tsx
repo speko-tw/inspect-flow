@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 
 import { ConfirmBox } from '../../ui/ConfirmBox'
@@ -66,6 +66,7 @@ export function ProjectCreationForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const requestErrorRef = useRef<HTMLParagraphElement | null>(null)
   const dirty = Object.keys(EMPTY_DRAFT).some(
     (field) =>
       draft[field as keyof ProjectDraft] !==
@@ -75,6 +76,18 @@ export function ProjectCreationForm({
   useEffect(() => {
     onDirtyChange?.(dirty)
   }, [dirty, onDirtyChange])
+
+  useEffect(() => {
+    if (!error || !requestErrorRef.current) return
+    // #734 T7：一般送出錯誤置於按鈕前並聚焦，不捲回頁面頂端。
+    const message = requestErrorRef.current
+    const block =
+      message.getBoundingClientRect().height > window.innerHeight * 0.8
+        ? 'start'
+        : 'nearest'
+    message.scrollIntoView?.({ block })
+    message.focus({ preventScroll: true })
+  }, [error])
 
   useEffect(() => {
     let active = true
@@ -193,7 +206,6 @@ export function ProjectCreationForm({
             : [],
         )}
       />
-      {error && <p role="alert">{error}</p>}
       <FormGroup title="專案資料">
         <FormField
           id="company-role"
@@ -330,6 +342,11 @@ export function ProjectCreationForm({
           </FormField>
         )}
       </FormGroup>
+      {error && (
+        <p ref={requestErrorRef} role="alert" tabIndex={-1}>
+          {error}
+        </p>
+      )}
       <div className="card-actions">
         {onCancel && (
           <button onClick={cancel} type="button">

@@ -797,12 +797,14 @@ describe('admin projects page', () => {
     expect(screen.queryByText('查看專案')).toBeNull()
     expect(screen.queryByText('進入專案')).toBeNull()
     expect(screen.getAllByRole('link', { name: '開啟專案' })).toHaveLength(2)
-    expect(screen.getAllByRole('link', { name: '套用範本' })[0]).toHaveClass(
-      'btn-primary',
-    )
-    expect(
-      screen.getAllByRole('link', { name: '開啟專案' })[0],
-    ).not.toHaveClass('btn-primary')
+    const card = screen
+      .getAllByRole('link', { name: '開啟專案' })[0]
+      .closest('article') as HTMLElement
+    const cardLinks = within(card).getAllByRole('link')
+    expect(cardLinks[0]).toHaveAccessibleName('開啟專案')
+    expect(cardLinks[0]).toHaveClass('btn-primary')
+    expect(cardLinks[1]).toHaveAccessibleName('套用範本')
+    expect(cardLinks[1]).not.toHaveClass('btn-primary')
     expect(screen.getByRole('button', { name: '搜尋' })).not.toHaveClass(
       'btn-primary',
     )
@@ -1015,6 +1017,34 @@ describe('admin projects page', () => {
     expect(
       screen.getByRole('link', { name: /專案代號：請填寫此欄位/ }),
     ).toHaveAttribute('href', '#project-code')
+  })
+
+  it('shows project submit failures above the submit button and focuses them', async () => {
+    projectFetch({
+      failWith: {
+        match: /\/projects$/,
+        method: 'POST',
+        code: 'server.error',
+        status: 500,
+      },
+    })
+    renderAt('/projects')
+    await screen.findAllByText('示範工程')
+    fillProjectForm()
+    await waitForNewProjectSubmit()
+    const form = screen
+      .getByRole('heading', { name: '新增專案', level: 2 })
+      .closest('form') as HTMLFormElement
+    fireEvent.click(within(form).getByRole('button', { name: '新增專案' }))
+
+    const alert = await within(form).findByRole('alert')
+    expect(alert).toHaveTextContent('伺服器暫時無法處理，請稍後再試。')
+    await waitFor(() => expect(alert).toHaveFocus())
+    expect(
+      alert.compareDocumentPosition(
+        within(form).getByRole('button', { name: '新增專案' }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
   it('lets Admin choose an eligible project creator', async () => {

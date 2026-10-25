@@ -102,6 +102,11 @@ export const ROUTES = {
     title: PAGE_TITLES.templates,
     permission: 'template-library-access',
   },
+  templateSaveFromProject: {
+    path: '/templates/from-project',
+    title: PAGE_TITLES.templates,
+    permission: 'template-library-access',
+  },
   projectHome: {
     path: '/projects/:projectId',
     title: PAGE_TITLES.projectHome,
@@ -243,6 +248,7 @@ const ACCESS_ROUTES: Array<{ route: ProductRoute; end: boolean }> = [
   { route: ROUTES.projectMembers, end: true },
   { route: ROUTES.projectHome, end: true },
   { route: ROUTES.adminProjects, end: true },
+  { route: ROUTES.templateSaveFromProject, end: true },
   { route: ROUTES.adminTemplates, end: false },
   { route: ROUTES.fieldTask, end: true },
   { route: ROUTES.fieldTasks, end: true },
