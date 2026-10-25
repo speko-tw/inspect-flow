@@ -377,6 +377,10 @@ describe('專案範本套用與存為範本（#429）', () => {
     mockApi({ canSave: true })
     renderPage({ ...USER, has_template_access: true }, [])
 
+    // #744：標題依賴 /projects 的資料，先等專案載入再驗標題層級。
+    await screen.findByText('試用 A 試用專案 A', {
+      selector: '.tpl-crumb',
+    })
     expect(
       await screen.findByRole('heading', {
         level: 2,
@@ -403,6 +407,10 @@ describe('專案範本套用與存為範本（#429）', () => {
     mockApi({ canSave: true })
     renderPage({ ...USER, has_template_access: true }, [], false, true)
 
+    // #744：獨立頁的 h1 同樣須先等專案資料，不以最終標題代替載入前提。
+    await screen.findByText('試用 A｜試用專案 A', {
+      selector: '.tpl-crumb',
+    })
     expect(
       await screen.findByRole('heading', {
         level: 1,
