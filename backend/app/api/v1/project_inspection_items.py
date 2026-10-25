@@ -191,7 +191,8 @@ def list_project_inspection_items(
     if db.get(Project, project_id) is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     can_edit_items = access.is_admin or (
-        "project_inspection_item.edit"
+        "inspection.use" in access.module_permissions
+        and "project_inspection_item.edit"
         in access.project_permissions_by_project.get(project_id, frozenset())
     )
 

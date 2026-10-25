@@ -1305,6 +1305,30 @@ describe('ProjectItemChangePage review round 2', () => {
         preview.item.title,
       ),
     )
+    fireEvent.change(screen.getByLabelText('查核項目名稱'), {
+      target: { value: '再次改名' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    const renameDialog = await screen.findByRole('dialog')
+    expect(
+      within(renameDialog).getByRole('radio', { name: noReinspectChoice }),
+    ).toBeChecked()
+    expect(renameDialog).toHaveTextContent('你選擇「不要」重新查核')
+    expect(api.update).toHaveBeenCalledTimes(1)
+    fireEvent.click(
+      within(renameDialog).getByRole('button', { name: '確認儲存' }),
+    )
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(2))
+    expect(api.update).toHaveBeenLastCalledWith(
+      'p',
+      'item-1',
+      expect.objectContaining({ title: '再次改名', reinspect: false }),
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('查核項目名稱')).toHaveValue(
+        preview.item.title,
+      ),
+    )
     fireEvent.change(screen.getByLabelText('項目說明'), {
       target: { value: '改過的項目說明' },
     })
