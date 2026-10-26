@@ -228,7 +228,7 @@ def park_template_names(
     因更新順序而拒絕合法的整批替換，呼叫端仍在同一交易中完成操作。
     """
     rows = list(items)
-    snapshots = {item.id: _template_audit_snapshot(db, item) for item in rows}
+    snapshots = _template_audit_snapshots(db, rows)
     for item in rows:
         item.title = f"__template_replacement_{uuid7()}"
     db.flush()
@@ -446,89 +446,146 @@ def _add_points(
 
 def _template_audit_snapshot(db: Session, item: TemplateItem) -> dict:
     """Serialize template structure for TPL-R25 audit events."""
+    return _template_audit_snapshots(db, [item])[item.id]
+
+
+def _by_point(rows: Iterable, attribute: str = "inspection_point_id") -> dict:
+    """依項次分組，保留查詢已排好的順序。"""
+    grouped: dict = {}
+    for row in rows:
+        grouped.setdefault(getattr(row, attribute), []).append(row)
+    return grouped
+
+
+def _template_audit_snapshots(
+    db: Session, items: Iterable[TemplateItem]
+) -> dict[UUID, dict]:
+    """批次序列化多個範本結構（TPL-R25）。
+
+    項次與其子表各以一次 IN 查詢載入，查詢次數固定、不隨項目數或
+    項次數成長（比照 #462）；輸出內容與逐項查詢時完全相同。
+    """
+    rows = list(items)
+    if not rows:
+        return {}
     points = db.scalars(
         select(TemplateInspectionPoint)
-        .where(TemplateInspectionPoint.template_item_id == item.id)
+        .where(
+            TemplateInspectionPoint.template_item_id.in_(
+                [item.id for item in rows]
+            )
+        )
         .order_by(TemplateInspectionPoint.sequence, TemplateInspectionPoint.id)
     ).all()
-    point_snapshots = []
-    for point in points:
-        fields = db.scalars(
+    points_by_item = _by_point(points, "template_item_id")
+    point_ids = [point.id for point in points]
+    fields = (
+        db.scalars(
             select(TemplateMeasurementField)
-            .where(TemplateMeasurementField.inspection_point_id == point.id)
+            .where(TemplateMeasurementField.inspection_point_id.in_(point_ids))
             .order_by(
                 TemplateMeasurementField.sort_order,
                 TemplateMeasurementField.id,
             )
         ).all()
-        text = db.scalar(
+        if point_ids
+        else []
+    )
+    texts = (
+        db.scalars(
             select(TemplateTextStandard).where(
-                TemplateTextStandard.inspection_point_id == point.id
+                TemplateTextStandard.inspection_point_id.in_(point_ids)
             )
-        )
-        numeric = db.scalar(
+        ).all()
+        if point_ids
+        else []
+    )
+    numerics = (
+        db.scalars(
             select(TemplateNumericStandard).where(
-                TemplateNumericStandard.inspection_point_id == point.id
+                TemplateNumericStandard.inspection_point_id.in_(point_ids)
             )
-        )
-        evidence = db.scalars(
+        ).all()
+        if point_ids
+        else []
+    )
+    evidence = (
+        db.scalars(
             select(TemplateEvidenceRequirement)
-            .where(TemplateEvidenceRequirement.inspection_point_id == point.id)
+            .where(
+                TemplateEvidenceRequirement.inspection_point_id.in_(point_ids)
+            )
             .order_by(
                 TemplateEvidenceRequirement.created_at,
                 TemplateEvidenceRequirement.id,
             )
         ).all()
-        snapshot = {
-            "sequence": point.sequence,
-            "title": point.title,
-            "instruction": point.instruction,
-            "measurement_fields": [
-                {
-                    "name": field.name,
-                    "field_type": field.field_type,
-                    "unit": field.unit,
-                    "sort_order": field.sort_order,
-                }
-                for field in fields
-            ],
-            "evidence_requirements": [
-                {
-                    "evidence_type": row.evidence_type,
-                    "required": row.required,
-                    "min_count": row.min_count,
-                    "max_count": row.max_count,
-                }
-                for row in evidence
-            ],
-        }
-        if text is not None:
-            snapshot["text_standard"] = {"text": text.text}
-        if numeric is not None:
-            bound_field = db.get(
-                TemplateMeasurementField, numeric.measurement_field_id
-            )
-            assert bound_field is not None  # numeric standard FK must resolve
-            snapshot["numeric_standard"] = {
-                "value": numeric.value,
-                "condition": numeric.condition,
-                "unit": numeric.unit,
-                "tolerance": numeric.tolerance,
-                "range_form": numeric.range_form,
-                "lower_bound": numeric.lower_bound,
-                "upper_bound": numeric.upper_bound,
-                "measurement_field": bound_field.name,
+        if point_ids
+        else []
+    )
+    fields_by_point = _by_point(fields)
+    fields_by_id = {field.id: field for field in fields}
+    text_by_point = {row.inspection_point_id: row for row in texts}
+    numeric_by_point = {row.inspection_point_id: row for row in numerics}
+    evidence_by_point = _by_point(evidence)
+
+    snapshots: dict[UUID, dict] = {}
+    for item in rows:
+        point_snapshots = []
+        for point in points_by_item.get(item.id, []):
+            text = text_by_point.get(point.id)
+            numeric = numeric_by_point.get(point.id)
+            snapshot = {
+                "sequence": point.sequence,
+                "title": point.title,
+                "instruction": point.instruction,
+                "measurement_fields": [
+                    {
+                        "name": field.name,
+                        "field_type": field.field_type,
+                        "unit": field.unit,
+                        "sort_order": field.sort_order,
+                    }
+                    for field in fields_by_point.get(point.id, [])
+                ],
+                "evidence_requirements": [
+                    {
+                        "evidence_type": row.evidence_type,
+                        "required": row.required,
+                        "min_count": row.min_count,
+                        "max_count": row.max_count,
+                    }
+                    for row in evidence_by_point.get(point.id, [])
+                ],
             }
-        point_snapshots.append(snapshot)
-    return {
-        "system_id": item.system_id,
-        "sequence": item.sequence,
-        "title": item.title,
-        "instruction": item.instruction,
-        # Audit normalization sorts top-level lists as set-like payloads;
-        # wrap this sequence to preserve the user-defined inspection order.
-        "inspection_points": {"items": point_snapshots},
-    }
+            if text is not None:
+                snapshot["text_standard"] = {"text": text.text}
+            if numeric is not None:
+                # 綁定欄位屬於同一項次，已在批次載入的欄位內。
+                bound_field = fields_by_id.get(numeric.measurement_field_id)
+                assert bound_field is not None  # numeric standard FK
+                snapshot["numeric_standard"] = {
+                    "value": numeric.value,
+                    "condition": numeric.condition,
+                    "unit": numeric.unit,
+                    "tolerance": numeric.tolerance,
+                    "range_form": numeric.range_form,
+                    "lower_bound": numeric.lower_bound,
+                    "upper_bound": numeric.upper_bound,
+                    "measurement_field": bound_field.name,
+                }
+            point_snapshots.append(snapshot)
+        snapshots[item.id] = {
+            "system_id": item.system_id,
+            "sequence": item.sequence,
+            "title": item.title,
+            "instruction": item.instruction,
+            # Audit normalization sorts top-level lists as set-like
+            # payloads; wrap this sequence to preserve the user-defined
+            # inspection order.
+            "inspection_points": {"items": point_snapshots},
+        }
+    return snapshots
 
 
 def _record_template_update(
