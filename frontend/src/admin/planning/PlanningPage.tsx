@@ -109,7 +109,7 @@ const TASK_CANCEL_BINDINGS: FieldErrorBinding[] = [
 // 各表單欄位不同，所以每個表單各一張表。
 const TASK_CODE_MESSAGES: Record<string, string> = {
   'project_inspection_item.inactive':
-    '所選查核項目已停用，請重新載入並選擇啟用項目。',
+    '所選的查核項目剛被停用，清單已更新並取消勾選，請確認後再送出。',
   'inspection_task.invalid_zone': '所選分區不屬於這個專案，請重新選擇。',
   'inspection_task.invalid_assignee':
     '建議指派人不是這個專案的成員，請重新選擇。',
@@ -630,6 +630,8 @@ export default function PlanningPage({
         const [itemsResult, zonesResult, membersResult, plansResult] = results
         if (itemsResult.status === 'fulfilled') {
           const loaded = itemsResult.value
+          // IP-R24：新增任務表單重載項目後，裁掉剛被停用的勾選並提示
+          // 移除的名稱，避免送出已知會被拒絕的項目。
           const selected = taskItemsRef.current
           const activeIds = new Set(
             loaded
@@ -645,6 +647,18 @@ export default function PlanningPage({
               .map((item) => item.title),
           )
           setTaskItems(selected.filter((id) => activeIds.has(id)))
+          // IP-R24：修改草稿時，原本就選著的停用項目可保留，只裁掉
+          // 剛新勾選、之後才被停用的項目（送出會回 inactive）。
+          setEditingTaskItems((current) => {
+            if (!current) return current
+            const original = new Set(current.task.items.map((i) => i.id))
+            const kept = current.itemIds.filter(
+              (id) => activeIds.has(id) || original.has(id),
+            )
+            return kept.length === current.itemIds.length
+              ? current
+              : { ...current, itemIds: kept }
+          })
           setItems(loaded)
         } else {
           setItems([])
@@ -975,6 +989,14 @@ export default function PlanningPage({
         caught instanceof HttpError && caught.code
           ? codeFields[caught.code]
           : undefined
+      if (
+        caught instanceof HttpError &&
+        caught.code === 'project_inspection_item.inactive'
+      ) {
+        // IP-R24：項目在送出前被停用；沿用重載裁除機制自動更新清單，
+        // 不要求使用者手動重新載入，也不清其他欄位的輸入與錯誤。
+        setReloadKey((key) => key + 1)
+      }
       if (codeField && caught instanceof HttpError && caught.code) {
         setServerFieldErrors({
           [codeField]:
@@ -1819,6 +1841,8 @@ export default function PlanningPage({
                               >
                                 至少選擇一筆查核項目。
                               </p>
+                              {/* IP-R24：草稿選單只額外呈現原本就選著的
+                                  停用項目，不讓使用者把它換成其他停用項目。 */}
                               {items
                                 .filter(
                                   (item) =>
@@ -1833,6 +1857,13 @@ export default function PlanningPage({
                                   )
                                   const selected =
                                     editingTaskItems.itemIds.includes(item.id)
+                                  const inactiveNoteId = [
+                                    'task',
+                                    task.id,
+                                    'item',
+                                    item.id,
+                                    'inactive-note',
+                                  ].join('-')
                                   return (
                                     <div
                                       className="planning-task-item-choice"
@@ -1840,8 +1871,25 @@ export default function PlanningPage({
                                     >
                                       <label>
                                         <input
+                                          aria-describedby={
+                                            item.is_active === false
+                                              ? inactiveNoteId
+                                              : undefined
+                                          }
                                           checked={selected}
                                           onChange={(event) => {
+                                            // 取消勾選的停用項目會從清單消失，
+                                            // 先把焦點移到選單群組，避免掉到 body。
+                                            if (
+                                              !event.target.checked &&
+                                              item.is_active === false
+                                            ) {
+                                              event.currentTarget
+                                                .closest('fieldset')
+                                                ?.focus({
+                                                  preventScroll: true,
+                                                })
+                                            }
                                             const selectedIds =
                                               editingTaskItems.itemIds
                                             setEditingTaskItems({
@@ -1868,7 +1916,9 @@ export default function PlanningPage({
                                         )}
                                       </label>
                                       {item.is_active === false && (
-                                        <p>取消勾選後無法再加回。</p>
+                                        <p id={inactiveNoteId}>
+                                          取消勾選後無法再加回。
+                                        </p>
                                       )}
                                       <details>
                                         <summary style={{ minHeight: 44 }}>
@@ -2256,6 +2306,19 @@ export default function PlanningPage({
                     {removedTaskItems.length > 0 && (
                       <p role="status">
                         已移除剛停用的項目：{removedTaskItems.join('、')}
+                      </p>
+                    )}
+                    {/* IP-R24：新增任務不得選入停用項目，清單只列啟用者。 */}
+                    {!loading &&
+                      items.length > 0 &&
+                      !items.some((item) => item.is_active !== false) && (
+                        <p className="field-hint">
+                          目前沒有啟用的查核項目，請先到專案查核項目新增或恢復。
+                        </p>
+                      )}
+                    {!loading && items.length === 0 && (
+                      <p className="field-hint">
+                        這個專案還沒有查核項目，請先到專案查核項目新增。
                       </p>
                     )}
                     {items

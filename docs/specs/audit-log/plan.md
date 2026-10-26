@@ -171,3 +171,10 @@ SQLite 得以 batch migration 設 NOT NULL 或移除欄位。交易失敗即
 ## #735 第二輪查詢呈現澄清
 
 T13 純前端沿用事件目錄：只列變動且認得的欄位，既有帳號／專案對照換名稱，未知 ID 不顯示；查核項次以數量摘要，新增／刪除另列內容，原始 JSON 收進「技術細節（工程人員用）」。窄螢幕每欄位一張卡片；不增加後端快照資料。
+
+## #717 專案查核項目停用與恢復
+
+事件目錄補 `project_inspection_item.deactivated`、`project_inspection_item.reactivated`（IP-R26）；與來源項目 `is_active` 轉換同交易，before／after 含 `is_active` 與 `title`，同狀態重送不寫事件，稽核失敗連同旗標回滾。
+
+- 前端 `auditLabels` 補兩個事件的白話名稱，並由 `auditLabels.test.ts` 驗證。
+- 依 `backend/tests/api/test_project_item_activation.py` 與完整 `make check` 驗收（IP-AC26）；不新增 migration。

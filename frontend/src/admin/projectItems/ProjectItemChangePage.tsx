@@ -673,6 +673,20 @@ export default function ProjectItemChangePage({
         } catch {
           // 保留後端回報的封存訊息。
         }
+      } else if (
+        caught instanceof ManagementApiError &&
+        caught.status === 409 &&
+        caught.code === 'project_inspection_item.inactive'
+      ) {
+        // IP-R23：載入後項目才被停用；停用項目須先恢復才可修改，
+        // 所以和封存一樣改為唯讀並收起確認框，保留後端回報的訊息。
+        setReadOnly(true)
+        setConfirming(false)
+        try {
+          await reloadPreview()
+        } catch {
+          // 保留後端回報的停用訊息。
+        }
       } else if (isReinspectionChoiceRequired(caught)) {
         try {
           const loaded = await reloadPreview()

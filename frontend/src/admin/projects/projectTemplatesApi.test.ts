@@ -39,13 +39,15 @@ describe('templateErrorMessage', () => {
   })
 })
 
-it('IP-AC25：套用與存為範本共用停用名稱的恢復提示', () => {
-  expect(
-    templateErrorMessage(
-      new ProjectTemplatesApiError(
-        409,
-        'project_inspection_item.inactive_name',
-      ),
-    ),
-  ).toBe('同名項目已停用，可在已停用清單恢復。')
+it('TPL-AC32：套用說明同名項目已停用，存為範本說明來源已停用', () => {
+  const error = new ProjectTemplatesApiError(
+    409,
+    'project_inspection_item.inactive_name',
+  )
+  expect(templateErrorMessage(error)).toBe(
+    '同名項目已停用，可在已停用清單恢復。',
+  )
+  expect(templateErrorMessage(error, '來源', 'save')).toBe(
+    '來源項目已停用，請先到已停用清單恢復，才能存為範本。',
+  )
 })

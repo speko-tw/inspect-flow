@@ -179,7 +179,7 @@ export default function SaveTemplateFromProjectPage() {
         },
       })
     } catch (caught) {
-      setStepError('save', templateErrorMessage(caught, name.trim()))
+      setStepError('save', templateErrorMessage(caught, name.trim(), 'save'))
     } finally {
       setBusy(false)
     }
@@ -240,6 +240,7 @@ export default function SaveTemplateFromProjectPage() {
             <h2>選擇查核項目</h2>
             {stepError('items')}
             {loading ? <p role="status">載入中…</p> : null}
+            {/* TPL-R28：存為範本不列停用來源，須先到專案恢復。 */}
             {!loading && (
               <ul>
                 {projectItems
@@ -259,7 +260,10 @@ export default function SaveTemplateFromProjectPage() {
                   ))}
               </ul>
             )}
-            <p>停用項目須先恢復，才能存為範本。</p>
+            {!loading &&
+              projectItems.some((item) => item.is_active === false) && (
+                <p>停用項目須先恢復，才能存為範本。</p>
+              )}
           </li>
         )}
         {source && (

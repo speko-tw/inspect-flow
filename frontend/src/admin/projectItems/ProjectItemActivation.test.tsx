@@ -27,7 +27,7 @@ const item = {
 
 afterEach(() => vi.unstubAllGlobals())
 
-function renderItems(canEdit = true) {
+function renderItems(canEdit = true, state?: Record<string, unknown>) {
   return render(
     <CurrentUserProvider
       value={{
@@ -35,7 +35,7 @@ function renderItems(canEdit = true) {
         clear: vi.fn(),
       }}
     >
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[{ pathname: '/', state }]}>
         <ProjectItemLinks
           projectId="p"
           viewerPermissions={canEdit ? ['project_inspection_item.edit'] : []}
@@ -92,9 +92,14 @@ describe('IP-AC23：停用與恢復', () => {
       screen.queryByRole('link', { name: `修改「${item.title}」` }),
     ).toBeNull()
     fireEvent.click(summary)
+    expect(screen.getByRole('status')).toHaveTextContent(
+      `已停用「${item.title}」。`,
+    )
     fireEvent.click(
       within(inactive).getByRole('button', { name: `恢復「${item.title}」` }),
     )
+    // UDS-R18：開始新的操作就清掉前一次的結果。
+    expect(screen.queryByRole('status')).toBeNull()
     expect(calls).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: '確認恢復' }))
     expect(
@@ -164,5 +169,57 @@ describe('IP-AC23：停用與恢復', () => {
       '/api/v1/projects/p/inspection-items/item-717:deactivate',
       '/api/v1/projects/p/inspection-items/item-717:activate',
     ])
+  })
+
+  it('停用失敗留在確認區顯示錯誤，項目仍在啟用清單', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        init?.method === 'POST'
+          ? Response.json(
+              { error: { code: 'resource.not_found' } },
+              { status: 404 },
+            )
+          : Response.json({ items: [item], next_cursor: null }),
+      ),
+    )
+    renderItems()
+    fireEvent.click(
+      await screen.findByRole('button', { name: `刪除「${item.title}」` }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '停用這個項目' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認停用' }))
+    const confirm = screen.getByRole('group', { name: '停用查核項目' })
+    const alert = await within(confirm).findByRole('alert')
+    expect(alert).toHaveTextContent('找不到此查核項目')
+    await waitFor(() => expect(alert).toHaveFocus())
+    expect(screen.queryByText('已停用（1）')).toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(
+      screen.getByRole('link', { name: `修改「${item.title}」` }),
+    ).toBeVisible()
+  })
+
+  it('點恢復時清掉前一次的成功提示與存為範本提示（UDS-R18）', async () => {
+    const other = { ...item, id: 'item-b', title: '另一個項目', task_count: 0 }
+    const inactive = { ...item, is_active: false }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({ items: [inactive, other], next_cursor: null }),
+      ),
+    )
+    renderItems(true, {
+      savedFromItemId: other.id,
+      savedTemplateTitle: '剛存的範本',
+      savedTemplateId: 't1',
+    })
+    expect(await screen.findByText(/已將「剛存的範本」存為範本/)).toBeVisible()
+    fireEvent.click(await screen.findByText('已停用（1）'))
+    fireEvent.click(
+      screen.getByRole('button', { name: `恢復「${item.title}」` }),
+    )
+    expect(screen.queryByText(/已將「剛存的範本」存為範本/)).toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })

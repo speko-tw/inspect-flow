@@ -15,6 +15,7 @@ import { listProjectItems } from '../projectItems/api'
 import {
   listAllProjects,
   saveProjectItemAsTemplate,
+  templateErrorMessage,
 } from '../projects/projectTemplatesApi'
 import { listTemplateCategories, listTemplateSystems } from './api'
 import SaveTemplateFromProjectPage from './SaveTemplateFromProjectPage'
@@ -23,7 +24,7 @@ vi.mock('../projectItems/api', () => ({ listProjectItems: vi.fn() }))
 vi.mock('../projects/projectTemplatesApi', () => ({
   listAllProjects: vi.fn(),
   saveProjectItemAsTemplate: vi.fn(),
-  templateErrorMessage: (error: Error) => error.message,
+  templateErrorMessage: vi.fn((error: Error) => error.message),
 }))
 vi.mock('./api', () => ({
   listTemplateCategories: vi.fn(),
@@ -316,7 +317,7 @@ describe('SaveTemplateFromProjectPage', () => {
   })
 })
 
-it('R2：跨專案存為範本不列停用來源', async () => {
+it('TPL-AC32：跨專案存為範本不列停用來源', async () => {
   vi.mocked(listAllProjects).mockResolvedValue([
     { id: 'p1', project_code: 'P-1', name: '工程一' },
   ])
@@ -341,4 +342,68 @@ it('R2：跨專案存為範本不列停用來源', async () => {
   expect(await screen.findByRole('button', { name: /啟用來源/ })).toBeVisible()
   expect(screen.queryByRole('button', { name: /停用來源/ })).toBeNull()
   expect(screen.getByText('停用項目須先恢復，才能存為範本。')).toBeVisible()
+})
+
+it('TPL-AC32：沒有停用項目時不顯示先恢復的提示', async () => {
+  vi.mocked(listAllProjects).mockResolvedValue([
+    { id: 'p1', project_code: 'P-1', name: '工程一' },
+  ])
+  vi.mocked(listTemplateCategories).mockResolvedValue([])
+  vi.mocked(listProjectItems).mockResolvedValue([
+    {
+      id: 'active',
+      project_id: 'p1',
+      sequence: 1,
+      title: '啟用來源',
+      instruction: '',
+      source_template_name: '範本',
+      applied_at: '2026-10-01T00:00:00Z',
+      task_count: 0,
+      inspection_points: [],
+    },
+  ])
+  renderPage(true)
+  fireEvent.click(await screen.findByRole('button', { name: 'P-1 · 工程一' }))
+  expect(await screen.findByRole('button', { name: /啟用來源/ })).toBeVisible()
+  expect(screen.queryByText('停用項目須先恢復，才能存為範本。')).toBeNull()
+})
+
+it('TPL-AC32：存入失敗以存為範本的語意轉譯錯誤', async () => {
+  vi.mocked(listAllProjects).mockResolvedValue([
+    { id: 'p1', project_code: 'P-1', name: '工程一' },
+  ])
+  vi.mocked(listTemplateCategories).mockResolvedValue([
+    { id: 'c1', name: '土木' },
+  ])
+  vi.mocked(listTemplateSystems).mockResolvedValue([
+    { id: 's1', category_id: 'c1', name: '結構' },
+  ])
+  vi.mocked(listProjectItems).mockResolvedValue([
+    {
+      id: 'i1',
+      project_id: 'p1',
+      sequence: 1,
+      title: '鋼筋查核',
+      instruction: '',
+      source_template_name: '原範本',
+      applied_at: '2026-10-01T00:00:00Z',
+      task_count: 0,
+      inspection_points: [],
+    },
+  ])
+  vi.mocked(saveProjectItemAsTemplate).mockRejectedValueOnce(
+    new Error('來源項目已停用'),
+  )
+  renderPage(true)
+  fireEvent.click(await screen.findByRole('button', { name: 'P-1 · 工程一' }))
+  fireEvent.click(await screen.findByRole('button', { name: /鋼筋查核/ }))
+  fireEvent.click(screen.getByRole('button', { name: '土木' }))
+  fireEvent.click(await screen.findByRole('button', { name: '結構' }))
+  fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('來源項目已停用')
+  expect(vi.mocked(templateErrorMessage)).toHaveBeenLastCalledWith(
+    expect.any(Error),
+    '鋼筋查核',
+    'save',
+  )
 })

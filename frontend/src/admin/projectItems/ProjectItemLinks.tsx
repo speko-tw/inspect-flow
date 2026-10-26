@@ -246,6 +246,8 @@ export default function ProjectItemLinks({
     )
   }
 
+  // IP-R23：清單預設只列啟用項目，停用者收進底部「已停用（N）」，
+  // 須先恢復才可修改（API 清單預設兩種狀態都回，依 IP-R26 由前端過濾）。
   const activeItems = items.filter((item) => item.is_active !== false)
   const inactiveItems = items.filter((item) => item.is_active === false)
 
@@ -450,6 +452,8 @@ export default function ProjectItemLinks({
                       setDeleting(null)
                       setActivation({ item, active: true })
                       setActivationError('')
+                      setSaveResult(null)
+                      setNotice('')
                     }}
                     type="button"
                   >

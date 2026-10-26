@@ -147,8 +147,10 @@ export default function ProjectTemplatesPage({
     null,
   )
   const [saveName, setSaveName] = useState('')
+  // TPL-R28：存為範本不列停用來源；網址直接帶入停用項目時也不採用，
+  // 避免略過清單過濾而送出必定被拒絕的請求。
   const routeSaveSource = projectItems.find(
-    (item) => item.id === routeSaveItemId,
+    (item) => item.id === routeSaveItemId && item.is_active !== false,
   )
   const activeSaveSource = routeSaveSource ?? saveSource
   const activeSaveName = routeSaveSource
@@ -212,6 +214,11 @@ export default function ProjectTemplatesPage({
     !itemsLoading &&
     !currentItemsLoadError &&
     projectItems.every((item) => item.is_active === false)
+  // TPL-R28：載入完成且確實有停用項目時才提示先恢復，其餘情況不顯示。
+  const showInactiveSaveHint =
+    !itemsLoading &&
+    !currentItemsLoadError &&
+    projectItems.some((item) => item.is_active === false)
 
   useEffect(() => {
     if (applyConflict) conflictActionRef.current?.focus()
@@ -407,6 +414,8 @@ export default function ProjectTemplatesPage({
     () => new Set(projectItems.map((item) => pythonCasefold(item.title))),
     [projectItems],
   )
+  // TPL-R28：停用項目仍參與同名比對；這組只含啟用項目，用來分辨
+  // 「已套用」與「同名項目已停用」兩種提示。
   const activeProjectItemNames = useMemo(
     () =>
       new Set(
@@ -629,7 +638,7 @@ export default function ProjectTemplatesPage({
       setRouteSaveItemId(null)
       setRouteSaveName(null)
     } catch (caught) {
-      setSaveError(templateErrorMessage(caught, activeSaveName.trim()))
+      setSaveError(templateErrorMessage(caught, activeSaveName.trim(), 'save'))
       setSaveErrorCode(
         caught instanceof ProjectTemplatesApiError && caught.status === 409
           ? (caught.code ?? '')
@@ -751,6 +760,7 @@ export default function ProjectTemplatesPage({
               )}
               {itemsLoading && <p>載入中…</p>}
               {showEmptyProjectItems && <p>目前沒有查核項目。</p>}
+              {showInactiveSaveHint && <p>停用項目須先恢復，才能存為範本。</p>}
               <ul>
                 {projectItems
                   .filter((item) => item.is_active !== false)
@@ -777,7 +787,6 @@ export default function ProjectTemplatesPage({
                     </li>
                   ))}
               </ul>
-              <p>停用項目須先恢復，才能存為範本。</p>
             </section>
           )}
         </div>

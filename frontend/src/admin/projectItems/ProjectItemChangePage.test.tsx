@@ -1709,3 +1709,31 @@ it('IP-AC25：改名遇停用同名項目時保留輸入並引導恢復', async 
   ).toBeVisible()
   expect(screen.getByLabelText('查核項目名稱')).toHaveValue('停用的同名項目')
 })
+
+describe('IP-AC23：停用項目唯讀', () => {
+  it('載入停用項目時顯示唯讀與先恢復的提示', async () => {
+    const inactive = structuredClone(preview)
+    inactive.item.is_active = false
+    inactive.readOnly = true
+    renderPage(apiWith({ loadPreview: vi.fn(async () => inactive) }))
+    expect(await screen.findByText('唯讀瀏覽')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '此查核項目已停用，請先在已停用清單恢復。',
+    )
+  })
+
+  it('送出時才發現已被停用：改為唯讀並收起確認框', async () => {
+    const api = apiWith({
+      update: vi.fn(async () => {
+        throw new ManagementApiError(409, 'project_inspection_item.inactive')
+      }),
+    })
+    renderPage(api)
+    await confirm('yes')
+    expect(await screen.findByText('唯讀瀏覽')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '此查核項目已停用，請先在已停用清單恢復。',
+    )
+  })
+})
