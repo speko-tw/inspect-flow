@@ -5,15 +5,24 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router'
+import {
+  Link,
+  useLocation,
+  useMatch,
+  useNavigate,
+  useParams,
+} from 'react-router'
 
 import { HttpError, isForbidden } from '../../http'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
+import { RequiredMark } from '../../ui/Form'
+import { revealElement } from '../../ui/reveal'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { planningClient, planningErrorMessage } from './api'
 import type { PlanningClient, ProjectZone } from './api'
 import { UnsavedLeaveBox } from '../../ui/navigation'
+import { BackLink } from '../../layout/BackLink'
 import { useUnsavedNavigationGuard } from '../../ui/navigation'
 import ProjectDeniedPage from '../projectHome/ProjectDeniedPage'
 
@@ -48,10 +57,10 @@ export default function ProjectZonesPage({
   const { projectId = '' } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
-  const isAddPage = location.pathname.endsWith('/zones/new')
+  const isAddPage = useMatch('/projects/:projectId/zones/new') !== null
   const listPath = `/projects/${encodeURIComponent(projectId)}/zones`
   const zoneNotice = (
-    location.state as { zoneNotice?: { text: string } } | null
+    location.state as { zoneNotice?: { zoneId: string; text: string } } | null
   )?.zoneNotice
   const [zones, setZones] = useState<ProjectZone[]>([])
   const [name, setName] = useState('')
@@ -66,17 +75,51 @@ export default function ProjectZonesPage({
   const [error, setError] = useState('')
   const [deleteError, setDeleteError] = useState('')
   const [notice, setNotice] = useState('')
-  const visibleNotice = notice || (!isAddPage ? (zoneNotice?.text ?? '') : '')
+  const [createdNotice, setCreatedNotice] = useState<{
+    zoneId: string
+    text: string
+  } | null>(null)
+  const [consumedNoticeKey, setConsumedNoticeKey] = useState('')
+  const [highlight, setHighlight] = useState<{
+    noticeKey: string
+    zoneId: string
+    active: boolean
+  } | null>(null)
+  const zoneRows = useRef(new Map<string, HTMLLIElement>())
+  const zoneNotices = useRef(new Map<string, HTMLParagraphElement>())
+  const visibleNotice = notice
   const [nameError, setNameError] = useState(false)
   const [serverNameError, setServerNameError] = useState('')
   const [formRouteKey, setFormRouteKey] = useState(`${projectId}:${isAddPage}`)
   const currentFormRouteKey = `${projectId}:${isAddPage}`
+  const currentNoticeKey =
+    zoneNotice && !isAddPage ? `${location.key}:${zoneNotice.zoneId}` : ''
+  if (currentNoticeKey && consumedNoticeKey !== currentNoticeKey) {
+    // 將一次性導頁狀態留在元件，清除網址狀態後訊息仍可留在新增列。
+    setConsumedNoticeKey(currentNoticeKey)
+    setCreatedNotice(zoneNotice ?? null)
+  }
+  if (
+    createdNotice &&
+    currentNoticeKey &&
+    consumedNoticeKey === currentNoticeKey &&
+    highlight?.noticeKey !== consumedNoticeKey
+  ) {
+    setHighlight({
+      noticeKey: consumedNoticeKey,
+      zoneId: createdNotice.zoneId,
+      active: true,
+    })
+  }
+  const highlightedZoneId = highlight?.active ? highlight.zoneId : null
   if (formRouteKey !== currentFormRouteKey) {
-    // 已確認離開新增網址後丟棄草稿；被 guard 攔下時路徑不變，草稿保留。
+    // ADM-R52：確認離開新增網址後丟棄草稿；被 guard 攔下時保留草稿。
     setFormRouteKey(currentFormRouteKey)
     setName('')
     setNameError(false)
     setServerNameError('')
+    setEditing(null)
+    setDeleting(null)
   }
   const nameInput = useRef<HTMLInputElement>(null)
   const errorMessage = useRef<HTMLParagraphElement>(null)
@@ -91,13 +134,40 @@ export default function ProjectZonesPage({
   const guard = useSubmitGuard()
   const canManage = viewerPermissions.includes('project_zone.manage')
   const hasUnsavedChanges = Boolean(
-    canManage && (editing ? name !== editing.name : name.length > 0),
+    canManage &&
+    (isAddPage
+      ? name.length > 0
+      : editing
+        ? name !== editing.name
+        : name.length > 0),
   )
   const leaveGuard = useUnsavedNavigationGuard(hasUnsavedChanges)
 
   useEffect(() => {
     if (nameError || serverNameError) nameInput.current?.focus()
   }, [nameError, serverNameError])
+
+  useEffect(() => {
+    if (isAddPage || !zoneNotice) return
+    navigate(location.pathname, { replace: true, state: null })
+  }, [isAddPage, location.pathname, navigate, zoneNotice])
+
+  useEffect(() => {
+    if (!createdNotice) return
+    const row = zoneRows.current.get(createdNotice.zoneId)
+    const message = zoneNotices.current.get(createdNotice.zoneId)
+    if (!row || !message) return
+    revealElement(message, 'nearest')
+    const noticeKey = consumedNoticeKey
+    const timer = window.setTimeout(() => {
+      setHighlight((current) =>
+        current?.noticeKey === noticeKey
+          ? { ...current, active: false }
+          : current,
+      )
+    }, 1800)
+    return () => window.clearTimeout(timer)
+  }, [createdNotice, consumedNoticeKey, zones])
 
   useEffect(() => {
     if (error && !nameError && !serverNameError) {
@@ -162,6 +232,7 @@ export default function ProjectZonesPage({
   function clearNameErrors() {
     setNameError(false)
     setServerNameError('')
+    setCreatedNotice(null)
     if (zoneNotice) {
       navigate(location.pathname, { replace: true, state: null })
     }
@@ -183,7 +254,7 @@ export default function ProjectZonesPage({
       if (editing) {
         cancelEditing()
       } else {
-        // 新增表單常駐；Esc 等同放棄這次輸入。
+        // 新增頁不是列內編輯；Esc 放棄草稿，避免舊列資料被誤送。
         setName('')
         setError('')
         clearNameErrors()
@@ -224,6 +295,7 @@ export default function ProjectZonesPage({
     event.preventDefault()
     // ADM-R28：新操作包含欄位驗證，需清掉舊成功提示。
     setNotice('')
+    setCreatedNotice(null)
     if (!name.trim()) {
       setError('')
       setServerNameError('')
@@ -236,7 +308,7 @@ export default function ProjectZonesPage({
     clearNameErrors()
     setNotice('')
     try {
-      if (editing) {
+      if (editing && !isAddPage) {
         const updated = await client.renameZone(projectId, editing.id, name)
         setZones((current) =>
           current.map((zone) => (zone.id === updated.id ? updated : zone)),
@@ -246,10 +318,15 @@ export default function ProjectZonesPage({
       } else {
         const created = await client.createZone(projectId, name)
         if (isAddPage) {
+          setZones((current) => [...current, created])
           leaveGuard.allowNavigation(() =>
             navigate(listPath, {
+              replace: true,
               state: {
-                zoneNotice: { text: `已新增分區「${created.name}」。` },
+                zoneNotice: {
+                  zoneId: created.id,
+                  text: `已新增分區「${created.name}」。`,
+                },
               },
             }),
           )
@@ -278,6 +355,7 @@ export default function ProjectZonesPage({
   }
 
   async function remove(zone: ProjectZone) {
+    setCreatedNotice(null)
     setBusy(true)
     setError('')
     setDeleteError('')
@@ -312,9 +390,12 @@ export default function ProjectZonesPage({
         onKeyDown={blockImeEnter}
         onSubmit={(event) => void save(event)}
       >
-        <h3>{formHeading}</h3>
+        {isEditing ? <h3>{formHeading}</h3> : null}
         <label>
-          分區名稱
+          <span>
+            分區名稱
+            <RequiredMark />
+          </span>
           <input
             aria-describedby={
               nameError || serverNameError
@@ -341,14 +422,25 @@ export default function ProjectZonesPage({
             {nameError ? '請輸入分區名稱。' : serverNameError}
           </p>
         )}
-        <button className="btn-primary" disabled={busy} type="submit">
-          {isEditing ? '儲存名稱' : '新增分區'}
-        </button>
-        {isEditing && (
-          <button disabled={busy} onClick={cancelEditing} type="button">
-            取消
+        <div className="named-row-actions">
+          {isEditing ? (
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={cancelEditing}
+              type="button"
+            >
+              取消
+            </button>
+          ) : (
+            <Link className="btn" to={listPath}>
+              取消
+            </Link>
+          )}
+          <button className="btn btn-primary" disabled={busy} type="submit">
+            {isEditing ? '儲存名稱' : '新增分區'}
           </button>
-        )}
+        </div>
       </form>
     )
   }
@@ -361,19 +453,26 @@ export default function ProjectZonesPage({
     if (loadFailed) {
       return (
         <section aria-labelledby="project-zones-heading">
-          <h2 id="project-zones-heading">分區</h2>
+          <BackLink to={listPath}>返回分區清單</BackLink>
+          <h2 id="project-zones-heading">新增分區</h2>
           <p role="alert">{error}</p>
-          <button onClick={() => setReloadKey((key) => key + 1)} type="button">
+          <button
+            className="btn"
+            onClick={() => {
+              setCreatedNotice(null)
+              setReloadKey((key) => key + 1)
+            }}
+            type="button"
+          >
             重新載入
           </button>
-          <Link to={listPath}>返回分區清單</Link>
         </section>
       )
     }
     return (
       <section aria-labelledby="project-zones-heading">
-        <h2 id="project-zones-heading">分區</h2>
-        <p>管理專案內可供任務選擇的地點分區。</p>
+        <BackLink to={listPath}>返回分區清單</BackLink>
+        <h2 id="project-zones-heading">新增分區</h2>
         <UnsavedLeaveBox guard={leaveGuard} />
         {error && (
           <p ref={errorMessage} role="alert" tabIndex={-1}>
@@ -381,7 +480,6 @@ export default function ProjectZonesPage({
           </p>
         )}
         {renderNameForm(false)}
-        <Link to={listPath}>取消</Link>
       </section>
     )
   }
@@ -403,7 +501,14 @@ export default function ProjectZonesPage({
       )}
       {loading ? <p>載入中…</p> : null}
       {!loading && loadFailed ? (
-        <button onClick={() => setReloadKey((key) => key + 1)} type="button">
+        <button
+          className="btn"
+          onClick={() => {
+            setCreatedNotice(null)
+            setReloadKey((key) => key + 1)
+          }}
+          type="button"
+        >
           重新載入
         </button>
       ) : null}
@@ -415,17 +520,41 @@ export default function ProjectZonesPage({
           {visibleNotice}
         </p>
       )}
-      {canManage && (
+      {canManage && !editing && (
         <p>
-          <Link className="btn-primary" to={`${listPath}/new`}>
+          <Link className="btn btn-primary" to={`${listPath}/new`}>
             新增分區
           </Link>
         </p>
       )}
       <ul className="named-list">
         {zones.map((zone) => (
-          <li className="named-row" key={zone.id}>
-            {/* 改名表單就在該列內展開，分區多時不必捲到頁面底部才找到它。 */}
+          <li
+            className="named-row"
+            key={zone.id}
+            ref={(element) => {
+              if (element) zoneRows.current.set(zone.id, element)
+              else zoneRows.current.delete(zone.id)
+            }}
+            style={
+              highlightedZoneId === zone.id
+                ? { backgroundColor: 'var(--success-bg)' }
+                : undefined
+            }
+          >
+            {createdNotice?.zoneId === zone.id && (
+              <p
+                className="notice-success"
+                ref={(element) => {
+                  if (element) zoneNotices.current.set(zone.id, element)
+                  else zoneNotices.current.delete(zone.id)
+                }}
+                role="status"
+              >
+                {createdNotice.text}
+              </p>
+            )}
+            {/* 改名表單留在原列，新增則使用獨立網址（ADM-R52）。 */}
             {editing?.id === zone.id ? (
               renderNameForm(true)
             ) : (
@@ -434,7 +563,7 @@ export default function ProjectZonesPage({
             {canManage && editing?.id !== zone.id && (
               <span className="named-row-actions">
                 <button
-                  className="btn-sm"
+                  className="btn btn-sm"
                   ref={(element) => {
                     if (element) rowTriggers.current.set(zone.id, element)
                     else rowTriggers.current.delete(zone.id)
@@ -456,7 +585,7 @@ export default function ProjectZonesPage({
                   重新命名
                 </button>
                 <button
-                  className="btn-sm"
+                  className="btn btn-sm"
                   disabled={busy}
                   onClick={(event) => {
                     rowTrigger.current = event.currentTarget

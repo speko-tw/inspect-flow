@@ -112,6 +112,7 @@ export const ROUTES = {
     title: PAGE_TITLES.projectHome,
     permission: 'project-access',
   },
+  // ADM-R52：成員新增、角色修改與分區新增都有直接網址。
   projectMembers: {
     path: '/projects/:projectId/members',
     title: PAGE_TITLES.projectMembers,

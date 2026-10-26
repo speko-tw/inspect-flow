@@ -2080,8 +2080,7 @@ const memberAnna: ProjectMember = {
 }
 
 function addForm(): HTMLElement {
-  return screen.getByRole('heading', { name: '加入成員' })
-    .parentElement as HTMLElement
+  return document.querySelector('.member-add-form') as HTMLElement
 }
 
 async function openMemberAddForm() {
@@ -2163,6 +2162,78 @@ describe('admin project members', () => {
     )
   })
 
+  it('matches the member add route with a trailing slash', async () => {
+    projectFetch()
+    renderAt('/projects/project-1/members/new/')
+
+    expect(
+      await screen.findByRole('heading', { name: '加入成員' }),
+    ).toBeVisible()
+    expect(screen.getByTestId('member-path')).toHaveTextContent(
+      '/projects/project-1/members/new/',
+    )
+  })
+
+  it('shows retry instead of not-found when edit members return 503', async () => {
+    projectFetch({
+      failWith: {
+        match: /\/members$/,
+        method: 'GET',
+        code: 'service.unavailable',
+        status: 503,
+      },
+    })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入成員')
+    expect(screen.queryByText('找不到這位專案成員。')).toBeNull()
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+  })
+
+  it('denies a direct edit route when the member API returns 403', async () => {
+    projectFetch({
+      failWith: {
+        match: /\/members$/,
+        method: 'GET',
+        code: 'permission.denied',
+        status: 403,
+      },
+    })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(
+      await screen.findByRole('heading', { name: '無權限', level: 2 }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeNull()
+    expect(screen.queryByLabelText('查核員')).toBeNull()
+  })
+
+  it('shows a role-field retry and disables save when edit roles return 503', async () => {
+    projectFetch({
+      members: [memberAnna],
+      failWith: {
+        match: /\/assignable-roles/,
+        method: 'GET',
+        code: 'service.unavailable',
+        status: 503,
+      },
+    })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(
+      await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeVisible()
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入角色')
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '儲存角色' })).toBeDisabled()
+  })
+
   it('denies a direct add route without project member permission', async () => {
     projectFetch({
       office: true,
@@ -2205,6 +2276,10 @@ describe('admin project members', () => {
     expect(
       await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
     ).toBeVisible()
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(await screen.findByTestId('member-return-account')).toBeVisible()
   })
@@ -2238,16 +2313,16 @@ describe('admin project members', () => {
     },
   )
 
-  it('labels a valid account-detail fallback for a missing member', async () => {
+  it('keeps the member-list link for a missing member with return state', async () => {
     projectFetch()
     renderMemberReturnContract('/accounts/user-1')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '找不到這位專案成員。',
     )
-    expect(screen.getByRole('link', { name: '返回帳號詳情' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
       'href',
-      '/accounts/user-1',
+      '/projects/project-1/members',
     )
   })
 
@@ -2369,6 +2444,7 @@ describe('admin project members', () => {
   })
 
   it('adds a member; hides existing, inactive, system users', async () => {
+    const scroll = mockScrollIntoView()
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
@@ -2400,6 +2476,16 @@ describe('admin project members', () => {
       '已加入「林鮑伯（bob.lin）」。',
     )
     expect(screen.getByRole('status')).toHaveClass('notice-success')
+    const addedRow = screen.getByRole('link', { name: '林鮑伯' }).closest('li')
+    await waitFor(() => {
+      expect(addedRow).toHaveStyle({ backgroundColor: 'var(--success-bg)' })
+    })
+    const rowNotice = within(addedRow as HTMLElement).getByRole('status')
+    expect(rowNotice).toHaveTextContent('已加入「林鮑伯（bob.lin）」。')
+    await waitFor(() => {
+      expect(scroll.scrollIntoView.mock.contexts).toContain(rowNotice)
+    })
+    expect(scroll.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
     expect(screen.getByRole('heading', { name: '成員列表' })).toBeVisible()
     await openMemberAddForm()
     expect(screen.getByText('沒有可加入的成員。')).toBeVisible()
@@ -2407,6 +2493,35 @@ describe('admin project members', () => {
     expect(
       within(addForm()).queryByRole('button', { name: '加入成員' }),
     ).toBeNull()
+  })
+
+  it('reveals the added-member notice after roles finish loading', async () => {
+    const scroll = mockScrollIntoView()
+    const fetchMock = projectFetch()
+    renderAt('/projects/project-1/members')
+    await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
+
+    const select = screen.getByRole('combobox', { name: '成員' })
+    fireEvent.change(select, { target: { value: bob.id } })
+    fireEvent.click(within(addForm()).getByLabelText('查核員'))
+    const rolesGate = holdRequests(fetchMock, 'GET', /\/assignable-roles/)
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+
+    expect(await screen.findByRole('link', { name: '林鮑伯' })).toBeVisible()
+    expect(calls(fetchMock, 'GET', /\/assignable-roles/)).toHaveLength(2)
+    const addedRow = screen.getByRole('link', { name: '林鮑伯' }).closest('li')
+    const rowNotice = within(addedRow as HTMLElement).getByRole('status')
+    expect(rowNotice).toHaveTextContent('已加入「林鮑伯（bob.lin）」。')
+    expect(scroll.scrollIntoView.mock.contexts).not.toContain(rowNotice)
+
+    rolesGate.resolve()
+    await waitFor(() => {
+      expect(scroll.scrollIntoView.mock.contexts).toContain(rowNotice)
+    })
+    expect(scroll.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
   })
 
   it('filters assignable roles for external candidates', async () => {
@@ -2451,6 +2566,25 @@ describe('admin project members', () => {
 
     expect(screen.getByLabelText('查核員')).toBeVisible()
     expect(screen.queryByLabelText('內部角色')).toBeNull()
+  })
+
+  it('disables role editing on the current user row with an explanation', async () => {
+    const selfUser = {
+      ...adminUser,
+      id: anna.id,
+      username: anna.username,
+      name_zh: anna.name_zh,
+    }
+    const selfMember = { ...memberAnna }
+    projectFetch({ members: [selfMember] })
+    renderAt('/projects/project-1/members', selfUser)
+    await screen.findByText('不能修改自己的專案角色。')
+
+    const link = screen.getByRole('link', {
+      name: /修改「鄧安娜.*」的角色/,
+    })
+    expect(link).toHaveAttribute('aria-disabled', 'true')
+    expect(link).toHaveAttribute('tabindex', '-1')
   })
 
   it('shows the not-assignable error by role choices', async () => {
@@ -3123,7 +3257,8 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
 
     expect(await screen.findByText('鄧安娜')).toBeVisible()
-    expect(screen.queryByRole('alert')).toBeNull()
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入角色')
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
     // 名稱由成員清單直接帶來，角色清單失敗也不影響顯示。
     expect(screen.getByText('查核員')).toBeVisible()
     expect(screen.queryByText('（角色名稱無法顯示）')).toBeNull()

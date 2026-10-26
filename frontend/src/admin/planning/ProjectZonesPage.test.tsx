@@ -5,7 +5,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { Link, Route, Routes } from 'react-router'
+import { Link, Route, Routes, useLocation } from 'react-router'
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { currentUserFixture } from '../../testing/contractFixtures'
@@ -18,7 +18,37 @@ import { createMockPlanningClient } from './api.mock'
 import nameTooLong from './fixtures/name-too-long-422.json'
 import ProjectZonesPage from './ProjectZonesPage'
 
-afterEach(() => vi.unstubAllGlobals())
+const restoreScrollMocks: Array<() => void> = []
+
+afterEach(() => {
+  restoreScrollMocks.splice(0).forEach((restore) => restore())
+  vi.unstubAllGlobals()
+})
+
+function mockScrollIntoView() {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    'scrollIntoView',
+  )
+  const scrollIntoView = vi.fn()
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoView,
+  })
+  restoreScrollMocks.push(() => {
+    if (descriptor) {
+      Object.defineProperty(
+        HTMLElement.prototype,
+        'scrollIntoView',
+        descriptor,
+      )
+    } else {
+      delete (HTMLElement.prototype as { scrollIntoView?: () => void })
+        .scrollIntoView
+    }
+  })
+  return scrollIntoView
+}
 
 function validationError(fixture: {
   error: { code: string; fields: Array<{ path: string; code: string }> }
@@ -573,10 +603,21 @@ function hold(client: PlanningClient, method: 'createZone' | 'renameZone') {
   return { gate, spy }
 }
 
+function ZoneLocationState() {
+  const location = useLocation()
+  return (
+    <output data-testid="zone-location-state">
+      {JSON.stringify(location.state)}
+    </output>
+  )
+}
+
 function mount(
   client: PlanningClient,
   permissions = MANAGE,
   initialPath = `/projects/${PROJECT}/zones`,
+  showRouteNavigation = false,
+  showLocationState = false,
 ) {
   render(
     <CurrentUserProvider
@@ -603,6 +644,12 @@ function mount(
             path="/projects/:projectId/zones/new"
           />
         </Routes>
+        {showRouteNavigation && (
+          <Link to={`/projects/${PROJECT}/zones/new`}>
+            測試：開啟新增分區網址
+          </Link>
+        )}
+        {showLocationState ? <ZoneLocationState /> : null}
       </DataMemoryRouter>
     </CurrentUserProvider>,
   )
@@ -613,6 +660,99 @@ function rowOf(name: string) {
 }
 
 describe('adding and renaming zones', () => {
+  it('matches the add route with a trailing slash', async () => {
+    mount(
+      createMockPlanningClient(),
+      MANAGE,
+      `/projects/${PROJECT}/zones/new/`,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: '新增分區' }),
+    ).toBeVisible()
+    const input = screen.getByLabelText('分區名稱')
+    expect(input).toBeVisible()
+    const actions = input.closest('form')?.querySelector('.named-row-actions')
+    expect(actions).not.toBeNull()
+    const cancel = within(actions as HTMLElement).getByRole('link', {
+      name: '取消',
+    })
+    const submit = within(actions as HTMLElement).getByRole('button', {
+      name: '新增分區',
+    })
+    expect(cancel.parentElement).toBe(submit.parentElement)
+    expect(
+      cancel.compareDocumentPosition(submit) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0)
+  })
+
+  it('consumes the created-zone location state after showing its row notice', async () => {
+    const scrollIntoView = mockScrollIntoView()
+    const client = createMockPlanningClient()
+    mount(client, MANAGE, `/projects/${PROJECT}/zones/new`, false, true)
+    await screen.findByLabelText('分區名稱')
+    fireEvent.change(screen.getByLabelText('分區名稱'), {
+      target: { value: '新增分區' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
+
+    const zoneName = await screen.findByText('新增分區', {
+      selector: '.named-row-name',
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('zone-location-state')).toHaveTextContent(
+        'null',
+      )
+    })
+    const row = zoneName.closest('li')
+    const rowNotice = within(row as HTMLElement).getByRole('status')
+    expect(rowNotice).toHaveTextContent('已新增分區「新增分區」。')
+    await waitFor(() => {
+      expect(row).toHaveStyle({ backgroundColor: 'var(--success-bg)' })
+    })
+    await waitFor(() => {
+      expect(scrollIntoView.mock.contexts).toContain(rowNotice)
+    })
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(screen.getByTestId('zone-location-state')).toHaveTextContent('null')
+  })
+
+  it('creates instead of renaming after entering the add route', async () => {
+    const client = createMockPlanningClient()
+    await client.createZone(PROJECT, 'A')
+    const create = vi.spyOn(client, 'createZone')
+    const rename = vi.spyOn(client, 'renameZone')
+    mount(client, MANAGE, `/projects/${PROJECT}/zones`, true)
+    await screen.findByText('A')
+
+    const addLink = screen.getByRole('link', { name: '新增分區' })
+    expect(addLink).toHaveAttribute('href', `/projects/${PROJECT}/zones/new`)
+    fireEvent.click(
+      within(rowOf('A')).getByRole('button', { name: '重新命名' }),
+    )
+    expect(screen.getByLabelText('分區名稱')).toHaveValue('A')
+    fireEvent.click(
+      screen.getByRole('link', { name: '測試：開啟新增分區網址' }),
+    )
+    expect(
+      await screen.findByRole('heading', { name: '新增分區' }),
+    ).toBeVisible()
+    fireEvent.change(screen.getByLabelText('分區名稱'), {
+      target: { value: 'B' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
+
+    expect.soft(create).toHaveBeenCalledWith(PROJECT, 'B')
+    expect.soft(rename).not.toHaveBeenCalled()
+    await expect(client.listProjectZones(PROJECT)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'A' }),
+        expect.objectContaining({ name: 'B' }),
+      ]),
+    )
+  })
+
   it('cancels a typed new zone with Escape', async () => {
     mount(createMockPlanningClient())
     await openAddForm()
@@ -684,6 +824,7 @@ describe('adding and renaming zones', () => {
     fireEvent.click(within(row).getByRole('button', { name: '重新命名' }))
     const input = screen.getByLabelText('分區名稱')
     await waitFor(() => expect(input).toHaveFocus())
+    expect(screen.queryByRole('link', { name: '新增分區' })).toBeNull()
     expect(
       within(row).queryByRole('button', { name: '重新命名' }),
     ).not.toBeInTheDocument()
@@ -699,6 +840,7 @@ describe('adding and renaming zones', () => {
       ).toHaveFocus()
       expect(within(row).getByRole('button', { name: '刪除' })).toBeVisible()
     })
+    expect(screen.getByRole('link', { name: '新增分區' })).toBeVisible()
     expect(screen.queryByText('取消的名稱')).toBeNull()
   })
 

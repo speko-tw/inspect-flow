@@ -5,15 +5,23 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router'
+import {
+  Link,
+  useLocation,
+  useMatch,
+  useNavigate,
+  useParams,
+} from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { isForbidden } from '../../http'
+import { BackLink } from '../../layout/BackLink'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { UnsavedLeaveBox } from '../../ui/navigation'
 import * as navigationGuard from '../../ui/navigation'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
+import { revealElement } from '../../ui/reveal'
 import { ManagementApiError, managementErrorMessage } from '../api'
 import { isResourceId } from '../../resourceId'
 import { RequiredMark } from '../../ui/Form'
@@ -106,12 +114,34 @@ function revealMemberAlert(alert: HTMLParagraphElement | null) {
   alert.focus({ preventScroll: true })
 }
 
+function memberAccountPath(member: ProjectMember): string {
+  const path = `/accounts/${encodeURIComponent(member.user_id)}`
+  return path
+}
+
+function memberEditPath(listPath: string, member: ProjectMember): string {
+  const userId = encodeURIComponent(member.user_id)
+  const path = `${listPath}/${userId}/edit`
+  return path
+}
+
+function memberEditLabel(member: ProjectMember): string {
+  const label = `修改「${personLabel(member)}」的角色`
+  return label
+}
+
+function memberRemoveLabel(member: ProjectMember): string {
+  const label = `將「${personLabel(member)}」移出專案`
+  return label
+}
+
 export default function ProjectDetailPage() {
   const { projectId = '', userId = '' } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
-  const isAddPage = location.pathname.endsWith('/members/new')
-  const isEditPage = location.pathname.endsWith('/edit')
+  const isAddPage = useMatch('/projects/:projectId/members/new') !== null
+  const isEditPage =
+    useMatch('/projects/:projectId/members/:userId/edit') !== null
   const mode = isAddPage ? 'add' : isEditPage ? 'edit' : 'list'
   const memberListPath = `/projects/${encodeURIComponent(projectId)}/members`
   const returnTo = memberReturnPath(
@@ -133,6 +163,7 @@ export default function ProjectDetailPage() {
 }
 
 function memberReturnPath(projectId: string, value: unknown): string {
+  // ADM-R52：只允許站內成員清單或有效帳號詳情，避免越權／外站導向。
   const listPath = `/projects/${encodeURIComponent(projectId)}/members`
   if (value === listPath) return listPath
   const accountMatch =
@@ -179,6 +210,11 @@ function ProjectMembersSection({
     userId: string
     text: string
   }>()
+  const memberRows = useRef(new Map<string, HTMLLIElement>())
+  const memberNotices = useRef(new Map<string, HTMLParagraphElement>())
+  const [highlightedMemberId, setHighlightedMemberId] = useState<
+    string | null
+  >(null)
   const [batchRoleError, setBatchRoleError] = useState('')
   const batchRoleErrorRef = useRef<HTMLParagraphElement | null>(null)
   const [batchRoleNotice, setBatchRoleNotice] = useState('')
@@ -203,7 +239,7 @@ function ProjectMembersSection({
   } | null>(null)
   const currentFormRouteKey = `${mode}:${userId}`
   if (formRouteKey !== currentFormRouteKey) {
-    // 路由確認離開表單後丟棄草稿；被 guard 攔下時路徑不變，草稿保留。
+    // ADM-R52：確認離開表單後丟棄草稿；被 guard 攔下時保留草稿。
     setFormRouteKey(currentFormRouteKey)
     setNewUserId('')
     setNewRoleIds([])
@@ -225,6 +261,36 @@ function ProjectMembersSection({
   useEffect(() => {
     if (message) revealMemberAlert(memberMessageRef.current)
   }, [message])
+
+  useEffect(() => {
+    if (
+      mode !== 'list' ||
+      !rowNotice ||
+      membersState.status !== 'ready' ||
+      rolesState.status === 'loading' ||
+      (isAdmin && projectState.status === 'loading')
+    ) {
+      return
+    }
+    const row = memberRows.current.get(rowNotice.userId)
+    const messageElement = memberNotices.current.get(rowNotice.userId)
+    if (!row || !messageElement) return
+    revealElement(messageElement, 'nearest')
+    setHighlightedMemberId(rowNotice.userId)
+    const timer = window.setTimeout(() => {
+      setHighlightedMemberId((current) =>
+        current === rowNotice.userId ? null : current,
+      )
+    }, 1800)
+    return () => window.clearTimeout(timer)
+  }, [
+    isAdmin,
+    membersState,
+    mode,
+    projectState.status,
+    rolesState.status,
+    rowNotice,
+  ])
 
   useEffect(() => {
     if (batchRoleError) revealMemberAlert(batchRoleErrorRef.current)
@@ -334,7 +400,9 @@ function ProjectMembersSection({
         text: `已加入「${added ? personLabel(added) : '成員'}」。`,
       })
       reload()
-      leaveGuard.allowNavigation(() => navigate(memberListPath))
+      leaveGuard.allowNavigation(() =>
+        navigate(memberListPath, { replace: true }),
+      )
     } catch (caught) {
       if (isRolesRequired(caught)) {
         setRolesError(ROLES_REQUIRED_TEXT)
@@ -379,7 +447,7 @@ function ProjectMembersSection({
         text: `已更新「${personLabel(editing.member)}」的角色。`,
       })
       reload()
-      leaveGuard.allowNavigation(() => navigate(returnTo))
+      leaveGuard.allowNavigation(() => navigate(returnTo, { replace: true }))
     } catch (caught) {
       if (isRolesRequired(caught)) {
         setEditing({ ...editing, error: ROLES_REQUIRED_TEXT })
@@ -519,15 +587,25 @@ function ProjectMembersSection({
     )
   }
 
+  if (mode === 'edit' && membersState.status === 'failed') {
+    return (
+      <section aria-labelledby="project-heading">
+        <BackLink to={memberListPath}>返回成員清單</BackLink>
+        <h2 id="project-heading">修改成員角色</h2>
+        <p role="alert">無法載入成員：{membersState.message}</p>
+        <button className="btn" onClick={reload} type="button">
+          重新載入
+        </button>
+      </section>
+    )
+  }
+
   if (mode === 'edit' && !editing) {
-    const returnLabel = returnTo.startsWith('/accounts/')
-      ? '返回帳號詳情'
-      : '返回成員清單'
     return !routeMember ? (
       <section aria-labelledby="project-heading">
-        <h2 id="project-heading">成員</h2>
+        <BackLink to={memberListPath}>返回成員清單</BackLink>
+        <h2 id="project-heading">修改成員角色</h2>
         <p role="alert">找不到這位專案成員。</p>
-        <Link to={returnTo}>{returnLabel}</Link>
       </section>
     ) : (
       <p role="status">載入中…</p>
@@ -537,7 +615,10 @@ function ProjectMembersSection({
   if (mode === 'edit' && editing) {
     return (
       <section aria-labelledby="project-heading">
-        <h2 id="project-heading">成員</h2>
+        <BackLink to={memberListPath}>返回成員清單</BackLink>
+        <h2 id="project-heading" ref={editHeadingRef} tabIndex={-1}>
+          修改「{personLabel(editing.member)}」的角色
+        </h2>
         <UnsavedLeaveBox guard={leaveGuard} />
         <form
           className="member-edit-view"
@@ -545,20 +626,26 @@ function ProjectMembersSection({
           onKeyDown={formKeyDown(cancelEdit)}
           onSubmit={submitEdit}
         >
-          <h3 ref={editHeadingRef} tabIndex={-1}>
-            修改「{personLabel(editing.member)}」的角色
-          </h3>
-          <MemberRoleFields
-            error={editing.error}
-            firstRef={editRolesRef}
-            onChange={(next) =>
-              setEditing((current) =>
-                current ? { ...current, roleIds: next, error: '' } : current,
-              )
-            }
-            roles={editableRoles}
-            selected={editing.roleIds}
-          />
+          {rolesState.status === 'failed' ? (
+            <div className="member-load-error">
+              <p role="alert">無法載入角色：{rolesState.message}</p>
+              <button className="btn" onClick={reload} type="button">
+                重新載入
+              </button>
+            </div>
+          ) : (
+            <MemberRoleFields
+              error={editing.error}
+              firstRef={editRolesRef}
+              onChange={(next) =>
+                setEditing((current) =>
+                  current ? { ...current, roleIds: next, error: '' } : current,
+                )
+              }
+              roles={editableRoles}
+              selected={editing.roleIds}
+            />
+          )}
           {alertFor('edit')}
           {editing.confirmDiscard ? (
             <ConfirmBox
@@ -582,10 +669,19 @@ function ProjectMembersSection({
             </ConfirmBox>
           ) : (
             <div className="member-actions">
-              <button disabled={busy} onClick={cancelEdit} type="button">
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={cancelEdit}
+                type="button"
+              >
                 取消
               </button>
-              <button className="btn-primary" disabled={busy} type="submit">
+              <button
+                className="btn btn-primary"
+                disabled={busy || rolesState.status !== 'ready'}
+                type="submit"
+              >
                 儲存角色
               </button>
             </div>
@@ -602,8 +698,11 @@ function ProjectMembersSection({
 
   return (
     <section aria-labelledby="project-heading">
-      <h2 id="project-heading">成員</h2>
-      {projectInfo && (
+      {mode === 'add' ? (
+        <BackLink to={memberListPath}>返回成員清單</BackLink>
+      ) : null}
+      <h2 id="project-heading">{mode === 'add' ? '加入成員' : '成員'}</h2>
+      {mode === 'list' && projectInfo && (
         <p className="field-hint">
           專案代號 {projectInfo.project_code}；業主／委託單位{' '}
           {projectInfo.client_name}；工程地點 {projectInfo.site_location}
@@ -616,10 +715,18 @@ function ProjectMembersSection({
       )}
 
       <UnsavedLeaveBox guard={leaveGuard} />
+      {mode === 'list' && rolesState.status === 'failed' ? (
+        <div className="member-load-error">
+          <p role="alert">無法載入角色：{rolesState.message}</p>
+          <button className="btn" onClick={reload} type="button">
+            重新載入
+          </button>
+        </div>
+      ) : null}
       {mode === 'list' ? (
         <p>
           <Link
-            className="btn-primary member-add-link"
+            className="btn btn-primary member-add-link"
             onClick={clearMessages}
             to={`${memberListPath}/new`}
           >
@@ -635,7 +742,6 @@ function ProjectMembersSection({
             onKeyDown={blockImeEnter}
             onSubmit={submitAdd}
           >
-            <h3>加入成員</h3>
             {candidatesState.status === 'failed' ? (
               <div className="member-load-error">
                 <p role="alert">
@@ -754,8 +860,15 @@ function ProjectMembersSection({
                     selected={newRoleIds}
                   />
                 )}
+              </>
+            )}
+            <div className="member-actions">
+              <Link className="btn" to={memberListPath}>
+                取消
+              </Link>
+              {!noCandidates && (
                 <button
-                  className="btn-primary"
+                  className="btn btn-primary"
                   disabled={
                     busy ||
                     !candidatesReady ||
@@ -767,11 +880,10 @@ function ProjectMembersSection({
                 >
                   加入成員
                 </button>
-              </>
-            )}
+              )}
+            </div>
             {alertFor('add')}
           </form>
-          {mode === 'add' && <Link to={memberListPath}>取消</Link>}
         </>
       ) : null}
 
@@ -851,10 +963,30 @@ function ProjectMembersSection({
                       : 'member-card member-card-inactive'
                   }
                   key={member.id}
+                  ref={(element) => {
+                    if (element)
+                      memberRows.current.set(member.user_id, element)
+                    else memberRows.current.delete(member.user_id)
+                  }}
+                  style={
+                    highlightedMemberId === member.user_id
+                      ? { backgroundColor: 'var(--success-bg)' }
+                      : undefined
+                  }
                 >
                   <div className="member-card-main">
                     {rowNotice?.userId === member.user_id && (
-                      <p className="notice-success" role="status">
+                      <p
+                        className="notice-success"
+                        ref={(element) => {
+                          if (element) {
+                            memberNotices.current.set(member.user_id, element)
+                          } else {
+                            memberNotices.current.delete(member.user_id)
+                          }
+                        }}
+                        role="status"
+                      >
                         {rowNotice.text}
                       </p>
                     )}
@@ -893,9 +1025,7 @@ function ProjectMembersSection({
                     )}
                     <p className="member-card-name">
                       {isAdmin ? (
-                        <Link
-                          to={`/accounts/${encodeURIComponent(member.user_id)}`}
-                        >
+                        <Link to={memberAccountPath(member)}>
                           {member.name_zh ?? member.username}
                         </Link>
                       ) : (
@@ -945,24 +1075,44 @@ function ProjectMembersSection({
                   ) : (
                     <div className="member-card-actions">
                       <Link
-                        className="btn-sm"
-                        aria-label={`修改「${personLabel(member)}」的角色`}
-                        aria-disabled={busy || !rolesReady}
-                        tabIndex={busy || !rolesReady ? -1 : undefined}
+                        className="btn btn-sm"
+                        aria-label={memberEditLabel(member)}
+                        aria-disabled={
+                          busy ||
+                          !rolesReady ||
+                          member.user_id === currentUser.id
+                        }
+                        tabIndex={
+                          busy ||
+                          !rolesReady ||
+                          member.user_id === currentUser.id
+                            ? -1
+                            : undefined
+                        }
                         onClick={(event) => {
-                          if (busy || !rolesReady) event.preventDefault()
-                          else {
+                          if (
+                            busy ||
+                            !rolesReady ||
+                            member.user_id === currentUser.id
+                          ) {
+                            event.preventDefault()
+                          } else {
                             clearMessages()
                             setRemoving(null)
                           }
                         }}
-                        to={`${memberListPath}/${encodeURIComponent(member.user_id)}/edit`}
+                        to={memberEditPath(memberListPath, member)}
                         state={{ returnTo: memberListPath }}
                       >
                         修改角色
                       </Link>
+                      {member.user_id === currentUser.id && (
+                        <span className="member-warning">
+                          不能修改自己的專案角色。
+                        </span>
+                      )}
                       <button
-                        aria-label={`將「${personLabel(member)}」移出專案`}
+                        aria-label={memberRemoveLabel(member)}
                         disabled={busy}
                         onClick={() => {
                           clearMessages()
