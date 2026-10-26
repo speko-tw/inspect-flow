@@ -777,6 +777,10 @@ button,
 
 /* 主要按鈕要明講；submit 不再自動變主要（搜尋、篩選等 submit 是次要）。 */
 .btn-primary {
+  min-height: 44px;
+  padding: var(--space-2) var(--space-5);
+  border-width: 2px;
+  font-weight: 750;
   background: var(--primary);
   border-color: var(--primary);
   color: var(--on-primary);
@@ -1529,11 +1533,6 @@ output {
   );
 }
 
-/* 導覽列會裁切內容，焦點框畫在分頁內側才不會被切掉。 */
-.app-header-tab:focus-visible {
-  outline-offset: -3px;
-}
-
 @media (hover: hover) {
   a.app-header-tab:hover {
     background: var(--surface-alt);
@@ -1944,7 +1943,7 @@ a.app-header-tab[aria-current='page'] {
   width: 100%;
   min-height: 2.5rem;
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: inherit;
@@ -2262,7 +2261,7 @@ a.app-header-tab[aria-current='page'] {
 .plan-list button {
   width: 100%;
   justify-content: flex-start;
-  border-color: var(--border);
+  border-color: var(--border-strong);
   text-align: left;
 }
 

@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import styles from './components.module.css'
+import pageTabStyles from './PageTabs.module.css'
 import {
   Badge,
   Button,
@@ -10,6 +11,7 @@ import {
   IconButton,
   InfoRow,
   Input,
+  PageTabs,
   SectionHeader,
   StatCard,
   Tag,
@@ -56,6 +58,82 @@ describe('Button', () => {
     fireEvent.click(button)
     fireEvent.click(button)
     expect(action).not.toHaveBeenCalled()
+  })
+})
+
+describe('PageTabs', () => {
+  it('shares selected state and keyboard navigation across tab sets', () => {
+    const onChange = vi.fn()
+    render(
+      <>
+        <PageTabs
+          label="設定區段"
+          onChange={onChange}
+          tabs={[
+            { id: 'one', label: '第一頁', panelId: 'panel-one' },
+            { id: 'two', label: '第二頁', panelId: 'panel-two' },
+          ]}
+          value="one"
+        />
+        <div id="panel-one" role="tabpanel" />
+        <div id="panel-two" role="tabpanel" />
+      </>,
+    )
+    const first = screen.getByRole('tab', { name: '第一頁' })
+    const second = screen.getByRole('tab', { name: '第二頁' })
+    expect(first).toHaveAttribute('aria-selected', 'true')
+    expect(first).toHaveAttribute('aria-controls', 'panel-one')
+    expect(first).toHaveClass(pageTabStyles.tab)
+    fireEvent.keyDown(first, { key: 'ArrowRight' })
+    expect(onChange).toHaveBeenCalledWith('two')
+    expect(second).toHaveFocus()
+    fireEvent.keyDown(second, { key: 'Home' })
+    expect(onChange).toHaveBeenLastCalledWith('one')
+    expect(first).toHaveFocus()
+  })
+
+  it('isolates matching tab sets IDs and keyboard focus', () => {
+    const firstChange = vi.fn()
+    const secondChange = vi.fn()
+    render(
+      <>
+        <PageTabs
+          label="第一組分頁"
+          onChange={firstChange}
+          tabs={[
+            { id: 'same', label: '共用項目', panelId: 'first-panel' },
+            { id: 'next', label: '下一頁', panelId: 'first-next-panel' },
+          ]}
+          value="same"
+        />
+        <PageTabs
+          label="第二組分頁"
+          onChange={secondChange}
+          tabs={[
+            { id: 'same', label: '共用項目', panelId: 'second-panel' },
+            { id: 'next', label: '下一頁', panelId: 'second-next-panel' },
+          ]}
+          value="same"
+        />
+      </>,
+    )
+    const tabLists = screen.getAllByRole('tablist')
+    const first = within(tabLists[0]).getByRole('tab', { name: '共用項目' })
+    const firstNext = within(tabLists[0]).getByRole('tab', { name: '下一頁' })
+    const second = within(tabLists[1]).getByRole('tab', { name: '共用項目' })
+    const secondNext = within(tabLists[1]).getByRole('tab', { name: '下一頁' })
+
+    expect(first.id).not.toBe(second.id)
+    fireEvent.keyDown(first, { key: 'ArrowRight' })
+    expect(firstChange).toHaveBeenCalledWith('next')
+    expect(firstNext).toHaveFocus()
+    expect(secondNext).not.toHaveFocus()
+    expect(secondChange).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(second, { key: 'ArrowRight' })
+    expect(secondChange).toHaveBeenCalledWith('next')
+    expect(secondNext).toHaveFocus()
+    expect(firstNext.id).not.toBe(secondNext.id)
   })
 })
 

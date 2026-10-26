@@ -58,6 +58,14 @@ header.app-header {
   .app-header .app-header-personal-trigger:active {
     background: var(--color-header-nav-pressed);
   }
+
+  .app-header a.app-header-tab[aria-current='page']:hover,
+  .app-header a.app-header-tab[aria-current='page']:active,
+  .app-header .app-header-management-trigger[aria-current='page']:hover,
+  .app-header .app-header-management-trigger[aria-current='page']:active {
+    background: var(--color-header-nav-current);
+    color: var(--color-brand-accent);
+  }
 }
 
 /* UDS-R19：只覆寫品牌表面的焦點，浮層仍沿用各主題焦點。 */

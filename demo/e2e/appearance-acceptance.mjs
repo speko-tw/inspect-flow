@@ -7,7 +7,9 @@ import { demoBaseUrl } from './base-url.mjs'
 const base = demoBaseUrl()
 const work = process.env.DEMO_WORK_DIR ?? '/private/tmp/inspectflow-demo-e2e'
 const screenshots = path.join(work, 'screenshots', 'appearance')
-const handoffScreenshots = '/private/tmp/inspectflow-515-screenshots'
+const handoffScreenshots = process.env.APPEARANCE_HANDOFF_DIR
+  ? path.resolve(process.env.APPEARANCE_HANDOFF_DIR)
+  : screenshots
 const roles = [
   ['admin', 'DemoAdmin2026', '/overview'],
   ['demo-office', 'DemoOffice2026', '/projects'],
@@ -95,7 +97,9 @@ async function capture(page, name) {
   const filename = `${name}.png`
   const destination = path.join(screenshots, filename)
   await page.screenshot({ path: destination, fullPage: true })
-  await copyFile(destination, path.join(handoffScreenshots, filename))
+  if (path.resolve(handoffScreenshots) !== path.resolve(screenshots)) {
+    await copyFile(destination, path.join(handoffScreenshots, filename))
+  }
   shots.push(filename)
 }
 

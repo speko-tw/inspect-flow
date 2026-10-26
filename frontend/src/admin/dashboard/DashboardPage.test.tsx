@@ -238,10 +238,43 @@ describe('Dashboard 頁面', () => {
     expect(
       await screen.findByText('陳工程師（engineer-1）'),
     ).toBeInTheDocument()
-    expect(screen.getByText('派任待開始')).toBeInTheDocument()
-    expect(screen.getByText('派任進行中')).toBeInTheDocument()
-    expect(screen.getByText('開始者進行中')).toBeInTheDocument()
-    expect(screen.getByText('完成查核')).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: '待開始' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: '進行中' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: '實際進行' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: '累計完成' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '待開始：2' })).toHaveAttribute(
+      'data-label',
+      '待開始',
+    )
+    expect(screen.getByRole('cell', { name: '實際進行：4' })).toHaveAttribute(
+      'data-label',
+      '實際進行',
+    )
+    expect(screen.getByRole('cell', { name: '累計完成：5' })).toHaveAttribute(
+      'data-label',
+      '累計完成',
+    )
+    const workloadGuidance = screen.getByText(
+      '前兩欄依建議指派人計，第三欄依實際開始的人計，最後一欄是實際完成的累計件數；同一件任務可能重複計入，不能加總。',
+    )
+    expect(workloadGuidance).toHaveTextContent(
+      '前兩欄依建議指派人計，第三欄依實際開始的人計，最後一欄是實際完成的累計件數；同一件任務可能重複計入，不能加總。',
+    )
+    const workloadTable = screen.getByRole('table', {
+      name: '工程師工作量清單',
+    })
+    expect(
+      workloadTable.compareDocumentPosition(workloadGuidance) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
     expect(api.listDashboardEngineers).toHaveBeenCalledWith({
       projectId: 'project-1',
       q: '',

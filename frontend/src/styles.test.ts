@@ -11,6 +11,7 @@ const dashboardCss = readFileSync(
 )
 
 const shellCss = readFileSync('src/styles/g7-shell.css', 'utf8')
+const pageTabsCss = readFileSync('src/components/PageTabs.module.css', 'utf8')
 
 // 取出頂層規則（行首的選擇器）的宣告，轉成 屬性 -> 值；比對值而不是原始
 // 字串，格式或宣告順序調整時測試不會誤報。
@@ -247,6 +248,17 @@ describe('button rules', () => {
   })
 })
 
+describe('named plan and template choices', () => {
+  it('uses the control-border token for both clickable lists', () => {
+    expect(declarationsOf('.tpl-detail-list button').border).toBe(
+      '1px solid var(--border-strong)',
+    )
+    expect(declarationsOf('.plan-list button')['border-color']).toBe(
+      'var(--border-strong)',
+    )
+  })
+})
+
 // 目前選取（#500）：側欄、計畫清單、範本樹共用同一種 selected 樣式，
 // 由 aria-current 驅動，值是 "false" 不算選取。
 describe('selected rules', () => {
@@ -390,6 +402,21 @@ describe('Shared brand header interaction tokens', () => {
     expect(shellCss).not.toMatch(
       /\.app-header \.app-header-tab:(hover|active)/,
     )
+    const currentLinkSelector = String.raw`\.app-header a\.app-header-tab`
+    const currentStateSelectors = [
+      String.raw`${currentLinkSelector}\[aria-current='page'\]:hover,`,
+      String.raw`${currentLinkSelector}\[aria-current='page'\]:active,`,
+      String.raw`\.app-header \.app-header-management-trigger` +
+        String.raw`\[aria-current='page'\]:hover,`,
+      String.raw`\.app-header \.app-header-management-trigger` +
+        String.raw`\[aria-current='page'\]:active`,
+    ].join(String.raw`\s*`)
+    const currentStateDeclarations =
+      String.raw`\s*\{\s*background: var\(--color-header-nav-current\);` +
+      String.raw`\s*color: var\(--color-brand-accent\);`
+    expect(shellCss).toMatch(
+      new RegExp(currentStateSelectors + currentStateDeclarations),
+    )
   })
 
   it('uses tokens for hover, pressed and current header states', () => {
@@ -397,32 +424,90 @@ describe('Shared brand header interaction tokens', () => {
     expect(shellCss).toContain('background: var(--color-header-nav-pressed);')
     expect(shellCss).toContain('background: var(--color-header-nav-current);')
   })
+
+  it('sets the focus offset only in the shared shell', () => {
+    expect(shellCss).toContain(
+      '.app-header .app-header-tab:focus-visible {\n' +
+        '  outline-offset: -3px;',
+    )
+    expect(css).not.toContain('.app-header-tab:focus-visible {')
+  })
 })
 
 // 觸控裝置點一下後 :hover 會殘留（iOS Safari，#524），所以所有
 // :hover 規則都必須包在 @media (hover: hover) 裡，只給有滑鼠的裝置。
+describe('confirmation overlay boundary', () => {
+  it('confines viewport positioning to the explicit modal class', () => {
+    const modalRule = /(?:^|\n)\s*\.confirm-box-modal\s*\{([^}]*)\}/.exec(css)
+    expect(modalRule).not.toBeNull()
+    const modal = declarationsIn(modalRule?.[0] ?? '')
+    expect(modal.position).toBe('fixed')
+    expect(Number(modal['z-index'])).toBeGreaterThanOrEqual(1000)
+    expect(modal.background).toBe('var(--surface)')
+    expect(modal['box-shadow']).toContain('100vmax')
+    const fixedRules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(([, , body]) => /position:\s*fixed/.test(body ?? ''))
+      .map(([, selector]) =>
+        selector
+          ?.replace(/\/\*[\s\S]*?\*\//g, '')
+          .split('\n')
+          .at(-1)
+          ?.trim(),
+      )
+    expect(fixedRules).toContain('.confirm-box-modal')
+    expect(
+      fixedRules.filter((selector) => selector !== '.confirm-box-modal'),
+    ).toEqual(['.app-header-management-menu'])
+  })
+})
+
 describe('hover rules', () => {
-  it('keeps every :hover rule inside @media (hover: hover)', () => {
-    const lines = `${css}\n${shellCss}`.split('\n')
-    let inHoverMedia = false
+  it('keeps every :hover and :active selector in hover-capable media', () => {
+    const lines = `${css}\n${shellCss}\n${pageTabsCss}`.split('\n')
+    let depth = 0
+    let hoverDepth: number | null = null
     const outside: string[] = []
     lines.forEach((line, index) => {
-      if (line.startsWith('@media (hover: hover) {')) inHoverMedia = true
-      else if (inHoverMedia && line === '}') inHoverMedia = false
-      else if (
-        !inHoverMedia &&
-        line.includes(':hover') &&
-        !line.trimStart().startsWith('*') &&
-        !line.trimStart().startsWith('/*')
-      ) {
-        outside.push(`${index + 1}: ${line.trim()}`)
+      const content = line.trim()
+      if (content.startsWith('@media (hover: hover)')) {
+        hoverDepth = depth + 1
+      } else if (hoverDepth !== null && depth < hoverDepth) {
+        hoverDepth = null
       }
+      if (
+        /:(?:hover|active)(?:\b|\s|,|\{)/.test(content) &&
+        !content.startsWith('/*') &&
+        hoverDepth === null
+      ) {
+        outside.push(`${index + 1}: ${content}`)
+      }
+      depth += (line.match(/\{/g) ?? []).length
+      depth -= (line.match(/\}/g) ?? []).length
+      if (hoverDepth !== null && depth < hoverDepth) hoverDepth = null
     })
     expect(outside).toEqual([])
   })
 
   it('has at least one :hover rule inside the media query', () => {
     expect(css).toMatch(/@media \(hover: hover\) \{\n\s+a\.topbar-brand:hover/)
+  })
+})
+
+describe('PageTabs selected state', () => {
+  it('marks selected tabs with a three-pixel token-colored line', () => {
+    const selectedRule = /\.tab\[aria-selected='true'\]\s*\{([^}]*)\}/.exec(
+      pageTabsCss,
+    )
+    expect(selectedRule).not.toBeNull()
+    expect(declarationsIn(selectedRule?.[0] ?? '')['box-shadow']).toBe(
+      'inset 0 -3px 0 var(--color-selection)',
+    )
+
+    const ordinaryRule = /\.tab\s*\{([^}]*)\}/.exec(pageTabsCss)
+    expect(ordinaryRule).not.toBeNull()
+    expect(
+      declarationsIn(ordinaryRule?.[0] ?? '')['box-shadow'],
+    ).toBeUndefined()
   })
 })
 

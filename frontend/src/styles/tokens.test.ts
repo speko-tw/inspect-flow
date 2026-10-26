@@ -143,6 +143,8 @@ describe('semantic design tokens', () => {
     expect(light).toMatchObject({
       '--color-brand-primary': '#002060',
       '--color-brand-accent': '#ffc200',
+      '--color-action-primary': '#002060',
+      '--color-action-primary-hover': '#123b79',
       '--color-bg-page': '#f3f6fa',
       '--color-bg-surface': '#ffffff',
       '--color-bg-muted': '#eaf0f7',
@@ -159,6 +161,8 @@ describe('semantic design tokens', () => {
       '--color-text-secondary': '#b8c5d6',
       '--color-focus': '#82c9f2',
       '--color-selection': '#8cc4ff',
+      '--color-action-primary': '#8cc4ff',
+      '--color-action-primary-hover': '#a8d2ff',
       '--color-border': '#344960',
     })
   })
