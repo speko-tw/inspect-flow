@@ -17,8 +17,8 @@ export type TaskListChange =
   { id: string; status: 'IN_PROGRESS' } | { id: string; removed: true }
 
 /**
- * 開始查核失敗時顯示的說明。`retryable` 只用於網路或伺服器暫時失敗，
- * 此時保留確認框讓使用者再按一次；權限不足、狀態已被改動等不可重試的
+ * 開始查核失敗時顯示的說明。`retryable` 只用於網路中斷，以及 401／
+ * 403／404／409 以外的其餘狀態碼，此時保留確認框讓使用者再按一次；權限不足、狀態已被改動等不可重試的
  * 失敗只提供返回清單。
  */
 type Failure = { message: string; retryable: boolean }
@@ -168,7 +168,9 @@ export default function StartAction({
       setStarted(true)
     } catch (cause) {
       const next = await failureFor(cause)
-      // next 為 null 代表已交給 onUnauthorized 處理，這裡不顯示錯誤。
+      // next 為 null 有兩種情況，這裡都不顯示錯誤：401 已交給
+      // onUnauthorized 處理；或 409 重抓後發現其實是本人開始，
+      // reconcile() 已套用最新資料並顯示進行中。
       if (next) {
         setFailure(next)
         setConfirming(next.retryable)

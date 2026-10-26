@@ -332,8 +332,7 @@ export function NumericStandardEditor({
                 {inputError(`${key}:value`) && (
                   <p className="field-error">{inputError(`${key}:value`)}</p>
                 )}
-                {/* TPL-R13：範圍的容許誤差必填、「＝」選填；≤、≥ 只在
-                    原本已有誤差值時才顯示。 */}
+                {/* TPL-R13：範圍的容許誤差必填、「＝」選填。 */}
                 {(standard.condition === 'range' ||
                   standard.condition === '=' ||
                   standard.tolerance) && (

@@ -495,7 +495,10 @@ def list_projects(
 
     ``q`` 比對專案名稱與代號；依專案名稱排序並以 cursor 分頁，每筆帶
     ``member_count``（ADM-R12）。專案代號不要求唯一，重複的代號在該筆
-    ``warnings`` 標 ``project_code.duplicate``，不拒絕。
+    ``warnings`` 標 ``project_code.duplicate``，不拒絕。規格
+    （domain-model/spec.md:278）的正式行為另允許
+    ``all_project_progress.read``，目前仍在規格所稱的過渡期，程式
+    只認 ``template.manage``。
     """
     filters = []
     query = (q or "").strip()

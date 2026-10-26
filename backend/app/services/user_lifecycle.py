@@ -190,10 +190,12 @@ def deactivation_check(session: Session, user: User) -> list[Project]:
 
 
 def unmanaged_project_ids(session: Session) -> frozenset[uuid.UUID]:
-    """DOM-R75：以共用權限入口找出沒有啟用管理成員的專案。
+    """DOM-R75：找出沒有有效管理成員的專案。
 
-    供 Admin 的「無人管理的專案」清單（ADM-R36）。有效管理成員的
-    條件與 :func:`deactivation_check` 相同（DOM-R70，兩者都排除 Admin）。
+    供 Admin 的「無人管理的專案」清單（ADM-R36）。口徑同
+    :func:`deactivation_check`（DOM-R70），另把已到期的外部協作者
+    視為無效；Admin 靠 ``is_admin`` 管理、不透過成員身分（DOM-R27），
+    故不計入。
     """
     # 以 outer join 加上 count == 0 找缺口，因此完全沒有成員的專案
     # 也會列入。
@@ -416,9 +418,10 @@ def reactivate_user(
     removed_projects = available_projects - selected_projects
     from app.services.module_permissions import validate_role_assignment
 
-    # 保留的成員身分要重驗角色條件（外部可用、最後一位管理者等，
-    # DOM-R70、DOM-R72）。帳號此時仍是停用狀態，所以不檢查
-    # require_active；角色集合沒有被改動，前後相同。
+    # 保留的成員身分要重驗外部協作者的角色條件（DOM-R72）。操作者
+    # 必為 Admin，不受 DOM-R70 最後一位管理者的限制。帳號此時仍是
+    # 停用狀態，所以不檢查 require_active；角色集合沒有被改動，前後
+    # 相同。
     for project_id in sorted(selected_projects, key=str):
         member = session.scalar(
             select(ProjectMember)

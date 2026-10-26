@@ -87,7 +87,6 @@ export function MeasurementFieldEditor({
     kind: 'type' | 'remove',
     message: string,
   ) {
-    // 一次只保留一則操作錯誤，新的失敗取代舊的。
     setActionErrors({ [key]: { [kind]: message } })
     setFocusRequest((current) => ({
       key: `${key}:${kind}`,
