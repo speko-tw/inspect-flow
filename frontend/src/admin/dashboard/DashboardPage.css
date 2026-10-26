@@ -116,6 +116,12 @@
   line-height: 1.2;
 }
 
+.dashboard-summary-hint {
+  margin-top: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+}
+
 .dashboard-summary-card.is-completion strong {
   color: var(--color-action-primary);
   font-size: clamp(2.125rem, 4vw, 3rem);

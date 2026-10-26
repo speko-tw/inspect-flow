@@ -367,7 +367,11 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
           </article>
           <Metric label="待開始" value={summary.pending_count} />
           <Metric label="進行中" value={summary.in_progress_count} />
-          <Metric label="已完成" value={summary.completed_count} />
+          <Metric
+            hint="狀態為完成的任務"
+            label="已完成"
+            value={summary.completed_count}
+          />
         </div>
       )}
 
@@ -534,11 +538,20 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
   )
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({
+  label,
+  value,
+  hint,
+}: {
+  label: string
+  value: number
+  hint?: string
+}) {
   return (
     <article className="dashboard-summary-card">
       <span>{label}</span>
       <strong>{value.toLocaleString('zh-TW')}</strong>
+      {hint && <small className="dashboard-summary-hint">{hint}</small>}
     </article>
   )
 }

@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -136,6 +137,11 @@ describe('Dashboard 頁面', () => {
     expect(
       screen.getAllByRole('columnheader').map((node) => node.textContent),
     ).toEqual(['專案', '待開始', '進行中', '已完成', '已派出', '完成率'])
+    // 摘要卡「已完成」補一行小字，說明它是狀態為完成的任務數，
+    // 與工作量表的「累計完成」（依實際完成者歸屬）區分。
+    expect(
+      within(screen.getByLabelText('進度摘要')).getByText('狀態為完成的任務'),
+    ).toBeVisible()
 
     fireEvent.change(screen.getByLabelText('檢視範圍'), {
       target: { value: 'project-1' },

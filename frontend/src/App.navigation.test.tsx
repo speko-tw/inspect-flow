@@ -708,7 +708,10 @@ describe('出路與 404（#480）', () => {
 
     // 專案頁有頂端列：帳號名稱、專案；個人選單提供密碼與登出。
     const bar = await screen.findByRole('navigation', { name: '管理功能' })
-    expect(await screen.findByText('DEMO-A｜示範工程甲')).toBeVisible()
+    // 標題拆成代號與名稱兩個區塊，改用標題的可及名稱比對整句。
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-A｜示範工程甲' }),
+    ).toBeVisible()
     expect(screen.getByRole('button', { name: '主管 ▾' })).toBeVisible()
     expect(within(bar).queryByRole('link', { name: '設定' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '主管 ▾' }))

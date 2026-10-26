@@ -84,6 +84,19 @@
   filter: brightness(1.08);
 }
 
+.destructiveOutline {
+  /* 刪除等不可逆操作的觸發鈕：外框紅；實心紅只給確認框內的確認鈕。 */
+  border-width: 2px;
+  border-color: var(--color-status-danger);
+  background: var(--color-bg-surface);
+  color: var(--color-status-danger);
+  font-weight: 600;
+}
+
+.destructiveOutline:hover:not(:disabled) {
+  background: var(--color-status-danger-bg);
+}
+
 .iconButton {
   display: inline-grid;
   min-width: 44px;

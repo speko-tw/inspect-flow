@@ -798,8 +798,9 @@ describe('TemplatesPage', () => {
     fireEvent.click(
       await within(navigation).findByRole('button', { name: '建築工程' }),
     )
-    // 刪除是觸發鈕（次要）；不可復原的最終確認才用 btn-danger（#500）。
+    // 刪除觸發鈕用外框紅；不可復原的最終確認才用實心 btn-danger（#500）。
     const trigger = screen.getByRole('button', { name: '刪除' })
+    expect(trigger).toHaveClass('btn-danger-outline')
     expect(trigger).not.toHaveClass('btn-danger')
     fireEvent.click(trigger)
     const confirmBox = screen.getByRole('group', { name: '刪除確認' })

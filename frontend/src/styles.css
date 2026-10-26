@@ -4,8 +4,9 @@
  *   - 按鈕（#500）：`button` 與 `.btn` 共用同一個基底，預設是次要
  *     （外框）。`.btn` 讓連結（`<Link className="btn">`）長得像按鈕；
  *     `.btn-primary` 是主要（每個區塊最多一個，`type="submit"` 不會
- *     自動變主要）；`.btn-danger` 只給不可復原的最終確認，觸發鈕用次要
- *     樣式；`.btn-sm` 是表格內的小尺寸。按鈕依內容寬度、靠左排列；
+ *     自動變主要）；`.btn-danger` 只給確認框內不可復原的最終確認；
+ *     停用、刪除等危險操作的觸發鈕用 `.btn-danger-outline`（外框紅）；
+ *     `.btn-sm` 是表格內的小尺寸。按鈕依內容寬度、靠左排列；
  *     只有 `.auth-card` 內的按鈕是全寬。確認與取消固定排成 [取消][確認]。
  *   - 返回上一層：`.back-link`（BackLink 元件，‹ 加「返回X」）。
  *   - 版面：`.auth-page`／`.auth-card`（登入、變更密碼、首次設定）、
@@ -358,9 +359,19 @@
 
 .project-home-header h1 {
   overflow-wrap: anywhere;
-  /* 中文可在任意字間折行；360px 下專案名稱會落出「…機電工／程」的孤字，
-     balance 讓兩行長度接近。 */
-  text-wrap: balance;
+}
+
+/* 中文可在任意字間折行，360px 下標題會在「示範廠」中間斷開或落出孤字。
+   代號（含「｜」）與名稱各自成為不可拆的區塊，斷點只會落在「｜」後面；
+   名稱本身過長時才在區塊內折行。 */
+.project-title-code {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.project-title-name {
+  display: inline-block;
+  max-width: 100%;
 }
 
 .project-home-body {
@@ -807,7 +818,7 @@ section > .btn-primary {
   }
 }
 
-/* 只給不可復原的最終確認；打開確認框的觸發鈕用次要樣式。 */
+/* 只給確認框內不可復原的最終確認；打開確認框的觸發鈕用外框紅。 */
 .btn-danger {
   background: var(--danger);
   border-color: var(--danger);
@@ -839,7 +850,8 @@ section > .btn-primary {
   }
 }
 
-/* 危險操作的觸發鈕：只用外框紅，實心紅留給確認框裡不可復原的確認鈕。 */
+/* 危險操作（停用、刪除）的觸發鈕：只用外框紅，實心紅留給確認框裡不可
+   復原的確認鈕；不可逆的刪除比停用更該用紅色提示。 */
 .btn-danger-outline {
   border-width: 2px;
   border-color: var(--danger);
@@ -957,6 +969,12 @@ table {
     gap: var(--space-2);
     padding-inline: 0;
     border: 0;
+  }
+
+  /* 「不能批次停用自己的帳號」說明跨整張卡寬，不擠在右欄窄窄的一條。 */
+  .users-table-scroll .users-account-table tbody td > .field-hint {
+    grid-column: 1 / -1;
+    margin: 0;
   }
 
   /* 卡片列是兩欄 grid，badge 是 grid 項目會被拉滿整欄；貼合內容靠左。 */
@@ -1650,7 +1668,8 @@ a.app-header-tab[aria-current='page'] {
 
 @media (max-width: 40rem) {
   main {
-    padding: var(--space-4) var(--space-3);
+    /* 16px 與頁首內容的左緣一致（頁首最小內縮 16px），不再差 4px。 */
+    padding: var(--space-4);
   }
 
   .auth-card {
@@ -2038,6 +2057,7 @@ a.app-header-tab[aria-current='page'] {
 .card-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
 }
 

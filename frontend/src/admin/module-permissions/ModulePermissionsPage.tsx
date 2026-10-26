@@ -2425,6 +2425,7 @@ function ModulePermissionsPageContent({
                           bundleDeleteTrigger.current = event.currentTarget
                           setBundleToDelete(bundle)
                         }}
+                        variant="destructiveOutline"
                       >
                         刪除定義
                       </Button>

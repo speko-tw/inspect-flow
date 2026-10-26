@@ -383,7 +383,7 @@ export default function ProjectZonesPage({
                   重新命名
                 </button>
                 <button
-                  className="btn-sm"
+                  className="btn-sm btn-danger-outline"
                   disabled={busy}
                   onClick={(event) => {
                     rowTrigger.current = event.currentTarget

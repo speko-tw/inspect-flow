@@ -338,10 +338,53 @@ describe('page-level rules that must not flatten the primary button', () => {
     const field = read('src/field/field-redesign.css')
     expect(
       declarationsOf('.field-shell.field-redesign', field).padding,
-    ).toMatch(/^var\(--space-8\) 0 /)
+    ).toMatch(/^0 0 /)
     expect(
       declarationsOf('.field-redesign .field-heading', field)['font-size'],
     ).toBe('var(--font-size-heading)')
+  })
+})
+
+describe('second design review layout rules', () => {
+  const read = (file: string) => readFileSync(file, 'utf8')
+
+  it('centres rows that mix 44px and 48px buttons', () => {
+    expect(
+      declarationsOf('.roles-page-tools', read('src/styles/g7-shell.css'))[
+        'align-items'
+      ],
+    ).toBe('center')
+    expect(declarationsOf('.card-actions')['align-items']).toBe('center')
+    expect(
+      declarationsOf(
+        '.wizard-actions',
+        read('src/admin/module-permissions/ModulePermissionsPage.css'),
+      )['align-items'],
+    ).toBe('center')
+  })
+
+  it('aligns narrow page content with the header at 16px', () => {
+    const narrow = css.slice(css.indexOf('/* ---- 窄螢幕 ---- */'))
+    const rule = narrow.slice(
+      narrow.indexOf('  main {'),
+      narrow.indexOf('}', narrow.indexOf('  main {')),
+    )
+    expect(declarationsIn(rule).padding).toBe('var(--space-4)')
+  })
+
+  it('keeps the project code and name as separate inline blocks', () => {
+    expect(declarationsOf('.project-title-code')).toMatchObject({
+      display: 'inline-block',
+      'white-space': 'nowrap',
+    })
+    expect(declarationsOf('.project-title-name').display).toBe('inline-block')
+  })
+
+  it('lets the self-batch hint span the whole account card', () => {
+    expect(css).toContain(
+      '.users-table-scroll .users-account-table tbody td > .field-hint {',
+    )
+    expect(css).toMatch(/td > \.field-hint \{\s+grid-column: 1 \/ -1;/)
   })
 })
 

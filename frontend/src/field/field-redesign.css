@@ -2,9 +2,9 @@
   width: min(100%, var(--content-width, 72rem));
   min-height: 100vh;
   margin-inline: auto;
-  /* 左右內縮由外層 main 提供；再加會讓任務頁左緣比其他管理頁多縮一截，
-     360px 也白白少 48px 寬。 */
-  padding: var(--space-8) 0 var(--space-12);
+  /* 內縮由外層 main 提供；再加會讓任務頁左緣與 h1 上緣都比其他管理頁多出
+     一截（上方約 31px），360px 也白白少 48px 寬。 */
+  padding: 0 0 var(--space-12);
 }
 
 .field-redesign .field-heading {

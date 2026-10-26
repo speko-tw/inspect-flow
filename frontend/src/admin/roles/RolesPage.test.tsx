@@ -722,9 +722,13 @@ describe('admin role management page', () => {
     })
     renderRoles()
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: '刪除角色 Viewer' }),
-    )
+    const trigger = await screen.findByRole('button', {
+      name: '刪除角色 Viewer',
+    })
+    // 不可逆刪除的觸發鈕用外框紅；實心紅只留給確認框內的確認鈕。
+    expect(trigger).toHaveClass('btn-danger-outline')
+    expect(trigger).not.toHaveClass('btn-danger')
+    fireEvent.click(trigger)
     const confirmation = await screen.findByRole('region', {
       name: '刪除「Viewer」',
     })

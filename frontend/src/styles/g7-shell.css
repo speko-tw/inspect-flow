@@ -116,7 +116,8 @@ header.app-header {
 .roles-page-tools {
   display: flex;
   flex-wrap: wrap;
-  align-items: start;
+  /* 一列內有 44px 與 48px（主要）按鈕，置中對齊才不會一高一低。 */
+  align-items: center;
   gap: var(--space-3);
   margin-top: var(--space-5);
 }

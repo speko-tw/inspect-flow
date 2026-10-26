@@ -18,14 +18,17 @@ import {
 } from './index'
 
 describe('Button', () => {
-  it.each(['primary', 'secondary', 'tertiary', 'destructive'] as const)(
-    'renders the %s hierarchy',
-    (variant) => {
-      render(<Button variant={variant}>執行</Button>)
-      const button = screen.getByRole('button', { name: '執行' })
-      expect(button).toHaveClass(styles[variant])
-    },
-  )
+  it.each([
+    'primary',
+    'secondary',
+    'tertiary',
+    'destructive',
+    'destructiveOutline',
+  ] as const)('renders the %s hierarchy', (variant) => {
+    render(<Button variant={variant}>執行</Button>)
+    const button = screen.getByRole('button', { name: '執行' })
+    expect(button).toHaveClass(styles[variant])
+  })
 
   it('can receive keyboard focus', () => {
     render(<Button>執行</Button>)
