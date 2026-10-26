@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.errors import APIError, ErrorCode
 from app.db.base import uuid7
 from app.models import (
     Project,
@@ -34,7 +35,10 @@ from app.services.template_library import create_template
 
 
 class DuplicateProjectItemError(ValueError):
-    def __init__(self, names: list[str]) -> None:
+    """區分停用名稱衝突，讓呼叫端能提示恢復而非重建。"""
+
+    def __init__(self, names: list[str], *, inactive: bool = False) -> None:
+        self.inactive = inactive
         self.names = names
         super().__init__(", ".join(names))
 
@@ -63,21 +67,27 @@ def _reject_duplicate_names(
     db.scalar(
         select(Project.id).where(Project.id == project_id).with_for_update()
     )
-    existing = {
-        title.strip().casefold()
-        for title in db.scalars(
-            select(ProjectInspectionItem.title).where(
-                ProjectInspectionItem.project_id == project_id
-            )
-        )
+    existing = db.execute(
+        select(
+            ProjectInspectionItem.title, ProjectInspectionItem.is_active
+        ).where(ProjectInspectionItem.project_id == project_id)
+    ).all()
+    names = {title.strip().casefold() for title, _ in existing}
+    active_names = {
+        title.strip().casefold() for title, active in existing if active
     }
     conflicts = [
         template.title
         for template in templates
-        if template.title.strip().casefold() in existing
+        if template.title.strip().casefold() in names
     ]
     if conflicts:
-        raise DuplicateProjectItemError(conflicts)
+        raise DuplicateProjectItemError(
+            conflicts,
+            inactive=not any(
+                name.strip().casefold() in active_names for name in conflicts
+            ),
+        )
 
 
 def _copy_template_item(
@@ -351,6 +361,13 @@ def create_template_from_project_item(
     )
     if source is None or system is None:
         return None
+    # IP-R25：來源已停用時先恢復，再存入範本，避免繞過停用入口。
+    if not source.is_active:
+        raise APIError(
+            ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE_NAME,
+            409,
+            details=[source.title],
+        )
 
     points_data: list[dict[str, object]] = []
     points = db.scalars(

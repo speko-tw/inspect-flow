@@ -127,6 +127,12 @@ _MAX_PAGE_SIZE = 100
 
 
 class UserResponse(BaseModel):
+    """帳號清單與詳情共用的回應欄位，不含任何密碼資料。
+
+    ``is_active``、``is_admin``、``is_system``、外部協作標記與到期日
+    讓畫面判斷哪些操作可用（DOM-R67、DOM-R73、DOM-R75）。
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
@@ -178,6 +184,13 @@ class ModuleDelegateUserListResponse(BaseModel):
 
 
 class CreateUserRequest(BaseModel):
+    """Admin 新增帳號的請求本文（AUT-R20）。
+
+    不帶密碼：臨時密碼由伺服器產生並只在建立回應回傳一次（ADM-R15、
+    AUT-R36）。``is_external_collaborator`` 沒有預設值，呼叫端必須
+    明確送出；``is_admin`` 另行處理，見 :func:`add_user`。
+    """
+
     username: str
     email: str
     name_zh: str
@@ -209,6 +222,13 @@ class TemporaryPasswordResetResponse(BaseModel):
 
 
 class UpdateUserRequest(BaseModel):
+    """修改帳號資料的請求本文，只更新請求有帶的欄位。
+
+    不含 ``company_id``：公司連結由 :class:`CompanyLinkRequest` 的
+    獨立端點處理（ADM-R47 把兩者分成不同按鈕）。切換外部協作標記
+    必須同時帶 ``confirm_external_transition``（DOM-R73）。
+    """
+
     username: str | None = None
     email: str | None = None
     name_zh: str | None = None
@@ -436,6 +456,12 @@ def _get_module_permission_target(
 
 
 def _module_error(exc: ValueError, *, bundle: bool = False) -> APIError:
+    """把模組權限 Service 的例外轉成 API 錯誤。
+
+    授權不足回 403；外部協作人員限制、被蘊含而不可單獨收回、代碼無效
+    等屬資料問題回 422（DOM-R62、DOM-R72）。``bundle`` 為真時，代碼
+    無效改用權限組合專用的錯誤碼（DOM-R63）。
+    """
     if isinstance(exc, ModulePermissionDeniedError):
         return APIError(
             ErrorCode.PERMISSION_DENIED,
@@ -475,6 +501,13 @@ def _bundle_response(bundle: PermissionBundle) -> PermissionBundleResponse:
 
 
 def _user_error(exc: ValueError) -> APIError:
+    """把帳號 Service 的業務例外轉成 API 錯誤，供前端對應專用訊息。
+
+    多數回 422 加專用錯誤碼（內建帳號受保護 DOM-R06、最後一位 Admin
+    DOM-R07、外部帳號以外部來源為準 DOM-R45、外部協作標記 DOM-R73
+    等）；只有修改帳號名稱的權限不足是 403（DOM-R45）。其餘落入共用
+    的驗證失敗。
+    """
     if isinstance(exc, BuiltInAccountModificationError):
         code = ErrorCode.USER_BUILTIN_PROTECTED
     elif isinstance(exc, LastActiveAdminRemovalError):
@@ -551,6 +584,12 @@ def list_users(
     limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> UserListResponse:
+    """分頁列出帳號，僅 Admin 可呼叫（AUT-R20）。
+
+    ``q`` 比對帳號名稱、中英文姓名、email 與工號；依帳號名稱排序並以
+    cursor 分頁（ADM-R13）。委派者不能用這個端點，改用
+    ``/module-delegate/users``（AUT-R49）。
+    """
     filters = []
     query = (q or "").strip()
     if query:
@@ -657,6 +696,11 @@ def add_user(
     response: Response,
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> CreatedUserResponse:
+    """Admin 新增帳號，並回傳只顯示一次的臨時密碼（AUT-R20）。
+
+    帳號、``user.created`` 稽核、Admin 標記與臨時密碼在同一交易寫入
+    （ALG-R31、AUT-R36）；回應標 ``no-store``，臨時密碼不留快取。
+    """
     _check_company_exists(db, body.company_id)
 
     def create_user_and_password() -> tuple[User, str]:
@@ -676,6 +720,8 @@ def add_user(
             },
         )
         if body.is_admin:
+            # 不經 create_user：set_is_admin 會擋外部協作人員取得 Admin，
+            # 並寫 user.admin_changed 稽核（DOM-R22）。
             set_is_admin(db, user, True)
         password = _temporary_password()
         set_password(db, user, password, is_temporary=True)
@@ -1038,6 +1084,10 @@ def list_external_users_without_project(
 def _serialize_external_users(
     db: Session, users: Sequence[User]
 ) -> list[dict[str, Any]]:
+    """批次補上公司名稱，組成「無專案外部協作者」清單（DOM-R75）。
+
+    用 outer join：帳號不一定連結公司，沒有公司時名稱為 ``None``。
+    """
     company_names = dict(
         db.execute(
             select(User.id, Company.name)

@@ -158,6 +158,7 @@ def project_inspection_item_details(
         {
             "id": item.id,
             "project_id": item.project_id,
+            "is_active": item.is_active,
             "sequence": item.sequence,
             "title": item.title,
             "instruction": item.instruction,
