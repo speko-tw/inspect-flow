@@ -545,7 +545,9 @@ describe('UsersPage 批次停用帳號（#414）', () => {
     renderUsers({ onSelectUser: vi.fn() })
     await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
-    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    const batchTrigger = screen.getByRole('button', { name: '批次停用帳號' })
+    expect(batchTrigger).toHaveClass('btn-danger-outline')
+    fireEvent.click(batchTrigger)
     fireEvent.click(
       await screen.findByRole('button', { name: '確認停用帳號' }),
     )
@@ -1110,7 +1112,9 @@ describe('UsersPage 操作確認框（#507）', () => {
     const backend = stubBackend()
     renderUsers()
     const row = await screen.findByRole('row', { name: /anna\.deng/ })
-    fireEvent.click(within(row).getByRole('button', { name: '停用' }))
+    const rowTrigger = within(row).getByRole('button', { name: '停用' })
+    expect(rowTrigger).toHaveClass('btn-danger-outline')
+    fireEvent.click(rowTrigger)
     const box = await screen.findByRole('region', { name: '操作確認' })
     expect(within(box).getAllByRole('listitem')).toHaveLength(4)
     const confirm = within(box).getByRole('button', {

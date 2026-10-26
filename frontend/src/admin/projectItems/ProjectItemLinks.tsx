@@ -382,7 +382,7 @@ export default function ProjectItemLinks({
                   </p>
                   <div className="project-item-actions">
                     <button
-                      className="btn btn-sm"
+                      className="btn btn-sm btn-danger-outline"
                       disabled={busy}
                       onClick={() => {
                         setActivation({ item, active: false })

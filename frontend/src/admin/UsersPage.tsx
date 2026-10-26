@@ -1360,6 +1360,11 @@ export default function UsersPage({
                                 {user.is_admin ? '收回管理者' : '指派管理者'}
                               </button>
                               <button
+                                className={
+                                  user.is_active
+                                    ? 'btn-danger-outline'
+                                    : undefined
+                                }
                                 disabled={user.is_system || busyUser !== null}
                                 onClick={() =>
                                   requestAction(
@@ -1545,6 +1550,7 @@ export default function UsersPage({
                   <>
                     <p>已選取 {selectedBatchUserIds.length} 個帳號。</p>
                     <button
+                      className="btn-danger-outline"
                       disabled={
                         selectedBatchUserIds.length === 0 ||
                         users
