@@ -3,7 +3,10 @@ import type { KeyboardEvent, ReactNode } from 'react'
 
 import styles from './PageTabs.module.css'
 
-/** 共用單頁分頁，維持鍵盤方向鍵與目前項目語意（UDS-R04、UDS-R05）。 */
+/**
+ * 共用頁內分頁：方向鍵、Home／End 循環切換，只有目前分頁在 tab 順序內。
+ * @remarks 對應 UDS-R05（selected、focus-visible 與鍵盤狀態）。
+ */
 export function PageTabs({
   tabs,
   value,
@@ -19,6 +22,10 @@ export function PageTabs({
   const tabRefs = useRef(new Map<string, HTMLButtonElement>())
 
   function move(event: KeyboardEvent<HTMLButtonElement>) {
+    // Alt+←／→ 是瀏覽器的上一頁／下一頁，Ctrl／Cmd／Shift 組合也屬於
+    // 瀏覽器或輔助科技；攔下來會讓使用者無法離開頁面。
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+      return
     const current = tabs.findIndex((tab) => tab.id === value)
     let next: number
     if (event.key === 'ArrowRight') next = (current + 1) % tabs.length

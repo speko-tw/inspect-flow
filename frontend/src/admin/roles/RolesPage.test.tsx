@@ -297,6 +297,24 @@ describe('角色表單未儲存導覽防護', () => {
     expect(event.defaultPrevented).toBe(true)
   })
 
+  it('新增角色是主要按鈕，表單展開後讓位給建立角色', async () => {
+    rolesFetch({ roles: [makeRole('role-1', '檢視者')] })
+    renderRoles('/roles', undefined, false)
+    await screen.findByRole('heading', { name: '專案角色' })
+    const create = screen.getByRole('button', { name: '新增角色' })
+    expect(create).toHaveClass('btn-primary')
+
+    fireEvent.click(create)
+
+    // UDS-R04：每頁至多一個醒目主要操作，表單內的送出鈕才是主要。
+    expect(screen.getByRole('button', { name: '新增角色' })).not.toHaveClass(
+      'btn-primary',
+    )
+    expect(screen.getByRole('button', { name: '建立角色' })).toHaveClass(
+      'btn-primary',
+    )
+  })
+
   it('未修改角色時可直接切換到新增表單', async () => {
     rolesFetch({ roles: [makeRole('role-1', '檢視者')] })
     renderRoles()

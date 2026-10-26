@@ -271,6 +271,10 @@ describe('Dashboard 頁面', () => {
     const workloadTable = screen.getByRole('table', {
       name: '工程師工作量清單',
     })
+    // 說明句同時是表格的描述，輔助科技進表格時會一併讀出。
+    expect(workloadTable).toHaveAccessibleDescription(
+      workloadGuidance.textContent ?? '',
+    )
     expect(
       workloadTable.compareDocumentPosition(workloadGuidance) &
         Node.DOCUMENT_POSITION_FOLLOWING,

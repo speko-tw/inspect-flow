@@ -802,7 +802,8 @@ describe('admin projects page', () => {
       .closest('article') as HTMLElement
     const cardLinks = within(card).getAllByRole('link')
     expect(cardLinks[0]).toHaveAccessibleName('開啟專案')
-    expect(cardLinks[0]).toHaveClass('btn-primary')
+    expect(cardLinks[0]).toHaveClass('btn-emphasis')
+    expect(cardLinks[0]).not.toHaveClass('btn-primary')
     expect(cardLinks[1]).toHaveAccessibleName('套用範本')
     expect(cardLinks[1]).not.toHaveClass('btn-primary')
     expect(screen.getByRole('button', { name: '搜尋' })).not.toHaveClass(

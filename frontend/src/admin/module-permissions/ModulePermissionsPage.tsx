@@ -2200,6 +2200,7 @@ function ModulePermissionsPageContent({
                         }
                         disabled={Boolean(createBlockReason)}
                         onClick={() => void createStaff()}
+                        variant="primary"
                       >
                         {existingAccount ? '套用職務' : '建立帳號'}
                       </Button>
@@ -2237,7 +2238,7 @@ function ModulePermissionsPageContent({
                 </div>
               )}
               {step <= 3 && (
-                <div>
+                <div className="wizard-actions">
                   {step > 0 && (
                     <Button
                       disabled={Boolean(createdId)}
@@ -2250,6 +2251,7 @@ function ModulePermissionsPageContent({
                     <Button
                       disabled={Boolean(createdId)}
                       onClick={() => goToStep(step + 1)}
+                      variant="primary"
                     >
                       下一步
                     </Button>
@@ -2717,6 +2719,7 @@ function ModulePermissionsPageContent({
                 </div>
               )}
               <Button
+                className="permission-check-button"
                 disabled={
                   accessLoadedFor !== selectedUser ||
                   (['task-list', 'members'].includes(diagnosticAction) &&

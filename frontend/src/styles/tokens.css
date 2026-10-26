@@ -23,6 +23,8 @@
   --color-border-strong: #7d8a9a;
   --color-focus: #1670a6;
   --color-selection: #002060;
+  /* 選取中的分段／晶片底色：深淺主題都比軌道（--color-bg-muted）更亮。 */
+  --color-selected-bg: #ffffff;
   --color-link: #174f9b;
   --color-action-primary: #002060;
   --color-action-primary-hover: #123b79;
@@ -92,6 +94,7 @@
   --color-border-strong: #8298b2;
   --color-focus: #82c9f2;
   --color-selection: #8cc4ff;
+  --color-selected-bg: #2a4666;
   --color-link: #aad0ff;
   --color-action-primary: #8cc4ff;
   --color-action-primary-hover: #a8d2ff;
@@ -136,6 +139,7 @@
     --color-border-strong: #8298b2;
     --color-focus: #82c9f2;
     --color-selection: #8cc4ff;
+    --color-selected-bg: #2a4666;
     --color-link: #aad0ff;
     --color-action-primary: #8cc4ff;
     --color-action-primary-hover: #a8d2ff;

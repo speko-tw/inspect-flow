@@ -283,6 +283,19 @@ describe('PeoplePage', () => {
     )
   })
 
+  it('新增帳號是帳號頁的主要按鈕', async () => {
+    peopleApiMock.request.mockResolvedValue({ items: [] })
+    render(
+      <DataMemoryRouter initialEntries={['/accounts']}>
+        <PeoplePage onTemporaryPassword={vi.fn()} />
+      </DataMemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('button', { name: '新增帳號' }),
+    ).toHaveClass('btn-primary')
+  })
+
   it('臨時密碼顯示時，站內導覽須確認且可留在精靈', async () => {
     peopleApiMock.request.mockResolvedValue({ items: [] })
     render(

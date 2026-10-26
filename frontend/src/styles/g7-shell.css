@@ -125,8 +125,10 @@ header.app-header {
   flex-basis: 100%;
 }
 
-.roles-page-tools > button,
-.roles-page-editor button {
+/* 主要按鈕的 48px 高度由 .btn-primary 決定，這裡排除，避免特異性相同時
+   被 44px 蓋回去。 */
+.roles-page-tools > button:not(.btn-primary),
+.roles-page-editor button:not(.btn-primary) {
   min-height: 2.75rem;
 }
 

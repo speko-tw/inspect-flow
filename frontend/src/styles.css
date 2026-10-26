@@ -23,6 +23,10 @@
   --content-width: 72rem;
   /* 窄螢幕下保留原觸控目標尺寸，避免這次 token 化改變操作幾何。 */
   --touch-target: 2.75rem;
+  /* 主要按鈕比觸控目標再高一階、留白更寬、有最小寬度，負責人說只靠
+     顏色「不太明顯」，要靠尺寸與字重補強（#534 裁定、UDS-R04）。 */
+  --control-primary-height: 3rem;
+  --control-primary-min-width: 8rem;
 
   --bg: var(--color-bg-page);
   --surface: var(--color-bg-surface);
@@ -354,6 +358,9 @@
 
 .project-home-header h1 {
   overflow-wrap: anywhere;
+  /* 中文可在任意字間折行；360px 下專案名稱會落出「…機電工／程」的孤字，
+     balance 讓兩行長度接近。 */
+  text-wrap: balance;
 }
 
 .project-home-body {
@@ -560,10 +567,6 @@ body {
   margin: auto;
 }
 
-.page-load-error .btn-primary {
-  min-height: 44px;
-}
-
 .version-footer {
   padding: var(--space-2) var(--space-4);
   color: var(--text-muted);
@@ -753,14 +756,17 @@ button,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.5rem;
+  /* 次要按鈕維持 44px 觸控高度；主要按鈕是 48px，高度差是層級線索之一。 */
+  min-height: var(--touch-target);
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-weight: 600;
+  /* 次要按鈕字重比主要低一階。系統中文字型（PingFang）最粗只到 600，
+     主要用 700 時會貼齊 600；次要必須降到 500 才拉得開層級。 */
+  font-weight: 500;
   text-align: center;
   text-decoration: none;
   cursor: pointer;
@@ -777,13 +783,20 @@ button,
 
 /* 主要按鈕要明講；submit 不再自動變主要（搜尋、篩選等 submit 是次要）。 */
 .btn-primary {
-  min-height: 44px;
-  padding: var(--space-2) var(--space-5);
+  min-width: min(var(--control-primary-min-width), 100%);
+  min-height: var(--control-primary-height);
+  padding: var(--space-2) var(--space-6);
   border-width: 2px;
-  font-weight: 750;
+  font-weight: 700;
   background: var(--primary);
   border-color: var(--primary);
   color: var(--on-primary);
+}
+
+/* 頁級主要按鈕（新增帳號、新增專案）直接放在頁面區塊底下，與接著出現的
+   搜尋欄位留出距離，48px 高的按鈕才不會貼著標籤。 */
+section > .btn-primary {
+  margin-block-end: var(--space-4);
 }
 
 @media (hover: hover) {
@@ -806,6 +819,38 @@ button,
     background: var(--danger-hover);
     border-color: var(--danger-hover);
     color: var(--on-danger);
+  }
+}
+
+/* 外框強調：卡片清單裡每張卡都有「開啟」時，實心主要按鈕會讓整頁
+   同時出現多個醒目主要操作（UDS-R04）；改成品牌色外框，比一般按鈕
+   醒目、又讓出頁級主要按鈕。 */
+.btn-emphasis {
+  border-width: 2px;
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .btn-emphasis:hover:not(:disabled) {
+    border-color: var(--primary-hover);
+    color: var(--primary-hover);
+  }
+}
+
+/* 危險操作的觸發鈕：只用外框紅，實心紅留給確認框裡不可復原的確認鈕。 */
+.btn-danger-outline {
+  border-width: 2px;
+  border-color: var(--danger);
+  color: var(--error-text);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .btn-danger-outline:hover:not(:disabled) {
+    background: var(--error-bg);
+    border-color: var(--danger-hover);
   }
 }
 
@@ -912,6 +957,11 @@ table {
     gap: var(--space-2);
     padding-inline: 0;
     border: 0;
+  }
+
+  /* 卡片列是兩欄 grid，badge 是 grid 項目會被拉滿整欄；貼合內容靠左。 */
+  .users-table-scroll .users-account-table tbody td > .badge {
+    justify-self: start;
   }
 
   .users-table-scroll .users-account-table tbody td::before {
@@ -1985,15 +2035,6 @@ a.app-header-tab[aria-current='page'] {
   font-size: 0.9rem;
 }
 
-/* 卡片操作在桌機與窄螢幕都可直接使用。 */
-.project-workspace-card .btn {
-  padding: var(--space-2) var(--space-4);
-}
-
-.project-workspace-card .btn-primary {
-  font-weight: 700;
-}
-
 .card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2301,6 +2342,12 @@ a.app-header-tab[aria-current='page'] {
   .tpl-detail-list button,
   summary {
     min-height: var(--touch-target);
+  }
+
+  /* 上面的 .btn 與 .btn-primary 同特異性，放在檔尾才不會把主要按鈕
+     壓回 44px。 */
+  .btn-primary {
+    min-height: var(--control-primary-height);
   }
 
   /* 點擊區是整個 summary；範本檢查點卡片的 summary 是 flex，內容垂直置中。 */

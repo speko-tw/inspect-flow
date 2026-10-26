@@ -1,7 +1,9 @@
 .dashboard-page {
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: var(--space-8) var(--space-6) var(--space-12);
+  /* 左右內縮由外層 main 提供（見 styles.css 的 .project-home-header 註解）；這裡
+     再加一次會讓總覽的左緣比其他管理頁多縮一截（#738 設計審查 D8）。 */
+  padding: 0 0 var(--space-12);
   color: var(--color-text-primary);
 }
 
@@ -32,7 +34,9 @@
   text-align: right;
 }
 
-.dashboard-page button:focus-visible,
+/* 分頁（role=tab）的焦點環由 PageTabs 自己負責；這裡排除它，否則
+   這條較高特異性的規則會蓋掉 PageTabs 的 -3px 內縮，環被 overflow 裁掉。 */
+.dashboard-page button:not([role='tab']):focus-visible,
 .dashboard-page input:focus-visible,
 .dashboard-page select:focus-visible {
   outline: 3px solid var(--color-focus);
@@ -110,10 +114,6 @@
   font-size: 1.875rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
-}
-
-.dashboard-summary-card.is-completion {
-  border-left: 4px solid var(--color-brand-accent);
 }
 
 .dashboard-summary-card.is-completion strong {
@@ -253,9 +253,17 @@
   color: var(--color-text-secondary);
 }
 
+/* 沿用改用共用 .notice 之前的外觀：虛線框加柔和底色，與錯誤、成功提示
+   區隔，也與白色面板分得出來。 */
 .dashboard-empty-notice {
   margin-block: var(--space-3);
   border-style: dashed;
+  background: var(--color-bg-muted);
+}
+
+/* 頁面層級的失敗提示（摘要、專案清單）與上方區塊保留 12px 距離。 */
+.dashboard-page > .notice {
+  margin-top: var(--space-3);
 }
 
 .dashboard-empty-notice p {
@@ -270,7 +278,7 @@
 
 @media (max-width: 760px) {
   .dashboard-page {
-    padding: var(--space-5) var(--space-4) var(--space-8);
+    padding: 0 0 var(--space-8);
   }
 
   .dashboard-heading {

@@ -92,6 +92,34 @@ describe('PageTabs', () => {
     expect(first).toHaveFocus()
   })
 
+  it.each(['altKey', 'ctrlKey', 'metaKey', 'shiftKey'] as const)(
+    'leaves %s arrow combinations to the browser',
+    (modifier) => {
+      const onChange = vi.fn()
+      render(
+        <PageTabs
+          label="設定區段"
+          onChange={onChange}
+          tabs={[
+            { id: 'one', label: '第一頁', panelId: 'panel-one' },
+            { id: 'two', label: '第二頁', panelId: 'panel-two' },
+          ]}
+          value="one"
+        />,
+      )
+      const first = screen.getByRole('tab', { name: '第一頁' })
+      // Alt+←／→ 是瀏覽器上一頁／下一頁，不能被分頁吃掉。
+      const notPrevented = fireEvent.keyDown(first, {
+        key: 'ArrowRight',
+        [modifier]: true,
+      })
+
+      expect(notPrevented).toBe(true)
+      expect(onChange).not.toHaveBeenCalled()
+      expect(first).not.toHaveFocus()
+    },
+  )
+
   it('isolates matching tab sets IDs and keyboard focus', () => {
     const firstChange = vi.fn()
     const secondChange = vi.fn()

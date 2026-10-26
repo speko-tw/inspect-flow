@@ -85,6 +85,7 @@ const requiredTokens = [
   '--color-border-control',
   '--color-border-strong',
   '--color-focus',
+  '--color-selected-bg',
   '--color-selection',
   '--color-link',
   '--color-action-primary',
@@ -311,5 +312,34 @@ describe('semantic token contrast', () => {
         `${status} boundary on status background`,
       ).toBeGreaterThanOrEqual(3)
     }
+  })
+})
+
+describe('selected segment background', () => {
+  function luminance(color: string) {
+    const [red, green, blue] = color
+      .match(/[\da-f]{2}/gi)!
+      .map((channel) => Number.parseInt(channel, 16) / 255)
+      .map((value) =>
+        value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+      )
+    return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!
+  }
+
+  it.each([
+    ['light', light],
+    ['dark', dark],
+    ['system dark', systemDark],
+  ])('is lighter than the track and readable in %s', (_name, map) => {
+    // 負責人裁定：深淺色層級行為相似，選取的分段都要比軌道更亮。
+    expect(luminance(map['--color-selected-bg']!)).toBeGreaterThan(
+      luminance(map['--color-bg-muted']!),
+    )
+    expect(
+      contrastRatio(map['--color-text-primary']!, map['--color-selected-bg']!),
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      contrastRatio(map['--color-selection']!, map['--color-selected-bg']!),
+    ).toBeGreaterThanOrEqual(3)
   })
 })

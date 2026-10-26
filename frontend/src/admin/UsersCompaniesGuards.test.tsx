@@ -339,9 +339,10 @@ describe('UsersPage 帳號詳情', () => {
       '停用帳號',
       '重設臨時密碼',
     ])
-    expect(
-      within(actions).getByRole('button', { name: '停用帳號' }),
-    ).toHaveClass('btn-danger')
+    // 觸發鈕只用外框紅，實心紅留給確認框裡的最終確認鈕。
+    const trigger = within(actions).getByRole('button', { name: '停用帳號' })
+    expect(trigger).toHaveClass('btn-danger-outline')
+    expect(trigger).not.toHaveClass('btn-danger')
   })
 
   it('deactivation uses the name and shows a success notice', async () => {

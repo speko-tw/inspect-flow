@@ -31,7 +31,11 @@ export function ListDetailLayout({
 
   return (
     <div
-      className="layout-list-detail"
+      className={
+        hasDetail
+          ? 'layout-list-detail'
+          : 'layout-list-detail layout-list-only'
+      }
       data-active-pane={hasDetail ? 'detail' : 'list'}
     >
       <section className="layout-list-pane" aria-label={listTitle}>

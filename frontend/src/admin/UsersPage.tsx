@@ -848,7 +848,9 @@ export default function UsersPage({
                   {detail.is_admin ? '收回管理者' : '指派管理者'}
                 </button>
                 <button
-                  className={detail.is_active ? 'btn-danger' : undefined}
+                  className={
+                    detail.is_active ? 'btn-danger-outline' : undefined
+                  }
                   disabled={detail.is_system || busyUser !== null}
                   onClick={() =>
                     requestAction(

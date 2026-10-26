@@ -506,7 +506,10 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
           {visibleEngineerState === 'ready' && visibleEngineers.length > 0 && (
             <>
               <EngineerList engineers={visibleEngineers} />
-              <p className="dashboard-workload-guidance">
+              <p
+                className="dashboard-workload-guidance"
+                id="dashboard-workload-guidance"
+              >
                 {ENGINEER_WORKLOAD_GUIDANCE}
               </p>
             </>
@@ -636,6 +639,7 @@ function ProjectList({
 function EngineerList({ engineers }: { engineers: DashboardEngineer[] }) {
   return (
     <div
+      aria-describedby="dashboard-workload-guidance"
       aria-label="工程師工作量清單"
       className="dashboard-engineer-list"
       role="table"

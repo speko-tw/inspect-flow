@@ -21,6 +21,7 @@ function declarationsOf(selector: string, source = css) {
   expect(match, `找不到規則 ${selector}`).not.toBeNull()
   return Object.fromEntries(
     (match?.[1] ?? '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
       .split(';')
       .map((line) => line.split(/:(.*)/s))
       .filter(([name, value]) => name.trim() && value)
@@ -32,7 +33,9 @@ function declarationsIn(rule: string) {
   const match = /\{([^}]*)/.exec(rule)
   expect(match, '找不到 CSS 宣告區塊').not.toBeNull()
   return Object.fromEntries(
+    // 先去掉註解：註解裡的冒號與分號會讓宣告名稱錯位。
     (match?.[1] ?? '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
       .split(';')
       .map((line) => line.split(/:(.*)/s))
       .filter(([name, value]) => name.trim() && value)
@@ -245,6 +248,123 @@ describe('button rules', () => {
     expect(css).not.toContain('.standalone-link')
     expect(css).not.toContain('.tpl-return-project')
     expect(css).not.toContain('.field-back')
+  })
+})
+
+// 主要按鈕的層級（#534 裁定、UDS-R04）：只靠顏色「不太明顯」，所以尺寸、
+// 字重、留白都要比次要按鈕大。jsdom 不排版，這裡驗證宣告值；實際像素
+// 由真瀏覽器矩陣量測。
+describe('button hierarchy geometry', () => {
+  const buttons = css.slice(
+    css.indexOf('/* ---- 按鈕：button 與 .btn'),
+    css.indexOf('/* ---- 表格 ---- */'),
+  )
+  const rule = (selector: string) => {
+    const start = buttons.indexOf(`\n${selector} {`)
+    expect(start, `找不到 ${selector}`).toBeGreaterThan(0)
+    return declarationsIn(buttons.slice(start, buttons.indexOf('}', start)))
+  }
+
+  it('makes the primary taller, wider and bolder than secondary', () => {
+    expect(css).toContain('--control-primary-height: 3rem;')
+    expect(css).toContain('--control-primary-min-width: 8rem;')
+    expect(css).toContain('--touch-target: 2.75rem;')
+    const primary = rule('.btn-primary')
+    const secondary = declarationsIn(
+      buttons.match(/\nbutton,\n\.btn \{[^}]*\}/)?.[0] ?? '',
+    )
+    expect(primary['min-height']).toBe('var(--control-primary-height)')
+    expect(primary['min-width']).toContain('var(--control-primary-min-width)')
+    expect(primary.padding).toBe('var(--space-2) var(--space-6)')
+    expect(secondary['min-height']).toBe('var(--touch-target)')
+    expect(Number(primary['font-weight'])).toBeGreaterThanOrEqual(700)
+    expect(Number(secondary['font-weight'])).toBeLessThanOrEqual(500)
+  })
+
+  it('keeps the primary height on narrow screens', () => {
+    const narrow = css.slice(css.indexOf('觸控目標：窄螢幕一律'))
+    const start = narrow.indexOf('.btn-primary {')
+    expect(start).toBeGreaterThan(0)
+    // 必須排在 .btn 的 min-height 之後，同特異性才不會被壓回 44px。
+    expect(start).toBeGreaterThan(narrow.indexOf('.btn,'))
+    expect(
+      declarationsIn(narrow.slice(start, narrow.indexOf('}', start)))[
+        'min-height'
+      ],
+    ).toBe('var(--control-primary-height)')
+  })
+
+  it('has no card-level override that flattens the primary button', () => {
+    expect(css).not.toContain('.project-workspace-card .btn')
+    expect(css).not.toContain('.page-load-error .btn-primary')
+  })
+
+  it('gives card and danger triggers outline-only variants', () => {
+    expect(rule('.btn-emphasis')).toMatchObject({
+      'border-color': 'var(--primary)',
+      color: 'var(--primary)',
+    })
+    expect(rule('.btn-danger-outline')).toMatchObject({
+      'border-color': 'var(--danger)',
+      color: 'var(--error-text)',
+    })
+    expect(rule('.btn-danger-outline').background).toBeUndefined()
+  })
+})
+
+describe('page-level rules that must not flatten the primary button', () => {
+  const read = (file: string) => readFileSync(file, 'utf8')
+
+  it('keeps 44px page rules off the 48px primary button', () => {
+    expect(read('src/styles/g7-shell.css')).toContain(
+      '.roles-page-tools > button:not(.btn-primary)',
+    )
+    expect(read('src/admin/projects/ProjectMembers.css')).toContain(
+      '.member-add-form button:not(.btn-primary)',
+    )
+  })
+
+  it('leaves horizontal padding to the outer main on all admin pages', () => {
+    // 外層 main 已提供左右內縮；頁面再加會讓左緣與 h1 起點各頁不一致。
+    expect(declarationsOf('.dashboard-page', dashboardCss).padding).toMatch(
+      /^0 0 /,
+    )
+    expect(
+      declarationsOf(
+        '.dashboard-task-page',
+        read('src/admin/dashboard/DashboardTaskPage.css'),
+      ).padding,
+    ).toMatch(/^0 0 /)
+    const field = read('src/field/field-redesign.css')
+    expect(
+      declarationsOf('.field-shell.field-redesign', field).padding,
+    ).toMatch(/^var\(--space-8\) 0 /)
+    expect(
+      declarationsOf('.field-redesign .field-heading', field)['font-size'],
+    ).toBe('var(--font-size-heading)')
+  })
+})
+
+describe('shared component button geometry', () => {
+  const components = readFileSync(
+    'src/components/components.module.css',
+    'utf8',
+  )
+  const rule = (selector: string) => {
+    const source = `\n${components}`
+    const start = source.indexOf(`\n${selector} {`)
+    expect(start, `找不到 ${selector}`).toBeGreaterThanOrEqual(0)
+    return declarationsIn(source.slice(start))
+  }
+
+  it('matches the global primary button size', () => {
+    const primary = rule('.primary')
+    expect(primary['min-height']).toBe('3rem')
+    expect(primary['min-width']).toContain('8rem')
+    expect(primary.padding).toContain('var(--space-6)')
+    expect(Number(primary['font-weight'])).toBeGreaterThan(
+      Number(rule('.button')['font-weight']),
+    )
   })
 })
 
@@ -490,6 +610,36 @@ describe('hover rules', () => {
 
   it('has at least one :hover rule inside the media query', () => {
     expect(css).toMatch(/@media \(hover: hover\) \{\n\s+a\.topbar-brand:hover/)
+  })
+})
+
+describe('PageTabs focus and contrast modes', () => {
+  it('keeps the tab list divider to one pixel, not a gold band', () => {
+    const tabs = declarationsIn(
+      /\.tabs\s*\{[^}]*\}/.exec(pageTabsCss)?.[0] ?? '',
+    )
+    expect(tabs['border-bottom']).toMatch(/^1px solid/)
+    expect(pageTabsCss).not.toContain('brand-accent')
+  })
+
+  it('draws a real border for the selected tab in forced colors', () => {
+    const start = pageTabsCss.indexOf('@media (forced-colors: active)')
+    expect(start).toBeGreaterThanOrEqual(0)
+    const block = pageTabsCss.slice(start, pageTabsCss.indexOf('\n}\n', start))
+    expect(block).toContain("[aria-selected='true']")
+    expect(block).toContain('border-bottom: 3px solid Highlight')
+  })
+
+  it('does not let the dashboard focus ring override the tab ring', () => {
+    expect(dashboardCss).toContain(
+      ".dashboard-page button:not([role='tab']):focus-visible",
+    )
+    expect(dashboardCss).not.toMatch(/\.dashboard-page button:focus-visible/)
+    expect(
+      declarationsIn(
+        /\.tab:focus-visible\s*\{[^}]*\}/.exec(pageTabsCss)?.[0] ?? '',
+      )['outline-offset'],
+    ).toBe('-3px')
   })
 })
 

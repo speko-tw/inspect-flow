@@ -517,6 +517,7 @@ export default function RolesPage() {
         <button
           aria-controls="role-editor-panel"
           aria-expanded={roleFormOpen}
+          className={roleFormOpen ? undefined : 'btn-primary'}
           onClick={startCreatingRole}
           type="button"
         >

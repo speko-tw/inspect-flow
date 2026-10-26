@@ -1,7 +1,8 @@
 .dashboard-task-page {
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: var(--space-8) var(--space-6) var(--space-12);
+  /* 左右內縮由外層 main 提供，與總覽及其他管理頁同一條左緣。 */
+  padding: 0 0 var(--space-12);
   color: var(--color-text-primary);
 }
 
@@ -191,7 +192,7 @@
 
 @media (max-width: 760px) {
   .dashboard-task-page {
-    padding: var(--space-5) var(--space-3) var(--space-8);
+    padding: 0 0 var(--space-8);
   }
 
   .dashboard-task-heading {
