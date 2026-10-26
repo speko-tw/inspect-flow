@@ -64,7 +64,7 @@ try {
   await projectCard.getByRole('link', { name: '開啟專案' }).click()
   await page.getByRole('link', { name: '計畫與任務' }).click()
   await page.getByRole('heading', { name: '計畫與任務' }).waitFor()
-  await page.getByRole('button', {
+  await page.getByRole('link', {
     name: '示範廠擴建機電工程查核計畫',
   }).click()
   await page.getByRole('link', {

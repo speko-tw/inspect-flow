@@ -362,9 +362,9 @@ try {
       }).click()
     }
     await page.getByRole('link', { name: '計畫與任務', exact: true }).click()
-    const activationPlanButton = page.locator('.plan-list').getByRole(
-      'button', { name: new RegExp(planName) },
-    )
+    const activationPlanButton = page
+      .locator('.plan-list')
+      .getByRole('link', { name: new RegExp(planName) })
     await activationPlanButton.waitFor()
     const activationPlanLabel = await activationPlanButton.innerText()
     assert.equal(
@@ -374,6 +374,9 @@ try {
     process.stdout.write(JSON.stringify({ activationPlanLabel }) + '\n')
     // IP-AC27～29：沿站內入口走過六種獨立頁，以真 Chrome 留證。
     const planningShot = async (name) => {
+      await page.getByText('載入中…', { exact: true }).waitFor({
+        state: 'hidden',
+      })
       assert.equal(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -393,9 +396,25 @@ try {
       .getByLabel('計畫名稱', { exact: false })
       .fill(`獨立頁計畫 ${width}`)
     await page.getByRole('button', { name: '建立計畫', exact: true }).click()
-    await page.getByText(`已建立計畫「獨立頁計畫 ${width}」。`).waitFor()
+    await page
+      .getByRole('heading', {
+        name: `獨立頁計畫 ${width}`,
+        exact: true,
+      })
+      .waitFor()
+    await page.getByText('已建立計畫，接著新增任務。').waitFor()
+    await page.waitForFunction(() => history.state?.usr == null)
+    await page.reload()
+    assert.equal(await page.getByText('已建立計畫，接著新增任務。').count(), 0)
+    await page.goBack()
+    await activationPlanButton.waitFor()
     await activationPlanButton.click()
     await page.getByRole('heading', { name: planName, exact: true }).waitFor()
+    const taskRow = page.getByRole('link', {
+      name: `保留停用項目 ${width}`,
+      exact: true,
+    })
+    assert.ok((await taskRow.boundingBox()).height >= 44)
     await planningShot('plan-detail')
     await page.getByRole('button', { name: '＋ 新增任務' }).click()
     await page.getByRole('button', { name: '建立草稿任務' }).waitFor()
@@ -424,7 +443,10 @@ try {
     await planningShot('task-edit-items')
     await page.reload()
     assert.equal(await retainedInput.isChecked(), true)
-    await page.getByRole('link', { name: '返回任務詳情' }).click()
+    await page
+      .locator('form')
+      .getByRole('button', { name: '取消', exact: true })
+      .click()
     await page.getByRole('button', { name: '修改地點', exact: true }).click()
     const locationForm = page.locator('[data-error-context="location"]')
     await locationForm.getByLabel('補充地點').waitFor()
@@ -438,9 +460,60 @@ try {
       .click()
     await page.locator('[data-error-context="assignee"]').waitFor()
     await planningShot('task-edit-assignee')
-    await page.getByRole('link', { name: '返回任務詳情' }).click()
+    await page
+      .locator('form')
+      .getByRole('button', { name: '取消', exact: true })
+      .click()
 
     assert.equal((await api(`${taskPath}:dispatch`, 'POST')).status, 200)
+    if (width === 1280) {
+      const planningBase = `/projects/${result.projects.B}/planning`
+      const pagePath = `${planningBase}/${plan.data.id}`
+      const taskPage = `${pagePath}/tasks/${draft.data.id}`
+      await page.goto(`${base}${taskPage}`)
+      await page.getByText('任務已派出，不能更換查核項目').waitFor()
+      await planningShot('task-dispatched')
+      assert.equal(
+        (await api(`/inspection-plans/${plan.data.id}:archive`, 'POST'))
+          .status,
+        200,
+      )
+      await page.goto(`${base}${pagePath}`)
+      await page
+        .getByText('計畫已封存。取消封存後才能新增、修改或派出任務。')
+        .waitFor()
+      await planningShot('plan-archived')
+      assert.equal(
+        (await api(`/inspection-plans/${plan.data.id}:unarchive`, 'POST'))
+          .status,
+        200,
+      )
+      let failDetail = true
+      const detailApi = `**/api/v1/inspection-plans/${plan.data.id}`
+      await page.route(detailApi, async (route) => {
+        if (failDetail && route.request().method() === 'GET') {
+          await route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: { code: 'unavailable' } }),
+          })
+        } else await route.continue()
+      })
+      await page.goto(`${base}${taskPage}`)
+      await page.getByRole('alert').waitFor()
+      await page.getByRole('button', { name: '重新載入' }).waitFor()
+      await planningShot('load-error')
+      failDetail = false
+      await page.getByRole('button', { name: '重新載入' }).click()
+      await page
+        .getByRole('heading', {
+          name: new RegExp(`保留停用項目 ${width}`),
+          level: 2,
+        })
+        .waitFor()
+      await page.unroute(detailApi)
+    }
+
     await page.goto(`${base}${itemBase}`)
     await page.getByText('已停用（1）', { exact: true }).click()
     await page

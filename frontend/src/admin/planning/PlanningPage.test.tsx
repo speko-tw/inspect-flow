@@ -6,8 +6,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import type { ReactElement, ReactNode } from 'react'
-import { Link, Route, Routes } from 'react-router'
+import { useEffect, type ReactElement, type ReactNode } from 'react'
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -26,7 +26,7 @@ import PlanningPage, { type PlanningPageClient } from './PlanningPage'
 
 const READ_ONLY_NOTICE =
   '你在這個專案只能查看計畫與任務，不能新增、修改或派出。' +
-  '需要調整請找專案內業或管理者。'
+  '需要調整請找有管理權限的專案成員或管理者。'
 const ASSIGNEE_LIST_UNAVAILABLE_NOTICE =
   '看不到成員名單，這次只能選「不指定」，' + '之後請有權限的人補上。'
 
@@ -38,15 +38,34 @@ function validationError(fixture: {
   return error
 }
 
+/** 模擬真實 router：換專案 props 時也換網址，避免測試產生矛盾的路徑。 */
+function PlanningRouteSync({ projectId }: { projectId: string }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  useEffect(() => {
+    const path = `/projects/${projectId}/planning`
+    if (!location.pathname.startsWith(path)) {
+      void navigate(path, { replace: true })
+    }
+  }, [projectId, location.pathname, navigate])
+  return null
+}
+
 function render(ui: ReactElement, user = currentUserFixture()) {
+  const projectId =
+    (ui.props as { initialProjectId?: string }).initialProjectId ??
+    'project-demo-1'
+  const initialPath = `/projects/${projectId}/planning`
   function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <DataMemoryRouter
-        initialEntries={[
-          `/projects/${(ui.props as { initialProjectId?: string }).initialProjectId ?? 'project-demo-1'}/planning`,
-        ]}
-      >
+      <DataMemoryRouter initialEntries={[initialPath]}>
         <CurrentUserProvider value={{ user, clear: vi.fn() }}>
+          <PlanningRouteSync
+            projectId={
+              (children as ReactElement<{ initialProjectId?: string }>).props
+                .initialProjectId ?? projectId
+            }
+          />
           {children}
         </CurrentUserProvider>
       </DataMemoryRouter>
@@ -68,6 +87,9 @@ async function click(element: Element) {
 }
 
 async function openPlanCreationForm() {
+  const back = screen.queryByRole('link', { name: '返回計畫清單' })
+  if (!screen.queryByRole('link', { name: '建立計畫' }) && back)
+    await click(back)
   await click(await screen.findByRole('link', { name: '建立計畫' }))
   await screen.findByLabelText(/計畫名稱/)
 }
@@ -104,10 +126,12 @@ describe('planning management page', () => {
         target: { value: '橋梁查核' },
       })
       await click(screen.getByRole('button', { name: '建立計畫' }))
-      const planButton = await screen.findByRole('button', {
+      await expectNotice('已建立計畫，接著新增任務。')
+      await click(screen.getByRole('link', { name: '返回計畫清單' }))
+      const planButton = await screen.findByRole('link', {
         name: '橋梁查核（草稿）',
       })
-      await expectNotice('已建立計畫「橋梁查核」。')
+
       await click(planButton)
       await waitFor(() =>
         expect(
@@ -385,9 +409,7 @@ describe('planning management page', () => {
       throw new ManagementApiError(409, 'inspection_plan.archived')
     }
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
-    await click(
-      await screen.findByRole('button', { name: '既有計畫（草稿）' }),
-    )
+    await click(await screen.findByRole('link', { name: '既有計畫（草稿）' }))
     expect(await screen.findByText(plan.name)).toBeInTheDocument()
     await click(screen.getByRole('button', { name: '修改計畫名稱' }))
 
@@ -418,7 +440,9 @@ describe('planning management page', () => {
       target: { value: '既有計畫' },
     })
     await click(screen.getByRole('button', { name: '建立計畫' }))
-    const planButton = await screen.findByRole('button', {
+    await expectNotice('已建立計畫，接著新增任務。')
+    await click(screen.getByRole('link', { name: '返回計畫清單' }))
+    const planButton = await screen.findByRole('link', {
       name: '既有計畫（草稿）',
     })
 
@@ -454,9 +478,7 @@ describe('planning management page', () => {
     expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    await click(
-      await screen.findByRole('button', { name: '唯讀計畫（草稿）' }),
-    )
+    await click(await screen.findByRole('link', { name: '唯讀計畫（草稿）' }))
     await openTaskCreationForm()
     const form = document.querySelector(
       '[data-error-context="task"]',
@@ -486,7 +508,7 @@ describe('planning management page', () => {
       ),
     ).toBeVisible()
     await click(
-      await screen.findByRole('button', { name: '人員查詢失敗（草稿）' }),
+      await screen.findByRole('link', { name: '人員查詢失敗（草稿）' }),
     )
     await openTaskCreationForm()
 
@@ -517,9 +539,7 @@ describe('planning management page', () => {
       throw new ManagementApiError(503, 'inspection_task.unavailable')
     }
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
-    await click(
-      await screen.findByRole('button', { name: '重試失敗（草稿）' }),
-    )
+    await click(await screen.findByRole('link', { name: '重試失敗（草稿）' }))
     await openTaskCreationForm()
     const form = document.querySelector(
       '[data-error-context="task"]',
@@ -554,7 +574,7 @@ describe('planning management page', () => {
     const { rerender } = render(
       <PlanningPage client={client} initialProjectId="project-demo-1" />,
     )
-    await click(await screen.findByRole('button', { name: 'A 專案（草稿）' }))
+    await click(await screen.findByRole('link', { name: 'A 專案（草稿）' }))
     await openTaskCreationForm()
     const form = document.querySelector(
       '[data-error-context="task"]',
@@ -568,7 +588,7 @@ describe('planning management page', () => {
       <PlanningPage client={client} initialProjectId="project-demo-2" />,
     )
     expect(await screen.findByText('專案：示範工程 B')).toBeInTheDocument()
-    await click(await screen.findByRole('button', { name: 'B 專案（草稿）' }))
+    await click(await screen.findByRole('link', { name: 'B 專案（草稿）' }))
     await openTaskCreationForm()
     const nextForm = document.querySelector(
       '[data-error-context="task"]',
@@ -594,9 +614,9 @@ describe('planning management page', () => {
       target: { value: '草稿刪除' },
     })
     await click(screen.getByRole('button', { name: '建立計畫' }))
-    await click(
-      await screen.findByRole('button', { name: '草稿刪除（草稿）' }),
-    )
+    await expectNotice('已建立計畫，接著新增任務。')
+    await click(screen.getByRole('link', { name: '返回計畫清單' }))
+    await click(await screen.findByRole('link', { name: '草稿刪除（草稿）' }))
     await openTaskCreationForm()
     await click(await screen.findByLabelText(/混凝土外觀/))
     const zone = (await client.listProjectZones('project-demo-1')).find(
@@ -657,18 +677,18 @@ describe('planning management page', () => {
     const create = screen.getByRole('button', { name: '建立計畫' })
     expect(create).toHaveClass('btn-primary')
     await click(create)
-    const plan = await screen.findByRole('button', {
+    await expectNotice('已建立計畫，接著新增任務。')
+    await click(screen.getByRole('link', { name: '返回計畫清單' }))
+    const plan = await screen.findByRole('link', {
       name: '選取樣式（草稿）',
     })
     expect(plan.closest('ul')).toHaveClass('plan-list')
-    expect(plan).toHaveAttribute('aria-current', 'false')
+    expect(plan.getAttribute('href')).toMatch(/\/planning\/[^/]+$/)
     await click(plan)
     expect(
       await screen.findByRole('heading', { name: '選取樣式' }),
     ).toHaveFocus()
-    expect(
-      screen.queryByRole('button', { name: '選取樣式（草稿）' }),
-    ).toBeNull()
+    expect(screen.queryByRole('link', { name: '選取樣式（草稿）' })).toBeNull()
   })
 
   it('scrolls to and focuses the selected plan heading', async () => {
@@ -685,7 +705,7 @@ describe('planning management page', () => {
         <PlanningPage client={client} initialProjectId="project-demo-1" />,
       )
       await click(
-        await screen.findByRole('button', { name: '定位計畫（草稿）' }),
+        await screen.findByRole('link', { name: '定位計畫（草稿）' }),
       )
       const heading = await screen.findByRole('heading', { name: '定位計畫' })
       await waitFor(() => expect(heading).toHaveFocus())
@@ -711,9 +731,9 @@ describe('planning management page', () => {
       target: { value: '項次檢查' },
     })
     await click(screen.getByRole('button', { name: '建立計畫' }))
-    await click(
-      await screen.findByRole('button', { name: '項次檢查（草稿）' }),
-    )
+    await expectNotice('已建立計畫，接著新增任務。')
+    await click(screen.getByRole('link', { name: '返回計畫清單' }))
+    await click(await screen.findByRole('link', { name: '項次檢查（草稿）' }))
     await openTaskCreationForm()
     const label = (await screen.findByLabelText(/混凝土外觀/)).closest('label')
     expect(label?.textContent).toMatch(/^混凝土外觀/)
@@ -734,8 +754,10 @@ describe('planning management page', () => {
       target: { value: '無說明項目' },
     })
     await click(screen.getByRole('button', { name: '建立計畫' }))
+    await expectNotice('已建立計畫，接著新增任務。')
+    await click(screen.getByRole('link', { name: '返回計畫清單' }))
     await click(
-      await screen.findByRole('button', { name: '無說明項目（草稿）' }),
+      await screen.findByRole('link', { name: '無說明項目（草稿）' }),
     )
     await openTaskCreationForm()
 
@@ -754,9 +776,9 @@ describe('planning management page', () => {
       target: { value: '單項名稱' },
     })
     await click(screen.getByRole('button', { name: '建立計畫' }))
-    await click(
-      await screen.findByRole('button', { name: '單項名稱（草稿）' }),
-    )
+    await expectNotice('已建立計畫，接著新增任務。')
+    await click(screen.getByRole('link', { name: '返回計畫清單' }))
+    await click(await screen.findByRole('link', { name: '單項名稱（草稿）' }))
     await openTaskCreationForm()
     await click(await screen.findByLabelText(/鋼筋保護層/))
     expect(screen.getByLabelText(/任務名稱/)).toHaveValue('鋼筋保護層')
@@ -779,9 +801,9 @@ describe('planning management page', () => {
       target: { value: '名稱長度' },
     })
     await click(screen.getByRole('button', { name: '建立計畫' }))
-    await click(
-      await screen.findByRole('button', { name: '名稱長度（草稿）' }),
-    )
+    await expectNotice('已建立計畫，接著新增任務。')
+    await click(screen.getByRole('link', { name: '返回計畫清單' }))
+    await click(await screen.findByRole('link', { name: '名稱長度（草稿）' }))
     await openTaskCreationForm()
     await click(await screen.findByLabelText(/甲{5}/))
     expect(screen.getByLabelText(/任務名稱/)).toHaveValue('甲'.repeat(128))
@@ -802,7 +824,7 @@ describe('planning management page', () => {
     })
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await click(
-      await screen.findByRole('button', { name: '既有任務清單（草稿）' }),
+      await screen.findByRole('link', { name: '既有任務清單（草稿）' }),
     )
 
     expect(
@@ -852,7 +874,7 @@ describe('planning management page', () => {
     })
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await click(
-      await screen.findByRole('button', { name: '任務名稱編輯（草稿）' }),
+      await screen.findByRole('link', { name: '任務名稱編輯（草稿）' }),
     )
     const heading = await screen.findByRole('heading', {
       name: /原任務名稱\s+（草稿）/,
@@ -925,7 +947,7 @@ describe('planning management page', () => {
     await client.dispatchTask(task.id)
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await click(
-      await screen.findByRole('button', { name: '封存驗收（進行中）' }),
+      await screen.findByRole('link', { name: '封存驗收（進行中）' }),
     )
     const article = (
       await screen.findByRole('heading', {
@@ -950,12 +972,20 @@ describe('planning management page', () => {
       ),
     )
     await expectNotice('已封存計畫。')
+    await openTaskDetail()
+    expect(
+      screen.getByRole('heading', {
+        name: /混凝土外觀.*（待開始）/,
+        level: 2,
+      }),
+    ).toBeVisible()
     expect(
       within(article).queryByRole('button', { name: '修改地點' }),
     ).toBeNull()
     expect(
       within(article).queryByRole('button', { name: '取消任務' }),
     ).toBeNull()
+    await click(screen.getByRole('link', { name: '返回計畫詳情' }))
     await click(screen.getByRole('button', { name: '取消封存' }))
     await click(
       within(screen.getByRole('dialog')).getByRole('button', { name: '確認' }),
@@ -988,7 +1018,9 @@ describe('planning management page', () => {
       target: { value: 'A 專用計畫' },
     })
     await click(screen.getByRole('button', { name: '建立計畫' }))
-    await screen.findByRole('button', { name: 'A 專用計畫（草稿）' })
+    await expectNotice('已建立計畫，接著新增任務。')
+    await click(screen.getByRole('link', { name: '返回計畫清單' }))
+    await screen.findByRole('link', { name: 'A 專用計畫（草稿）' })
 
     vi.spyOn(client, 'getProject').mockRejectedValueOnce(
       new ManagementApiError(404, 'resource.not_found'),
@@ -1004,7 +1036,7 @@ describe('planning management page', () => {
       '網址中的專案不存在或已刪除',
     )
     expect(
-      screen.queryByRole('button', { name: 'A 專用計畫（草稿）' }),
+      screen.queryByRole('link', { name: 'A 專用計畫（草稿）' }),
     ).toBeNull()
     expect(screen.queryByLabelText(/混凝土外觀/)).toBeNull()
   })
@@ -1025,7 +1057,9 @@ describe('planning management page', () => {
       target: { value: 'B 專案計畫' },
     })
     await click(screen.getByRole('button', { name: '建立計畫' }))
-    const planButton = await screen.findByRole('button', {
+    await expectNotice('已建立計畫，接著新增任務。')
+    await click(screen.getByRole('link', { name: '返回計畫清單' }))
+    const planButton = await screen.findByRole('link', {
       name: 'B 專案計畫（草稿）',
     })
     await click(planButton)
@@ -1054,8 +1088,10 @@ describe('planning management page', () => {
       target: { value: '無分區計畫' },
     })
     await click(screen.getByRole('button', { name: '建立計畫' }))
+    await expectNotice('已建立計畫，接著新增任務。')
+    await click(screen.getByRole('link', { name: '返回計畫清單' }))
     await click(
-      await screen.findByRole('button', { name: '無分區計畫（草稿）' }),
+      await screen.findByRole('link', { name: '無分區計畫（草稿）' }),
     )
     await openTaskCreationForm()
     await screen.findByLabelText(/材料進場查驗/)
@@ -1069,7 +1105,7 @@ describe('planning management page', () => {
     })
     const [item] = await client.listProjectItems('project-demo-1')
     const completed = await client.createTask(plan.id, {
-      name: '混凝土外觀',
+      name: '已完成任務',
       item_ids: [item.id],
       suggested_assignee_id: null,
       zone_id: null,
@@ -1079,7 +1115,7 @@ describe('planning management page', () => {
     await client.startTask(completed.id)
     await client.completeTask(completed.id)
     const cancelled = await client.createTask(plan.id, {
-      name: '混凝土外觀',
+      name: '已取消任務',
       item_ids: [item.id],
       suggested_assignee_id: null,
       zone_id: null,
@@ -1089,11 +1125,24 @@ describe('planning management page', () => {
     await client.cancelTask(cancelled.id, '取消驗收')
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await click(
-      await screen.findByRole('button', { name: '唯讀狀態（已完成）' }),
+      await screen.findByRole('link', { name: '唯讀狀態（已完成）' }),
     )
-    await screen.findByRole('heading', { name: /已完成/ })
-    expect(screen.queryByRole('button', { name: '修改地點' })).toBeNull()
-    expect(screen.getByText('取消原因：取消驗收')).toBeInTheDocument()
+    for (const name of ['已完成任務', '已取消任務']) {
+      await click(await screen.findByRole('link', { name }))
+      expect(
+        await screen.findByRole('heading', {
+          name: new RegExp(name),
+          level: 2,
+        }),
+      ).toBeVisible()
+      for (const action of ['修改地點', '修改名稱', '修改建議指派']) {
+        expect(screen.queryByRole('button', { name: action })).toBeNull()
+      }
+      if (name === '已取消任務') {
+        expect(screen.getByText('取消原因：取消驗收')).toBeInTheDocument()
+      }
+      await click(screen.getByRole('link', { name: '返回計畫詳情' }))
+    }
   })
 
   describe('field hints and errors (#490)', () => {
@@ -1107,7 +1156,7 @@ describe('planning management page', () => {
         <PlanningPage client={client} initialProjectId="project-demo-1" />,
       )
       await click(
-        await screen.findByRole('button', { name: '橋梁查核（草稿）' }),
+        await screen.findByRole('link', { name: '橋梁查核（草稿）' }),
       )
       await click(await screen.findByRole('button', { name: '＋ 新增任務' }))
       await click(await screen.findByLabelText(/混凝土外觀/))
@@ -1220,7 +1269,7 @@ describe('planning management page', () => {
       })
       await click(screen.getByRole('button', { name: '建立計畫' }))
 
-      await expectNotice('已建立計畫「橋梁查核」。')
+      await expectNotice('已建立計畫，接著新增任務。')
       await openPlanCreationForm()
       expect(screen.getByLabelText(/計畫名稱/)).toHaveValue('')
     })
@@ -1233,7 +1282,7 @@ describe('planning management page', () => {
         <PlanningPage client={client} initialProjectId="project-demo-1" />,
       )
       await click(
-        await screen.findByRole('button', { name: '橋梁查核（草稿）' }),
+        await screen.findByRole('link', { name: '橋梁查核（草稿）' }),
       )
       await click(await screen.findByRole('button', { name: '＋ 新增任務' }))
       const item = await screen.findByLabelText(/混凝土外觀/)
@@ -1322,7 +1371,7 @@ describe('planning forms guard (#507)', () => {
     mode: 'plan' | 'task' | 'new' = 'task',
   ) {
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
-    const originalPlanButton = await screen.findByRole('button', {
+    const originalPlanButton = await screen.findByRole('link', {
       name: /橋梁查核（/,
     })
     await click(originalPlanButton)
@@ -1354,7 +1403,7 @@ describe('planning forms guard (#507)', () => {
     const form = formByContext('assignee')
     const selector = within(form).getByLabelText('建議指派人')
     const formHeading = within(form).getByRole('heading', {
-      name: '修改任務指派',
+      name: '修改建議指派',
     })
     await waitFor(() => expect(formHeading).toHaveFocus())
     expect(selector).toBeDisabled()
@@ -1365,7 +1414,7 @@ describe('planning forms guard (#507)', () => {
     )
     expect(saveAssignee).not.toHaveBeenCalled()
 
-    await click(within(form).getByRole('button', { name: '儲存指派' }))
+    await click(within(form).getByRole('button', { name: '儲存建議指派' }))
 
     await expectNotice('已更新建議指派。')
     expect(saveAssignee).toHaveBeenCalledOnce()
@@ -1379,7 +1428,7 @@ describe('planning forms guard (#507)', () => {
     })
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
-    const originalPlanButton = await screen.findByRole('button', {
+    const originalPlanButton = await screen.findByRole('link', {
       name: /橋梁查核（/,
     })
     await click(originalPlanButton)
@@ -1389,15 +1438,10 @@ describe('planning forms guard (#507)', () => {
     })
 
     await click(screen.getByRole('link', { name: '返回計畫詳情' }))
-    const switchPrompt = [
-      '目前的計畫有尚未儲存的內容。',
-      '切換計畫會捨棄變更，確定切換嗎？',
-    ].join('')
     expect(confirm).not.toHaveBeenCalled()
     expect(
       await screen.findByRole('group', { name: '有尚未儲存的變更' }),
     ).toBeVisible()
-    expect(switchPrompt).toContain('尚未儲存')
     const locationInput = screen.getByLabelText('補充地點')
     expect(locationInput).toHaveValue('尚未儲存的地點')
     expect(
@@ -1406,7 +1450,7 @@ describe('planning forms guard (#507)', () => {
 
     await click(screen.getByRole('button', { name: '捨棄變更' }))
     await click(screen.getByRole('link', { name: '返回計畫清單' }))
-    await click(screen.getByRole('button', { name: /第二計畫（/ }))
+    await click(screen.getByRole('link', { name: /第二計畫（/ }))
     expect(
       await screen.findByRole('heading', { name: '第二計畫' }),
     ).toBeVisible()
@@ -1586,7 +1630,7 @@ describe('planning forms guard (#507)', () => {
     fireEvent.change(within(form).getByLabelText('建議指派人'), {
       target: { value: 'project-a-member-1' },
     })
-    await click(within(form).getByRole('button', { name: '儲存指派' }))
+    await click(within(form).getByRole('button', { name: '儲存建議指派' }))
 
     expect(
       await within(form).findByText('欄位格式不正確，請檢查輸入內容。'),
@@ -1611,7 +1655,7 @@ describe('planning forms guard (#507)', () => {
     const article = await openPlan(client)
     await click(within(article).getByRole('button', { name: '修改建議指派' }))
     const form = formByContext('assignee')
-    await click(within(form).getByRole('button', { name: '儲存指派' }))
+    await click(within(form).getByRole('button', { name: '儲存建議指派' }))
 
     const alert = await within(form).findByRole('alert')
     expect(alert).toHaveTextContent('伺服器暫時無法處理')
@@ -1630,7 +1674,7 @@ describe('planning forms guard (#507)', () => {
     await click(within(article).getByRole('button', { name: '修改建議指派' }))
     const form = formByContext('assignee')
     const selector = within(form).getByLabelText('建議指派人')
-    await click(within(form).getByRole('button', { name: '儲存指派' }))
+    await click(within(form).getByRole('button', { name: '儲存建議指派' }))
 
     const alert = await within(form).findByRole('alert')
     expect(alert).toHaveTextContent('輸入資料不符合規格')
@@ -1694,7 +1738,7 @@ describe('planning forms guard (#507)', () => {
     fireEvent.submit(form)
     gate.resolve()
 
-    await expectNotice('已建立計畫「橋梁查核」。')
+    await expectNotice('已建立計畫，接著新增任務。')
     expect(spy).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('alert')).toBeNull()
   })
@@ -1936,7 +1980,7 @@ describe('planning forms guard (#507)', () => {
     const article = await openPlan(client)
     await click(within(article).getByRole('button', { name: '修改建議指派' }))
     const form = within(article)
-      .getByRole('button', { name: '儲存指派' })
+      .getByRole('button', { name: '儲存建議指派' })
       .closest('form') as HTMLFormElement
 
     fireEvent.submit(form)
@@ -1969,13 +2013,13 @@ describe('planning forms guard (#507)', () => {
 
     await click(
       within(article).getByRole('button', {
-        name: '前往建議指派欄位',
+        name: '指定建議指派人',
       }),
     )
     fireEvent.change(within(article).getByLabelText('建議指派人'), {
       target: { value: 'project-a-member-1' },
     })
-    await click(within(article).getByRole('button', { name: '儲存指派' }))
+    await click(within(article).getByRole('button', { name: '儲存建議指派' }))
     await waitFor(() => {
       expect(within(article).queryByText(/尚未指派/)).not.toBeInTheDocument()
     })
@@ -2061,7 +2105,7 @@ describe('planning forms guard (#507)', () => {
       render(
         <PlanningPage client={client} initialProjectId="project-demo-1" />,
       )
-      await click(await screen.findByRole('button', { name: /橋梁查核（/ }))
+      await click(await screen.findByRole('link', { name: /橋梁查核（/ }))
       await openTaskDetail()
       return screen.findByRole('article')
     }
@@ -2116,7 +2160,7 @@ describe('planning forms guard (#507)', () => {
         within(article).getByRole('button', { name: '派出任務' }),
       ).toBeDisabled()
 
-      await click(within(list).getByRole('button', { name: '前往地點欄位' }))
+      await click(within(list).getByRole('button', { name: '填寫地點' }))
 
       expect(
         within(article).getByRole('heading', { name: '修改任務地點' }),
@@ -2137,9 +2181,7 @@ describe('planning forms guard (#507)', () => {
       )
       const hashBefore = window.location.hash
 
-      await click(
-        within(list).getByRole('button', { name: '前往修改查核項目' }),
-      )
+      await click(within(list).getByRole('button', { name: '選擇查核項目' }))
 
       await waitFor(() =>
         expect(
@@ -2372,7 +2414,7 @@ describe('planning forms guard (#507)', () => {
         .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
       const article = await openPlan(client)
       expect(
-        within(article).getByRole('button', { name: '前往建議指派欄位' }),
+        within(article).getByRole('button', { name: '指定建議指派人' }),
       ).toBeVisible()
       await click(within(article).getByRole('button', { name: '修改地點' }))
       await click(within(article).getByRole('button', { name: '儲存地點' }))
@@ -2383,14 +2425,14 @@ describe('planning forms guard (#507)', () => {
         ).toBeNull(),
       )
       expect(
-        within(article).queryByRole('button', { name: '前往建議指派欄位' }),
+        within(article).queryByRole('button', { name: '指定建議指派人' }),
       ).toBeNull()
       expect(within(article).getByText(/尚未指派/)).toBeVisible()
       expect(
         within(article).queryByRole('button', { name: '修改建議指派' }),
       ).toBeNull()
       expect(
-        within(article).queryByRole('heading', { name: '修改任務指派' }),
+        within(article).queryByRole('heading', { name: '修改建議指派' }),
       ).toBeNull()
     })
 
@@ -2478,7 +2520,7 @@ describe('planning forms guard (#507)', () => {
       })
       await click(screen.getByRole('link', { name: '返回計畫清單' }))
       await click(screen.getByRole('button', { name: '捨棄變更' }))
-      await click(await screen.findByRole('button', { name: /橋梁查核（/ }))
+      await click(await screen.findByRole('link', { name: /橋梁查核（/ }))
       await screen.findByRole('heading', { name: '無權限' })
 
       await click(screen.getByRole('link', { name: '回到我的首頁' }))
@@ -2668,7 +2710,7 @@ describe('planning forms guard (#507)', () => {
       fireEvent.change(within(form).getByLabelText('建議指派人'), {
         target: { value: 'project-a-member-1' },
       })
-      await click(within(form).getByRole('button', { name: '儲存指派' }))
+      await click(within(form).getByRole('button', { name: '儲存建議指派' }))
 
       const selector = within(form).getByLabelText('建議指派人')
       expect(
@@ -2718,7 +2760,7 @@ describe('planning trial fixes (#634)', () => {
       await client.createPlan('project-demo-1', { name: '乙計畫' })
     }
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
-    await click(await screen.findByRole('button', { name: /橋梁查核（/ }))
+    await click(await screen.findByRole('link', { name: /橋梁查核（/ }))
     const article = (
       await screen.findAllByRole('heading', { name: /混凝土外觀/ })
     )[0].closest('article') as HTMLElement
@@ -2757,7 +2799,7 @@ describe('planning trial fixes (#634)', () => {
 
     expect(creationForm()).toBeNull()
     expect(
-      within(article).queryByRole('heading', { name: '修改任務指派' }),
+      within(article).queryByRole('heading', { name: '修改建議指派' }),
     ).not.toBeInTheDocument()
     await waitFor(() =>
       expect(
@@ -2809,11 +2851,11 @@ describe('planning trial fixes (#634)', () => {
 
     await openTaskDetail()
     const shortcut = within(article).getByRole('button', {
-      name: '前往建議指派欄位',
+      name: '指定建議指派人',
     })
     await click(shortcut)
     expect(screen.queryByText('已更新計畫名稱。')).toBeNull()
-    const form = within(article).getByRole('heading', { name: '修改任務指派' })
+    const form = within(article).getByRole('heading', { name: '修改建議指派' })
     expect(form).toBeVisible()
     await click(
       within(form.closest('form') as HTMLElement).getByRole('button', {
@@ -2823,7 +2865,7 @@ describe('planning trial fixes (#634)', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: '前往建議指派欄位' }),
+        screen.getByRole('button', { name: '指定建議指派人' }),
       ).toHaveFocus(),
     )
   })
@@ -2867,7 +2909,7 @@ describe('planning trial fixes (#634)', () => {
     await click(screen.getByRole('link', { name: '返回計畫詳情' }))
     await click(screen.getByRole('button', { name: '捨棄變更' }))
     await click(screen.getByRole('link', { name: '返回計畫清單' }))
-    await click(await screen.findByRole('button', { name: '乙計畫（草稿）' }))
+    await click(await screen.findByRole('link', { name: '乙計畫（草稿）' }))
     await screen.findByRole('heading', { name: '乙計畫' })
 
     expect(creationForm()).toBeNull()
@@ -2898,10 +2940,10 @@ describe('#727 唯讀身分', () => {
           can_inspect_tasks: identity === '現場工程師',
         }),
       )
-      await click(await screen.findByRole('button', { name: /既有計畫/ }))
+      await click(await screen.findByRole('link', { name: /既有計畫/ }))
       await screen.findByRole('heading', { name: plan.name })
       expect(screen.getByRole('status')).toHaveTextContent(
-        '你在這個專案只能查看計畫與任務，不能新增、修改或派出。需要調整請找專案內業或管理者。',
+        '你在這個專案只能查看計畫與任務，不能新增、修改或派出。需要調整請找有管理權限的專案成員或管理者。',
       )
       expect(screen.queryByRole('button', { name: '建立計畫' })).toBeNull()
       expect(screen.queryByRole('button', { name: '＋ 新增任務' })).toBeNull()
@@ -2956,7 +2998,7 @@ describe('#727c 各動作依實際權限', () => {
         viewerPermissions={permissions}
       />,
     )
-    await click(await screen.findByRole('button', { name: /權限驗收/ }))
+    await click(await screen.findByRole('link', { name: /權限驗收/ }))
     await screen.findByRole('heading', { name: /草稿案例/ })
     return { client, plan, tasks, loadAssignees }
   }
@@ -2979,7 +3021,7 @@ describe('#727c 各動作依實際權限', () => {
       if (name === '建立計畫') {
         await click(screen.getByRole('link', { name: '返回計畫清單' }))
         expect(screen.getByRole('link', { name })).toBeVisible()
-        await click(screen.getByRole('button', { name: /權限驗收/ }))
+        await click(screen.getByRole('link', { name: /權限驗收/ }))
       } else if (['修改計畫名稱', '封存計畫', '＋ 新增任務'].includes(name)) {
         expect(screen.getAllByRole('button', { name })[0]).toBeVisible()
       } else {
@@ -3009,7 +3051,7 @@ describe('#727c 各動作依實際權限', () => {
     const dispatch = vi.spyOn(client, 'dispatchTask')
     await click(screen.getByRole('link', { name: '返回計畫清單' }))
     expect(screen.getByRole('link', { name: '建立計畫' })).toBeVisible()
-    await click(screen.getByRole('button', { name: /權限驗收/ }))
+    await click(screen.getByRole('link', { name: /權限驗收/ }))
     await openTaskDetail()
     expect(loadAssignees).toHaveBeenCalledOnce()
     for (const name of [
@@ -3093,7 +3135,7 @@ it('IP-AC24：新增不選停用項目，草稿只保留原有停用項目', asy
   ])
   const updateItems = vi.spyOn(client, 'updateTaskItems')
   render(<PlanningPage client={client} initialProjectId={projectId} />)
-  await click(await screen.findByRole('button', { name: /停用保留計畫（/ }))
+  await click(await screen.findByRole('link', { name: /停用保留計畫（/ }))
   await openTaskCreationForm()
   const newForm = document.querySelector(
     '[data-error-context="task"]',
@@ -3143,7 +3185,7 @@ it('IP-AC24：項目重載裁除剛停用的勾選，提交只含啟用項目', 
   const view = render(
     <PlanningPage client={client} initialProjectId={projectId} />,
   )
-  await click(await screen.findByRole('button', { name: /重載測試（/ }))
+  await click(await screen.findByRole('link', { name: /重載測試（/ }))
   await openTaskCreationForm()
   await click(screen.getByLabelText(new RegExp(items[0].title)))
   await click(screen.getByLabelText(new RegExp(items[1].title)))
@@ -3199,7 +3241,7 @@ it('停用的建議指派人顯示改派提醒並靠近修改入口', async () =
     }
   })
   render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
-  await click(await screen.findByRole('button', { name: /停用改派（/ }))
+  await click(await screen.findByRole('link', { name: /停用改派（/ }))
   expect(await screen.findByText('（已停用，請改派）')).toBeVisible()
   await openTaskDetail()
   expect(
@@ -3245,7 +3287,7 @@ it.each([
       }
     })
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
-    await click(await screen.findByRole('button', { name: /歷史計畫（/ }))
+    await click(await screen.findByRole('link', { name: /歷史計畫（/ }))
     expect(await screen.findByText('（已停用）')).toBeVisible()
     expect(screen.queryByText(/請改派/)).toBeNull()
   },
@@ -3273,7 +3315,7 @@ it('IP-AC24：取消勾選停用項目後焦點移到選單群組，警告綁在
     items[1],
   ])
   render(<PlanningPage client={client} initialProjectId={projectId} />)
-  await click(await screen.findByRole('button', { name: /焦點計畫（/ }))
+  await click(await screen.findByRole('link', { name: /焦點計畫（/ }))
   const article = (
     await screen.findByRole('heading', { name: /保留停用/ })
   ).closest('article')!
@@ -3305,7 +3347,7 @@ it('IP-AC24：送出時項目剛被停用，自動重載並保留其他欄位', 
     throw new ManagementApiError(409, 'project_inspection_item.inactive')
   })
   render(<PlanningPage client={client} initialProjectId={projectId} />)
-  await click(await screen.findByRole('button', { name: /自動重載計畫（/ }))
+  await click(await screen.findByRole('link', { name: /自動重載計畫（/ }))
   await openTaskCreationForm()
   await click(screen.getByLabelText(new RegExp(items[0].title)))
   await click(screen.getByLabelText(new RegExp(items[1].title)))
@@ -3364,7 +3406,7 @@ it('IP-AC24：修改草稿時新勾選的項目剛被停用，重載後裁掉並
     return realUpdate(taskId, body)
   })
   render(<PlanningPage client={client} initialProjectId={projectId} />)
-  await click(await screen.findByRole('button', { name: /草稿重載計畫（/ }))
+  await click(await screen.findByRole('link', { name: /草稿重載計畫（/ }))
   const article = (
     await screen.findByRole('heading', { name: /草稿重載任務/ })
   ).closest('article')!
@@ -3437,7 +3479,7 @@ it('IP-AC24：修改草稿重載後伺服器集合已不含某停用項目時，
     throw new ManagementApiError(409, 'project_inspection_item.inactive')
   })
   render(<PlanningPage client={client} initialProjectId={projectId} />)
-  await click(await screen.findByRole('button', { name: /伺服器已改計畫（/ }))
+  await click(await screen.findByRole('link', { name: /伺服器已改計畫（/ }))
   const article = (
     await screen.findByRole('heading', { name: /伺服器已改任務/ })
   ).closest('article')!
@@ -3462,7 +3504,7 @@ it('IP-AC24：專案項目全被停用時，新增任務提示先新增或恢復
     items.map((item) => ({ ...item, is_active: false })),
   )
   render(<PlanningPage client={client} initialProjectId={projectId} />)
-  await click(await screen.findByRole('button', { name: /全停用計畫（/ }))
+  await click(await screen.findByRole('link', { name: /全停用計畫（/ }))
   await openTaskCreationForm()
   expect(
     await screen.findByText(
@@ -3478,7 +3520,7 @@ it('IP-AC24：專案沒有任何查核項目時用另一句提示', async () => 
   const { client, projectId } = await seedDraftWithItems('無項目計畫')
   client.listProjectItems = vi.fn(async () => [])
   render(<PlanningPage client={client} initialProjectId={projectId} />)
-  await click(await screen.findByRole('button', { name: /無項目計畫（/ }))
+  await click(await screen.findByRole('link', { name: /無項目計畫（/ }))
   await openTaskCreationForm()
   expect(
     await screen.findByText(

@@ -22,7 +22,7 @@
 | T12 | 序列化 Task 建立快照與專案項目修改，固定項目／Plan 鎖順序，並以 PostgreSQL 並行 API 測試驗證快照一致與鎖序一致 | `backend/app/services/inspection_planning.py`、`backend/tests/db/test_project_item_edit_concurrency.py`、`backend/tests/services/test_inspection_planning.py`、`docs/specs/inspection-planning/plan.md` | T2、T3 | IP-R03、IP-AC03 | #555 |
 | T14 | 專案進度區段所需的後端：專案 Task 清單的 `status`、`needs_reinspection=true` 篩選、排序與每筆 `plan`／`item_summary`（IP-R18），單筆 Task 讀取加 `plan`、`started_by_user`、`completed_by_user`（IP-R19）；以資料庫與批次載入完成；補 API 測試與前後端契約 fixture | 依當時程式碼盤點，預計 `backend/app/api/v1/inspection_planning.py`、`backend/app/services/inspection_planning.py`、`backend/tests/api/` | T3、T7 | IP-AC18、IP-AC19 | 待開 task（母 issue [#452](https://github.com/speko-tw/inspect-flow/issues/452)；先於 `admin-dashboard` T21 合併） |
 | T15 | 將專案查核項目 PATCH 的查詢、驗證、寫入與受影響 Task 組裝移入 Service 層；同一來源項目的 Task 以批次查詢載入，每個受影響 Plan 只重算一次；以服務層委派契約、既有 PATCH 行為測試及多 Plan／多 Task 回歸測試驗證行為不變 | `backend/app/api/v1/inspection_planning.py`、`backend/app/services/inspection_planning.py`、`backend/tests/contract/test_project_item_edit_service_boundary.py`、`backend/tests/services/test_inspection_planning.py` | T2、T3、T12 | IP-AC03～IP-AC05 | #622 |
-| T13 | 草稿 Task 修改查核項目（IP-R20）：新增 `PUT /api/v1/inspection-tasks/{task_id}/items` 與服務層；入口先預檢封存 Plan 與 Task 狀態、鎖後複檢，依來源項目、Plan、Task 的鎖序在同一交易重建明細與 Snapshot，持鎖後重讀舊項目集合，並寫入 `inspection_task.items_updated`；計畫頁草稿任務加「修改查核項目」原地表單（含取消、未儲存提醒、錯誤在欄位旁），缺查核項目的派出阻擋捷徑改開此表單；補後端、PostgreSQL 並行與前端測試 | `backend/app/services/inspection_planning.py`、`backend/app/api/v1/inspection_planning.py`、`backend/tests/services/test_inspection_planning.py`、`backend/tests/api/test_inspection_planning_api.py`、`backend/tests/db/test_project_item_edit_concurrency.py`、`backend/tests/services/test_audit.py`、`frontend/src/admin/planning/` | T3、T4、T12 | IP-AC20、ADM-AC42 | [#615](https://github.com/speko-tw/inspect-flow/issues/615) |
+| T13 | 草稿 Task 修改查核項目（IP-R20）：新增 `PUT /api/v1/inspection-tasks/{task_id}/items` 與服務層；入口先預檢封存 Plan 與 Task 狀態、鎖後複檢，依來源項目、Plan、Task 的鎖序在同一交易重建明細與 Snapshot，持鎖後重讀舊項目集合，並寫入 `inspection_task.items_updated`；計畫頁草稿任務加「修改查核項目」獨立表單頁（IP-R28，含取消、未儲存提醒、錯誤在欄位旁），缺查核項目的派出阻擋捷徑改開此表單；補後端、PostgreSQL 並行與前端測試 | `backend/app/services/inspection_planning.py`、`backend/app/api/v1/inspection_planning.py`、`backend/tests/services/test_inspection_planning.py`、`backend/tests/api/test_inspection_planning_api.py`、`backend/tests/db/test_project_item_edit_concurrency.py`、`backend/tests/services/test_audit.py`、`frontend/src/admin/planning/` | T3、T4、T12 | IP-AC20、ADM-AC42 | [#615](https://github.com/speko-tw/inspect-flow/issues/615) |
 
 - 每個 task issue 開立前，應將路徑清單縮到具體檔案，並依共用 migration、model registry、router、API client 等實際重疊情況調整責任界線。
 - 所有 AC 至少由一個 task 涵蓋（IP-AC11 由 T1～T4 涵蓋；IP-AC12 由 T7 涵蓋，其 `project.read` 分支與 IP-R12、IP-AC13 由 `authentication` 任務 P 涵蓋）；IP-Q 業務裁定已納入 KD-55／KD-56；KD-55 項目級補充依負責人留言 5970063986，`state-machines` 的 SM-Q03 已同步並凍結。本規格 Plan／Task 原範圍已凍結；依 #369 擴增的 ProjectZone、Task 地點與對應驗收納入本次凍結範圍。
@@ -142,9 +142,9 @@ Issue #406 補齊以下測試對應，不變更產品行為：
 
 ## Issue #635 第 1、2 批：計畫與任務拆頁
 
-依負責人裁定（#534，2026-10-26）及 #635 分批定案，新增 IP-R27～R29／IP-AC27～AC29，與受影響的 ADM-R52／AC52、UDS-R20／AC19 在同一工作項目落地。
+依負責人裁定（#534，2026-10-26）及 #635 分批定案，新增 IP-R27～R29／IP-AC27～AC29，與受影響的 ADM-R53／AC53、UDS-R20／AC19 在同一工作項目落地。
 
 - 保留 PlanningPage 的既有 API、錯誤 pointer、IP-R24 選單重載與權限邏輯，以路由區分清單、詳情、獨立表單；同專案只保留已載入資料，離頁清除草稿。
 - 修改頁依三支獨立寫入 API 分成地點、建議指派、項目三頁，以 section 查詢參數保留可重新整理的網址；避免多請求部分成功被誤認為整份成功。
 - 來源與測試：`frontend/src/admin/planning/PlanningPage.tsx`、`PlanningPage.test.tsx`、`PlanningRoutes.test.tsx`；路由註冊 `frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/routes.ts`、`frontend/src/routes.test.ts`；E2E `demo/e2e/walkthrough.mjs`、`demo/e2e/template-acceptance.mjs`，其餘僅同步上述三份規格。
-- 驗證保留原有派送、檢查、停用建議指派提示、既有任務排除本筆、封存唯讀與 IP-R23～R26 斷言，新增直接網址權限、重新整理、返回、未儲存與草稿清除；完整 make check 使用獨立 PostgreSQL 資料庫，等 Docker 恢復後執行。E2E 使用 18612／18613，真頁截圖在 repo 外保存。
+- 驗證保留原有派送、檢查、停用建議指派提示、既有任務排除本筆、封存唯讀與 IP-R23～R26 斷言，新增直接網址權限、重新整理、返回、未儲存與草稿清除；執行完整 make check、E2E 與桌面／行動版視覺驗收。
