@@ -427,7 +427,9 @@ describe('project home', () => {
     await screen.findByRole('heading', { name: '計畫與任務' })
     fireEvent.click(screen.getByRole('link', { name: '成員' }))
 
-    expect(await screen.findByRole('heading', { name: '成員' })).toBeVisible()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '成員' })).toBeVisible(),
+    )
     expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(2)
   })
 

@@ -7,9 +7,9 @@ import { demoBaseUrl } from './base-url.mjs'
 const base = demoBaseUrl()
 const work = process.env.DEMO_WORK_DIR ?? '/private/tmp/inspectflow-demo-e2e'
 const screenshots = path.join(work, 'screenshots', 'appearance')
-const handoffScreenshots = process.env.APPEARANCE_HANDOFF_DIR
-  ? path.resolve(process.env.APPEARANCE_HANDOFF_DIR)
-  : screenshots
+const handoffScreenshots =
+  process.env.APPEARANCE_HANDOFF_DIR ?? path.join(work, 'appearance-handoff')
+assert.notEqual(path.resolve(screenshots), path.resolve(handoffScreenshots))
 const roles = [
   ['admin', 'DemoAdmin2026', '/overview'],
   ['demo-office', 'DemoOffice2026', '/projects'],

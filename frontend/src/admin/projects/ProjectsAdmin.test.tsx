@@ -5,7 +5,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { Link, Route, Routes, useNavigate } from 'react-router'
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -19,6 +19,7 @@ import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import AdminPage from '../AdminPage'
 import type { User } from '../api'
 import type { MemberCandidate, Project, ProjectMember, Role } from './api'
+import ProjectDetailPage from './ProjectDetailPage'
 import contract from './fixtures/member-roles-contract.json'
 import roleContract from './fixtures/company-role-contract.json'
 
@@ -179,10 +180,43 @@ function renderAt(
   )
 }
 
+function renderMemberReturnContract(returnTo: unknown) {
+  // 驗證內部回傳 state 契約；目前實際編輯入口仍只有成員清單。
+  return render(
+    <DataMemoryRouter
+      initialEntries={[
+        {
+          pathname: '/projects/project-1/members/user-1/edit',
+          state: { returnTo },
+        },
+      ]}
+    >
+      <CurrentUserProvider value={{ user: adminUser, clear: vi.fn() }}>
+        <Routes>
+          <Route
+            element={<ProjectDetailPage />}
+            path="/projects/:projectId/members/:userId/edit"
+          />
+          <Route
+            element={<p data-testid="member-return-list">Member list</p>}
+            path="/projects/:projectId/members"
+          />
+          <Route
+            element={<p data-testid="member-return-account">Account detail</p>}
+            path="/accounts/:personId"
+          />
+        </Routes>
+      </CurrentUserProvider>
+    </DataMemoryRouter>,
+  )
+}
+
 function MemberTestNavigation() {
   const navigate = useNavigate()
+  const location = useLocation()
   return (
     <>
+      <span data-testid="member-path">{location.pathname}</span>
       <Link to="/projects">離開成員頁</Link>
       <button onClick={() => navigate(-1)} type="button">
         成員頁上一頁
@@ -2050,8 +2084,12 @@ const memberAnna: ProjectMember = {
 }
 
 function addForm(): HTMLElement {
-  return screen.getByRole('heading', { name: '加入成員' })
-    .parentElement as HTMLElement
+  return document.querySelector('.member-add-form') as HTMLElement
+}
+
+async function openMemberAddForm() {
+  fireEvent.click(await screen.findByRole('link', { name: '加入成員' }))
+  await screen.findByRole('heading', { name: '加入成員' })
 }
 
 describe('專案成員表單未儲存導覽防護', () => {
@@ -2065,10 +2103,15 @@ describe('專案成員表單未儲存導覽防護', () => {
     projectFetch()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderAt('/projects/project-1/members', adminUser, {
-      entries: ['/projects', '/projects/project-1/members', '/projects'],
-      index: 1,
+      entries: [
+        '/projects',
+        '/projects/project-1/members',
+        '/projects/project-1/members/new',
+        '/projects',
+      ],
+      index: 2,
     })
-    await screen.findByText('目前沒有成員。')
+    await screen.findByRole('heading', { name: '加入成員' })
     selectMember()
 
     fireEvent.click(screen.getByRole('link', { name: '離開成員頁' }))
@@ -2095,6 +2138,7 @@ describe('專案成員表單未儲存導覽防護', () => {
     projectFetch()
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
     selectMember()
     const event = new Event('beforeunload', { cancelable: true })
 
@@ -2105,6 +2149,200 @@ describe('專案成員表單未儲存導覽防護', () => {
 })
 
 describe('admin project members', () => {
+  it('opens and refreshes the standalone add route without showing the list', async () => {
+    projectFetch()
+    renderAt('/projects/project-1/members/new')
+
+    expect(
+      await screen.findByRole('heading', { name: '加入成員' }),
+    ).toBeVisible()
+    expect(screen.getByTestId('member-path')).toHaveTextContent(
+      '/projects/project-1/members/new',
+    )
+    expect(screen.queryByRole('heading', { name: '成員列表' })).toBeNull()
+    expect(screen.getByRole('link', { name: '取消' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+  })
+
+  it('matches the member add route with a trailing slash', async () => {
+    projectFetch()
+    renderAt('/projects/project-1/members/new/')
+
+    expect(
+      await screen.findByRole('heading', { name: '加入成員' }),
+    ).toBeVisible()
+    expect(screen.getByTestId('member-path')).toHaveTextContent(
+      '/projects/project-1/members/new/',
+    )
+  })
+
+  it('shows retry instead of not-found when edit members return 503', async () => {
+    projectFetch({
+      failWith: {
+        match: /\/members$/,
+        method: 'GET',
+        code: 'service.unavailable',
+        status: 503,
+      },
+    })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入成員')
+    expect(screen.queryByText('找不到這位專案成員。')).toBeNull()
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+  })
+
+  it('denies a direct edit route when the member API returns 403', async () => {
+    projectFetch({
+      failWith: {
+        match: /\/members$/,
+        method: 'GET',
+        code: 'permission.denied',
+        status: 403,
+      },
+    })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(
+      await screen.findByRole('heading', { name: '無權限', level: 2 }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeNull()
+    expect(screen.queryByLabelText('查核員')).toBeNull()
+  })
+
+  it('shows a role-field retry and disables save when edit roles return 503', async () => {
+    projectFetch({
+      members: [memberAnna],
+      failWith: {
+        match: /\/assignable-roles/,
+        method: 'GET',
+        code: 'service.unavailable',
+        status: 503,
+      },
+    })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(
+      await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeVisible()
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入角色')
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '儲存角色' })).toBeDisabled()
+  })
+
+  it('denies a direct add route without project member permission', async () => {
+    projectFetch({
+      office: true,
+      failWith: {
+        match: /\/projects\/project-1\/members$/,
+        method: 'GET',
+        code: 'permission.denied',
+        status: 403,
+      },
+    })
+    renderAt('/projects/project-1/members/new', officeUser)
+
+    expect(
+      await screen.findByRole('heading', { name: '無權限', level: 2 }),
+    ).toBeVisible()
+    expect(screen.queryByRole('heading', { name: '加入成員' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: '成員' })).toBeNull()
+  })
+
+  it('opens a direct edit route and returns to the member list on cancel', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(
+      await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeVisible()
+    expect(screen.getByTestId('member-path')).toHaveTextContent(
+      '/projects/project-1/members/user-1/edit',
+    )
+    expect(screen.queryByRole('heading', { name: '成員列表' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(
+      await screen.findByRole('heading', { name: '成員列表' }),
+    ).toBeVisible()
+  })
+
+  it('honors a valid account-detail return state on cancel', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderMemberReturnContract('/accounts/user-1')
+    expect(
+      await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(await screen.findByTestId('member-return-account')).toBeVisible()
+  })
+
+  it('honors a valid account-detail return state after save', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderMemberReturnContract('/accounts/user-1')
+    expect(
+      await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByLabelText('審核者'))
+    fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
+    expect(await screen.findByTestId('member-return-account')).toBeVisible()
+  })
+
+  it.each([
+    ['invalid resource id', '/accounts/../escape'],
+    ['another internal route', '/roles'],
+    ['external URL', 'https://example.com/'],
+    ['account URL with query', '/accounts/user-1?next=/roles'],
+  ])(
+    'falls back to the member list for %s return state',
+    async (_name, value) => {
+      projectFetch({ members: [memberAnna] })
+      renderMemberReturnContract(value)
+      expect(
+        await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+      ).toBeVisible()
+      fireEvent.click(screen.getByRole('button', { name: '取消' }))
+      expect(await screen.findByTestId('member-return-list')).toBeVisible()
+    },
+  )
+
+  it('keeps the member-list link for a missing member with return state', async () => {
+    projectFetch()
+    renderMemberReturnContract('/accounts/user-1')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '找不到這位專案成員。',
+    )
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+  })
+
+  it('labels a rejected return target as the member-list fallback', async () => {
+    projectFetch()
+    renderMemberReturnContract('https://example.com/')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '找不到這位專案成員。',
+    )
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+  })
+
   it('shows member cards with company and role summary, not a table', async () => {
     projectFetch({
       members: [
@@ -2198,6 +2436,7 @@ describe('admin project members', () => {
     projectFetch()
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     expect(screen.getByLabelText('查核員')).toHaveAccessibleDescription(
       '可執行現場查核、讀取查核任務',
@@ -2209,9 +2448,11 @@ describe('admin project members', () => {
   })
 
   it('adds a member; hides existing, inactive, system users', async () => {
+    const scroll = mockScrollIntoView()
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
 
     const select = screen.getByRole('combobox', { name: '成員' })
     const optionNames = within(select)
@@ -2239,12 +2480,52 @@ describe('admin project members', () => {
       '已加入「林鮑伯（bob.lin）」。',
     )
     expect(screen.getByRole('status')).toHaveClass('notice-success')
+    const addedRow = screen.getByRole('link', { name: '林鮑伯' }).closest('li')
+    await waitFor(() => {
+      expect(addedRow).toHaveStyle({ backgroundColor: 'var(--success-bg)' })
+    })
+    const rowNotice = within(addedRow as HTMLElement).getByRole('status')
+    expect(rowNotice).toHaveTextContent('已加入「林鮑伯（bob.lin）」。')
+    await waitFor(() => {
+      expect(scroll.scrollIntoView.mock.contexts).toContain(rowNotice)
+    })
+    expect(scroll.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(screen.getByRole('heading', { name: '成員列表' })).toBeVisible()
+    await openMemberAddForm()
     expect(screen.getByText('沒有可加入的成員。')).toBeVisible()
-    // 全部都加完後，角色勾選與加入按鈕一起隱藏，只剩說明（#487）。
     expect(within(addForm()).queryByRole('checkbox')).toBeNull()
     expect(
       within(addForm()).queryByRole('button', { name: '加入成員' }),
     ).toBeNull()
+  })
+
+  it('reveals the added-member notice after roles finish loading', async () => {
+    const scroll = mockScrollIntoView()
+    const fetchMock = projectFetch()
+    renderAt('/projects/project-1/members')
+    await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
+
+    const select = screen.getByRole('combobox', { name: '成員' })
+    fireEvent.change(select, { target: { value: bob.id } })
+    fireEvent.click(within(addForm()).getByLabelText('查核員'))
+    const rolesGate = holdRequests(fetchMock, 'GET', /\/assignable-roles/)
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+
+    expect(await screen.findByRole('link', { name: '林鮑伯' })).toBeVisible()
+    expect(calls(fetchMock, 'GET', /\/assignable-roles/)).toHaveLength(2)
+    const addedRow = screen.getByRole('link', { name: '林鮑伯' }).closest('li')
+    const rowNotice = within(addedRow as HTMLElement).getByRole('status')
+    expect(rowNotice).toHaveTextContent('已加入「林鮑伯（bob.lin）」。')
+    expect(scroll.scrollIntoView.mock.contexts).not.toContain(rowNotice)
+
+    rolesGate.resolve()
+    await waitFor(() => {
+      expect(scroll.scrollIntoView.mock.contexts).toContain(rowNotice)
+    })
+    expect(scroll.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
   })
 
   it('filters assignable roles for external candidates', async () => {
@@ -2255,6 +2536,7 @@ describe('admin project members', () => {
     })
     renderAt('/projects/project-1/members', officeUser)
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     const select = screen.getByRole('combobox', { name: '成員' })
     fireEvent.change(select, { target: { value: externalCandidate.id } })
@@ -2284,10 +2566,35 @@ describe('admin project members', () => {
     renderAt('/projects/project-1/members')
     await screen.findByText('外部協作者')
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
 
     expect(screen.getByLabelText('查核員')).toBeVisible()
     expect(screen.queryByLabelText('內部角色')).toBeNull()
+  })
+
+  it('disables role editing on the current user row with an explanation', async () => {
+    const selfUser = {
+      ...adminUser,
+      id: anna.id,
+      username: anna.username,
+      name_zh: anna.name_zh,
+    }
+    const selfMember = { ...memberAnna }
+    projectFetch({ members: [selfMember] })
+    renderAt('/projects/project-1/members', selfUser)
+    await screen.findByText('不能修改自己的專案角色。')
+
+    const link = screen.getByRole('link', {
+      name: /修改「鄧安娜.*」的角色/,
+    })
+    expect(link).toHaveAttribute('aria-disabled', 'true')
+    expect(link).toHaveAttribute('tabindex', '-1')
+    const warning = screen.getByText('不能修改自己的專案角色。')
+    expect(warning).toHaveAttribute('id', `self-role-warning-${selfMember.id}`)
+    expect(link).toHaveAttribute(
+      'aria-describedby',
+      `self-role-warning-${selfMember.id}`,
+    )
   })
 
   it('shows the not-assignable error by role choices', async () => {
@@ -2301,6 +2608,7 @@ describe('admin project members', () => {
     })
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
     })
@@ -2329,6 +2637,7 @@ describe('admin project members', () => {
     })
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: externalCandidate.id },
     })
@@ -2351,6 +2660,7 @@ describe('admin project members', () => {
     const fetchMock = projectFetch()
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: anna.id },
@@ -2383,6 +2693,7 @@ describe('admin project members', () => {
     const fetchMock = projectFetch()
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     fireEvent.click(
       within(addForm()).getByRole('button', { name: '加入成員' }),
@@ -2407,6 +2718,7 @@ describe('admin project members', () => {
     })
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: anna.id },
@@ -2427,7 +2739,7 @@ describe('admin project members', () => {
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     // 獨立畫面：清單與加入表單不在同一畫面。
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: /修改「/ })).toHaveFocus(),
@@ -2472,7 +2784,7 @@ describe('admin project members', () => {
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     fireEvent.click(screen.getByLabelText('審核者'))
     fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
 
@@ -2481,17 +2793,46 @@ describe('admin project members', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('maps the last-manager error on edit to the roles field', async () => {
+    const fetchMock = projectFetch({
+      members: [memberAnna],
+      failWith: {
+        match: /\/roles$/,
+        method: 'PUT',
+        code: 'project.last_manager',
+        status: 409,
+      },
+    })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
+    await screen.findByRole('heading', { name: /修改「.*」的角色/ })
+    fireEvent.click(screen.getByLabelText('審核者'))
+    fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
+
+    const error = await screen.findByText(
+      '這是此專案最後一位管理者，請先安排其他管理者後再修改角色。',
+    )
+    expect(error).toBeVisible()
+    expect(
+      screen.getByRole('group', { name: /專案角色/ }),
+    ).toHaveAccessibleDescription(error.textContent ?? '')
+    expect(screen.getByLabelText('查核員')).toHaveFocus()
+    expect(screen.getByLabelText('審核者')).toBeChecked()
+    expect(calls(fetchMock, 'PUT', /\/roles$/)).toHaveLength(1)
+  })
+
   it('asks before discarding unsaved role changes; Escape cancels', async () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     // 沒改動就取消：直接回清單。
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.getByRole('heading', { name: '成員列表' })).toBeVisible()
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     fireEvent.click(screen.getByLabelText('審核者'))
     fireEvent.keyDown(screen.getByLabelText('審核者'), { key: 'Escape' })
     const prompt = screen.getByRole('group', { name: '捨棄確認' })
@@ -2552,6 +2893,7 @@ describe('admin project members', () => {
     })
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: anna.id },
@@ -2570,6 +2912,7 @@ describe('admin project members', () => {
     projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
 
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
@@ -2584,20 +2927,149 @@ describe('admin project members', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 
-  it('keeps the draft add form while editing another member', async () => {
+  it('guards leaving a draft add form and keeps it when continuing', async () => {
     projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
 
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
     })
     fireEvent.click(within(addForm()).getByLabelText('審核者'))
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
+    const prompt = screen.getByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
 
     expect(screen.getByRole('combobox', { name: '成員' })).toHaveValue(bob.id)
     expect(within(addForm()).getByLabelText('審核者')).toBeChecked()
+  })
+
+  it('clears an add draft after discard and reopening the same route', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    await openMemberAddForm()
+
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
+      target: { value: bob.id },
+    })
+    fireEvent.click(within(addForm()).getByLabelText('審核者'))
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
+    const prompt = screen.getByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
+    expect(screen.getByRole('heading', { name: '成員列表' })).toBeVisible()
+
+    await openMemberAddForm()
+    expect(screen.getByRole('combobox', { name: '成員' })).toHaveValue('')
+    expect(within(addForm()).getByLabelText('查核員')).not.toBeChecked()
+    expect(within(addForm()).getByLabelText('審核者')).not.toBeChecked()
+  })
+
+  it('clears add field errors after cancel and reopening the route', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    await openMemberAddForm()
+    await screen.findByRole('combobox', { name: '成員' })
+    await screen.findByLabelText('查核員')
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+
+    expect(screen.getByText('請選擇要加入的成員。')).toBeVisible()
+    expect(screen.getByText('請至少選一個角色。')).toBeVisible()
+    expect(screen.getByRole('combobox', { name: '成員' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    expect(within(addForm()).getByLabelText('查核員')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
+    expect(screen.getByRole('heading', { name: '成員列表' })).toBeVisible()
+    await openMemberAddForm()
+
+    expect(screen.queryByText('請選擇要加入的成員。')).toBeNull()
+    expect(screen.queryByText('請至少選一個角色。')).toBeNull()
+    expect(screen.getByRole('combobox', { name: '成員' })).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    expect(within(addForm()).getByLabelText('查核員')).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+  })
+
+  it('closes a removal confirmation when opening the add route', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+
+    fireEvent.click(screen.getByRole('button', { name: /移出專案/ }))
+    expect(screen.getByRole('group', { name: '移出確認' })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('link', { name: '加入成員' }))
+    await screen.findByRole('heading', { name: '加入成員' })
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
+
+    await screen.findByRole('heading', { name: '成員列表' })
+    expect(screen.queryByRole('group', { name: '移出確認' })).toBeNull()
+  })
+
+  it('does not return to the add form after saving and going Back', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members', adminUser, {
+      entries: ['/projects', '/projects/project-1/members'],
+      index: 1,
+    })
+    await screen.findByText('鄧安娜')
+    await openMemberAddForm()
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
+      target: { value: bob.id },
+    })
+    fireEvent.click(screen.getByLabelText('查核員'))
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+    await screen.findByRole('status')
+
+    fireEvent.click(screen.getByRole('button', { name: '成員頁上一頁' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('member-path')).toHaveTextContent('/projects'),
+    )
+    expect(screen.queryByRole('heading', { name: '加入成員' })).toBeNull()
+  })
+
+  it('discards edit changes on Back before reopening the same member', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
+    await screen.findByRole('heading', { name: /修改「.*」的角色/ })
+    fireEvent.click(screen.getByLabelText('查核員'))
+    fireEvent.click(screen.getByLabelText('審核者'))
+    expect(screen.getByLabelText('審核者')).toBeChecked()
+
+    fireEvent.click(screen.getByRole('button', { name: '成員頁上一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    expect(
+      await screen.findByRole('heading', { name: '成員列表' }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
+    await screen.findByRole('heading', { name: /修改「.*」的角色/ })
+    expect(screen.getByLabelText('查核員')).toBeChecked()
+    expect(screen.getByLabelText('審核者')).not.toBeChecked()
   })
 
   it('uses mock shapes that match the backend member schema', async () => {
@@ -2638,6 +3110,7 @@ describe('admin project members', () => {
     const fetchMock = projectFetch({ rolePages: [[roleA], [roleB]] })
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     expect(screen.getByLabelText('審核者')).toBeVisible()
     expect(calls(fetchMock, 'GET', /\/assignable-roles/)).toHaveLength(2)
@@ -2669,6 +3142,7 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
 
     expect(await screen.findByText('鄧安娜')).toBeVisible()
+    await openMemberAddForm()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(calls(fetchMock, 'GET', globalReads)).toHaveLength(0)
     expect(calls(fetchMock, 'GET', /\/projects\/project-1$/)).toHaveLength(0)
@@ -2684,6 +3158,7 @@ describe('project members for an office user (not admin, #481)', () => {
     projectFetch({ office: true, members: [memberAnna] })
     renderAt(path, officeUser)
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
 
     const checkbox = screen.getByLabelText('查核員')
     const button = screen.getByRole('button', {
@@ -2703,6 +3178,7 @@ describe('project members for an office user (not admin, #481)', () => {
     const fetchMock = projectFetch({ office: true, members: [memberAnna] })
     renderAt(path, officeUser)
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
 
     const select = screen.getByRole('combobox', { name: '成員' })
     expect(
@@ -2726,11 +3202,9 @@ describe('project members for an office user (not admin, #481)', () => {
     expect(
       JSON.parse(String(calls(fetchMock, 'POST', /\/members$/)[0][1]?.body)),
     ).toEqual({ user_id: bob.id, role_ids: [roleA.id] })
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(await screen.findByRole('status')).toHaveTextContent(
       '已加入「林鮑伯（bob.lin）」。',
     )
-    // 加入後這個人不再是候選；沒有人可加時改顯示說明。
-    expect(await screen.findByText('沒有可加入的成員。')).toBeVisible()
   })
 
   it('changes roles on the separate screen by clicking', async () => {
@@ -2738,7 +3212,7 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
     await screen.findByText('鄧安娜')
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     expect(
       await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
     ).toBeVisible()
@@ -2781,14 +3255,23 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
 
     expect(await screen.findByText('鄧安娜')).toBeVisible()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(
+      screen.getByRole('link', { name: /修改「.*」的角色/ }),
+    ).toBeEnabled()
+    await openMemberAddForm()
     expect(await screen.findByText(/無法載入可加入的成員/)).toBeVisible()
     expect(
       within(addForm()).getByRole('button', { name: '加入成員' }),
     ).toBeDisabled()
-    // 角色區塊與成員操作不受影響。
+    // 新增表單的角色選擇仍可用；取消後回到原清單。
     expect(within(addForm()).getByLabelText('查核員')).toBeVisible()
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
     expect(
-      screen.getByRole('button', { name: /修改「.*」的角色/ }),
+      await screen.findByRole('heading', { name: '成員列表' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('link', { name: /修改「.*」的角色/ }),
     ).toBeEnabled()
   })
 
@@ -2824,14 +3307,15 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
 
     expect(await screen.findByText('鄧安娜')).toBeVisible()
-    expect(await screen.findByText(/無法載入角色/)).toBeVisible()
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入角色')
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
     // 名稱由成員清單直接帶來，角色清單失敗也不影響顯示。
     expect(screen.getByText('查核員')).toBeVisible()
     expect(screen.queryByText('（角色名稱無法顯示）')).toBeNull()
+    expect(screen.queryByRole('combobox', { name: '成員' })).toBeNull()
     expect(
-      screen.getByRole('button', { name: /修改「.*」的角色/ }),
-    ).toBeDisabled()
-    expect(screen.getByRole('combobox', { name: '成員' })).toBeVisible()
+      screen.getByRole('link', { name: /修改「.*」的角色/ }),
+    ).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('retries every failed block with the reload button', async () => {
@@ -2845,6 +3329,8 @@ describe('project members for an office user (not admin, #481)', () => {
       return (inner as NonNullable<typeof inner>)(input, init)
     })
     renderAt(path, officeUser)
+    await screen.findByRole('heading', { name: '成員列表' })
+    await openMemberAddForm()
     await screen.findByText(/無法載入可加入的成員/)
 
     failing = false
@@ -2893,6 +3379,8 @@ describe('project members for an office user (not admin, #481)', () => {
       ],
     })
     renderAt(path, officeUser)
+    await screen.findByRole('heading', { name: '成員列表' })
+    await openMemberAddForm()
 
     expect(await screen.findByText('沒有可加入的成員。')).toBeVisible()
     expect(screen.getByText(/需要新增帳號請洽系統管理者/)).toBeVisible()
@@ -2937,6 +3425,7 @@ describe('project members forms guard (#507)', () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
     await fillAdd()
     const gate = holdRequests(fetchMock, 'POST', /\/members$/)
     const form = formOf(addForm())
@@ -2962,6 +3451,7 @@ describe('project members forms guard (#507)', () => {
     })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
     await fillAdd()
     const form = formOf(addForm())
 
@@ -2978,6 +3468,7 @@ describe('project members forms guard (#507)', () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
     await fillAdd()
 
     expectImeEnterIgnored(screen.getByRole('combobox', { name: '成員' }))
@@ -2989,7 +3480,7 @@ describe('project members forms guard (#507)', () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     fireEvent.click(screen.getByLabelText('審核者'))
     const gate = holdRequests(fetchMock, 'PUT', /\/roles$/)
     const form = formOf(screen.getByRole('button', { name: '儲存角色' }))
@@ -3006,7 +3497,7 @@ describe('project members forms guard (#507)', () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     fireEvent.click(screen.getByLabelText('審核者'))
 
     expectImeEnterIgnored(screen.getByLabelText('審核者'))
