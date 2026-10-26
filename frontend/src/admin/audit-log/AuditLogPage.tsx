@@ -31,10 +31,18 @@ interface FilterErrors {
   to?: string
 }
 
+// 空值顯示「無」：新增事件的 before、刪除事件的 after 本來就是空值
+// （ALG-R09），不是資料遺失。
 function displayJson(value: unknown): string {
   return value == null ? '無' : JSON.stringify(value, null, 2)
 }
 
+/**
+ * Admin 專用的稽核紀錄查詢頁（ADM-R07、ADM-R08、ALG-R22、ALG-R23）。
+ *
+ * 唯讀：只查詢，不新增、修改或刪除紀錄（ALG-R04）。篩選條件按下
+ * 「查詢」才生效，改了輸入但沒送出時不會重新載入。
+ */
 export default function AuditLogPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -53,11 +61,15 @@ export default function AuditLogPage() {
   const toRef = useRef<HTMLInputElement>(null)
   const [filters, setFilters] = useState<AuditLogFilters>(emptyFilters)
   const [cursor, setCursor] = useState<string | null>(null)
+  // 後端只給「下一頁」的 cursor；上一頁靠前端記下走過的 cursor 往回退。
   const [history, setHistory] = useState<Array<string | null>>([])
   const [result, setResult] = useState<AuditLogPage | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
+  // 篩選選項與名稱對照一次載入：紀錄多數只存 id，紀錄內容有名稱欄位
+  // 時優先用，查不到才用這些清單在前端查表（ALG-R03，被記錄的對象
+  // 日後可能已刪除）。
   useEffect(() => {
     let active = true
     void listAllPages<{ id: string; name: string }>('/roles')
@@ -113,6 +125,9 @@ export default function AuditLogPage() {
 
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    // 輸入是本地時間，轉成 UTC 的 ISO 字串再送出（audit-log 規格
+    // 查詢 API：from、to 為 UTC ISO-8601，含起不含迄）；起訖顛倒或
+    // 格式不對就擋在前端，錯誤顯示在欄位旁。
     const fromDate = from ? new Date(from) : null
     const toDate = to ? new Date(to) : null
     const nextErrors: FilterErrors = {}
@@ -161,6 +176,10 @@ export default function AuditLogPage() {
     setHistory((previous) => previous.slice(0, -1))
   }
 
+  // ALG-R22：角色以「目前名稱」呈現，不是事件當時的名稱；角色清單
+  // 成功載入後仍找不到才回 null（role_ids 摘要顯示「已刪除的角色」；
+  // 對象欄查不到名稱時只保留類型，ALG-AC17），載入中或失敗時顯示
+  // 暫時無法顯示，兩者不能混為一談，也不得顯示 UUID。
   function roleName(id: string): string | null {
     if (rolesState !== 'ready') return '角色名稱暫時無法顯示'
     return roles.find((role) => role.id === id)?.name ?? null
