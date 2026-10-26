@@ -3277,9 +3277,11 @@ it('IP-AC24：送出時項目剛被停用，自動重載並保留其他欄位', 
   expect(screen.getByLabelText(new RegExp(items[1].title))).toBeChecked()
   expect(screen.getByLabelText('補充地點')).toHaveValue('工地北側')
   expect(screen.getByLabelText(/任務名稱/)).toHaveValue('我自己取的名稱')
+  // 重載只發生一次，沒有重載迴圈。
+  expect(vi.mocked(client.listProjectItems).mock.calls.length).toBe(before + 1)
 })
 
-it('IP-AC24：修改草稿時新勾選的項目剛被停用，重載後裁掉並保留原選取', async () => {
+it('IP-AC24：修改草稿時新勾選的項目剛被停用，重載後裁掉並保留原有的停用項目', async () => {
   const { client, projectId, items, plan } =
     await seedDraftWithItems('草稿重載計畫')
   await client.createTask(plan.id, {
@@ -3289,13 +3291,19 @@ it('IP-AC24：修改草稿時新勾選的項目剛被停用，重載後裁掉並
     location_text: '工地',
     suggested_assignee_id: null,
   })
+  // items[0] 從頭就是停用（草稿原本已含），重載後仍須保留勾選。
   let deactivated = false
-  client.listProjectItems = vi.fn(async () =>
-    deactivated ? [items[0], { ...items[1], is_active: false }] : items,
-  )
-  client.updateTaskItems = vi.fn(async () => {
-    deactivated = true
-    throw new ManagementApiError(409, 'project_inspection_item.inactive')
+  client.listProjectItems = vi.fn(async () => [
+    { ...items[0], is_active: false },
+    deactivated ? { ...items[1], is_active: false } : items[1],
+  ])
+  const realUpdate = client.updateTaskItems.bind(client)
+  client.updateTaskItems = vi.fn(async (taskId, body) => {
+    if (!deactivated) {
+      deactivated = true
+      throw new ManagementApiError(409, 'project_inspection_item.inactive')
+    }
+    return realUpdate(taskId, body)
   })
   render(<PlanningPage client={client} initialProjectId={projectId} />)
   fireEvent.click(
@@ -3329,6 +3337,71 @@ it('IP-AC24：修改草稿時新勾選的項目剛被停用，重載後裁掉並
     ).toBeNull(),
   )
   expect(within(form).getByLabelText(new RegExp(items[0].title))).toBeChecked()
+  // 重載只發生一次，沒有重載迴圈。
+  expect(vi.mocked(client.listProjectItems).mock.calls.length).toBe(before + 1)
+  // 再送出：item_ids 仍含原有的停用項目、不含剛停用的新項目。
+  fireEvent.click(within(form).getByRole('button', { name: '儲存查核項目' }))
+  await waitFor(() =>
+    expect(client.updateTaskItems).toHaveBeenLastCalledWith(
+      expect.any(String),
+      { item_ids: [items[0].id] },
+    ),
+  )
+})
+
+it('IP-AC24：修改草稿重載後伺服器集合已不含某停用項目時，該項目被裁掉', async () => {
+  const { client, projectId, items, plan } =
+    await seedDraftWithItems('伺服器已改計畫')
+  const task = await client.createTask(plan.id, {
+    name: '伺服器已改任務',
+    item_ids: [items[0].id, items[1].id],
+    zone_id: null,
+    location_text: '工地',
+    suggested_assignee_id: null,
+  })
+  // 兩項都是停用的原有項目；編輯期間別人把 items[0] 從任務移除。
+  client.listProjectItems = vi.fn(async () =>
+    items.map((item) => ({ ...item, is_active: false })),
+  )
+  let serverChanged = false
+  const realGetPlan = client.getPlan.bind(client)
+  client.getPlan = vi.fn(async (planId) => {
+    const detail = await realGetPlan(planId)
+    if (!serverChanged) return detail
+    return {
+      ...detail,
+      tasks: detail.tasks?.map((t) =>
+        t.id === task.id
+          ? { ...t, items: t.items.filter((i) => i.id !== items[0].id) }
+          : t,
+      ),
+    }
+  })
+  client.updateTaskItems = vi.fn(async () => {
+    serverChanged = true
+    throw new ManagementApiError(409, 'project_inspection_item.inactive')
+  })
+  render(<PlanningPage client={client} initialProjectId={projectId} />)
+  fireEvent.click(
+    await screen.findByRole('button', { name: /伺服器已改計畫（/ }),
+  )
+  const article = (
+    await screen.findByRole('heading', { name: /伺服器已改任務/ })
+  ).closest('article')!
+  fireEvent.click(
+    within(article).getByRole('button', { name: '修改查核項目' }),
+  )
+  const form = document.querySelector(
+    '[data-error-context="items"]',
+  ) as HTMLFormElement
+  expect(within(form).getByLabelText(new RegExp(items[0].title))).toBeChecked()
+  fireEvent.click(within(form).getByRole('button', { name: '儲存查核項目' }))
+  await waitFor(() =>
+    expect(
+      within(form).queryByLabelText(new RegExp(items[0].title)),
+    ).toBeNull(),
+  )
+  expect(within(form).getByLabelText(new RegExp(items[1].title))).toBeChecked()
 })
 
 it('IP-AC24：專案項目全被停用時，新增任務提示先新增或恢復', async () => {

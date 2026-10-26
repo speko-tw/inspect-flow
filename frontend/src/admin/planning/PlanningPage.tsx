@@ -1,5 +1,5 @@
 import { inactiveAssigneeNotice } from '../../ui/SuggestedAssignee'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 
 import { collectPages, HttpError, isForbidden, isNotFound } from '../../http'
@@ -335,10 +335,61 @@ export default function PlanningPage({
     task: InspectionTask
     name: string
   } | null>(null)
-  const [editingTaskItems, setEditingTaskItems] = useState<{
+  const [editingTaskItemsDraft, setEditingTaskItems] = useState<{
     task: InspectionTask
     itemIds: string[]
   } | null>(null)
+
+  const [selectedPlanData, setSelectedPlanData] = useState<{
+    id: string
+    plan: InspectionPlan
+  } | null>(null)
+  useEffect(() => {
+    if (!selectedPlanId) return
+    let active = true
+    void client.getPlan(selectedPlanId).then(
+      (plan) => active && setSelectedPlanData({ id: selectedPlanId, plan }),
+      (caught: unknown) => {
+        if (active) {
+          setErrorContext('page')
+          if (isForbidden(caught)) {
+            setAccessDenied(true)
+          } else {
+            setError(planningErrorMessage(caught))
+          }
+        }
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [client, selectedPlanId, reloadKey])
+  const selectedPlanDetail =
+    selectedPlanData?.id === selectedPlanId ? selectedPlanData.plan : null
+  // IP-R24：修改草稿時，只保留「伺服器目前仍有的」停用項目，裁掉剛新勾選、
+  // 之後才被停用的項目（送出會回 inactive）。「原有」以重載後最新的計畫明細
+  // 為準，和後端持鎖重讀的 old_ids 一致；明細尚未回來時先用開啟編輯器時的
+  // 快照。項目清單載入失敗（items 為空）時不裁，避免誤清使用者的勾選。
+  // 以衍生值呈現而不在 effect 內改 state，重載與明細到達的先後都會收斂。
+  const editingTaskItems = useMemo(() => {
+    const draft = editingTaskItemsDraft
+    if (!draft || items.length === 0) return draft
+    const activeIds = new Set(
+      items.filter((item) => item.is_active !== false).map((item) => item.id),
+    )
+    const latest = selectedPlanDetail?.tasks?.find(
+      (task) => task.id === draft.task.id,
+    )
+    const original = new Set(
+      (latest ?? draft.task).items.map((item) => item.id),
+    )
+    const kept = draft.itemIds.filter(
+      (id) => activeIds.has(id) || original.has(id),
+    )
+    return kept.length === draft.itemIds.length
+      ? draft
+      : { ...draft, itemIds: kept }
+  }, [editingTaskItemsDraft, items, selectedPlanDetail])
   const [editingAssignee, setEditingAssignee] = useState<{
     task: InspectionTask
     assigneeId: string
@@ -647,18 +698,6 @@ export default function PlanningPage({
               .map((item) => item.title),
           )
           setTaskItems(selected.filter((id) => activeIds.has(id)))
-          // IP-R24：修改草稿時，原本就選著的停用項目可保留，只裁掉
-          // 剛新勾選、之後才被停用的項目（送出會回 inactive）。
-          setEditingTaskItems((current) => {
-            if (!current) return current
-            const original = new Set(current.task.items.map((i) => i.id))
-            const kept = current.itemIds.filter(
-              (id) => activeIds.has(id) || original.has(id),
-            )
-            return kept.length === current.itemIds.length
-              ? current
-              : { ...current, itemIds: kept }
-          })
           setItems(loaded)
         } else {
           setItems([])
@@ -760,33 +799,6 @@ export default function PlanningPage({
       : membersFailure === 'temporary'
         ? '成員名單暫時載入失敗'
         : ''
-
-  const [selectedPlanData, setSelectedPlanData] = useState<{
-    id: string
-    plan: InspectionPlan
-  } | null>(null)
-  useEffect(() => {
-    if (!selectedPlanId) return
-    let active = true
-    void client.getPlan(selectedPlanId).then(
-      (plan) => active && setSelectedPlanData({ id: selectedPlanId, plan }),
-      (caught: unknown) => {
-        if (active) {
-          setErrorContext('page')
-          if (isForbidden(caught)) {
-            setAccessDenied(true)
-          } else {
-            setError(planningErrorMessage(caught))
-          }
-        }
-      },
-    )
-    return () => {
-      active = false
-    }
-  }, [client, selectedPlanId, reloadKey])
-  const selectedPlanDetail =
-    selectedPlanData?.id === selectedPlanId ? selectedPlanData.plan : null
 
   // 只在「換了一份計畫」時聚焦；同一份計畫重新載入不應再搶焦點。
   const loadedPlanId = selectedPlanDetail?.id
