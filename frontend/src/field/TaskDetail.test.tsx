@@ -371,3 +371,28 @@ describe('現場任務詳情', () => {
     ).toBeInTheDocument()
   })
 })
+
+it.each([
+  ['COMPLETED', false],
+  ['CANCELLED', false],
+  ['PENDING', true],
+  ['IN_PROGRESS', false],
+])('現場詳情停用提醒依 %s、封存 %s 判斷', async (status, plan_archived) => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        ...detail,
+        status,
+        plan_archived,
+        suggested_assignee: { ...detail.suggested_assignee, is_active: false },
+      }),
+    ),
+  )
+  renderDetail()
+  const warning = !plan_archived && status === 'IN_PROGRESS'
+  expect(
+    await screen.findByText(warning ? '（已停用，請改派）' : '（已停用）'),
+  ).toBeVisible()
+  if (!warning) expect(screen.queryByText(/請改派/)).toBeNull()
+})

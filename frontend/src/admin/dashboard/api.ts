@@ -51,6 +51,7 @@ export type DashboardProjectPage = Page<DashboardProject>
 
 /** ADM-R06：全部進度權限可讀的任務欄位白名單。 */
 export interface DashboardTask {
+  plan_archived?: boolean
   task_id: string
   status: string
   location: {
@@ -60,6 +61,7 @@ export interface DashboardTask {
   suggested_assignee: {
     user_id: string
     name_zh: string | null
+    is_active?: boolean
   } | null
 }
 

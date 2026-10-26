@@ -106,7 +106,13 @@ function TestPasswordNavigation() {
 
 async function renderReadyPage() {
   renderPage()
-  await screen.findByRole('heading', { name: '個人設定' })
+  await screen.findByRole('heading', { name: '請先設定新密碼' })
+  expect(screen.getByLabelText('臨時密碼')).toBeVisible()
+  expect(
+    screen.getByText(
+      '你用的是管理者給的臨時密碼，設定自己的密碼後才能繼續使用。',
+    ),
+  ).toBeVisible()
 }
 
 describe('全無權限帳號的設定落點（role-tasks.md）', () => {
@@ -123,8 +129,10 @@ describe('全無權限帳號的設定落點（role-tasks.md）', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: '個人設定' })
+    expect(screen.getByLabelText('目前密碼')).toBeVisible()
+    expect(screen.queryByLabelText('臨時密碼')).toBeNull()
     expect(screen.queryByRole('link', { name: /^返回/ })).toBeNull()
-    fireEvent.change(screen.getByLabelText('目前密碼'), {
+    fireEvent.change(screen.getByLabelText(/^(目前密碼|臨時密碼)$/), {
       target: { value: 'old-password' },
     })
     fireEvent.change(screen.getByLabelText('新密碼'), {
@@ -164,11 +172,11 @@ describe('全無權限帳號的設定落點（role-tasks.md）', () => {
     )
     renderPage()
 
-    await screen.findByRole('heading', { name: '個人設定' })
+    await screen.findByRole('heading', { name: '請先設定新密碼' })
     expect(screen.getByRole('status')).toHaveTextContent(
       '尚未開通任何功能，請洽系統管理者',
     )
-    expect(screen.getByLabelText('目前密碼')).toBeVisible()
+    expect(screen.getByLabelText(/^(目前密碼|臨時密碼)$/)).toBeVisible()
   })
 
   it('不對仍有功能權限、只是開啟設定的帳號顯示說明', async () => {
@@ -178,7 +186,7 @@ describe('全無權限帳號的設定落點（role-tasks.md）', () => {
     )
     renderPage()
 
-    await screen.findByRole('heading', { name: '個人設定' })
+    await screen.findByRole('heading', { name: '請先設定新密碼' })
     expect(screen.queryByText('尚未開通任何功能，請洽系統管理者')).toBeNull()
   })
 })
@@ -195,8 +203,8 @@ describe('變更密碼草稿導覽防護', () => {
     mockAuth()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderPage(['/other', '/settings', '/other'], 1)
-    await screen.findByRole('heading', { name: '個人設定' })
-    fireEvent.change(screen.getByLabelText('目前密碼'), {
+    await screen.findByRole('heading', { name: '請先設定新密碼' })
+    fireEvent.change(screen.getByLabelText(/^(目前密碼|臨時密碼)$/), {
       target: { value: 'private-current-password' },
     })
 
@@ -208,7 +216,7 @@ describe('變更密碼草稿導覽防護', () => {
     fireEvent.click(screen.getByRole('button', { name: '密碼頁上一頁' }))
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
     expect(
-      screen.getByRole('heading', { name: '個人設定' }),
+      screen.getByRole('heading', { name: '請先設定新密碼' }),
     ).toBeInTheDocument()
 
     confirm.mockReturnValue(true)
@@ -222,8 +230,8 @@ describe('變更密碼草稿導覽防護', () => {
   it('實際輸入後攔截 beforeunload', async () => {
     mockAuth()
     renderPage()
-    await screen.findByRole('heading', { name: '個人設定' })
-    fireEvent.change(screen.getByLabelText('目前密碼'), {
+    await screen.findByRole('heading', { name: '請先設定新密碼' })
+    fireEvent.change(screen.getByLabelText(/^(目前密碼|臨時密碼)$/), {
       target: { value: 'private-current-password' },
     })
     const event = new Event('beforeunload', { cancelable: true })
@@ -238,7 +246,7 @@ describe.each([['變更密碼頁', '/api/v1/auth/password']])(
   '%s 共用表單',
   (_name, endpoint) => {
     function fill() {
-      fireEvent.change(screen.getByLabelText('目前密碼'), {
+      fireEvent.change(screen.getByLabelText(/^(目前密碼|臨時密碼)$/), {
         target: { value: 'old-password' },
       })
       fireEvent.change(screen.getByLabelText('新密碼'), {
@@ -287,7 +295,7 @@ describe.each([['變更密碼頁', '/api/v1/auth/password']])(
       )
       vi.stubGlobal('fetch', fetchMock)
       await renderReadyPage()
-      expectImeEnterIgnored(screen.getByLabelText('目前密碼'))
+      expectImeEnterIgnored(screen.getByLabelText(/^(目前密碼|臨時密碼)$/))
       expect(
         fetchMock.mock.calls.filter(([input]) =>
           requestUrl(input).endsWith(endpoint),
@@ -330,7 +338,7 @@ describe.each([['變更密碼頁', '/api/v1/auth/password']])(
 )
 
 function fillAndSubmit(current: string, next: string, confirm: string) {
-  fireEvent.change(screen.getByLabelText('目前密碼'), {
+  fireEvent.change(screen.getByLabelText(/^(目前密碼|臨時密碼)$/), {
     target: { value: current },
   })
   fireEvent.change(screen.getByLabelText('新密碼'), {
@@ -376,7 +384,7 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
 
     await renderReadyPage()
 
-    expect(screen.getByLabelText('目前密碼')).toHaveAttribute(
+    expect(screen.getByLabelText(/^(目前密碼|臨時密碼)$/)).toHaveAttribute(
       'type',
       'password',
     )
@@ -419,7 +427,7 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     await waitFor(() => expect(confirmation).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     const focus = vi.fn()
-    screen.getByLabelText('目前密碼').focus()
+    screen.getByLabelText(/^(目前密碼|臨時密碼)$/).focus()
     confirmation.addEventListener('focus', focus)
     fireEvent.submit(confirmation.closest('form')!)
     await waitFor(() => expect(focus).toHaveBeenCalledOnce())
@@ -436,9 +444,9 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     )
     alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain(
-      '目前密碼錯誤。請確認目前密碼後再試一次。',
+      '臨時密碼錯誤。請確認臨時密碼後再試一次。',
     )
-    const currentPassword = screen.getByLabelText('目前密碼')
+    const currentPassword = screen.getByLabelText(/^(目前密碼|臨時密碼)$/)
     expect(currentPassword).toHaveAttribute(
       'aria-describedby',
       'change-password-current-error',
@@ -475,7 +483,7 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     )
     alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain(
-      '新密碼與目前密碼相同。請改用不同的新密碼。',
+      '新密碼與臨時密碼相同。請改用不同的新密碼。',
     )
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(postCallCount).toBe(3)
@@ -680,4 +688,48 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
     )
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
+})
+
+it('無功能權限帳號完成強制改密碼後切回一般設定文案', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (requestUrl(input).endsWith('/auth/password'))
+        return new Response(null, { status: 204 })
+      return jsonResponse({ ...NO_FEATURE_USER, must_change_password: true })
+    }),
+  )
+  renderPage()
+  await screen.findByRole('heading', { name: '請先設定新密碼' })
+  fireEvent.change(screen.getByLabelText('臨時密碼'), {
+    target: { value: 'temporary' },
+  })
+  fireEvent.change(screen.getByLabelText('新密碼'), {
+    target: { value: 'new-password' },
+  })
+  fireEvent.change(screen.getByLabelText('再輸入一次新密碼'), {
+    target: { value: 'new-password' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
+  expect(await screen.findByText('密碼已變更。')).toBeVisible()
+  expect(screen.getByRole('heading', { name: '個人設定' })).toBeVisible()
+  expect(screen.getByLabelText('目前密碼')).toBeVisible()
+  expect(screen.queryByText(/你用的是管理者給的臨時密碼/)).toBeNull()
+})
+
+it('強制模式的必填錯誤、摘要與表單說明使用臨時密碼', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => jsonResponse(TEMP_PASSWORD_USER)),
+  )
+  await renderReadyPage()
+  fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
+  expect(screen.getByRole('link', { name: /臨時密碼/ })).toBeVisible()
+  expect(
+    screen.getAllByText('臨時密碼尚未填寫。請輸入臨時密碼。').length,
+  ).toBeGreaterThan(0)
+  expect(screen.getByRole('group', { name: '密碼資料' })).toBeVisible()
+  expect(
+    screen.getByText('請輸入臨時密碼，再設定自己的新密碼。'),
+  ).toBeVisible()
 })

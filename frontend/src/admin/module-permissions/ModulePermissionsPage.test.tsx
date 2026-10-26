@@ -2659,15 +2659,15 @@ describe('ModulePermissionsPage', () => {
     const candidate = within(chooser)
       .getByRole('radio', { name: /現場工程師/ })
       .closest('.role-candidate')! as HTMLElement
-    expect(candidate).toHaveTextContent('角色可用權限（7 項）')
+    expect(candidate).not.toHaveTextContent('角色可用權限')
     expect(
       within(candidate).getByRole('button', {
-        name: '「現場工程師」完整權限',
+        name: '「現場工程師比目前多給的能力」完整權限',
       }),
     ).toBeVisible()
     const summaries = candidate.querySelectorAll('.role-permission-summary')
-    expect(summaries).toHaveLength(2)
-    expect(summaries[1]).not.toHaveTextContent('檢視專案基本資料')
+    expect(summaries).toHaveLength(1)
+    expect(summaries[0]).not.toHaveTextContent('檢視專案基本資料')
   })
 
   it('orders advanced settings before the capability summary', async () => {

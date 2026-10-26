@@ -70,6 +70,12 @@ function emptyRestorePreviewSelection(): RestorePreviewSelection {
 
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
+/** 停用對象獨立標示，避免姓名看起來像另一項後果。 */
+function deactivationAccountText(user: User): string {
+  const name = user.name_zh || user.username
+  return `要停用的帳號：${name}（${user.username}）`
+}
+
 /** T2：單人及批次共用四項後果，避免詳情與清單文案分歧。 */
 function DeactivationConsequences({ count }: { count?: number }) {
   const subject = count === undefined ? '他' : `這 ${count} 個帳號`
@@ -709,9 +715,6 @@ export default function UsersPage({
         '你會拿到一組只顯示一次的臨時密碼，他下次登入必須改密碼。',
       ].join('')
     }
-    if (kind === 'deactivate') {
-      return `停用${name}（${user.username}）`
-    }
     if (kind === 'activate') {
       return `重新啟用${name}（${user.username}）後，他可以再次登入。`
     }
@@ -908,7 +911,14 @@ export default function UsersPage({
                   rootRef={confirmationRef}
                   variant={confirmVariant(pendingAction)}
                 >
-                  <p>{actionMessage(pendingAction)}</p>
+                  {pendingAction.kind === 'deactivate' && (
+                    <h2>停用 1 個帳號？</h2>
+                  )}
+                  <p>
+                    {pendingAction.kind === 'deactivate'
+                      ? deactivationAccountText(pendingAction.user)
+                      : actionMessage(pendingAction)}
+                  </p>
                   {pendingAction.kind === 'deactivate' && (
                     <DeactivationConsequences />
                   )}
@@ -1275,7 +1285,16 @@ export default function UsersPage({
                                   rootRef={confirmationRef}
                                   variant={confirmVariant(pendingAction)}
                                 >
-                                  <p>{actionMessage(pendingAction)}</p>
+                                  {pendingAction.kind === 'deactivate' && (
+                                    <h2>停用 1 個帳號？</h2>
+                                  )}
+                                  <p>
+                                    {pendingAction.kind === 'deactivate'
+                                      ? deactivationAccountText(
+                                          pendingAction.user,
+                                        )
+                                      : actionMessage(pendingAction)}
+                                  </p>
                                   {pendingAction.kind === 'deactivate' && (
                                     <DeactivationConsequences />
                                   )}
@@ -1542,10 +1561,14 @@ export default function UsersPage({
                         role="region"
                         variant="danger"
                       >
+                        <h2>
+                          停用 {batchDeactivationPreview.users.length} 個帳號？
+                        </h2>
                         <DeactivationConsequences
                           count={batchDeactivationPreview.users.length}
                         />
-                        <ul>
+                        <p>要停用的帳號：</p>
+                        <ul aria-label="要停用的帳號">
                           {batchDeactivationPreview.users.map((user) => (
                             <li key={user.id}>
                               {user.name_zh || user.username}（{user.username}

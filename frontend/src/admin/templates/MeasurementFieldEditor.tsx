@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { InspectionPoint, MeasurementField } from './api'
 import { RequiredMark } from '../../ui/Form'
+import { revealElement } from '../../ui/reveal'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { boundField, localizeField } from './templateEditorUtils'
 
@@ -34,7 +35,58 @@ export function MeasurementFieldEditor({
   updatePoint,
   structureLocked = false,
 }: Props) {
-  const [actionErrors, setActionErrors] = useState<Record<string, string>>({})
+  const [actionErrors, setActionErrors] = useState<
+    Record<
+      string,
+      {
+        type?: string
+        remove?: string
+      }
+    >
+  >({})
+  const binding = boundField(point)
+  const bindingKey = binding?.clientKey ?? binding?.client_id ?? binding?.id
+  const fieldKeys = point.measurement_fields.map(
+    (field) => field.clientKey ?? field.client_id ?? field.id,
+  )
+  const context = JSON.stringify([bindingKey, fieldKeys])
+  const [previousContext, setPreviousContext] = useState(context)
+  // TPL-R17：錯誤屬於欄位，不屬於位置；解除綁定即清除，不能重綁後復活。
+  if (previousContext !== context) {
+    setPreviousContext(context)
+    setActionErrors((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([key]) => fieldKeys.includes(key) && key === bindingKey,
+        ),
+      ),
+    )
+  }
+  const alertRefs = useRef(new Map<string, HTMLElement>())
+  const [focusRequest, setFocusRequest] = useState({ key: '', attempt: 0 })
+  useEffect(() => {
+    if (!focusRequest.attempt) return
+    const alert = alertRefs.current.get(focusRequest.key) ?? null
+    revealElement(alert)
+    alert?.focus({ preventScroll: true })
+  }, [focusRequest])
+
+  function showActionError(
+    key: string,
+    kind: 'type' | 'remove',
+    message: string,
+  ) {
+    setActionErrors({ [key]: { [kind]: message } })
+    setFocusRequest((current) => ({
+      key: `${key}:${kind}`,
+      attempt: current.attempt + 1,
+    }))
+  }
+
+  function alertRef(key: string, node: HTMLElement | null) {
+    if (node) alertRefs.current.set(key, node)
+    else alertRefs.current.delete(key)
+  }
   return (
     <section className="tpl-point-section" aria-label="要記錄什麼">
       <h4>要記錄什麼</h4>
@@ -46,6 +98,9 @@ export function MeasurementFieldEditor({
         const bound = boundField(point) === field
         const pointBase = errorPointKey ?? `point:${pointIndex}`
         const base = `${pointBase}:field:${fieldIndex}`
+        const actionKey = String(
+          field.clientKey ?? field.client_id ?? field.id,
+        )
         const removeField = () => {
           updatePoint(pointIndex, {
             measurement_fields: point.measurement_fields.filter(
@@ -84,15 +139,16 @@ export function MeasurementFieldEditor({
               id={`field-${pointIndex}-${fieldIndex}-type`}
               onChange={(event) => {
                 if (bound && event.target.value !== 'number') {
-                  setActionErrors({
-                    [`${base}:type`]:
-                      '這個欄位用於數值標準；請先改綁其他欄位或移除標準。',
-                  })
+                  showActionError(
+                    actionKey,
+                    'type',
+                    '這個欄位用於數值標準；請先改綁其他欄位或移除標準。',
+                  )
                   return
                 }
                 setActionErrors((current) => {
                   const next = { ...current }
-                  delete next[`${base}:type`]
+                  delete next[actionKey]
                   return next
                 })
                 updateField(pointIndex, fieldIndex, {
@@ -108,9 +164,14 @@ export function MeasurementFieldEditor({
             {errors[`${base}:type`] && (
               <p className="field-error">{errors[`${base}:type`]}</p>
             )}
-            {actionErrors[`${base}:type`] && (
-              <p className="field-error" role="alert">
-                {actionErrors[`${base}:type`]}
+            {actionErrors[actionKey]?.type && (
+              <p
+                className="field-error"
+                role="alert"
+                tabIndex={-1}
+                ref={(node) => alertRef(`${actionKey}:type`, node)}
+              >
+                {actionErrors[actionKey]?.type}
               </p>
             )}
             {field.field_type === 'number' && (
@@ -139,7 +200,8 @@ export function MeasurementFieldEditor({
               <p className="tpl-hint muted-text">此欄位用於數值標準。</p>
             )}
             {confirmField === `${pointIndex}:${fieldIndex}` &&
-            !structureLocked ? (
+            !structureLocked &&
+            !bound ? (
               <ConfirmBox
                 confirmLabel="移除欄位"
                 label="移除欄位確認"
@@ -154,10 +216,12 @@ export function MeasurementFieldEditor({
                 disabled={structureLocked}
                 onClick={() => {
                   if (bound) {
-                    setActionErrors({
-                      [`${base}:remove`]:
-                        '這個欄位仍綁定數值標準，請先解除綁定後再移除。',
-                    })
+                    setConfirmField('')
+                    showActionError(
+                      actionKey,
+                      'remove',
+                      '這個欄位仍綁定數值標準，請先解除綁定後再移除。',
+                    )
                   } else if (field.name || field.unit) {
                     setConfirmField(`${pointIndex}:${fieldIndex}`)
                   } else {
@@ -169,10 +233,32 @@ export function MeasurementFieldEditor({
                 移除欄位
               </button>
             )}
-            {actionErrors[`${base}:remove`] && (
-              <p className="field-error" role="alert">
-                {actionErrors[`${base}:remove`]}
-              </p>
+            {bound && actionErrors[actionKey]?.remove && (
+              <div
+                role="alert"
+                tabIndex={-1}
+                ref={(node) => alertRef(`${actionKey}:remove`, node)}
+              >
+                <p className="field-error">
+                  {actionErrors[actionKey]?.remove}
+                </p>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    const standard = event.currentTarget
+                      .closest('.tpl-point-section')
+                      ?.parentElement?.querySelector<HTMLElement>(
+                        '[aria-label="判定標準"]',
+                      )
+                    standard?.scrollIntoView?.({ block: 'nearest' })
+                    standard
+                      ?.querySelector<HTMLInputElement>('input:checked')
+                      ?.focus()
+                  }}
+                >
+                  前往判定標準
+                </button>
+              </div>
             )}
           </div>
         )

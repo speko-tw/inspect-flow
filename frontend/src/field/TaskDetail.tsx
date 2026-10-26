@@ -1,3 +1,4 @@
+import { SuggestedAssignee } from '../ui/SuggestedAssignee'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
@@ -170,7 +171,13 @@ export default function TaskDetail({
                 label="建議指派"
                 value={
                   <span className="field-detail-values">
-                    <span>{task.suggested_assignee?.name_zh ?? '未指定'}</span>
+                    <span>
+                      <SuggestedAssignee
+                        person={task.suggested_assignee}
+                        status={task.status}
+                        archived={Boolean(task.plan_archived)}
+                      />
+                    </span>
                     {task.status === 'PENDING' &&
                       task.suggested_assignee &&
                       !task.suggested_assignee.is_me && (

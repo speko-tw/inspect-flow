@@ -1,3 +1,4 @@
+import { SuggestedAssignee } from '../../ui/SuggestedAssignee'
 // IP-R18 定義清單篩選、排序與游標；
 // IP-R19 定義只讀任務詳情。
 import { useEffect, useState } from 'react'
@@ -323,7 +324,15 @@ function ProgressList({
                 <strong>{progressTaskTitle(task)}</strong>
                 <StatusBadge status={task.status} />
                 <span>{taskLocation(task)}</span>
-                <span>建議指派：{task.assignee?.name_zh || '未指派'}</span>
+                <span>
+                  建議指派：
+                  <SuggestedAssignee
+                    person={task.assignee}
+                    status={task.status}
+                    archived={task.plan.archived}
+                    unassignedLabel="未指派"
+                  />
+                </span>
                 <span>計畫：{task.plan.name}</span>
                 {needsReinspection(task) && <span>待重查</span>}
                 {task.plan.archived && <span>計畫已封存</span>}
@@ -471,7 +480,14 @@ function ProgressDetail({
             <dt>地點</dt>
             <dd>{taskLocation(task)}</dd>
             <dt>建議指派</dt>
-            <dd>{task.assignee?.name_zh || '未指派'}</dd>
+            <dd>
+              <SuggestedAssignee
+                person={task.assignee}
+                status={task.status}
+                archived={task.plan.archived}
+                unassignedLabel="未指派"
+              />
+            </dd>
             <dt>實際開始者</dt>
             <dd>{task.started_by_user?.name_zh || '尚未開始'}</dd>
             <dt>實際完成者</dt>

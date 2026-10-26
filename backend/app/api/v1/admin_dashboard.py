@@ -92,6 +92,7 @@ class DashboardTaskAssignee(BaseModel):
 
     user_id: UUID
     name_zh: str | None
+    is_active: bool
 
 
 class DashboardTaskItem(BaseModel):
@@ -99,6 +100,7 @@ class DashboardTaskItem(BaseModel):
 
     task_id: UUID
     status: str
+    plan_archived: bool
     location: DashboardTaskLocation
     suggested_assignee: DashboardTaskAssignee | None
 

@@ -128,3 +128,51 @@ it.each([
     ),
   ).toBe('範本項目：排水管坡度檢查')
 })
+
+it('取消任務從快照取任務名稱', () => {
+  expect(
+    entityLabel(
+      auditLogEntryFixture({
+        entity_type: 'inspection_task',
+        before: { task_name: '給水管試壓' },
+        after: { status: 'CANCELLED' },
+      }),
+      noLookup,
+    ),
+  ).toBe('任務：給水管試壓')
+})
+
+it('角色只改權限時仍顯示角色名；帳號快照可提供刪除前名稱', () => {
+  expect(
+    entityLabel(
+      auditLogEntryFixture({
+        entity_type: 'role',
+        entity_id: 'known-role',
+        after: { permission_codes: ['project.read'] },
+      }),
+      { ...noLookup, roleName: () => '現場工程師' },
+    ),
+  ).toBe('角色：現場工程師')
+  expect(
+    entityLabel(
+      auditLogEntryFixture({
+        entity_type: 'user',
+        after: { name_zh: '林承安' },
+      }),
+      noLookup,
+    ),
+  ).toBe('帳號：林承安')
+})
+
+it('套用範本的對象維持專案名，不把來源範本名當成專案', () => {
+  expect(
+    entityLabel(
+      auditLogEntryFixture({
+        entity_type: 'project',
+        entity_id: 'project',
+        after: { source_name: '給排水範本', item_count: 2 },
+      }),
+      { ...noLookup, projectName: () => '示範工程' },
+    ),
+  ).toBe('專案：示範工程')
+})
