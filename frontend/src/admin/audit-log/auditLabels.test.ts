@@ -20,6 +20,8 @@ describe('稽核事件白話對照', () => {
     ['template_item.deleted', null, '刪除範本項目'],
     ['project.template_applied', null, '套用範本'],
     ['project_inspection_item.deleted', null, '刪除查核項目'],
+    ['project_inspection_item.deactivated', null, '停用查核項目'],
+    ['project_inspection_item.reactivated', null, '恢復查核項目'],
     ['user.created', null, '建立帳號'],
     ['user.email_changed', null, '修改帳號電子郵件'],
     ['user.account_expiry_changed', null, '修改帳號到期日'],

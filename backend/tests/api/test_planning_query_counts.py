@@ -599,8 +599,9 @@ def test_locked_item_patch_batches_evidence_lookup(db_session, make_client):
     assert counts[0][1] == counts[1][1]
 
 
+@pytest.mark.parametrize("inspection_enabled", [True, False])
 def test_project_item_task_counts_are_only_computed_for_editors(
-    world, db_session, make_client
+    world, db_session, make_client, inspection_enabled
 ):
     """TPL-R27：唯讀項目清單不計算編輯專用的引用數。"""
     project_id = world["project"].id
@@ -623,6 +624,14 @@ def test_project_item_task_counts_are_only_computed_for_editors(
             role_assignments=[ProjectMemberRole(role_id=role.id)],
         )
     )
+    if inspection_enabled:
+        db_session.add(
+            UserModulePermission(
+                user_id=editor.id,
+                permission_code="inspection.use",
+                source="manual",
+            )
+        )
     manager = create_root_user_with_company(db_session, "COUNT-MANAGER")
     db_session.add(
         UserModulePermission(
@@ -658,7 +667,11 @@ def test_project_item_task_counts_are_only_computed_for_editors(
             event.remove(engine, "before_cursor_execute", record)
         return response, statements
 
-    for client in (world["admin"], editor_client):
+    editors = [world["admin"]]
+    readers = [world["field"], world["plain"], manager_client]
+    # AUT-R19：角色編輯權限須搭配 inspection.use 才能讀引用數。
+    (editors if inspection_enabled else readers).append(editor_client)
+    for client in editors:
         response, statements = get_with_sql(client)
         assert response.status_code == 200, response.text
         counts = {
@@ -673,7 +686,7 @@ def test_project_item_task_counts_are_only_computed_for_editors(
             for statement in statements
         )
 
-    for client in (world["field"], world["plain"], manager_client):
+    for client in readers:
         response, statements = get_with_sql(client)
         assert response.status_code == 200, response.text
         assert statements

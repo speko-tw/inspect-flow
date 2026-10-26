@@ -1,5 +1,5 @@
 import { inactiveAssigneeNotice } from '../../ui/SuggestedAssignee'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 
 import { collectPages, HttpError, isForbidden, isNotFound } from '../../http'
@@ -108,6 +108,8 @@ const TASK_CANCEL_BINDINGS: FieldErrorBinding[] = [
 // 聚焦（ADM-R28）；IP-AC15 的零點位項目錯誤也屬於查核項目欄位。
 // 各表單欄位不同，所以每個表單各一張表。
 const TASK_CODE_MESSAGES: Record<string, string> = {
+  'project_inspection_item.inactive':
+    '所選的查核項目剛被停用，清單已更新並取消勾選，請確認後再送出。',
   'inspection_task.invalid_zone': '所選分區不屬於這個專案，請重新選擇。',
   'inspection_task.invalid_assignee':
     '建議指派人不是這個專案的成員，請重新選擇。',
@@ -122,6 +124,7 @@ const TASK_CODE_MESSAGES: Record<string, string> = {
   'inspection_task.invalid_name': '任務名稱需為 1 到 128 個字元。',
 }
 const TASK_CREATE_CODE_FIELDS: Record<string, FieldKey> = {
+  'project_inspection_item.inactive': 'task-items',
   'inspection_task.invalid_name': 'task-name',
   'inspection_task.invalid_zone': 'task-zone',
   'inspection_task.invalid_assignee': 'task-assignee',
@@ -134,6 +137,7 @@ const TASK_RENAME_CODE_FIELDS: Record<string, FieldKey> = {
   'inspection_task.invalid_name': 'task-rename',
 }
 const TASK_ITEMS_CODE_FIELDS: Record<string, FieldKey> = {
+  'project_inspection_item.inactive': 'edit-task-items',
   'inspection_task.items_required': 'edit-task-items',
   'inspection_task.item_without_points': 'edit-task-items',
   'inspection_task.invalid_project_item': 'edit-task-items',
@@ -303,6 +307,12 @@ export default function PlanningPage({
   const [editingPlanName, setEditingPlanName] = useState(false)
   const [updatedPlanName, setUpdatedPlanName] = useState('')
   const [taskItems, setTaskItems] = useState<string[]>([])
+  const [removedTaskItems, setRemovedTaskItems] = useState<string[]>([])
+  // 重載完成時讀最新勾選，避免非同步請求保留較舊的選擇。
+  const taskItemsRef = useRef(taskItems)
+  useEffect(() => {
+    taskItemsRef.current = taskItems
+  }, [taskItems])
   const [taskName, setTaskName] = useState('')
   // 只有使用者碰過名稱欄才採用手動值，避免項目變動覆寫自訂名稱。
   const [taskNameTouched, setTaskNameTouched] = useState(false)
@@ -325,10 +335,61 @@ export default function PlanningPage({
     task: InspectionTask
     name: string
   } | null>(null)
-  const [editingTaskItems, setEditingTaskItems] = useState<{
+  const [editingTaskItemsDraft, setEditingTaskItems] = useState<{
     task: InspectionTask
     itemIds: string[]
   } | null>(null)
+
+  const [selectedPlanData, setSelectedPlanData] = useState<{
+    id: string
+    plan: InspectionPlan
+  } | null>(null)
+  useEffect(() => {
+    if (!selectedPlanId) return
+    let active = true
+    void client.getPlan(selectedPlanId).then(
+      (plan) => active && setSelectedPlanData({ id: selectedPlanId, plan }),
+      (caught: unknown) => {
+        if (active) {
+          setErrorContext('page')
+          if (isForbidden(caught)) {
+            setAccessDenied(true)
+          } else {
+            setError(planningErrorMessage(caught))
+          }
+        }
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [client, selectedPlanId, reloadKey])
+  const selectedPlanDetail =
+    selectedPlanData?.id === selectedPlanId ? selectedPlanData.plan : null
+  // IP-R24：修改草稿時，只保留「伺服器目前仍有的」停用項目，裁掉剛新勾選、
+  // 之後才被停用的項目（送出會回 inactive）。「原有」以重載後最新的計畫明細
+  // 為準，和後端持鎖重讀的 old_ids 一致；明細尚未回來時先用開啟編輯器時的
+  // 快照。項目清單載入失敗（items 為空）時不裁，避免誤清使用者的勾選。
+  // 以衍生值呈現而不在 effect 內改 state，重載與明細到達的先後都會收斂。
+  const editingTaskItems = useMemo(() => {
+    const draft = editingTaskItemsDraft
+    if (!draft || items.length === 0) return draft
+    const activeIds = new Set(
+      items.filter((item) => item.is_active !== false).map((item) => item.id),
+    )
+    const latest = selectedPlanDetail?.tasks?.find(
+      (task) => task.id === draft.task.id,
+    )
+    const original = new Set(
+      (latest ?? draft.task).items.map((item) => item.id),
+    )
+    const kept = draft.itemIds.filter(
+      (id) => activeIds.has(id) || original.has(id),
+    )
+    return kept.length === draft.itemIds.length
+      ? draft
+      : { ...draft, itemIds: kept }
+  }, [editingTaskItemsDraft, items, selectedPlanDetail])
   const [editingAssignee, setEditingAssignee] = useState<{
     task: InspectionTask
     assigneeId: string
@@ -619,7 +680,25 @@ export default function PlanningPage({
       if (active) {
         const [itemsResult, zonesResult, membersResult, plansResult] = results
         if (itemsResult.status === 'fulfilled') {
-          setItems(itemsResult.value)
+          const loaded = itemsResult.value
+          // IP-R24：新增任務表單重載項目後，裁掉剛被停用的勾選並提示
+          // 移除的名稱，避免送出已知會被拒絕的項目。
+          const selected = taskItemsRef.current
+          const activeIds = new Set(
+            loaded
+              .filter((item) => item.is_active !== false)
+              .map((item) => item.id),
+          )
+          setRemovedTaskItems(
+            loaded
+              .filter(
+                (item) =>
+                  item.is_active === false && selected.includes(item.id),
+              )
+              .map((item) => item.title),
+          )
+          setTaskItems(selected.filter((id) => activeIds.has(id)))
+          setItems(loaded)
         } else {
           setItems([])
           setError(planningErrorMessage(itemsResult.reason))
@@ -720,33 +799,6 @@ export default function PlanningPage({
       : membersFailure === 'temporary'
         ? '成員名單暫時載入失敗'
         : ''
-
-  const [selectedPlanData, setSelectedPlanData] = useState<{
-    id: string
-    plan: InspectionPlan
-  } | null>(null)
-  useEffect(() => {
-    if (!selectedPlanId) return
-    let active = true
-    void client.getPlan(selectedPlanId).then(
-      (plan) => active && setSelectedPlanData({ id: selectedPlanId, plan }),
-      (caught: unknown) => {
-        if (active) {
-          setErrorContext('page')
-          if (isForbidden(caught)) {
-            setAccessDenied(true)
-          } else {
-            setError(planningErrorMessage(caught))
-          }
-        }
-      },
-    )
-    return () => {
-      active = false
-    }
-  }, [client, selectedPlanId, reloadKey])
-  const selectedPlanDetail =
-    selectedPlanData?.id === selectedPlanId ? selectedPlanData.plan : null
 
   // 只在「換了一份計畫」時聚焦；同一份計畫重新載入不應再搶焦點。
   const loadedPlanId = selectedPlanDetail?.id
@@ -949,6 +1001,14 @@ export default function PlanningPage({
         caught instanceof HttpError && caught.code
           ? codeFields[caught.code]
           : undefined
+      if (
+        caught instanceof HttpError &&
+        caught.code === 'project_inspection_item.inactive'
+      ) {
+        // IP-R24：項目在送出前被停用；沿用重載裁除機制自動更新清單，
+        // 不要求使用者手動重新載入，也不清其他欄位的輸入與錯誤。
+        setReloadKey((key) => key + 1)
+      }
       if (codeField && caught instanceof HttpError && caught.code) {
         setServerFieldErrors({
           [codeField]:
@@ -1124,6 +1184,7 @@ export default function PlanningPage({
     setTaskFormOpen(false)
     taskFormFocus.current = null
     setTaskItems([])
+    setRemovedTaskItems([])
     setTaskName('')
     setTaskNameTouched(false)
     setTaskZoneId('')
@@ -1792,64 +1853,109 @@ export default function PlanningPage({
                               >
                                 至少選擇一筆查核項目。
                               </p>
-                              {items.map((item) => {
-                                const existingTasks = tasksForItem(
-                                  item.id,
-                                ).filter((existing) => existing.id !== task.id)
-                                const selected =
-                                  editingTaskItems.itemIds.includes(item.id)
-                                return (
-                                  <div
-                                    className="planning-task-item-choice"
-                                    key={item.id}
-                                  >
-                                    <label>
-                                      <input
-                                        checked={selected}
-                                        onChange={(event) => {
-                                          const selectedIds =
-                                            editingTaskItems.itemIds
-                                          setEditingTaskItems({
-                                            ...editingTaskItems,
-                                            itemIds: event.target.checked
-                                              ? [...selectedIds, item.id]
-                                              : selectedIds.filter(
-                                                  (id) => id !== item.id,
-                                                ),
-                                          })
-                                          clearFieldError('edit-task-items')
-                                        }}
-                                        type="checkbox"
-                                        value={item.id}
-                                      />
-                                      {item.instruction
-                                        ? `${item.title} — ${item.instruction}`
-                                        : item.title}
-                                    </label>
-                                    <details>
-                                      <summary style={{ minHeight: 44 }}>
-                                        本計畫已有 {existingTasks.length}{' '}
-                                        筆任務
-                                      </summary>
-                                      {existingTasks.length > 0 ? (
-                                        <ul>
-                                          {existingTasks.map((existing) => (
-                                            <li key={existing.id}>
-                                              {taskTitle(existing) ||
-                                                '未命名任務'}
-                                              {existing.zone
-                                                ? `（${existing.zone.name}）`
-                                                : ''}
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      ) : (
-                                        <p>目前沒有使用此項目的任務。</p>
-                                      )}
-                                    </details>
-                                  </div>
+                              {/* IP-R24：草稿選單只額外呈現原本就選著的
+                                  停用項目，不讓使用者把它換成其他停用項目。 */}
+                              {items
+                                .filter(
+                                  (item) =>
+                                    item.is_active !== false ||
+                                    editingTaskItems.itemIds.includes(item.id),
                                 )
-                              })}
+                                .map((item) => {
+                                  const existingTasks = tasksForItem(
+                                    item.id,
+                                  ).filter(
+                                    (existing) => existing.id !== task.id,
+                                  )
+                                  const selected =
+                                    editingTaskItems.itemIds.includes(item.id)
+                                  const inactiveNoteId = [
+                                    'task',
+                                    task.id,
+                                    'item',
+                                    item.id,
+                                    'inactive-note',
+                                  ].join('-')
+                                  return (
+                                    <div
+                                      className="planning-task-item-choice"
+                                      key={item.id}
+                                    >
+                                      <label>
+                                        <input
+                                          aria-describedby={
+                                            item.is_active === false
+                                              ? inactiveNoteId
+                                              : undefined
+                                          }
+                                          checked={selected}
+                                          onChange={(event) => {
+                                            // 取消勾選的停用項目會從清單消失，
+                                            // 先把焦點移到選單群組，避免掉到 body。
+                                            if (
+                                              !event.target.checked &&
+                                              item.is_active === false
+                                            ) {
+                                              event.currentTarget
+                                                .closest('fieldset')
+                                                ?.focus({
+                                                  preventScroll: true,
+                                                })
+                                            }
+                                            const selectedIds =
+                                              editingTaskItems.itemIds
+                                            setEditingTaskItems({
+                                              ...editingTaskItems,
+                                              itemIds: event.target.checked
+                                                ? [...selectedIds, item.id]
+                                                : selectedIds.filter(
+                                                    (id) => id !== item.id,
+                                                  ),
+                                            })
+                                            clearFieldError('edit-task-items')
+                                          }}
+                                          type="checkbox"
+                                          value={item.id}
+                                        />
+                                        {item.instruction
+                                          ? [
+                                              item.title,
+                                              item.instruction,
+                                            ].join(' — ')
+                                          : item.title}
+                                        {item.is_active === false && (
+                                          <span>（已停用）</span>
+                                        )}
+                                      </label>
+                                      {item.is_active === false && (
+                                        <p id={inactiveNoteId}>
+                                          取消勾選後無法再加回。
+                                        </p>
+                                      )}
+                                      <details>
+                                        <summary style={{ minHeight: 44 }}>
+                                          本計畫已有 {existingTasks.length}{' '}
+                                          筆任務
+                                        </summary>
+                                        {existingTasks.length > 0 ? (
+                                          <ul>
+                                            {existingTasks.map((existing) => (
+                                              <li key={existing.id}>
+                                                {taskTitle(existing) ||
+                                                  '未命名任務'}
+                                                {existing.zone
+                                                  ? `（${existing.zone.name}）`
+                                                  : ''}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          <p>目前沒有使用此項目的任務。</p>
+                                        )}
+                                      </details>
+                                    </div>
+                                  )
+                                })}
                             </fieldset>
                             {fieldErrorText('edit-task-items')}
                             {error && errorContext === 'items' && (
@@ -2209,52 +2315,74 @@ export default function PlanningPage({
                     <p className="field-hint" id="task-items-hint">
                       至少選擇一筆查核項目。
                     </p>
-                    {items.map((item) => {
-                      const existingTasks = tasksForItem(item.id)
-                      const selected = taskItems.includes(item.id)
-                      return (
-                        <div key={item.id}>
-                          <label>
-                            <input
-                              checked={selected}
-                              onChange={(event) => {
-                                toggleItem(item.id, event.target.checked)
-                                clearFieldError('task-items')
-                              }}
-                              type="checkbox"
-                              value={item.id}
-                            />
-                            {item.instruction
-                              ? `${item.title} — ${item.instruction}`
-                              : item.title}
-                          </label>
-                          {/* IP-R02 允許同項目建立多筆任務，所以只標示已有
+                    {removedTaskItems.length > 0 && (
+                      <p role="status">
+                        已移除剛停用的項目：{removedTaskItems.join('、')}
+                      </p>
+                    )}
+                    {/* IP-R24：新增任務不得選入停用項目，清單只列啟用者。 */}
+                    {!loading &&
+                      items.length > 0 &&
+                      !items.some((item) => item.is_active !== false) && (
+                        <p className="field-hint">
+                          目前沒有啟用的查核項目，請先到專案查核項目新增或恢復。
+                        </p>
+                      )}
+                    {!loading && items.length === 0 && (
+                      <p className="field-hint">
+                        這個專案還沒有查核項目，請先到專案查核項目新增。
+                      </p>
+                    )}
+                    {items
+                      .filter((item) => item.is_active !== false)
+                      .map((item) => {
+                        const existingTasks = tasksForItem(item.id)
+                        const selected = taskItems.includes(item.id)
+                        return (
+                          <div key={item.id}>
+                            <label>
+                              <input
+                                checked={selected}
+                                onChange={(event) => {
+                                  toggleItem(item.id, event.target.checked)
+                                  clearFieldError('task-items')
+                                }}
+                                type="checkbox"
+                                value={item.id}
+                              />
+                              {item.instruction
+                                ? [item.title, item.instruction].join(' — ')
+                                : item.title}
+                            </label>
+                            {/* IP-R02 允許同項目建立多筆任務，所以只標示已有
                               幾筆、不擋選擇，讓使用者自己避開重複任務。 */}
-                          <details>
-                            <summary style={{ minHeight: 44 }}>
-                              本計畫已有 {existingTasks.length} 筆任務
-                            </summary>
-                            {existingTasks.length > 0 ? (
-                              <ul>
-                                {existingTasks.map((task) => (
-                                  <li key={task.id}>
-                                    {taskTitle(task) || '未命名任務'}
-                                    {task.zone ? `（${task.zone.name}）` : ''}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p>目前沒有使用此項目的任務。</p>
+                            <details>
+                              <summary style={{ minHeight: 44 }}>
+                                本計畫已有 {existingTasks.length} 筆任務
+                              </summary>
+                              {existingTasks.length > 0 ? (
+                                <ul>
+                                  {existingTasks.map((task) => (
+                                    <li key={task.id}>
+                                      {taskTitle(task) || '未命名任務'}
+                                      {task.zone
+                                        ? `（${task.zone.name}）`
+                                        : ''}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p>目前沒有使用此項目的任務。</p>
+                              )}
+                            </details>
+                            {selected && existingTasks.length > 0 && (
+                              <p className="field-hint">
+                                此項目已在本計畫任務中使用；仍可建立另一筆任務。
+                              </p>
                             )}
-                          </details>
-                          {selected && existingTasks.length > 0 && (
-                            <p className="field-hint">
-                              此項目已在本計畫任務中使用；仍可建立另一筆任務。
-                            </p>
-                          )}
-                        </div>
-                      )
-                    })}
+                          </div>
+                        )
+                      })}
                   </fieldset>
                   {fieldErrorText('task-items')}
                   {zones.length > 0 && !zonesDenied && (
