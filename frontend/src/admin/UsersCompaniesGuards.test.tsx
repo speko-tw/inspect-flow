@@ -2140,3 +2140,90 @@ it('提醒背景失敗不搶搜尋焦點，主動重試失敗才聚焦錯誤', a
   await waitFor(() => expect(screen.getByRole('alert')).toHaveFocus())
   expect(backend.count('GET', /external-without-project/)).toBe(2)
 })
+
+describe('#732 批次預覽的並行請求上限', () => {
+  const SELECTED = 12
+  const LIMIT = 6
+
+  /** 每個預覽請求稍後才回應，並記錄同時未完成的最大請求數。 */
+  function trackPeak(pathPattern: RegExp) {
+    const state = { inFlight: 0, peak: 0 }
+    const hold = (call: Call) => {
+      if (call.method !== 'GET' || !pathPattern.test(call.path)) {
+        return undefined
+      }
+      state.inFlight += 1
+      state.peak = Math.max(state.peak, state.inFlight)
+      const gate = deferred()
+      setTimeout(() => {
+        state.inFlight -= 1
+        gate.resolve()
+      }, 2)
+      return gate
+    }
+    return { state, hold }
+  }
+
+  const manyUsers = (isActive: boolean): User[] =>
+    Array.from({ length: SELECTED }, (_, index) => ({
+      ...regularUser,
+      id: `user-${index + 1}`,
+      username: `batch.user${index + 1}`,
+      is_active: isActive,
+    }))
+
+  /** 逐一勾選目前列表的核取方塊；用 DOM 查詢避免逐列的角色查詢拖慢。 */
+  function checkAll(labelPrefix: string) {
+    const boxes = document.querySelectorAll<HTMLInputElement>(
+      `input[type="checkbox"][aria-label^="${labelPrefix}"]`,
+    )
+    expect(boxes).toHaveLength(SELECTED)
+    boxes.forEach((box) => fireEvent.click(box))
+  }
+
+  async function selectAllUsers() {
+    renderUsers({ onSelectUser: vi.fn() })
+    await screen.findByRole('checkbox', { name: '選取 batch.user1' })
+    checkAll('選取 batch.user')
+  }
+
+  it.each([
+    ['停用', true, /\/deactivation-check$/],
+    ['啟用', false, /\/reactivation-preview$/],
+  ])('批次%s預覽同時最多 6 個請求', async (action, active, pattern) => {
+    const { state, hold } = trackPeak(pattern)
+    const backend = stubBackend({ users: manyUsers(active), hold })
+    await selectAllUsers()
+
+    fireEvent.click(screen.getByRole('button', { name: `批次${action}帳號` }))
+    await screen.findByRole('region', { name: `批次${action}確認` })
+
+    expect(backend.count('GET', pattern)).toBe(SELECTED)
+    expect(state.peak).toBeLessThanOrEqual(LIMIT)
+  })
+
+  it('批次停用公司預覽同時最多 6 個請求', async () => {
+    const { state, hold } = trackPeak(/\/active-users$/)
+    const companies = Array.from({ length: SELECTED }, (_, index) => ({
+      ...company,
+      id: `company-${index + 1}`,
+      name: `批次公司${index + 1}`,
+    }))
+    const backend = stubBackend({ companies, hold })
+    render(
+      <DataMemoryRouter>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <CompaniesPage />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+    await screen.findByRole('checkbox', { name: '選取公司 批次公司1' })
+    checkAll('選取公司 批次公司')
+
+    fireEvent.click(screen.getByRole('button', { name: '批次停用公司' }))
+    await screen.findByRole('region', { name: '批次停用確認' })
+
+    expect(backend.count('GET', /\/active-users$/)).toBe(SELECTED)
+    expect(state.peak).toBeLessThanOrEqual(LIMIT)
+  })
+})

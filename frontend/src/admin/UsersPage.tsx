@@ -47,6 +47,7 @@ import {
   type User,
   type UserDetail,
 } from './api'
+import { mapWithConcurrency } from './mapWithConcurrency'
 import { useCursorList } from './useCursorList'
 import UserForm from './UserForm'
 import { ACCOUNT_LABEL } from '../layout/navigationLabels'
@@ -506,8 +507,8 @@ export default function UsersPage({
     setBatchDeactivationNotice('')
     setBatchDeactivationLoading(true)
     try {
-      const checks = await Promise.all(
-        selected.map((user) => getDeactivationCheck(user.id)),
+      const checks = await mapWithConcurrency(selected, (user) =>
+        getDeactivationCheck(user.id),
       )
       const projects = new Map<
         string,
@@ -567,8 +568,8 @@ export default function UsersPage({
     setBatchActivationNotice('')
     setBatchActivationLoading(true)
     try {
-      const previews = await Promise.all(
-        selected.map((user) => getReactivationPreview(user.id)),
+      const previews = await mapWithConcurrency(selected, (user) =>
+        getReactivationPreview(user.id),
       )
       setBatchActivationPreview({ users: selected, previews })
       setBatchRestoreSelections(
