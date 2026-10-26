@@ -2351,12 +2351,14 @@ it('批次預覽同時最多六個帳號、十二個 GET 在途', async () => {
     }),
   )
   renderUsers()
-  for (const user of users)
-    fireEvent.click(
-      await screen.findByRole('checkbox', {
-        name: `選取 ${user.username}`,
-      }),
-    )
+  // 一次核對全部帳號，避免每次選取都重掃整個清單（#744）。
+  const checkboxes = await screen.findAllByRole('checkbox', {
+    name: /^選取 person-/,
+  })
+  expect(checkboxes.map((box) => box.getAttribute('aria-label'))).toEqual(
+    users.map((user) => `選取 ${user.username}`),
+  )
+  for (const checkbox of checkboxes) fireEvent.click(checkbox)
   fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
   try {
     await waitFor(() => expect(inFlight).toBeGreaterThanOrEqual(12))
