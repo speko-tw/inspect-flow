@@ -386,8 +386,9 @@ def list_dashboard_engineers(
         )
         .group_by(InspectionTask.completed_by)
     )
-    # 三種計數各自一條查詢，缺的欄位補 0 後 union，最後依人加總，
-    # 如此三個數字不會混成單一數字（ADM-R05）。
+    # 三種計數各自一條查詢，因為各歸屬的篩選不同：派給與開始排除
+    # 封存 Plan，完成不排除（ADM-R03、R04 的歷史口徑）。缺的欄位補
+    # 0 後 union，最後依人加總，三個數字不會混成單一數字（ADM-R05）。
     workload_rows = union_all(
         assigned_counts, started_counts, completed_counts
     ).subquery()

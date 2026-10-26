@@ -21,7 +21,7 @@ from app.permission_codes import (
 )
 from app.services.permissions import calculate_effective_access
 
-# 現場執行碼只有 inspection_task.inspect（ADM-R18）。
+# 現場執行碼只有 inspection_task.inspect（AUT-R08）。
 FIELD_PERMISSION_CODES: frozenset[str] = frozenset({"inspection_task.inspect"})
 # 內業碼：ADM-R18 所稱「任何內業權限」。單有代碼不算，還要具備該代碼
 # 所屬模組的「可使用」權限才成立（AUT-R19，見 summarize_access）。
@@ -44,7 +44,7 @@ OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     }
 )
 # 唯讀碼：專案範圍中以 .read 結尾者。它不代表內業或現場權限
-# （ADM-R18），所以不併入上面兩組。
+# （AUT-R08），所以不併入上面兩組。
 READ_ONLY_PERMISSION_CODES: frozenset[str] = frozenset(
     code.value
     for code in PermissionCode
@@ -62,7 +62,8 @@ INSPECTION_OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     if permission_code_module(code) == "inspection"
 )
 # 規劃或管理成員用的內業碼；ADM-R23 的登入落點用它判斷：現場人員若
-# 同時能規劃或管理成員，落點就不是 /tasks。
+# 同時能規劃或管理成員，就不走「直接進 /tasks」這條，改依後面的
+# 順序決定（ADM-R23）。
 PROJECT_PLANNING_OR_MEMBERS_PERMISSION_CODES: frozenset[str] = frozenset(
     {
         "project_member.manage",
@@ -84,8 +85,10 @@ PROJECT_PLANNING_OR_MEMBERS_PERMISSION_CODES: frozenset[str] = frozenset(
 class AccessSummary:
     """前端決定落點與導覽入口所需的存取摘要（AUT-R08、ADM-R23）。
 
-    各欄位都是「有效權限」算出的布林值，不是角色名稱；Admin 一律
-    全部為真。
+    多數欄位是由有效權限算出的布林值，不是角色名稱；
+    module_permissions、delegated_modules 是集合。Admin 的布林欄位
+    一律為真，集合為全部：module_permissions 是全部已登記的模組
+    權限代碼，delegated_modules 是全部模組。
     """
 
     has_office_access: bool
@@ -152,6 +155,9 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
         "inspection_task.inspect" in project_access_codes
         and "inspection.use" in module_permissions
     )
+    # has_field_access（AUT-R08）與 can_inspect_tasks（AUT-R52）目前
+    # 算式相同，但語意分開：前者答「有沒有現場權限」，後者專供任務
+    # 入口與登入落點。日後規則可能各自演變，不要合併成同一個變數。
     can_inspect_tasks = (
         "inspection_task.inspect" in project_access_codes
         and "inspection.use" in module_permissions

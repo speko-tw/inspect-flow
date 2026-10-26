@@ -19,8 +19,8 @@ import {
   type ProjectInput,
 } from './api'
 
-// 表單草稿：日期與建立者角色人選用字串保存（輸入框的值），送出時才
-// 轉成 API 要的空值。
+// 表單草稿：日期與建立者角色人選用字串保存（輸入框的值）。送出時
+// 日期轉成 null；建立者角色人選沒選就不送該欄位。
 type ProjectDraft = Omit<
   ProjectInput,
   'planned_start_date' | 'planned_completion_date' | 'creator_role_user_id'

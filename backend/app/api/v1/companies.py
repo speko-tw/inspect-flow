@@ -255,8 +255,9 @@ def batch_change_company_status(
 ) -> BatchCompanyStatusResponse:
     """Apply selected company statuses atomically (ADM-R13).
 
-    任一公司或人員驗證失敗時整批資料不變（ADM-AC10），因此所有
-    檢查與加鎖都在寫入前完成。
+    請求層的檢查與加鎖在寫入前完成；DOM-R06、R07（內建帳號、
+    最後一位 Admin）在逐筆寫入時才觸發，由整個請求的交易回滾
+    保證整批不變（ADM-AC10）。
     """
     items = body.items
     require_batch_size(len(items))

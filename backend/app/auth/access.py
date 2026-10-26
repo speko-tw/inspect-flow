@@ -264,9 +264,10 @@ def require_admin_or_any_project_permission(
 ) -> Callable[..., User]:
     """Allow Admin or a user holding a permission in any project.
 
-    給「跨專案入口」用（例如列出自己可操作的專案）：不指定專案，
-    只要在任一專案持有該代碼即放行，具體專案內的動作仍由各專案
-    端點另行用 AUT-R19 檢查。
+    給「跨專案入口」用（例如現場 Task 清單
+    GET /field/inspection-tasks）：不指定專案，只要在任一專案持有
+    該代碼即放行；非 Admin 另須具該代碼所屬模組的「可使用」
+    （AUT-R19）。具體專案內的動作仍由各專案端點另行檢查。
     """
     if not is_permission_code_registered(permission_code):
         raise ValueError(f"unregistered permission code: {permission_code}")
@@ -394,7 +395,7 @@ def require_module_or_any_project_permission(
         if access.is_admin:
             return user
         # 兩條路任一成立即可：有模組權限，或在任一專案持有專案
-        # 代碼；後者同樣須具該模組「可使用」（AUT-R19）。
+        # 代碼；後者須具該模組「可使用」（AUT-R19）。
         module = permission_code_module(project_permission_code)
         module_use_code = f"{module}.use" if module else None
         project_granted = any(
@@ -447,8 +448,10 @@ def require_module_and_project_permission(
         user: User = Depends(require_login, scope="function"),  # noqa
         db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
-        # 與 require_project_permission 一致：路徑上的專案 id 不是
-        # UUID 回 422；模組與專案兩邊都要具備才放行，缺哪一邊都 403。
+        # 路徑專案 id 不是 UUID 一律 422（含 Admin），與
+        # require_project_permission 相同；不同處是這裡另要求指定的
+        # 模組權限代碼。非 Admin 須模組與專案兩邊都具備，缺哪邊都
+        # 403；Admin 放行。
         project_id = _parse_uuid(request.path_params.get(param_name))
         if project_id is None:
             raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)

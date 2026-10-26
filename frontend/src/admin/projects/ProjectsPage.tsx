@@ -435,7 +435,8 @@ function AdminProjectsPage() {
     try {
       let saved: Project
       if (editing) {
-        // 只送有變動的欄位；完全沒變就不呼叫 API，直接回清單。
+        // 只送有變動的欄位；完全沒變就不呼叫 API，直接回清單，因為
+        // 後端收到沒有任何欄位的更新會回 422（ProjectUnchangedError）。
         const original = toInput(toForm(editing))
         const changed: Record<string, unknown> = Object.fromEntries(
           Object.entries(input).filter(
@@ -447,7 +448,8 @@ function AdminProjectsPage() {
           applyTransition({ kind: 'list' })
           return
         }
-        // 本公司角色有變才帶原因（ADM-R42、DOM-R76）。
+        // 改角色的原因只描述角色變更，所以只在 company_role 有變動時
+        // 才帶（ADM-R42、DOM-R76）。
         if (changed.company_role !== undefined && changeReason !== null) {
           changed.company_role_change_reason = changeReason
         }

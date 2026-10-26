@@ -67,8 +67,9 @@ export default function AuditLogPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // 篩選選項與名稱對照一次載入：角色、專案、人員的名稱都在前端查表，
-  // 紀錄本身只存 id（ALG-R03，被記錄的對象日後可能已刪除）。
+  // 篩選選項與名稱對照一次載入：紀錄多數只存 id，紀錄內容有名稱欄位
+  // 時優先用，查不到才用這些清單在前端查表（ALG-R03，被記錄的對象
+  // 日後可能已刪除）。
   useEffect(() => {
     let active = true
     void listAllPages<{ id: string; name: string }>('/roles')
@@ -124,8 +125,9 @@ export default function AuditLogPage() {
 
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    // 輸入是本地時間，轉成 UTC 的 ISO 字串再送出（API-R09）；起訖
-    // 顛倒或格式不對就擋在前端，錯誤顯示在欄位旁。
+    // 輸入是本地時間，轉成 UTC 的 ISO 字串再送出（audit-log 規格
+    // 查詢 API：from、to 為 UTC ISO-8601，含起不含迄）；起訖顛倒或
+    // 格式不對就擋在前端，錯誤顯示在欄位旁。
     const fromDate = from ? new Date(from) : null
     const toDate = to ? new Date(to) : null
     const nextErrors: FilterErrors = {}
@@ -175,8 +177,9 @@ export default function AuditLogPage() {
   }
 
   // ALG-R22：角色以「目前名稱」呈現，不是事件當時的名稱；角色清單
-  // 成功載入後仍找不到才回 null（呼叫端顯示「已刪除的角色」），載入
-  // 中或失敗時顯示暫時無法顯示，兩者不能混為一談，也不得顯示 UUID。
+  // 成功載入後仍找不到才回 null（role_ids 摘要顯示「已刪除的角色」；
+  // 對象欄查不到名稱時只保留類型，ALG-AC17），載入中或失敗時顯示
+  // 暫時無法顯示，兩者不能混為一談，也不得顯示 UUID。
   function roleName(id: string): string | null {
     if (rolesState !== 'ready') return '角色名稱暫時無法顯示'
     return roles.find((role) => role.id === id)?.name ?? null

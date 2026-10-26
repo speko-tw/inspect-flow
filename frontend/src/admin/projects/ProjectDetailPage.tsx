@@ -114,8 +114,8 @@ function revealMemberAlert(alert: HTMLParagraphElement | null) {
  * 專案成員區段：加入成員、修改角色、移出與批次指派（ADM-R20～
  * ADM-R22、ADM-R13）。
  *
- * 沒有 `project_member.manage` 時成員 API 回 403，本頁只顯示無權限，
- * 不提供唯讀成員列表（ADM-R27）。
+ * 沒有 `project_member.manage` 時成員 API 回 403，本頁只顯示無權限
+ * 畫面（出路依 ADM-R25），不提供唯讀成員列表（ADM-R27）。
  */
 export default function ProjectDetailPage() {
   const { projectId = '' } = useParams()
