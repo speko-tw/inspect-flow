@@ -2685,3 +2685,115 @@ describe('W-741 R4 回歸', () => {
     ).toBeTruthy()
   })
 })
+
+describe('#732 批次預覽的並行請求上限', () => {
+  const SELECTED = 8
+  const LIMIT = 6
+
+  /** 每個預覽請求稍後才回應，並記錄同時未完成的最大請求數。 */
+  function trackPeak(pathPattern: RegExp) {
+    const state = { inFlight: 0, peak: 0 }
+    const hold = (call: Call) => {
+      if (call.method !== 'GET' || !pathPattern.test(call.path)) {
+        return undefined
+      }
+      state.inFlight += 1
+      state.peak = Math.max(state.peak, state.inFlight)
+      const gate = deferred()
+      setTimeout(() => {
+        state.inFlight -= 1
+        gate.resolve()
+      }, 2)
+      return gate
+    }
+    return { state, hold }
+  }
+
+  const manyUsers = (isActive: boolean): User[] =>
+    Array.from({ length: SELECTED }, (_, index) => ({
+      ...regularUser,
+      id: `user-${index + 1}`,
+      username: `batch.user${index + 1}`,
+      is_active: isActive,
+    }))
+
+  /** 逐一勾選目前列表的核取方塊；用 DOM 查詢避免逐列的角色查詢拖慢。 */
+  function checkAll(labelPrefix: string) {
+    const boxes = document.querySelectorAll<HTMLInputElement>(
+      `input[type="checkbox"][aria-label^="${labelPrefix}"]`,
+    )
+    expect(boxes).toHaveLength(SELECTED)
+    boxes.forEach((box) => fireEvent.click(box))
+  }
+
+  async function selectAllUsers() {
+    renderUsers({ onSelectUser: vi.fn() })
+    await screen.findByRole('checkbox', { name: '選取 batch.user1' })
+    checkAll('選取 batch.user')
+  }
+
+  // 批次停用帳號的上限（含兩個查詢）已由上方「批次預覽同時最多六個
+  // 帳號」涵蓋；這裡補啟用預覽與公司預覽，以及預覽過期後停止領新工作。
+  it('批次啟用預覽同時最多 6 個請求', async () => {
+    const pattern = /\/reactivation-preview$/
+    const { state, hold } = trackPeak(pattern)
+    const backend = stubBackend({ users: manyUsers(false), hold })
+    await selectAllUsers()
+
+    fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+    await screen.findByRole('region', { name: '批次啟用確認' })
+
+    expect(backend.count('GET', pattern)).toBe(SELECTED)
+    expect(state.peak).toBeLessThanOrEqual(LIMIT)
+  })
+
+  it('批次停用預覽過期後不再發出新的請求', async () => {
+    const pattern = /\/deactivation-check$/
+    const gates = manyUsers(true).map(() => deferred<void>())
+    const backend = stubBackend({
+      users: manyUsers(true),
+      hold: (call) =>
+        call.method === 'GET' && pattern.test(call.path)
+          ? gates[Number(call.path.split('/')[4].split('-')[1]) - 1]
+          : undefined,
+    })
+    const view = renderUsers({ onSelectUser: vi.fn() })
+    await screen.findByRole('checkbox', { name: '選取 batch.user1' })
+    checkAll('選取 batch.user')
+
+    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    await waitFor(() => expect(backend.count('GET', pattern)).toBe(LIMIT))
+    // 離開頁面讓這一批預覽過期；放行在途請求後不應再領後面的帳號。
+    view.unmount()
+    await act(async () => {
+      gates.forEach((gate) => gate.resolve())
+    })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(backend.count('GET', pattern)).toBe(LIMIT)
+  })
+
+  it('批次停用公司預覽同時最多 6 個請求', async () => {
+    const { state, hold } = trackPeak(/\/active-users$/)
+    const companies = Array.from({ length: SELECTED }, (_, index) => ({
+      ...company,
+      id: `company-${index + 1}`,
+      name: `批次公司${index + 1}`,
+    }))
+    const backend = stubBackend({ companies, hold })
+    render(
+      <DataMemoryRouter>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <CompaniesPage />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+    await screen.findByRole('checkbox', { name: '選取公司 批次公司1' })
+    checkAll('選取公司 批次公司')
+
+    fireEvent.click(screen.getByRole('button', { name: '批次停用公司' }))
+    await screen.findByRole('region', { name: '批次停用確認' })
+
+    expect(backend.count('GET', /\/active-users$/)).toBe(SELECTED)
+    expect(state.peak).toBeLessThanOrEqual(LIMIT)
+  })
+})
