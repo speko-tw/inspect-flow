@@ -23,6 +23,7 @@ import {
   type Company,
 } from './api'
 import { CursorListSearch } from './CursorListSearch'
+import { mapWithConcurrency } from './mapWithConcurrency'
 import { useCursorList } from './useCursorList'
 
 export default function CompaniesPage() {
@@ -192,8 +193,8 @@ export default function CompaniesPage() {
     setBatchNotice('')
     setBatchLoading(true)
     try {
-      const activeUsers = await Promise.all(
-        selected.map((item) => listActiveCompanyUsers(item.id)),
+      const activeUsers = await mapWithConcurrency(selected, (item) =>
+        listActiveCompanyUsers(item.id),
       )
       const usersByCompany: Record<string, ActiveCompanyUsers['users']> = {}
       selected.forEach((item, index) => {

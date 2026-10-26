@@ -48,6 +48,8 @@ const EMPTY_FORM = {
 
 type FormState = typeof EMPTY_FORM
 type FormMode = { kind: 'new' } | { kind: 'edit'; project: Project } | null
+// 有未儲存內容時，使用者想去的下一個畫面；確認捨棄後才真的套用
+// （ADM-R15、ADM-R38）。
 type Transition =
   | { kind: 'new' }
   | { kind: 'edit'; project: Project }
@@ -180,6 +182,8 @@ function AdminProjectsPage() {
   const previousFormModeRef = useRef<FormMode>(null)
   const focusAfterCloseRef = useRef<FormMode>(null)
 
+  // 每次開啟、關閉或切換表單都遞增；請求回來時與送出當時比對，
+  // 舊請求的結果不得改動後來開啟的表單或草稿（ADM-R15）。
   function advanceFormSession() {
     const nextSession = formSessionRef.current + 1
     formSessionRef.current = nextSession
@@ -198,6 +202,8 @@ function AdminProjectsPage() {
   const roleChanged = Boolean(
     editing && form && form.company_role !== editing.company_role,
   )
+  // 新增表單的草稿由 ProjectCreationForm 自己保存，只回報是否變動
+  // （creationDirty）；編輯表單則與原值逐欄比對。
   const hasUnsavedChanges =
     creationDirty ||
     Boolean(
@@ -429,6 +435,8 @@ function AdminProjectsPage() {
     try {
       let saved: Project
       if (editing) {
+        // 只送有變動的欄位；完全沒變就不呼叫 API，直接回清單，因為
+        // 後端收到沒有任何欄位的更新會回 422（ProjectUnchangedError）。
         const original = toInput(toForm(editing))
         const changed: Record<string, unknown> = Object.fromEntries(
           Object.entries(input).filter(
@@ -440,6 +448,8 @@ function AdminProjectsPage() {
           applyTransition({ kind: 'list' })
           return
         }
+        // 改角色的原因只描述角色變更，所以只在 company_role 有變動時
+        // 才帶（ADM-R42、DOM-R76）。
         if (changed.company_role !== undefined && changeReason !== null) {
           changed.company_role_change_reason = changeReason
         }

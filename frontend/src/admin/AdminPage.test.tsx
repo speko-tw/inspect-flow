@@ -894,10 +894,13 @@ describe('admin user and company pages', () => {
     managementFetch({ companyRows: rows })
     renderAdmin('/companies')
 
+    // 100 列表格上的 getByRole 每次要檢查全部節點的可及性，高負載下
+    // 三次查詢就超過 5 秒測試逾時（#744）；按鈕改用文字加標籤查詢。
     expect(await screen.findByText('目標公司0')).toBeInTheDocument()
     const list = screen.getByRole('region', { name: '公司管理' })
     expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
-    // 續載鈕限定所屬清單，保留 role 查詢並避開其他管理面板（#741）。
+    // 每個測試只在第一次保留清單範圍內的 getByRole，驗證按鈕的無障礙名稱。
+    // 續載鈕限定所屬清單，避開其他管理面板（#741、#744）。
     fireEvent.click(within(list).getByRole('button', { name: '載入更多' }))
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
 
@@ -915,8 +918,8 @@ describe('admin user and company pages', () => {
     fireEvent.change(screen.getByLabelText('搜尋公司'), {
       target: { value: '草稿不應套用' },
     })
-    // 續載鈕限定所屬清單，保留 role 查詢並避開其他管理面板（#741）。
-    fireEvent.click(within(list).getByRole('button', { name: '載入更多' }))
+    // 清單已載入 100 列，這裡改用文字查詢避免高負載逾時（#744）。
+    fireEvent.click(screen.getByText('載入更多', { selector: 'button' }))
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
   })
 
@@ -1478,7 +1481,9 @@ describe('admin user and company pages', () => {
     expect(within(confirmation).getAllByRole('alert')).toHaveLength(1)
   })
 
-  it('edits users and toggles admin and active status', async () => {
+  // 原本與編輯、管理者切換合在同一個測試；高負載下整段會超過 5 秒
+  // 的測試逾時（#744），依動作拆開，每段仍完整驗證各自的請求。
+  it('edits users and toggles admin status', async () => {
     const fetchMock = managementFetch()
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
@@ -1616,6 +1621,42 @@ describe('admin user and company pages', () => {
           init?.method === 'PUT',
       ),
     ).toBe(false)
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1') && init?.method === 'PATCH',
+      ),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1/admin') &&
+          init?.method === 'PUT',
+      ),
+    ).toBe(true)
+  })
+
+  it('deactivates and reactivates users', async () => {
+    const fetchMock = managementFetch()
+    renderAdmin()
+    await openAccountDetails('anna.deng', '鄧安娜')
+    // 基本資料操作不需遍歷同頁的權限與角色面板（#744）。
+    const section = screen
+      .getByRole('heading', { name: '鄧安娜', level: 1 })
+      .closest('section')
+    expect(section).not.toBeNull()
+    const basic = within(section as HTMLElement)
+    fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
+    const deactivation = basic.getByRole('region', { name: '操作確認' })
+    fireEvent.click(within(deactivation).getByRole('button', { name: '取消' }))
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1/active') &&
+          init?.method === 'PUT',
+      ),
+    ).toBe(false)
+    // 取消後重新開啟確認框，仍可完成停用。
     fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
     const disableConfirmation = basic.getByRole('region', {
       name: '操作確認',
@@ -1648,19 +1689,6 @@ describe('admin user and company pages', () => {
       expect(basic.getByText('狀態：啟用中')).toBeInTheDocument()
     })
 
-    expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).endsWith('/users/user-1') && init?.method === 'PATCH',
-      ),
-    ).toBe(true)
-    expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).endsWith('/users/user-1/admin') &&
-          init?.method === 'PUT',
-      ),
-    ).toBe(true)
     expect(
       fetchMock.mock.calls.filter(
         ([url, init]) =>

@@ -20,6 +20,7 @@ from app.models import (
     TemplateTextStandard,
 )
 from app.services.audit import record_audit_event
+from app.services.batch_load import load_grouped
 from app.services.operator import get_current_operator
 
 
@@ -228,7 +229,7 @@ def park_template_names(
     因更新順序而拒絕合法的整批替換，呼叫端仍在同一交易中完成操作。
     """
     rows = list(items)
-    snapshots = {item.id: _template_audit_snapshot(db, item) for item in rows}
+    snapshots = _template_audit_snapshots(db, rows)
     for item in rows:
         item.title = f"__template_replacement_{uuid7()}"
     db.flush()
@@ -445,90 +446,123 @@ def _add_points(
 
 
 def _template_audit_snapshot(db: Session, item: TemplateItem) -> dict:
-    """Serialize template structure for TPL-R25 audit events."""
-    points = db.scalars(
-        select(TemplateInspectionPoint)
-        .where(TemplateInspectionPoint.template_item_id == item.id)
-        .order_by(TemplateInspectionPoint.sequence, TemplateInspectionPoint.id)
-    ).all()
-    point_snapshots = []
-    for point in points:
-        fields = db.scalars(
-            select(TemplateMeasurementField)
-            .where(TemplateMeasurementField.inspection_point_id == point.id)
-            .order_by(
-                TemplateMeasurementField.sort_order,
-                TemplateMeasurementField.id,
-            )
-        ).all()
-        text = db.scalar(
-            select(TemplateTextStandard).where(
-                TemplateTextStandard.inspection_point_id == point.id
-            )
-        )
-        numeric = db.scalar(
-            select(TemplateNumericStandard).where(
-                TemplateNumericStandard.inspection_point_id == point.id
-            )
-        )
-        evidence = db.scalars(
-            select(TemplateEvidenceRequirement)
-            .where(TemplateEvidenceRequirement.inspection_point_id == point.id)
-            .order_by(
-                TemplateEvidenceRequirement.created_at,
-                TemplateEvidenceRequirement.id,
-            )
-        ).all()
-        snapshot = {
-            "sequence": point.sequence,
-            "title": point.title,
-            "instruction": point.instruction,
-            "measurement_fields": [
-                {
-                    "name": field.name,
-                    "field_type": field.field_type,
-                    "unit": field.unit,
-                    "sort_order": field.sort_order,
-                }
-                for field in fields
-            ],
-            "evidence_requirements": [
-                {
-                    "evidence_type": row.evidence_type,
-                    "required": row.required,
-                    "min_count": row.min_count,
-                    "max_count": row.max_count,
-                }
-                for row in evidence
-            ],
-        }
-        if text is not None:
-            snapshot["text_standard"] = {"text": text.text}
-        if numeric is not None:
-            bound_field = db.get(
-                TemplateMeasurementField, numeric.measurement_field_id
-            )
-            assert bound_field is not None  # numeric standard FK must resolve
-            snapshot["numeric_standard"] = {
-                "value": numeric.value,
-                "condition": numeric.condition,
-                "unit": numeric.unit,
-                "tolerance": numeric.tolerance,
-                "range_form": numeric.range_form,
-                "lower_bound": numeric.lower_bound,
-                "upper_bound": numeric.upper_bound,
-                "measurement_field": bound_field.name,
-            }
-        point_snapshots.append(snapshot)
-    return {
-        "system_id": item.system_id,
-        "sequence": item.sequence,
-        "title": item.title,
-        "instruction": item.instruction,
-        # Audit normalization sorts top-level lists as set-like payloads;
-        # wrap this sequence to preserve the user-defined inspection order.
-        "inspection_points": {"items": point_snapshots},
+    """序列化範本結構，供 TPL-R25 稽核事件使用。"""
+    return _template_audit_snapshots(db, [item])[item.id]
+
+
+def _template_audit_snapshots(
+    db: Session, items: Iterable[TemplateItem]
+) -> dict[UUID, dict]:
+    """批次序列化多個範本結構（TPL-R25）。
+
+    項次與其子表各以分段 IN 查詢載入（每段 500 筆），查詢次數只隨
+    段數線性成長、不隨項目數成長（比照 #462）；輸出內容與逐項查詢
+    時完全相同。
+    """
+    rows = list(items)
+    if not rows:
+        return {}
+    # 以 load_grouped 分段載入，點位數再多也不會超過 SQLite 的
+    # bind 參數上限（整系統覆蓋最多可達 40000 個點位）。
+    points_by_item = load_grouped(
+        db,
+        TemplateInspectionPoint.template_item_id,
+        [item.id for item in rows],
+        TemplateInspectionPoint.sequence,
+        TemplateInspectionPoint.id,
+    )
+    point_ids = [
+        point.id for group in points_by_item.values() for point in group
+    ]
+    fields_by_point = load_grouped(
+        db,
+        TemplateMeasurementField.inspection_point_id,
+        point_ids,
+        TemplateMeasurementField.sort_order,
+        TemplateMeasurementField.id,
+    )
+    fields_by_id = {
+        field.id: field
+        for group in fields_by_point.values()
+        for field in group
     }
+    text_by_point = {
+        key: group[0]
+        for key, group in load_grouped(
+            db, TemplateTextStandard.inspection_point_id, point_ids
+        ).items()
+    }
+    numeric_by_point = {
+        key: group[0]
+        for key, group in load_grouped(
+            db, TemplateNumericStandard.inspection_point_id, point_ids
+        ).items()
+    }
+    evidence_by_point = load_grouped(
+        db,
+        TemplateEvidenceRequirement.inspection_point_id,
+        point_ids,
+        TemplateEvidenceRequirement.created_at,
+        TemplateEvidenceRequirement.id,
+    )
+
+    snapshots: dict[UUID, dict] = {}
+    for item in rows:
+        point_snapshots = []
+        for point in points_by_item.get(item.id, []):
+            text = text_by_point.get(point.id)
+            numeric = numeric_by_point.get(point.id)
+            snapshot = {
+                "sequence": point.sequence,
+                "title": point.title,
+                "instruction": point.instruction,
+                "measurement_fields": [
+                    {
+                        "name": field.name,
+                        "field_type": field.field_type,
+                        "unit": field.unit,
+                        "sort_order": field.sort_order,
+                    }
+                    for field in fields_by_point.get(point.id, [])
+                ],
+                "evidence_requirements": [
+                    {
+                        "evidence_type": row.evidence_type,
+                        "required": row.required,
+                        "min_count": row.min_count,
+                        "max_count": row.max_count,
+                    }
+                    for row in evidence_by_point.get(point.id, [])
+                ],
+            }
+            if text is not None:
+                snapshot["text_standard"] = {"text": text.text}
+            if numeric is not None:
+                # 綁定欄位屬於同一項次，已在批次載入的欄位內。
+                bound_field = fields_by_id.get(numeric.measurement_field_id)
+                # 外鍵保證綁定欄位存在。
+                assert bound_field is not None
+                snapshot["numeric_standard"] = {
+                    "value": numeric.value,
+                    "condition": numeric.condition,
+                    "unit": numeric.unit,
+                    "tolerance": numeric.tolerance,
+                    "range_form": numeric.range_form,
+                    "lower_bound": numeric.lower_bound,
+                    "upper_bound": numeric.upper_bound,
+                    "measurement_field": bound_field.name,
+                }
+            point_snapshots.append(snapshot)
+        snapshots[item.id] = {
+            "system_id": item.system_id,
+            "sequence": item.sequence,
+            "title": item.title,
+            "instruction": item.instruction,
+            # 稽核正規化會把最上層的清單當成集合排序；包一層物件，
+            # 才能保留使用者自訂的查驗項次順序。
+            "inspection_points": {"items": point_snapshots},
+        }
+    return snapshots
 
 
 def _record_template_update(

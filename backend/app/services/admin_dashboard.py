@@ -34,10 +34,15 @@ def _visible_project_ids(
     )
     if not access.is_active:
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    # 不存在的專案與沒有權限的專案同樣回 403，呼叫端無法分辨。
     if project_id is not None and session.get(Project, project_id) is None:
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    # ADM-R06：全部專案範圍只看 all_project_progress.read（Admin
+    # 放行），不需要查核模組「可使用」；專案權限不得擴大成這個範圍。
     if access.is_admin or _ALL_PROGRESS in access.module_permissions:
         return True, set()
+    # 其餘人員逐專案要「看專案進度與工作量」專案權限，並具查核模組
+    # 「可使用」才算可見（ADM-R06、AUT-R19）。
     if project_id is not None:
         allowed = (
             _TASK_READ in access.project_permissions
@@ -60,9 +65,12 @@ def _task_counts(
     project_ids: set[UUID] | None,
 ) -> dict[str, int | float]:
     """依 ADM-R02～04 計算目前工作量與歷史完成率。"""
+    # ADM-R02：待開始／進行中只計非封存 Plan，且不依日期篩選。
     today_active = (
         InspectionPlan.is_archived.is_(False)
     ) & InspectionTask.status.in_(("PENDING", "IN_PROGRESS"))
+    # ADM-R03：完成率分母是非取消且已派出的任務；完成數與分母都不
+    # 排除封存 Plan（ADM-R04 的歷史口徑），與上面的目前工作量不同。
     denominator = InspectionTask.status.in_(
         ("PENDING", "IN_PROGRESS", "COMPLETED")
     )
@@ -85,6 +93,7 @@ def _task_counts(
         InspectionPlan.id == InspectionTask.plan_id,
     )
     if project_ids is not None:
+        # 沒有任何可見專案時直接回 0，不必查詢。
         if not project_ids:
             return {
                 "pending_count": 0,
@@ -114,6 +123,8 @@ def get_dashboard_summary(
     all_projects, project_ids = _visible_project_ids(
         session, user_id=user_id, project_id=project_id
     )
+    # ADM-R06：沒有 all_project_progress.read 的人只能看指定專案的
+    # 總覽，不指定專案（全部專案範圍）一律 403。
     if project_id is None and not all_projects:
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
     if project_id is not None and not all_projects:
@@ -141,6 +152,7 @@ def list_dashboard_projects(
     """依專案名稱與 UUID 穩定分頁回傳專案進度。"""
     all_projects, project_ids = _visible_project_ids(session, user_id=user_id)
     filters = []
+    # 非全域範圍只列通過 ADM-R06 兩層檢查的專案；一個都沒有就不查。
     if not all_projects:
         if not project_ids:
             return {"items": [], "next_cursor": None}
@@ -168,6 +180,8 @@ def list_dashboard_projects(
     items = result["items"]
     if not items:
         return result
+    # 先分頁取得專案，再只對這一頁的專案一次彙總任務數，避免逐專案
+    # 各查一次；沒有任務的專案在下方補 0。
     ids = {item["project_id"] for item in items}
     grouped = session.execute(
         select(
@@ -246,6 +260,8 @@ def list_dashboard_engineers(
         if all_projects
         else project_ids
     )
+    # ADM-R05：「派給誰」、「誰開始」、「誰查的」是三種歸屬，分開
+    # 統計；先找出在範圍內任一種歸屬出現的人，再分頁、再逐種計數。
     project_filter: list[ColumnElement[bool]] = []
     if scope_ids is not None:
         project_filter.append(InspectionTask.project_id.in_(scope_ids))
@@ -370,6 +386,9 @@ def list_dashboard_engineers(
         )
         .group_by(InspectionTask.completed_by)
     )
+    # 三種計數各自一條查詢，因為各歸屬的篩選不同：派給與開始排除
+    # 封存 Plan，完成不排除（ADM-R03、R04 的歷史口徑）。缺的欄位補
+    # 0 後 union，最後依人加總，三個數字不會混成單一數字（ADM-R05）。
     workload_rows = union_all(
         assigned_counts, started_counts, completed_counts
     ).subquery()
@@ -412,7 +431,11 @@ def _require_all_progress_access(
     user_id: UUID,
     project_id: UUID,
 ) -> None:
-    """依 ADM-R06 驗證全部進度權限及專案存在。"""
+    """依 ADM-R06 驗證全部進度權限及專案存在。
+
+    任務明細只要 all_project_progress.read（Admin 放行），不另需
+    查核模組「可使用」；專案權限不能取代它。
+    """
     access = calculate_effective_access(
         session, user_id=user_id, project_id=project_id
     )
@@ -431,7 +454,12 @@ def _dashboard_task_item(
     assignee: User | None,
     plan_archived: bool,
 ) -> dict[str, object]:
-    """序列化 ADM-AC05 的任務白名單欄位。"""
+    """序列化 ADM-AC05 的任務白名單欄位。
+
+    只輸出清單、狀態、地點、建議指派四項（ADM-R06）；總覽、明細頁
+    與 API 都經過這個函式，新增欄位前須先確認不是照片或查核結果。
+    """
+    # 分區必須與 Task 同專案（DOM-R58）；不一致時不輸出分區名稱。
     if zone is not None and zone.project_id != task.project_id:
         zone = None
     return {
@@ -480,6 +508,7 @@ def list_dashboard_tasks(
     )
     tasks = result["items"]
     task_rows = tasks
+    # 以下三組都是整頁一次批次讀取，分區再限定同專案。
     zone_ids = {task.zone_id for task in task_rows if task.zone_id is not None}
     assignee_ids = {
         task.assignee_id for task in task_rows if task.assignee_id is not None
