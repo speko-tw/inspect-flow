@@ -24,6 +24,13 @@ type Props = {
   structureLocked?: boolean
 }
 
+/**
+ * 編輯單一查核項次的實測欄位（文字或數字）：新增、改名、改型別與單位、
+ * 移除（TPL-R11、TPL-R16）。
+ *
+ * 被數值標準綁定的欄位不能直接移除或改成文字，須先解除綁定；這類主動
+ * 操作被拒時，說明顯示在該欄位旁並聚焦（TPL-R17）。
+ */
 export function MeasurementFieldEditor({
   point,
   pointIndex,
@@ -35,6 +42,8 @@ export function MeasurementFieldEditor({
   updatePoint,
   structureLocked = false,
 }: Props) {
+  // 操作錯誤以欄位的穩定識別當 key，不用陣列位置，增刪重排時錯誤才
+  // 不會轉移到另一個欄位（TPL-R17）。
   const [actionErrors, setActionErrors] = useState<
     Record<
       string,
@@ -64,6 +73,8 @@ export function MeasurementFieldEditor({
   }
   const alertRefs = useRef(new Map<string, HTMLElement>())
   const [focusRequest, setFocusRequest] = useState({ key: '', attempt: 0 })
+  // 主動操作失敗：先捲入視窗再聚焦，聚焦時不再捲動，避免畫面二次
+  // 跳動（TPL-R17、UDS-R18）。
   useEffect(() => {
     if (!focusRequest.attempt) return
     const alert = alertRefs.current.get(focusRequest.key) ?? null
@@ -138,6 +149,7 @@ export function MeasurementFieldEditor({
               disabled={structureLocked}
               id={`field-${pointIndex}-${fieldIndex}-type`}
               onChange={(event) => {
+                // 綁定欄位不得改成文字（TPL-R17）：不改值，直接說明原因。
                 if (bound && event.target.value !== 'number') {
                   showActionError(
                     actionKey,
@@ -151,6 +163,8 @@ export function MeasurementFieldEditor({
                   delete next[actionKey]
                   return next
                 })
+                // 文字欄位不帶單位；改成數字欄位時單位清空，必填
+                // （TPL-R11）要使用者自己填。
                 updateField(pointIndex, fieldIndex, {
                   field_type: event.target.value as 'text' | 'number',
                   unit: event.target.value === 'text' ? null : '',
@@ -199,6 +213,7 @@ export function MeasurementFieldEditor({
             {bound && (
               <p className="tpl-hint muted-text">此欄位用於數值標準。</p>
             )}
+            {/* 綁定中的欄位不出現移除確認，直接說明原因（TPL-R17）。 */}
             {confirmField === `${pointIndex}:${fieldIndex}` &&
             !structureLocked &&
             !bound ? (
@@ -223,6 +238,8 @@ export function MeasurementFieldEditor({
                       '這個欄位仍綁定數值標準，請先解除綁定後再移除。',
                     )
                   } else if (field.name || field.unit) {
+                    // 已填內容才要確認；空白的新欄位沒有東西可丟，
+                    // 直接移除。
                     setConfirmField(`${pointIndex}:${fieldIndex}`)
                   } else {
                     removeField()
@@ -245,6 +262,8 @@ export function MeasurementFieldEditor({
                 <button
                   type="button"
                   onClick={(event) => {
+                    // 捷徑：捲到同項次的「判定標準」並聚焦目前選的判定
+                    // 方式，讓使用者去解除綁定（TPL-R17）。
                     const standard = event.currentTarget
                       .closest('.tpl-point-section')
                       ?.parentElement?.querySelector<HTMLElement>(
@@ -266,6 +285,8 @@ export function MeasurementFieldEditor({
       <button
         disabled={structureLocked}
         onClick={() => {
+          // 第一個欄位預填項次標題並隨標題同步（TPL-R20）；後續欄位
+          // 名稱留白、不預填（TPL-R21）。
           updatePoint(pointIndex, {
             measurement_fields: [
               ...point.measurement_fields,
@@ -281,6 +302,8 @@ export function MeasurementFieldEditor({
               },
             ],
           })
+          // 焦點移到新欄位的名稱（TPL-R21）；新欄位要等這次更新 render
+          // 後才存在，所以延後一拍再聚焦。
           window.setTimeout(() => {
             document
               .getElementById(
