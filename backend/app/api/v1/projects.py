@@ -174,6 +174,12 @@ def _strip_reason(value: object) -> object:
 
 
 class UpdateProjectRequest(BaseModel):
+    """修改專案的請求本文，只更新請求有帶的欄位（DOM-R66）。
+
+    ``company_role`` 的值有變動時必須帶 ``company_role_change_reason``
+    （DOM-R76），驗證順序見下方欄位註解。
+    """
+
     project_code: str | None = None
     name: str | None = None
     client_name: str | None = None
@@ -332,6 +338,11 @@ def _project_list_responses(
     projects: Sequence[Project],
     duplicate_codes: set[str],
 ) -> list[ProjectListItemResponse]:
+    """批次補上每個專案的有效啟用成員數與重複代號警告（ADM-R12）。
+
+    成員數交給 :func:`count_active_project_members`（DOM-R77），整頁
+    只查一次，不逐筆查詢；``duplicate_codes`` 由呼叫端先算好。
+    """
     counts = count_active_project_members(
         db, {project.id for project in projects}
     )
@@ -374,6 +385,12 @@ def _member_detail_response(
     is_effectively_active: bool,
     module_permissions: frozenset[str],
 ) -> ProjectMemberDetailResponse:
+    """組出成員詳情，同時回原始 ``is_active`` 與有效狀態（ADM-R12）。
+
+    ``is_effectively_active`` 把外部協作者的到期日算進去，讓畫面分得
+    出「已停用」與「已到期」；到期當日仍有效，且讀取時不改寫
+    ``is_active``（DOM-R77）。
+    """
     ordered_assignments = sorted(
         member.role_assignments, key=lambda assignment: assignment.role_id
     )
@@ -474,6 +491,15 @@ def list_projects(
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> ProjectListResponse:
+    """分頁列出專案，存取以模組權限 ``template.manage`` 把關（Admin 放行）。
+
+    ``q`` 比對專案名稱與代號；依專案名稱排序並以 cursor 分頁，每筆帶
+    ``member_count``（ADM-R12）。專案代號不要求唯一，重複的代號在該筆
+    ``warnings`` 標 ``project_code.duplicate``，不拒絕。規格
+    （domain-model/spec.md:278）的正式行為另允許
+    ``all_project_progress.read``，目前仍在規格所稱的過渡期，程式
+    只認 ``template.manage``。
+    """
     filters = []
     query = (q or "").strip()
     if query:
@@ -583,6 +609,13 @@ def add_project(
     db: Session = Depends(get_db, scope="function"),  # noqa
     caller: User = Depends(_PROJECT_CREATE_ACCESS, scope="function"),  # noqa
 ) -> ProjectResponse:
+    """新增專案，需模組權限 ``project.create``（DOM-R65）。
+
+    非 Admin 建立後同一交易自動成為成員並取得建立者角色；Admin 不自動
+    成為成員，但可用 ``creator_role_user_id`` 指定人選。
+    """
+    # DOM-R65：只有 Admin 可以帶 creator_role_user_id，其他人只要出現
+    # 這個欄位（含帶 null）就拒絕。
     if "creator_role_user_id" in body.model_fields_set and not caller.is_admin:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     try:
@@ -782,6 +815,11 @@ def add_member(
     db: Session = Depends(get_db, scope="function"),  # noqa
     caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> ProjectMemberResponse:
+    """加入專案成員並指派角色，需專案權限 ``project_member.manage``。
+
+    角色指派限制（可指派、不能改自己、外部可用）由 Service 層檢查，
+    違規在這裡轉成對應的 422（DOM-R70、DOM-R72）。已是成員回 409。
+    """
     _get_project(db, project_id)
     user = db.get(User, body.user_id)
     if user is None:
@@ -819,6 +857,8 @@ def add_member(
         raise APIError(ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE, 422) from exc
     except InactiveProjectMemberError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+    # ADM-R20：Service 與資料庫允許沒有角色的成員（DOM-R36），但 API
+    # 不允許；檢查放在權限與資源不存在之後，順序依 ADM-R20 規定。
     _require_roles(body.role_ids)
     return _member_response(db, member)
 
@@ -834,6 +874,11 @@ def edit_member_roles(
     db: Session = Depends(get_db, scope="function"),  # noqa
     caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> ProjectMemberResponse:
+    """以完整集合取代成員的角色，需專案權限 ``project_member.manage``。
+
+    除了 DOM-R70、DOM-R72 的指派限制，還擋下非 Admin 移除專案最後
+    一位管理成員（``PROJECT_LAST_MANAGER``）。空集合回 422（ADM-R20）。
+    """
     member = _get_member(db, project_id, user_id)
     role_ids = _checked_role_ids(db, body.role_ids)
     try:
