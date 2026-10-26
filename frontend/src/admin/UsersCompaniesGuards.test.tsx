@@ -2624,9 +2624,7 @@ describe('W-741 R4 回歸', () => {
           fireEvent.change(screen.getByLabelText('搜尋帳號'), {
             target: { value: transition === '搜尋' ? '新查詢' : '' },
           })
-          fireEvent.click(
-            screen.getByRole('button', { name: '搜尋' }),
-          )
+          fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
           await waitFor(() =>
             expect(backend.count('GET', '/api/v1/users')).toBe(2),
           )
