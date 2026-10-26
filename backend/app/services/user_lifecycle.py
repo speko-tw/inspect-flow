@@ -46,8 +46,16 @@ def expire_external_account_if_due(
     *,
     today: date | None = None,
 ) -> bool:
-    """在首次偵測到到期時停用外部協作人員並只寫一筆系統稽核。"""
+    """在首次偵測到到期時停用外部協作人員並只寫一筆系統稽核。
+
+    DOM-R75：到期日當天結束後才算到期（``account_expires_on`` 小於
+    今天），之後的請求看到的已是停用狀態，不會再寫稽核。回傳值表示
+    這次呼叫是否真的停用了帳號。
+    """
     current_date = today or clock.utc_now().date()
+    # 先用不加鎖的讀取排除不必處理的帳號（絕大多數請求），確定到期
+    # 才鎖列；鎖定後必須重驗，因為 DOM-R75 只准寫一筆 account_expired
+    # 稽核，並行請求可能已先一步停用。
     candidate = session.get(User, user_id)
     if (
         candidate is None
@@ -72,6 +80,7 @@ def expire_external_account_if_due(
         or user.account_expires_on >= current_date
     ):
         return False
+    # 自動停用是系統事件（ALG-R15），稽核的操作者記為內建 admin。
     set_is_active(
         session,
         user,
@@ -85,7 +94,11 @@ def expire_external_account_if_due(
 def expire_due_external_accounts(
     session: Session, *, today: date | None = None
 ) -> int:
-    """把管理清單讀取時已到期的外部協作者一併標記為停用。"""
+    """把管理清單讀取時已到期的外部協作者一併標記為停用。
+
+    逐一交給 :func:`expire_external_account_if_due`，每個帳號各自鎖列
+    重驗並各寫一筆稽核（DOM-R75）；回傳這次實際停用的帳號數。
+    """
     current_date = today or clock.utc_now().date()
     user_ids = list(
         session.scalars(
@@ -107,7 +120,13 @@ def expire_due_external_accounts(
 def deactivate_external_account_without_memberships(
     session: Session, user_id: uuid.UUID
 ) -> bool:
-    """DOM-R75：外部協作者失去最後一個專案身分時自動停用。"""
+    """DOM-R75：外部協作者失去最後一個專案身分時自動停用。
+
+    由 ``remove_project_member`` 在刪除成員並寫完稽核後呼叫。是否還有
+    專案身分看有效權限入口的 ``project_memberships``，它保留沒有角色
+    的成員身分（DOM-R36），所以只有完全沒有 ``ProjectMember`` 才會
+    停用；內部人員與已停用帳號一律不處理。
+    """
     user = session.scalar(
         select(User)
         .where(User.id == user_id)
@@ -119,6 +138,7 @@ def deactivate_external_account_without_memberships(
     access = calculate_effective_access(session, user_id=user.id)
     if access.project_memberships:
         return False
+    # 系統事件（ALG-R15）；原因代碼讓稽核區分到期與失去專案身分。
     set_is_active(
         session,
         user,
@@ -130,7 +150,14 @@ def deactivate_external_account_without_memberships(
 
 
 def deactivation_check(session: Session, user: User) -> list[Project]:
-    """列出停用後將沒有啟用管理成員的專案（DOM-R67、ADM-R33）。"""
+    """列出停用後將沒有啟用管理成員的專案（DOM-R67、ADM-R33）。
+
+    只供停用前提醒，不阻擋停用。「唯一的管理成員」以有效權限計算
+    （DOM-R70）：帳號啟用、具專案模組「可使用」（``project.use``）、
+    專案角色含 ``project_member.manage``，所以下面查其他管理成員時
+    ``active_only`` 與 ``module_permission_code`` 兩個條件不可省，
+    否則已停用或沒有模組權限的成員會被誤算成還有人管理。
+    """
     if not user.is_active:
         return []
     access = calculate_effective_access(session, user_id=user.id)
@@ -163,7 +190,13 @@ def deactivation_check(session: Session, user: User) -> list[Project]:
 
 
 def unmanaged_project_ids(session: Session) -> frozenset[uuid.UUID]:
-    """DOM-R75：以共用權限入口找出沒有啟用管理成員的專案。"""
+    """DOM-R75：以共用權限入口找出沒有啟用管理成員的專案。
+
+    供 Admin 的「無人管理的專案」清單（ADM-R36）。有效管理成員的
+    條件與 :func:`deactivation_check` 相同（DOM-R70，兩者都排除 Admin）。
+    """
+    # 以 outer join 加上 count == 0 找缺口，因此完全沒有成員的專案
+    # 也會列入。
     effective_managers = (
         select(
             ProjectMember.id.label("member_id"),
@@ -205,7 +238,12 @@ def unmanaged_project_ids(session: Session) -> frozenset[uuid.UUID]:
 
 
 def reactivation_preview(session: Session, user: User) -> dict[str, Any]:
-    """回傳停用帳號中可供 Admin 勾選恢復的目前資料（DOM-R67）。"""
+    """回傳停用帳號中可供 Admin 勾選恢復的目前資料（DOM-R67）。
+
+    唯讀，不改任何資料。停用期間權限、委派與成員身分都保留（只是
+    不生效），所以直接讀目前的資料列即可。``account_expired`` 為
+    true 時，前端須提示先延長或清除到期日（DOM-R75）。
+    """
     permission_codes = list(
         session.scalars(
             select(UserModulePermission.permission_code)
@@ -226,6 +264,8 @@ def reactivation_preview(session: Session, user: User) -> dict[str, Any]:
         .where(ProjectMember.user_id == user.id)
         .order_by(Project.name, Project.id)
     ).all()
+    # 只列建議指派仍指向此人、已派出且未完成的任務；停用期間已被
+    # 改派的任務不還原也不列入（DOM-R67）。
     tasks = list(
         session.scalars(
             select(InspectionTask)
@@ -280,8 +320,17 @@ def reactivate_user(
     project_ids: list[uuid.UUID],
     task_ids: list[uuid.UUID],
 ) -> User:
-    """依 Admin 勾選結果原子恢復帳號項目並稽核（DOM-R67）。"""
+    """依 Admin 勾選結果原子恢復帳號項目並稽核（DOM-R67）。
+
+    只恢復勾選的項目；沒勾的模組權限與委派被收回、成員身分被移除、
+    任務的建議指派被清空，各自依原事件寫稽核，最後寫一筆
+    ``user.active_changed`` 記下恢復與移除的內容。勾選值必須落在
+    :func:`reactivation_preview` 的範圍內，否則丟
+    :class:`InvalidRestoreSelectionError`；外部協作者的到期日已過則
+    丟 :class:`AccountExpiredError`（DOM-R75）。
+    """
     actor = get_current_operator(session)
+    # Service 層自己檢查 Admin，不只依賴路由層的 Admin 檢查。
     if not actor.is_admin:
         raise PermissionError("Only Admin may reactivate an account")
     user = session.scalar(
@@ -293,6 +342,7 @@ def reactivate_user(
     if user is None:
         raise LookupError("User does not exist")
     if user.is_active:
+        # 已啟用視為重複請求，不再恢復也不重複寫稽核。
         return user
     if (
         user.is_external_collaborator
@@ -303,6 +353,8 @@ def reactivate_user(
             "Clear or extend the external collaborator expiry date first"
         )
 
+    # 以鎖定後重算的預覽為準：預覽到送出之間資料可能已變動，
+    # 勾選值只准落在這一份範圍內（DOM-R67）。
     preview = reactivation_preview(session, user)
     available_permissions = set(preview["permission_codes"])
     available_delegations = set(preview["delegated_modules"])
@@ -320,6 +372,8 @@ def reactivate_user(
         available_projects,
         available_tasks,
     )
+    # DOM-R62：project.create 蘊含 project.use、template.manage 蘊含
+    # template.use，勾選結果不得只留主權限而缺被蘊含的權限。
     for primary, implied in (
         ("project.create", "project.use"),
         ("template.manage", "template.use"),
@@ -329,6 +383,7 @@ def reactivate_user(
     if errors:
         raise InvalidRestoreSelectionError(sorted(set(errors)))
 
+    # project_members 與本模組互相呼叫，雙方都在函式內才匯入。
     from app.services.module_permissions import (
         revoke_module_delegation,
         revoke_module_permission,
@@ -337,6 +392,8 @@ def reactivate_user(
 
     selected_permissions = set(permission_codes)
     removed_permissions = available_permissions - selected_permissions
+    # 主權限（project.create、template.manage）要先收回：只要主權限
+    # 還在，單獨收回被蘊含的權限會被拒絕（DOM-R62）。
     for code in sorted(
         removed_permissions,
         key=lambda item: (
@@ -359,6 +416,9 @@ def reactivate_user(
     removed_projects = available_projects - selected_projects
     from app.services.module_permissions import validate_role_assignment
 
+    # 保留的成員身分要重驗角色條件（外部可用、最後一位管理者等，
+    # DOM-R70、DOM-R72）。帳號此時仍是停用狀態，所以不檢查
+    # require_active；角色集合沒有被改動，前後相同。
     for project_id in sorted(selected_projects, key=str):
         member = session.scalar(
             select(ProjectMember)
@@ -405,6 +465,8 @@ def reactivate_user(
 
     selected_tasks = set(task_ids)
     cleared_tasks = available_tasks - selected_tasks
+    # 鎖列後重驗建議指派仍是此人才清空，避免覆蓋預覽之後被改派的
+    # 任務（DOM-R67：已被改派的不還原）。
     for task_id in sorted(cleared_tasks, key=str):
         task = session.scalar(
             select(InspectionTask)
@@ -415,6 +477,8 @@ def reactivate_user(
             task.assignee_id = None
             task.updated_by = actor.id
 
+    # 不經 set_is_active：它拒絕直接啟用（DOM-R67 要求帶恢復選項），
+    # 也會另寫一筆事件；這裡改寫一筆含恢復內容的 user.active_changed。
     user.is_active = True
     user.updated_by = actor.id
     session.flush()
@@ -454,6 +518,8 @@ def _selection_errors(
         ("task_ids", task_ids, available_tasks),
     )
     errors: list[str] = []
+    # DOM-R67：重新啟用只接受預覽內的項目；重複值與預覽外的值都回報，
+    # 由呼叫端彙整成一次 422。
     for name, selected, available in values:
         if len(selected) != len(set(selected)):
             errors.append(f"{name} contains duplicate values")

@@ -28,6 +28,13 @@ from app.permission_codes import (
 
 
 class UserModulePermission(TimestampedBase):
+    """一個人擁有的一項模組範圍權限（DOM-R59）。
+
+    ``source`` 記錄這筆權限怎麼來的（手動、自動蘊含、權限組合、回填
+    migration），讓蘊含與回填產生的授權可追溯。Admin 的模組權限是
+    隱含的，不寫資料列；帳號停用時資料列保留（DOM-R67）。
+    """
+
     __tablename__ = "user_module_permissions"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -61,6 +68,12 @@ class UserModulePermission(TimestampedBase):
 
 
 class UserModuleDelegation(TimestampedBase):
+    """一個人被委派管理的模組（DOM-R61）。
+
+    被委派者只能授予與收回自己被委派模組內的模組權限；委派本身不附帶
+    任何模組的編輯能力，指派與收回只有 Admin 能做。
+    """
+
     __tablename__ = "user_module_delegations"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -83,6 +96,12 @@ class UserModuleDelegation(TimestampedBase):
 
 
 class PermissionBundle(AuditMixin, TimestampedBase):
+    """一鍵勾選多個模組權限的命名組合（DOM-R63）。
+
+    名稱以小寫後唯一的函式索引保證不分大小寫唯一。組合與人員之間
+    不記錄連結，因此修改或刪除組合不會追改已套用過的人。
+    """
+
     __tablename__ = "permission_bundles"
 
     name: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -112,6 +131,8 @@ class PermissionBundle(AuditMixin, TimestampedBase):
 
 
 class PermissionBundlePermission(TimestampedBase):
+    """權限組合內的一個模組範圍權限代碼（DOM-R63）；同組合不得重複。"""
+
     __tablename__ = "permission_bundle_permissions"
 
     bundle_id: Mapped[uuid.UUID] = mapped_column(
@@ -137,6 +158,13 @@ class PermissionBundlePermission(TimestampedBase):
 
 
 class CreatorRoleSetting(TimestampedBase):
+    """系統唯一的「建立者角色」設定，指向一個 ``Role``（DOM-R64）。
+
+    ``role_id`` 以 ``RESTRICT`` 保護，目前的建立者角色不能刪除，須先
+    改設另一個角色。``setting_key`` 的 CHECK 與唯一約束讓整張表最多
+    只有一列。
+    """
+
     __tablename__ = "creator_role_settings"
 
     setting_key: Mapped[str] = mapped_column(
