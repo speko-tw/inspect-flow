@@ -70,6 +70,9 @@
 | IP-R24 | 停用只改來源項目的 `is_active`，不得改變任何既有 Task（含草稿）、Snapshot、查核紀錄及照片。新增 Task 與草稿新增選用項目時不得選入停用項目；草稿原先已選取者保留，修改草稿選單只額外呈現原有的停用項目，不得將其換成其他停用項目。保留停用項目的草稿仍可派出。草稿選單標示「已停用」並說明「取消勾選後無法再加回」；新增任務表單重載項目後，裁除剛停用的勾選並提示移除的名稱；送出時才發現項目已停用（409 `project_inspection_item.inactive`），表單自動重載項目並取消該勾選，不清其他欄位，不要求使用者手動重新載入；修改草稿重載後，停用項目只保留最新計畫明細中該任務仍有的，其餘停用勾選一併取消。專案沒有啟用項目時，新增任務表單說明先到專案查核項目新增或恢復。 | 必須／不得 | [負責人指示（#717）](https://github.com/speko-tw/inspect-flow/issues/717)；[實作細節](https://github.com/speko-tw/inspect-flow/issues/717#issuecomment-6397735011)，細節為規格設計（非負責人裁定）；PR-04 |
 | IP-R25 | 同名檢查包含停用項目，改名與套用範本均沿用 trim／casefold 與名稱鎖。同名衝突只要含任何啟用項目即回 409 `project_inspection_item.duplicate_name`；衝突全為停用名稱時才回 409 `project_inspection_item.inactive_name`，`details` 保留衝突名稱陣列；改名、套用 UI 均顯示「同名項目已停用，可在已停用清單恢復」；存為範本選到停用來源時顯示「來源項目已停用，請先到已停用清單恢復，才能存為範本。」，須先恢復，並回 409 `project_inspection_item.inactive_name`（TPL-R28），不在範本庫新增停用狀態；範本庫本身的同名仍依 TPL-R03。直接修改停用項目或新加入停用項目回 409 `project_inspection_item.inactive`。 | 必須 | [負責人指示（#717）](https://github.com/speko-tw/inspect-flow/issues/717)；[實作細節](https://github.com/speko-tw/inspect-flow/issues/717#issuecomment-6397735011)，細節為規格設計（非負責人裁定） |
 | IP-R26 | 狀態轉換與 `project_inspection_item.deactivated`／`project_inspection_item.reactivated` 稽核事件必須在同一交易，before／after 含 `is_active`，並保留來源名稱 `title`、專案、操作者與時間；稽核失敗全部回滾。重送相同狀態回 200，不更新時間或重複寫事件。動作端點沿用冒號慣例；清單與項目詳情回傳 `is_active`。為相容既有讀取端，API 清單預設包含兩種狀態，`active_only=true` 僅列啟用；前端依 IP-R23／IP-R24 過濾。 | 必須 | [負責人指示（#717）](https://github.com/speko-tw/inspect-flow/issues/717)；[實作細節](https://github.com/speko-tw/inspect-flow/issues/717#issuecomment-6397735011)，細節為規格設計（非負責人裁定）；PR-08、PR-16 |
+| IP-R27 | 計畫與任務管理**必須**採清單 → 詳情 → 獨立表單。計畫清單 `/projects/:projectId/planning`、新增計畫 `/planning/new`、計畫詳情 `/planning/:planId`（後兩者均在同專案下）；計畫改名維持詳情頁原地編輯。清單不堆疊建立表單或已選計畫詳情。 | 必須 | [負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)；PR-19 |
+| IP-R28 | 任務詳情、建立、修改**必須**有獨立網址：同計畫下 `/tasks/:taskId`、`/tasks/new`、`/tasks/:taskId/edit`。修改地點、建議指派、草稿查核項目採獨立表單頁，分別由 `section=location`、`assignee`、`items` 指定；沒有 section 時預設地點。此分頁為規格設計，避免不同 API 的部分成功冒充整份儲存。任務改名維持詳情頁原地編輯，取消原因維持破壞性確認。既有 IP-R05、R07、R12、R20、R23～R26 均繼續適用。 | 必須 | [負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)；[分批定案](https://github.com/speko-tw/inspect-flow/issues/635#issuecomment-6410458831)；PR-19 |
+| IP-R29 | 新頁**必須**受路由 ID 守衛與實際動作權限保護，直接輸入表單網址不得繞過權限、Plan 封存或 Task 狀態限制。重新整理維持同一資源及表單種類；建立與儲存成功後返回清單或該任務詳情並顯示就近結果。返回、取消與跨頁依 ADM-R28 保護未儲存資料；確認離開後清除草稿，回到表單不帶回已捨棄值。網址中的 Plan 必須屬於路徑專案，Task 必須屬於路徑 Plan。 | 必須 | [負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)；PR-01、PR-19 |
 
 ## 資料
 
@@ -225,6 +228,9 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 | IP-AC24 | 草稿及其他狀態的任務已引用項目 X，另一停用項目 Y | 停用 X；新增 Task 選 X；草稿保留 X 並選入啟用項目；嘗試選入 Y；派出原草稿 | 停用前後既有 Task／Snapshot／紀錄／照片不變，新選 X／Y 被拒；原草稿可保留 X 並派出；新任務選單無停用項目，草稿選單只保留原選取者 | IP-R24 |
 | IP-AC25 | 停用項目與目前專案其他項目或範本同名 | 改名、套用單項／整系統、以停用來源存為範本 | 回 inactive_name、保留草稿並提示到已停用清單恢復，不部分寫入；恢復後可重新選用 | IP-R25 |
 | IP-AC26 | 啟用／停用的項目，另有模擬稽核失敗 | 停用、恢復、同狀態重送、注入失敗 | 每次真正轉換恰一筆事件且 before／after 有 is_active、title，帶正確專案與操作者；同狀態不寫；失敗連同旗標回滾；紀錄頁顯示白話名稱 | IP-R26 |
+| IP-AC27 | 專案具計畫與任務 | 從計畫清單開詳情、建立計畫，再開任務詳情與新增／修改頁；直接輸入或重新整理各網址 | 清單、詳情與表單分離；對應資源與表單種類不變；計畫與任務改名維持原地，取消原因維持確認框；站內無舊網址轉址 | IP-R27、IP-R28 |
+| IP-AC28 | 無寫入權限者、封存 Plan、不允許修改的 Task，或錯誤／跨資源 ID | 直接開啟新增與修改網址 | 無權限者看不到表單；封存或狀態不符顯示說明；ID 格式不合法由路由守衛拒絕，跨專案／Plan 不顯示錯誤資源 | IP-R29 |
+| IP-AC29 | 新增及修改表單有輸入或欄位錯誤 | 儲存、取消、返回、跨頁、重新整理，或捨棄後重開 | 欄旁錯誤與首錯聚焦保留；dirty 離開先確認、保留不丟值、捨棄後不留草稿；成功返回正確父頁並有就近提示；IP-AC24 停用項目與 409 自動重載裁除、既有任務排除本筆、指派停用提示、派送及封存唯讀均保留 | IP-R28、IP-R29 |
 
 ## 決議追蹤
 
@@ -294,3 +300,5 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 - 範圍變更（負責人指示，#717）：新增 IP-R23～IP-R26、IP-AC23～IP-AC26，專案項目停用與恢復；所有操作、同名、UI、API 與稽核細節為規格設計（非負責人裁定）。來源：[負責人指示（#717）](https://github.com/speko-tw/inspect-flow/issues/717)；[實作細節](https://github.com/speko-tw/inspect-flow/issues/717#issuecomment-6397735011)，細節為規格設計（非負責人裁定）。
 - 規格澄清（#717，第 1 輪審查）：IP-R24 補明送出遇 `project_inspection_item.inactive` 時自動重載項目、取消停用的勾選，以及專案沒有啟用項目時的新增任務提示；IP-R20 的項目驗證順序只在 IP-R20 完整描述，其他處改為引用；IP-R25 補明存為範本選到停用來源回 `inactive_name`。細節為規格設計（非負責人裁定）。
 - 規格澄清（#717，第 2 輪審查）：IP-R25 改名、套用與存為範本的停用提示分開陳述，存為範本選到停用來源顯示「來源項目已停用，請先到已停用清單恢復，才能存為範本。」（TPL-R28、TPL-AC32 同步）；IP-R24 補明修改草稿重載後以最新計畫明細判定「原有」的停用項目。細節為規格設計（非負責人裁定）。
+
+- 範圍變更（負責人指示，#635 第 1、2 批）：[負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)；清單 → 詳情 → 獨立表單與各頁網址依[分批定案](https://github.com/speko-tw/inspect-flow/issues/635#issuecomment-6410458831)，本單同時落地規格與實作；技術分頁、草稿生命週期與錯誤處理細節為規格設計。

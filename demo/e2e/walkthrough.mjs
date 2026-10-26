@@ -67,6 +67,9 @@ try {
   await page.getByRole('button', {
     name: '示範廠擴建機電工程查核計畫',
   }).click()
+  await page.getByRole('link', {
+    name: '擴建廠機房派工示範', exact: true,
+  }).click()
   await page.getByText('擴建廠機房派工示範').waitFor()
   const walkthrough = page.locator('article').filter({
     hasText: '擴建廠機房派工示範',

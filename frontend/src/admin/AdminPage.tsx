@@ -66,6 +66,11 @@ const PROJECT_PAGE_ROUTES = [
   ROUTES.projectZones,
   ROUTES.projectInspectionTemplates,
   ROUTES.projectPlanning,
+  ROUTES.projectPlanNew,
+  ROUTES.projectPlan,
+  ROUTES.projectTaskNew,
+  ROUTES.projectTask,
+  ROUTES.projectTaskEdit,
   ROUTES.projectProgress,
   ROUTES.projectProgressTask,
   ROUTES.projectItemChange,
@@ -203,6 +208,56 @@ const PROJECT_ROUTES = (
         </ProjectSectionPage>
       }
       path={nestedRoutePath(ROUTES.projectPlanning, ROUTES.adminShell)}
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
+        </ProjectSectionPage>
+      }
+      path={nestedRoutePath(ROUTES.projectPlanNew, ROUTES.adminShell)}
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
+        </ProjectSectionPage>
+      }
+      path={nestedRoutePath(ROUTES.projectPlan, ROUTES.adminShell)}
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
+        </ProjectSectionPage>
+      }
+      path={nestedRoutePath(ROUTES.projectTaskNew, ROUTES.adminShell)}
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
+        </ProjectSectionPage>
+      }
+      path={nestedRoutePath(ROUTES.projectTask, ROUTES.adminShell)}
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
+        </ProjectSectionPage>
+      }
+      path={nestedRoutePath(ROUTES.projectTaskEdit, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectSectionPage section="progress" />}

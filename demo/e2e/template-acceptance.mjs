@@ -244,6 +244,8 @@ try {
   // 測試產物跟隨隔離工作目錄，交付時再複製到指定位置。
   const shots = path.join(work, 'screenshots', 'project-items')
   await mkdir(shots, { recursive: true })
+  const planningShots = path.join(work, 'screenshots', 'planning')
+  await mkdir(planningShots, { recursive: true })
   const activationZones = await api(`/projects/${result.projects.B}/zones`)
   assert.equal(activationZones.status, 200)
   assert.ok(activationZones.data.items.length > 0)
@@ -370,13 +372,45 @@ try {
       `${planName}（草稿）`.replace(/\s/g, ''),
     )
     process.stdout.write(JSON.stringify({ activationPlanLabel }) + '\n')
+    // IP-AC27～29：沿站內入口走過六種獨立頁，以真 Chrome 留證。
+    const planningShot = async (name) => {
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+        true,
+      )
+      await page.screenshot({
+        path: path.join(planningShots, `${width}-${scheme}-${name}.png`),
+        fullPage: true,
+      })
+    }
+    await planningShot('plan-list')
+    await page.getByRole('link', { name: '建立計畫', exact: true }).click()
+    await page.getByLabel('計畫名稱', { exact: false }).waitFor()
+    await planningShot('plan-new')
+    await page
+      .getByLabel('計畫名稱', { exact: false })
+      .fill(`獨立頁計畫 ${width}`)
+    await page.getByRole('button', { name: '建立計畫', exact: true }).click()
+    await page.getByText(`已建立計畫「獨立頁計畫 ${width}」。`).waitFor()
     await activationPlanButton.click()
+    await page.getByRole('heading', { name: planName, exact: true }).waitFor()
+    await planningShot('plan-detail')
     await page.getByRole('button', { name: '＋ 新增任務' }).click()
+    await page.getByRole('button', { name: '建立草稿任務' }).waitFor()
+    await planningShot('task-new')
     const taskForm = page.locator('[data-error-context="task"]')
     assert.equal(
       await taskForm.locator(`input[value="${activationItem.id}"]`).count(),
       0,
     )
+    await taskForm.getByRole('button', { name: '取消', exact: true }).click()
+    await page
+      .getByRole('link', { name: `保留停用項目 ${width}`, exact: true })
+      .click()
+    await page.getByRole('button', { name: '修改地點', exact: true }).waitFor()
+    await planningShot('task-detail')
     const draftArticle = page.locator('article').filter({
       has: page.getByRole('heading', {
         name: new RegExp(`保留停用項目 ${width}`),
@@ -387,6 +421,25 @@ try {
       .locator('[data-error-context="items"]')
       .locator(`input[value="${activationItem.id}"]`)
     assert.equal(await retainedInput.isChecked(), true)
+    await planningShot('task-edit-items')
+    await page.reload()
+    assert.equal(await retainedInput.isChecked(), true)
+    await page.getByRole('link', { name: '返回任務詳情' }).click()
+    await page.getByRole('button', { name: '修改地點', exact: true }).click()
+    const locationForm = page.locator('[data-error-context="location"]')
+    await locationForm.getByLabel('補充地點').waitFor()
+    await planningShot('task-edit')
+    await locationForm.getByLabel('補充地點').fill(`北側 ${width}`)
+    await locationForm.getByRole('button', { name: '儲存地點' }).click()
+    await page.getByText('已更新任務地點。', { exact: true }).waitFor()
+    assert.equal((await api(taskPath)).data.location_text, `北側 ${width}`)
+    await page
+      .getByRole('button', { name: '修改建議指派', exact: true })
+      .click()
+    await page.locator('[data-error-context="assignee"]').waitFor()
+    await planningShot('task-edit-assignee')
+    await page.getByRole('link', { name: '返回任務詳情' }).click()
+
     assert.equal((await api(`${taskPath}:dispatch`, 'POST')).status, 200)
     await page.goto(`${base}${itemBase}`)
     await page.getByText('已停用（1）', { exact: true }).click()

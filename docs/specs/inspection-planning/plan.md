@@ -139,3 +139,12 @@ Issue #406 補齊以下測試對應，不變更產品行為：
 ## #717 第 2 輪審查修正
 
 小幅修正：送出遇 inactive 後自動重載項目清單並取消停用勾選（新增任務與修改草稿皆不要求手動重載，測試鎖定只重載一次）；修改草稿的「原有」停用項目改以重載後最新計畫明細為準，與後端持鎖重讀的 old_ids 一致；存為範本選到停用來源的 `inactive_name` 措辭與同名衝突分開；IP-R20 的項目驗證順序去重為引用。不新增或重用 R／AC 編號；仍為規格設計（非負責人裁定）。
+
+## Issue #635 第 1、2 批：計畫與任務拆頁
+
+依負責人裁定（#534，2026-10-26）及 #635 分批定案，新增 IP-R27～R29／IP-AC27～AC29，與受影響的 ADM-R52／AC52、UDS-R20／AC19 在同一工作項目落地。
+
+- 保留 PlanningPage 的既有 API、錯誤 pointer、IP-R24 選單重載與權限邏輯，以路由區分清單、詳情、獨立表單；同專案只保留已載入資料，離頁清除草稿。
+- 修改頁依三支獨立寫入 API 分成地點、建議指派、項目三頁，以 section 查詢參數保留可重新整理的網址；避免多請求部分成功被誤認為整份成功。
+- 來源與測試：`frontend/src/admin/planning/PlanningPage.tsx`、`PlanningPage.test.tsx`、`PlanningRoutes.test.tsx`；路由註冊 `frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/routes.ts`、`frontend/src/routes.test.ts`；E2E `demo/e2e/walkthrough.mjs`、`demo/e2e/template-acceptance.mjs`，其餘僅同步上述三份規格。
+- 驗證保留原有派送、檢查、停用建議指派提示、既有任務排除本筆、封存唯讀與 IP-R23～R26 斷言，新增直接網址權限、重新整理、返回、未儲存與草稿清除；完整 make check 使用獨立 PostgreSQL 資料庫，等 Docker 恢復後執行。E2E 使用 18612／18613，真頁截圖在 repo 外保存。
