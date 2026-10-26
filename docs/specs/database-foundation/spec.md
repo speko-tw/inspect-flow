@@ -54,7 +54,7 @@
 | DBF-R07 | 程式碼**應**避免 SQLite 專用的 raw SQL；**不得**依賴 SQLite AUTOINCREMENT 作為跨系統身分 | 應（避免 raw SQL）；不得（AUTOINCREMENT） | [PR-03](../../intents/02-principles.md#pr-03)「規則」「怎麼做」；[KD-07](../../intents/03-decisions-and-stack.md#kd-07)（考慮過但沒選：AUTOINCREMENT） |
 | DBF-R08 | 時間欄位**應**以含時區的型別儲存 UTC 時間，SQLite 與 PostgreSQL 讀回的都是同一個 UTC 時刻；API 輸出沿用 `api-conventions` 的時間格式（API-R09） | 應 | [PR-03](../../intents/02-principles.md#pr-03)「怎麼做」（timestamp 跨資料庫一致）；[KD-14](../../intents/03-decisions-and-stack.md#kd-14) |
 | DBF-R09 | 後端**應**提供一個交易單位給 Service 層使用：一次請求內的寫入在成功時一起提交，拋出例外時一起回滾；API 層不直接組 SQL | 應 | [KD-10](../../intents/03-decisions-and-stack.md#kd-10)；[01-overview Backend 分層](../../intents/01-overview.md#backend-分層與存取邊界)（依據：架構基準 §2.2、§7） |
-| DBF-R10 | CI **必須**在每個 PR 對 PostgreSQL 執行 `alembic upgrade head` 與資料庫相關的測試（`backend/tests/db/`），另含角色 API 的 PostgreSQL 回歸（#741），任一失敗時 check 為失敗；整套後端測試不對 PostgreSQL 跑。這一段**必須**經由 `make check` 執行，不另開 CI job（依 SKL-R04）：`make check` 只在設定了 PostgreSQL 連線時執行這一段，未設定時略過、其餘檢查照常；CI 以 service container 提供 PostgreSQL 並設定連線。PostgreSQL 採實作時官方支援中的最新穩定主版本，版本號固定寫在 CI 設定裡，升級時另外調整 | 必須 | [CI](../../intents/03-decisions-and-stack.md#stack-ci)（PostgreSQL 相容性測試為 CI 閘門，已決定）；[PR-03](../../intents/02-principles.md#pr-03)「怎麼檢查」；由 `skeleton` 移交；範圍、頻率、機制與版本依 [DBF-Q1](#dbf-q1) 裁定（[#53](https://github.com/speko-tw/inspect-flow/issues/53)） |
+| DBF-R10 | CI **必須**在每個 PR 對 PostgreSQL 執行 `alembic upgrade head` 與資料庫相關的測試（`backend/tests/db/`），任一失敗時 check 為失敗；整套後端測試不對 PostgreSQL 跑。這一段**必須**經由 `make check` 執行，不另開 CI job（依 SKL-R04）：`make check` 只在設定了 PostgreSQL 連線時執行這一段，未設定時略過、其餘檢查照常；CI 以 service container 提供 PostgreSQL 並設定連線。PostgreSQL 採實作時官方支援中的最新穩定主版本，版本號固定寫在 CI 設定裡，升級時另外調整 | 必須 | [CI](../../intents/03-decisions-and-stack.md#stack-ci)（PostgreSQL 相容性測試為 CI 閘門，已決定）；[PR-03](../../intents/02-principles.md#pr-03)「怎麼檢查」；由 `skeleton` 移交；範圍、頻率、機制與版本依 [DBF-Q1](#dbf-q1) 裁定（[#53](https://github.com/speko-tw/inspect-flow/issues/53)） |
 
 ### 第一段：`User`、`Project` 共通結構（凍結）
 
@@ -123,7 +123,7 @@
 | DBF-AC05 | 後端的連線初始化邏輯，分別套用在 SQLite 檔案資料庫與非 SQLite 方言的連線上 | SQLite：從後端取得的連線查 `PRAGMA foreign_keys` 與 `PRAGMA journal_mode`；非 SQLite：以非 SQLite 方言觸發同一段初始化；另掃描 `backend/app` 原始碼中所有 `PRAGMA` 語句 | SQLite 分別回傳 `1` 與 `wal`；非 SQLite 連線上沒有執行任何 `PRAGMA`；每一處 `PRAGMA` 都帶有計畫規定格式的資料庫相依性標註 | DBF-R06、DBF-R07 |
 | DBF-AC06 | 一張測試專用、含時間欄位的資料表 | 寫入一個 `+08:00` 時區的時間後讀回 | 讀回的值帶時區、換算成 UTC 後與寫入的時刻相同；用 `api-conventions` 的時間格式輸出以 `Z` 結尾 | DBF-R08 |
 | DBF-AC07 | 一張測試專用的資料表，以及在同一個交易單位內寫入兩筆、第二筆後拋出例外的操作 | 執行該操作，再執行一次不拋例外的同樣操作 | 拋例外時兩筆都不存在；不拋例外時兩筆都存在 | DBF-R09 |
-| DBF-AC08 | 一個 PR 的 CI 執行，CI 以 service container 提供 PostgreSQL 並設定連線；另有一個沒有設定 PostgreSQL 連線的本機環境 | CI 執行 `make check`；本機執行 `make check` | CI 對 PostgreSQL 執行 `alembic upgrade head` 與 `backend/tests/db/` 的測試，另含角色 API 的 PostgreSQL 回歸（#741），全部成功時 check 通過；故意放入一支在 PostgreSQL 上會失敗的 migration 時，check 失敗；故意讓 `backend/tests/db/` 的一個測試在 PostgreSQL 上失敗時，check 也失敗；CI 設定裡的 PostgreSQL 版本是固定的主版本號，不是 `latest` 這類浮動標籤，且是實作當時 PostgreSQL 官方支援中的最新穩定主版本；本機略過 PostgreSQL 這一段，其餘檢查照常執行 | DBF-R10 |
+| DBF-AC08 | 一個 PR 的 CI 執行，CI 以 service container 提供 PostgreSQL 並設定連線；另有一個沒有設定 PostgreSQL 連線的本機環境 | CI 執行 `make check`；本機執行 `make check` | CI 對 PostgreSQL 執行 `alembic upgrade head` 與 `backend/tests/db/` 的測試，全部成功時 check 通過；故意放入一支在 PostgreSQL 上會失敗的 migration 時，check 失敗；故意讓 `backend/tests/db/` 的一個測試在 PostgreSQL 上失敗時，check 也失敗；CI 設定裡的 PostgreSQL 版本是固定的主版本號，不是 `latest` 這類浮動標籤，且是實作當時 PostgreSQL 官方支援中的最新穩定主版本；本機略過 PostgreSQL 這一段，其餘檢查照常執行 | DBF-R10 |
 
 ### 第一段：`User`、`Project` 共通結構
 
@@ -178,4 +178,3 @@
 - DBF-R22、DBF-AC14：補明舊 `range` 資料空容許誤差轉成 `0`，並測試範本與專案副本兩張表 — [PR #373 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/373#pullrequestreview-5404511885)。
 - 意圖變更跟進（負責人裁定，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖變更見 KD-69）：DBF-R20 補明 `SystemRoleAssignment` 只在過渡期保留，改造時以新 migration 轉為人員模組權限（資料表由 `domain-model` DOM-R59 定義）；其餘不變 — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
 - 規格澄清（[#542](https://github.com/speko-tw/inspect-flow/issues/542)）：intents 整併後，已裁定的 OQ／G 與被取代的 KD 引用改指新位置，開工門檻比對改列仍擋門檻的 G-06、G-07 與已併入決策的原門檻項目；只改引用與依據欄，不改需求、驗收條件與狀態 — [#542](https://github.com/speko-tw/inspect-flow/issues/542)
-- 計畫調整（[#741](https://github.com/speko-tw/inspect-flow/issues/741)）：DBF-R10、DBF-AC08 的 PostgreSQL 階段另含 `backend/tests/api/test_roles_api.py` 角色 API 回歸；延續 DBF-Q1 的 migration 與 `tests/db/` 基線，不擴大為整套後端測試。

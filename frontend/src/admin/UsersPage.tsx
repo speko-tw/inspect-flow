@@ -168,8 +168,10 @@ async function loadBatchDeactivationPreviews(users: User[]) {
         try {
           previews[index] = await loadDeactivationPreview(users[index].id)
         } catch (caught) {
-          failed = true
-          failure = caught
+          if (!failed) {
+            failed = true
+            failure = caught
+          }
         }
       }
     }),
@@ -210,7 +212,7 @@ type PendingAction = {
 
 export default function UsersPage({
   onTemporaryPassword,
-  detailUserId,
+  detailUserId: rawDetailUserId,
   initialQuery,
   hideCreateForm = false,
   externalNavigationGuard = false,
@@ -232,6 +234,8 @@ export default function UsersPage({
   onDirtyChange?: (dirty: boolean) => void
   onSelectUser?: (id: string) => void
 }) {
+  // 網址 UUID 可為大寫；統一請求鍵與比對，避免重載或漏掉到期捷徑。
+  const detailUserId = rawDetailUserId?.toLowerCase()
   const { user: currentUser } = useCurrentUser()
   const location = useLocation()
   const navigate = useNavigate()
@@ -320,6 +324,12 @@ export default function UsersPage({
     projects: DeactivationCheck['last_manager_projects']
     reassignmentProjects: DeactivationCheck['last_manager_projects']
   } | null>(null)
+  const batchDeactivationRequestId = useRef(0)
+  const invalidateBatchDeactivationPreview = useCallback(() => {
+    batchDeactivationRequestId.current += 1
+    setBatchDeactivationLoading(false)
+    setBatchDeactivationPreview(null)
+  }, [])
   const [batchActivationLoading, setBatchActivationLoading] = useState(false)
   const [batchActivationBusy, setBatchActivationBusy] = useState(false)
   const [batchActivationError, setBatchActivationError] = useState('')
@@ -427,14 +437,19 @@ export default function UsersPage({
 
   useEffect(() => {
     // T3：清單結果不屬於詳情或另一頁，不能隨共用頁面狀態留下。
+    invalidateBatchDeactivationPreview()
     setBatchDeactivationError('')
     setBatchDeactivationNotice('')
     setBatchActivationError('')
     setBatchActivationNotice('')
     setBatchActivationPreview(null)
-    setBatchDeactivationPreview(null)
     setSelectedBatchUserIds([])
-  }, [detailUserId, location.key, appliedQuery])
+  }, [
+    detailUserId,
+    location.key,
+    appliedQuery,
+    invalidateBatchDeactivationPreview,
+  ])
 
   useEffect(() => {
     if (!pendingAction || ['admin', 'reset'].includes(pendingAction.kind)) {
@@ -520,6 +535,7 @@ export default function UsersPage({
   useEffect(() => {
     return () => {
       companyRequestId.current += 1
+      batchDeactivationRequestId.current += 1
     }
   }, [loadCompanies])
 
@@ -583,11 +599,14 @@ export default function UsersPage({
         selectedBatchUserIds.includes(user.id) && user.id !== currentUser.id,
     )
     if (selected.length === 0 || batchDeactivationLoading) return
+    const requestId = ++batchDeactivationRequestId.current
     setBatchDeactivationError('')
     setBatchDeactivationNotice('')
     setBatchDeactivationLoading(true)
     try {
       const checks = await loadBatchDeactivationPreviews(selected)
+      // 搜尋或換頁後，只讓目前這一批預覽更新確認框與載入狀態。
+      if (requestId !== batchDeactivationRequestId.current) return
       const projects = new Map<
         string,
         DeactivationCheck['last_manager_projects'][number]
@@ -610,9 +629,11 @@ export default function UsersPage({
         reassignmentProjects: [...reassignmentProjects.values()],
       })
     } catch (caught) {
-      setBatchDeactivationError(managementErrorMessage(caught))
+      if (requestId === batchDeactivationRequestId.current)
+        setBatchDeactivationError(managementErrorMessage(caught))
     } finally {
-      setBatchDeactivationLoading(false)
+      if (requestId === batchDeactivationRequestId.current)
+        setBatchDeactivationLoading(false)
     }
   }
 
@@ -718,7 +739,7 @@ export default function UsersPage({
   }
 
   function cancelBatchDeactivation() {
-    setBatchDeactivationPreview(null)
+    invalidateBatchDeactivationPreview()
     clearBatchMessages()
   }
 
@@ -1051,6 +1072,7 @@ export default function UsersPage({
                   onCancel={() => {
                     setExpiryEditorUser(null)
                     setEditingUser(null)
+                    reportDirty(`details:${detail.id}`, false)
                   }}
                   onDirtyChange={(dirty) =>
                     reportDirty(`details:${detail.id}`, dirty)
@@ -1081,7 +1103,10 @@ export default function UsersPage({
                     companies={companies}
                     error={rowError(detail.id, 'company')}
                     errorFocusRequest={saveError?.request}
-                    onCancel={() => setEditingCompany(null)}
+                    onCancel={() => {
+                      setEditingCompany(null)
+                      reportDirty(`company:${detail.id}`, false)
+                    }}
                     onDirtyChange={(dirty) =>
                       reportDirty(`company:${detail.id}`, dirty)
                     }
@@ -1168,6 +1193,7 @@ export default function UsersPage({
               onQueryChange={setQuery}
               onSearch={(event) => {
                 event.preventDefault()
+                invalidateBatchDeactivationPreview()
                 clearBatchMessages()
                 setSelectedBatchUserIds([])
                 void search(query).then(() => onQueryApplied?.(query.trim()))
@@ -1180,13 +1206,14 @@ export default function UsersPage({
                 <p>
                   找不到符合「{appliedQuery}」的帳號。{' '}
                   <button
-                    onClick={() =>
+                    onClick={() => {
+                      invalidateBatchDeactivationPreview()
                       void clearSearch().then(() => {
                         clearBatchMessages()
                         setSelectedBatchUserIds([])
                         onQueryApplied?.('')
                       })
-                    }
+                    }}
                     type="button"
                   >
                     清除搜尋
@@ -1666,11 +1693,6 @@ export default function UsersPage({
                         <DeactivationConsequences
                           count={batchDeactivationPreview.users.length}
                         />
-                        <DeactivationReassignmentLinks
-                          projects={
-                            batchDeactivationPreview.reassignmentProjects
-                          }
-                        />
                         <p>要停用的帳號：</p>
                         <ul aria-label="要停用的帳號">
                           {batchDeactivationPreview.users.map((user) => (
@@ -1700,6 +1722,11 @@ export default function UsersPage({
                             </ul>
                           </div>
                         )}
+                        <DeactivationReassignmentLinks
+                          projects={
+                            batchDeactivationPreview.reassignmentProjects
+                          }
+                        />
                       </ConfirmBox>
                     )}
                   </>

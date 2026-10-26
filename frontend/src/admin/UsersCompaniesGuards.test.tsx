@@ -2381,3 +2381,309 @@ it('批次預覽同時最多六個帳號、十二個 GET 在途', async () => {
     }),
   ).toBeVisible()
 })
+
+describe('W-741 R4 回歸', () => {
+  it('詳情在途才放行不含目標的清單，只取一次且保留表單', async () => {
+    const listGate = deferred()
+    const detailGate = deferred()
+    const backend = stubBackend({
+      users: [],
+      detailUser: { ...regularUser, is_external_collaborator: true },
+      hold: (call) =>
+        call.path === '/api/v1/users'
+          ? listGate
+          : call.path === '/api/v1/users/user-1'
+            ? detailGate
+            : undefined,
+    })
+    function LocationProbe() {
+      return <output aria-label="測試網址">{useLocation().search}</output>
+    }
+    const view = render(
+      <DataMemoryRouter initialEntries={['/accounts/user-1?edit=expiry']}>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <UsersPage detailUserId="user-1" onTemporaryPassword={vi.fn()} />
+          <LocationProbe />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+    try {
+      await waitFor(() =>
+        expect(backend.count('GET', '/api/v1/users/user-1')).toBe(1),
+      )
+      await act(async () => listGate.resolve())
+      expect(backend.count('GET', '/api/v1/users')).toBe(1)
+      expect(backend.count('GET', '/api/v1/users/user-1')).toBe(1)
+      await act(async () => detailGate.resolve())
+      const date = await screen.findByLabelText(/外部帳號到期日/)
+      const form = date.closest('form')
+      expect(form).not.toBeNull()
+      fireEvent.change(date, { target: { value: '2030-01-01' } })
+      await waitFor(() =>
+        expect(screen.getByLabelText('測試網址')).toBeEmptyDOMElement(),
+      )
+      expect(backend.count('GET', '/api/v1/users/user-1')).toBe(1)
+      expect(screen.getByLabelText(/外部帳號到期日/)).toBe(date)
+      expect(date.closest('form')).toBe(form)
+      expect(date).toHaveValue('2030-01-01')
+    } finally {
+      view.unmount()
+      listGate.resolve()
+      detailGate.resolve()
+    }
+  })
+
+  it('大寫 UUID 的到期捷徑沿用小寫 API 帳號並只取一次', async () => {
+    const id = 'abcdefab-1234-4321-9876-abcdefabcdef'
+    const backend = stubBackend({
+      users: [],
+      detailUser: {
+        ...regularUser,
+        id,
+        is_external_collaborator: true,
+      },
+    })
+    render(
+      <DataMemoryRouter
+        initialEntries={[`/accounts/${id.toUpperCase()}?edit=expiry`]}
+      >
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <UsersPage
+            detailUserId={id.toUpperCase()}
+            onTemporaryPassword={vi.fn()}
+          />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+    const date = await screen.findByLabelText(/外部帳號到期日/)
+    await waitFor(() => expect(date).toHaveFocus())
+    expect(backend.count('GET', `/api/v1/users/${id}`)).toBe(1)
+    expect(
+      backend.calls.filter((call) =>
+        call.path.toLowerCase().endsWith(`/users/${id}`),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it.each(['修改資料', '修改公司連結'])(
+    '詳情%s取消後返回清單不再攔截未儲存變更',
+    async (action) => {
+      stubBackend({
+        companies: [company, { ...company, id: 'company-2', name: '示範二' }],
+      })
+      function RoutedUsers() {
+        const location = useLocation()
+        const navigate = useNavigate()
+        return (
+          <>
+            <button onClick={() => navigate('/accounts')}>測試返回清單</button>
+            <UsersPage
+              detailUserId={
+                location.pathname === '/accounts/user-1' ? 'user-1' : null
+              }
+              onTemporaryPassword={vi.fn()}
+            />
+          </>
+        )
+      }
+      render(
+        <DataMemoryRouter initialEntries={['/accounts/user-1']}>
+          <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+            <RoutedUsers />
+          </CurrentUserProvider>
+        </DataMemoryRouter>,
+      )
+      fireEvent.click(await screen.findByRole('button', { name: action }))
+      const form = (
+        await screen.findByRole('heading', {
+          name: action === '修改資料' ? '修改帳號資料' : '連結公司',
+        })
+      ).closest('form')!
+      if (action === '修改資料') {
+        fireEvent.change(within(form).getByLabelText(/中文姓名/), {
+          target: { value: '未儲存姓名' },
+        })
+      } else {
+        await within(form).findByRole('option', { name: '示範二' })
+        fireEvent.change(within(form).getByLabelText('公司'), {
+          target: { value: 'company-2' },
+        })
+      }
+      fireEvent.click(screen.getByRole('button', { name: '測試返回清單' }))
+      fireEvent.click(await screen.findByRole('button', { name: '保留編輯' }))
+      expect(form).toBeInTheDocument()
+      fireEvent.click(within(form).getByRole('button', { name: '取消' }))
+      fireEvent.click(screen.getByRole('button', { name: '測試返回清單' }))
+      expect(
+        await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+      ).toBeVisible()
+      expect(
+        screen.queryByRole('button', { name: '保留編輯' }),
+      ).not.toBeInTheDocument()
+    },
+  )
+
+  it('多筆預覽依序失敗時保留第一個錯誤', async () => {
+    stubBackend({
+      users: [
+        regularUser,
+        { ...regularUser, id: 'user-2', username: 'other' },
+      ],
+    })
+    const original = globalThis.fetch
+    const gates = [deferred(), deferred()]
+    const started: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (...args: Parameters<typeof fetch>) => {
+        const path = new URL(String(args[0]), 'http://localhost').pathname
+        if (!path.endsWith('/deactivation-check')) return original(...args)
+        const index = path.includes('/user-1/') ? 0 : 1
+        started.push(path)
+        await gates[index].promise
+        return Response.json(
+          {
+            error: {
+              code: index === 0 ? 'user.last_admin' : 'user.builtin_protected',
+            },
+          },
+          { status: 400 },
+        )
+      }),
+    )
+    const view = renderUsers()
+    try {
+      for (const checkbox of await screen.findAllByRole('checkbox', {
+        name: /^選取 /,
+      }))
+        fireEvent.click(checkbox)
+      fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+      await waitFor(() => expect(started).toHaveLength(2))
+      await act(async () => gates[0].resolve())
+      await act(async () => gates[1].resolve())
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        '系統至少要保留一位啟用中的管理者。',
+      )
+      expect(screen.queryByRole('region', { name: '批次停用確認' })).toBeNull()
+    } finally {
+      view.unmount()
+      gates.forEach((gate) => gate.resolve())
+    }
+  })
+
+  it.each(
+    ['搜尋', '相同搜尋', '切換詳情'].flatMap((transition) =>
+      [false, true].map((fail) => ({ transition, fail })),
+    ),
+  )(
+    '$transition 後丟棄舊預覽（失敗 $fail），不覆蓋新請求',
+    async ({ transition, fail }) => {
+      const gates = [deferred(), deferred()]
+      const backend = stubBackend({
+        users: [
+          regularUser,
+          { ...regularUser, id: 'user-2', username: 'other' },
+        ],
+        hold: (call) =>
+          /\/(deactivation-check|participating-projects)$/.test(call.path)
+            ? gates[call.path.includes('/user-1/') ? 0 : 1]
+            : undefined,
+        fail: (call) =>
+          fail && call.path.endsWith('/user-1/deactivation-check'),
+      })
+      function KeptUsers() {
+        const [detail, setDetail] = useState<string | null>(null)
+        return (
+          <>
+            <button onClick={() => setDetail('user-1')}>測試詳情</button>
+            <button onClick={() => setDetail(null)}>測試清單</button>
+            <UsersPage detailUserId={detail} onTemporaryPassword={vi.fn()} />
+          </>
+        )
+      }
+      const view = render(
+        <DataMemoryRouter>
+          <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+            <KeptUsers />
+          </CurrentUserProvider>
+        </DataMemoryRouter>,
+      )
+      try {
+        fireEvent.click(
+          await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+        await waitFor(() =>
+          expect(backend.count('GET', /user-1\/deactivation-check$/)).toBe(1),
+        )
+        if (transition === '切換詳情') {
+          fireEvent.click(screen.getByRole('button', { name: '測試詳情' }))
+          await screen.findByRole('heading', { name: '鄧安娜' })
+          fireEvent.click(screen.getByRole('button', { name: '測試清單' }))
+        } else {
+          fireEvent.change(screen.getByLabelText('搜尋帳號'), {
+            target: { value: transition === '搜尋' ? '新查詢' : '' },
+          })
+          fireEvent.click(
+            screen.getByRole('button', { name: '搜尋', exact: true }),
+          )
+          await waitFor(() =>
+            expect(backend.count('GET', '/api/v1/users')).toBe(2),
+          )
+        }
+        fireEvent.click(
+          await screen.findByRole('checkbox', { name: '選取 other' }),
+        )
+        const button = screen.getByRole('button', { name: '批次停用帳號' })
+        expect(button).toBeEnabled()
+        fireEvent.click(button)
+        await waitFor(() =>
+          expect(backend.count('GET', /user-2\/deactivation-check$/)).toBe(1),
+        )
+        await act(async () => gates[0].resolve())
+        expect(button).toBeDisabled()
+        expect(
+          screen.queryByRole('region', { name: '批次停用確認' }),
+        ).toBeNull()
+        expect(screen.queryByRole('alert')).toBeNull()
+        await act(async () => gates[1].resolve())
+        const box = await screen.findByRole('region', { name: '批次停用確認' })
+        expect(
+          within(box).getByRole('list', { name: '要停用的帳號' }),
+        ).toHaveTextContent('other')
+        expect(
+          within(box).getByRole('list', { name: '要停用的帳號' }),
+        ).not.toHaveTextContent('anna.deng')
+      } finally {
+        view.unmount()
+        gates.forEach((gate) => gate.resolve())
+      }
+    },
+  )
+
+  it('批次改派連結排在名單與專案警告之後', async () => {
+    const project = { id: 'project-1', project_code: 'P-1', name: '示範工地' }
+    stubBackend({
+      lastManagerProjects: [project],
+      participatingProjects: { 'user-1': [{ ...project, roles: [] }] },
+    })
+    renderUsers()
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    const box = await screen.findByRole('region', { name: '批次停用確認' })
+    const names = within(box).getByRole('list', { name: '要停用的帳號' })
+    const warning =
+      within(box).getByText(/停用後下列專案將沒有啟用中的管理成員/)
+    const links = within(box).getByRole('region', { name: '改派未完成任務' })
+    expect(
+      names.compareDocumentPosition(warning) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      warning.compareDocumentPosition(links) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+})
