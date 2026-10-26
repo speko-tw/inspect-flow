@@ -16,7 +16,7 @@ describe('mapWithConcurrency（#732）', () => {
         inFlight -= 1
         return item * 2
       },
-      4,
+      { limit: 4 },
     )
     expect(peak).toBe(4)
     expect(results).toEqual(items.map((item) => item * 2))
@@ -38,9 +38,41 @@ describe('mapWithConcurrency（#732）', () => {
           if (item === 2) throw failure
           return item
         },
-        3,
+        { limit: 3 },
       ),
     ).rejects.toBe(failure)
     expect(started.length).toBeLessThan(30)
+  })
+
+  it('等在途請求收尾才回報，且只保留第一個錯誤', async () => {
+    const first = new Error('first')
+    let settled = 0
+    await expect(
+      mapWithConcurrency(
+        [0, 1, 2],
+        async (item) => {
+          await new Promise((resolve) => setTimeout(resolve, item * 5 + 1))
+          settled += 1
+          throw item === 0 ? first : new Error(`later-${item}`)
+        },
+        { limit: 3 },
+      ),
+    ).rejects.toBe(first)
+    expect(settled).toBe(3)
+  })
+
+  it('過期後不再領取新工作', async () => {
+    const started: number[] = []
+    let stale = false
+    await mapWithConcurrency(
+      Array.from({ length: 20 }, (_, index) => index),
+      async (item) => {
+        started.push(item)
+        await new Promise((resolve) => setTimeout(resolve, 1))
+        if (item === 1) stale = true
+      },
+      { limit: 2, isStale: () => stale },
+    )
+    expect(started.length).toBeLessThan(20)
   })
 })
