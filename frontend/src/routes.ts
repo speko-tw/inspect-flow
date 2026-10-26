@@ -117,6 +117,16 @@ export const ROUTES = {
     title: PAGE_TITLES.projectMembers,
     permission: 'project-access',
   },
+  projectMemberNew: {
+    path: '/projects/:projectId/members/new',
+    title: PAGE_TITLES.projectMemberNew,
+    permission: 'project-access',
+  },
+  projectMemberEdit: {
+    path: '/projects/:projectId/members/:userId/edit',
+    title: PAGE_TITLES.projectMemberEdit,
+    permission: 'project-access',
+  },
   projectItems: {
     path: '/projects/:projectId/inspection-items',
     title: PAGE_TITLES.projectItems,
@@ -125,6 +135,11 @@ export const ROUTES = {
   projectZones: {
     path: '/projects/:projectId/zones',
     title: PAGE_TITLES.projectZones,
+    permission: 'project-access',
+  },
+  projectZoneNew: {
+    path: '/projects/:projectId/zones/new',
+    title: PAGE_TITLES.projectZoneNew,
     permission: 'project-access',
   },
   projectInspectionTemplates: {
@@ -244,7 +259,10 @@ const ACCESS_ROUTES: Array<{ route: ProductRoute; end: boolean }> = [
   { route: ROUTES.projectPlanning, end: true },
   { route: ROUTES.projectItemChange, end: true },
   { route: ROUTES.projectItems, end: true },
+  { route: ROUTES.projectMemberEdit, end: true },
+  { route: ROUTES.projectMemberNew, end: true },
   { route: ROUTES.projectZones, end: true },
+  { route: ROUTES.projectZoneNew, end: true },
   { route: ROUTES.projectMembers, end: true },
   { route: ROUTES.projectHome, end: true },
   { route: ROUTES.adminProjects, end: true },

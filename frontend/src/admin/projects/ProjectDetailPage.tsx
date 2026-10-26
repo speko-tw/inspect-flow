@@ -5,7 +5,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
@@ -15,6 +15,7 @@ import { UnsavedLeaveBox } from '../../ui/navigation'
 import * as navigationGuard from '../../ui/navigation'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { ManagementApiError, managementErrorMessage } from '../api'
+import { isResourceId } from '../../resourceId'
 import { RequiredMark } from '../../ui/Form'
 import { ACCOUNT_LABEL } from '../../layout/navigationLabels'
 import MemberRoleFields from './MemberRoleFields'
@@ -84,6 +85,9 @@ function assignmentError(caught: unknown): string | null {
   if (caught.code === 'project.member_self_role_change') {
     return '不能修改自己的專案角色。'
   }
+  if (caught.code === 'project.last_manager') {
+    return '這是此專案最後一位管理者，請先安排其他管理者後再修改角色。'
+  }
   return null
 }
 
@@ -103,12 +107,57 @@ function revealMemberAlert(alert: HTMLParagraphElement | null) {
 }
 
 export default function ProjectDetailPage() {
-  const { projectId = '' } = useParams()
+  const { projectId = '', userId = '' } = useParams()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const isAddPage = location.pathname.endsWith('/members/new')
+  const isEditPage = location.pathname.endsWith('/edit')
+  const mode = isAddPage ? 'add' : isEditPage ? 'edit' : 'list'
+  const memberListPath = `/projects/${encodeURIComponent(projectId)}/members`
+  const returnTo = memberReturnPath(
+    projectId,
+    (location.state as { returnTo?: unknown } | null)?.returnTo,
+  )
   // 換專案時整頁重來，不沿用上一個專案的候選與角色。
-  return <ProjectMembersSection key={projectId} projectId={projectId} />
+  return (
+    <ProjectMembersSection
+      key={projectId}
+      mode={mode}
+      memberListPath={memberListPath}
+      navigate={navigate}
+      projectId={projectId}
+      returnTo={returnTo}
+      userId={userId}
+    />
+  )
 }
 
-function ProjectMembersSection({ projectId }: { projectId: string }) {
+function memberReturnPath(projectId: string, value: unknown): string {
+  const listPath = `/projects/${encodeURIComponent(projectId)}/members`
+  if (value === listPath) return listPath
+  const accountMatch =
+    typeof value === 'string' && /^\/accounts\/([^/?#]+)$/.exec(value)
+  if (accountMatch && isResourceId(accountMatch[1])) {
+    return `/accounts/${encodeURIComponent(accountMatch[1])}`
+  }
+  return listPath
+}
+
+function ProjectMembersSection({
+  mode,
+  memberListPath,
+  navigate,
+  projectId,
+  returnTo,
+  userId,
+}: {
+  mode: 'list' | 'add' | 'edit'
+  memberListPath: string
+  navigate: ReturnType<typeof useNavigate>
+  projectId: string
+  returnTo: string
+  userId: string
+}) {
   const { user: currentUser } = useCurrentUser()
   const isAdmin = currentUser.is_admin
   const [projectState, setProjectState] = useState<Loaded<Project>>(LOADING)
@@ -126,15 +175,20 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   } | null>(null)
   const memberMessageRef = useRef<HTMLParagraphElement | null>(null)
   const [notice, setNotice] = useState('')
+  const [rowNotice, setRowNotice] = useState<{
+    userId: string
+    text: string
+  }>()
   const [batchRoleError, setBatchRoleError] = useState('')
   const batchRoleErrorRef = useRef<HTMLParagraphElement | null>(null)
   const [batchRoleNotice, setBatchRoleNotice] = useState('')
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
   const [batchRoleId, setBatchRoleId] = useState('')
 
-  // 加入表單（草稿留在這裡，進出修改畫面都不會掉）。
+  // 加入表單草稿只在新增路由內保留；確認離開後由路由身分重設。
   const [newUserId, setNewUserId] = useState('')
   const [newRoleIds, setNewRoleIds] = useState<string[]>([])
+  const [formRouteKey, setFormRouteKey] = useState(`${mode}:${userId}`)
   const [userError, setUserError] = useState('')
   const [rolesError, setRolesError] = useState('')
   const userRef = useRef<HTMLSelectElement>(null)
@@ -147,12 +201,23 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     error: string
     confirmDiscard: boolean
   } | null>(null)
+  const currentFormRouteKey = `${mode}:${userId}`
+  if (formRouteKey !== currentFormRouteKey) {
+    // 路由確認離開表單後丟棄草稿；被 guard 攔下時路徑不變，草稿保留。
+    setFormRouteKey(currentFormRouteKey)
+    setNewUserId('')
+    setNewRoleIds([])
+    setUserError('')
+    setRolesError('')
+    setMessage(null)
+    setEditing(null)
+  }
   const editingDirty = Boolean(
     editing && !sameSet(editing.roleIds, editing.member.role_ids),
   )
   const addDirty = Boolean(newUserId || newRoleIds.length > 0)
   const leaveGuard = navigationGuard.useUnsavedNavigationGuard(
-    editingDirty || addDirty,
+    (mode === 'edit' && editingDirty) || (mode === 'add' && addDirty),
   )
   const editRolesRef = useRef<HTMLInputElement>(null)
   const editHeadingRef = useRef<HTMLHeadingElement>(null)
@@ -199,6 +264,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   function clearMessages() {
     setMessage(null)
     setNotice('')
+    setRowNotice(undefined)
     setBatchRoleError('')
     setBatchRoleNotice('')
   }
@@ -234,7 +300,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       )
       setSelectedMemberIds([])
       setBatchRoleId('')
-      setReloadKey((key) => key + 1)
+      reload()
     } catch (caught) {
       setBatchRoleError(managementErrorMessage(caught))
     } finally {
@@ -263,10 +329,12 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     try {
       await addProjectMember(projectId, newUserId, newRoleIds)
       const added = candidates.find((user) => user.id === newUserId)
-      setNotice(`已加入「${added ? personLabel(added) : '成員'}」。`)
-      setNewUserId('')
-      setNewRoleIds([])
-      setReloadKey((key) => key + 1)
+      setRowNotice({
+        userId: newUserId,
+        text: `已加入「${added ? personLabel(added) : '成員'}」。`,
+      })
+      reload()
+      leaveGuard.allowNavigation(() => navigate(memberListPath))
     } catch (caught) {
       if (isRolesRequired(caught)) {
         setRolesError(ROLES_REQUIRED_TEXT)
@@ -306,9 +374,12 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
         editing.member.user_id,
         editing.roleIds,
       )
-      setNotice(`已更新「${personLabel(editing.member)}」的角色。`)
-      setEditing(null)
-      setReloadKey((key) => key + 1)
+      setRowNotice({
+        userId: editing.member.user_id,
+        text: `已更新「${personLabel(editing.member)}」的角色。`,
+      })
+      reload()
+      leaveGuard.allowNavigation(() => navigate(returnTo))
     } catch (caught) {
       if (isRolesRequired(caught)) {
         setEditing({ ...editing, error: ROLES_REQUIRED_TEXT })
@@ -325,17 +396,6 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     }
   }
 
-  function startEdit(member: ProjectMember) {
-    clearMessages()
-    setRemoving(null)
-    setEditing({
-      member,
-      roleIds: [...member.role_ids],
-      error: '',
-      confirmDiscard: false,
-    })
-  }
-
   function cancelEdit() {
     if (!editing) return
     if (editingDirty && !editing.confirmDiscard) {
@@ -343,6 +403,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       return
     }
     setEditing(null)
+    navigate(returnTo)
   }
 
   async function confirmRemove() {
@@ -354,7 +415,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       await removeProjectMember(projectId, removing.user_id)
       setNotice(`已將「${personLabel(removing)}」移出專案。`)
       setRemoving(null)
-      setReloadKey((key) => key + 1)
+      reload()
     } catch (caught) {
       setMessage({ scope: 'remove', text: managementErrorMessage(caught) })
     } finally {
@@ -376,6 +437,20 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   const members = dataOf(membersState)
   const candidates = dataOf(candidatesState)
   const roles = dataOf(rolesState)
+  const routeMember = members.find((item) => item.user_id === userId)
+  if (
+    mode === 'edit' &&
+    membersState.status === 'ready' &&
+    routeMember &&
+    editing?.member.id !== routeMember.id
+  ) {
+    setEditing({
+      member: routeMember,
+      roleIds: [...routeMember.role_ids],
+      error: '',
+      confirmDiscard: false,
+    })
+  }
   const selectedCandidate = candidates.find(
     (candidate) => candidate.id === newUserId,
   )
@@ -385,7 +460,12 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   const editableRoles = editing?.member.is_external_collaborator
     ? roles.filter((role) => role.is_external_allowed)
     : roles
-  const reload = () => setReloadKey((key) => key + 1)
+  function reload() {
+    setMembersState(LOADING)
+    setCandidatesState(LOADING)
+    setRolesState(LOADING)
+    setReloadKey((key) => key + 1)
+  }
   // 沒有可加入的人時，只顯示說明；角色勾選與加入按鈕都沒有意義。
   const noCandidates =
     candidatesState.status === 'ready' && candidates.length === 0
@@ -411,13 +491,26 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   }
   // 沒有 project_member.manage：成員 API 回 403，不顯示任何新增、修改、
   // 移出操作（導覽也已隱藏成員區段，這裡處理直接輸入網址的情況）。
-  if (membersState.status === 'failed' && membersState.forbidden) {
+  if (
+    (membersState.status === 'failed' && membersState.forbidden) ||
+    (mode === 'add' &&
+      [candidatesState, rolesState].some(
+        (state) => state.status === 'failed' && state.forbidden,
+      )) ||
+    (mode === 'edit' && rolesState.status === 'failed' && rolesState.forbidden)
+  ) {
     return <AccessDeniedPage headingLevel={2} />
   }
 
   // 成員列表是判斷權限的依據（沒有管理權限時它回 403）；先等它回來，
   // 避免候選、角色的失敗訊息在權限訊息出現前閃一下。
-  if (membersState.status === 'loading' && !editing) {
+  if (
+    membersState.status === 'loading' ||
+    (mode === 'add' &&
+      (candidatesState.status === 'loading' ||
+        rolesState.status === 'loading')) ||
+    (mode === 'edit' && rolesState.status === 'loading')
+  ) {
     return (
       <section aria-labelledby="project-heading">
         <h2 id="project-heading">成員</h2>
@@ -426,7 +519,22 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     )
   }
 
-  if (editing) {
+  if (mode === 'edit' && !editing) {
+    const returnLabel = returnTo.startsWith('/accounts/')
+      ? '返回帳號詳情'
+      : '返回成員清單'
+    return !routeMember ? (
+      <section aria-labelledby="project-heading">
+        <h2 id="project-heading">成員</h2>
+        <p role="alert">找不到這位專案成員。</p>
+        <Link to={returnTo}>{returnLabel}</Link>
+      </section>
+    ) : (
+      <p role="status">載入中…</p>
+    )
+  }
+
+  if (mode === 'edit' && editing) {
     return (
       <section aria-labelledby="project-heading">
         <h2 id="project-heading">成員</h2>
@@ -462,7 +570,12 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                   current ? { ...current, confirmDiscard: false } : current,
                 )
               }
-              onConfirm={() => setEditing(null)}
+              onConfirm={() =>
+                leaveGuard.allowNavigation(() => {
+                  setEditing(null)
+                  navigate(returnTo)
+                })
+              }
               variant="danger"
             >
               <p>角色還沒儲存，要捨棄這次的修改嗎？</p>
@@ -503,321 +616,369 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       )}
 
       <UnsavedLeaveBox guard={leaveGuard} />
-      <form
-        className="member-add-form"
-        noValidate
-        onKeyDown={blockImeEnter}
-        onSubmit={submitAdd}
-      >
-        <h3>加入成員</h3>
-        {candidatesState.status === 'failed' ? (
-          <div className="member-load-error">
-            <p role="alert">無法載入可加入的成員：{candidatesState.message}</p>
-            <button onClick={reload} type="button">
-              重新載入
-            </button>
-          </div>
-        ) : candidatesState.status === 'loading' ? (
-          <p>載入可加入的成員…</p>
-        ) : candidates.length === 0 ? (
-          <>
-            <p>沒有可加入的成員。</p>
-            {isAdmin ? (
-              <p className="field-hint">
-                要加入新的人，請先到
-                <Link to="/accounts">{ACCOUNT_LABEL}</Link>建立帳號。
-              </p>
-            ) : (
-              <p className="field-hint">
-                可加入尚未參與這個專案的成員；需要新增帳號請洽系統管理者。
-              </p>
-            )}
-          </>
-        ) : (
-          <div>
-            <label>
-              <span>
-                成員
-                <RequiredMark />
-              </span>
-              <select
-                aria-describedby={userError ? 'member-user-error' : undefined}
-                aria-invalid={userError ? true : undefined}
-                onChange={(event) => {
-                  setNewUserId(event.target.value)
-                  setNewRoleIds([])
-                  setUserError('')
-                  setRolesError('')
-                }}
-                ref={userRef}
-                value={newUserId}
-              >
-                <option value="">請選擇成員</option>
-                {candidates.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {personLabel(user)} · {user.company_name ?? '未連結公司'}
-                    {user.is_external_collaborator ? ' · 外部協作人員' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {selectedCandidate &&
-              (!selectedCandidate.module_status.project_use ||
-                !selectedCandidate.module_status.inspection_use) && (
-                <p className="field-hint">
-                  {[
-                    selectedCandidate.module_status.project_use
-                      ? null
-                      : '尚未開通專案權限，請系統管理者或被委派者開通',
-                    selectedCandidate.module_status.inspection_use
-                      ? null
-                      : '尚未開通查核權限，請系統管理者或被委派者開通',
-                  ]
-                    .filter(Boolean)
-                    .join('；')}
-                </p>
-              )}
-            {userError && (
-              <p className="field-error" id="member-user-error">
-                {userError}
-              </p>
-            )}
-          </div>
-        )}
-        {!noCandidates && (
-          <>
-            {rolesState.status === 'failed' ? (
+      {mode === 'list' ? (
+        <p>
+          <Link
+            className="btn-primary member-add-link"
+            onClick={clearMessages}
+            to={`${memberListPath}/new`}
+          >
+            加入成員
+          </Link>
+        </p>
+      ) : null}
+      {mode === 'add' ? (
+        <>
+          <form
+            className="member-add-form"
+            noValidate
+            onKeyDown={blockImeEnter}
+            onSubmit={submitAdd}
+          >
+            <h3>加入成員</h3>
+            {candidatesState.status === 'failed' ? (
               <div className="member-load-error">
-                <p role="alert">無法載入角色：{rolesState.message}</p>
+                <p role="alert">
+                  無法載入可加入的成員：{candidatesState.message}
+                </p>
                 <button onClick={reload} type="button">
                   重新載入
                 </button>
               </div>
-            ) : rolesState.status === 'loading' ? (
-              <p>載入角色…</p>
-            ) : roles.length === 0 ? (
+            ) : candidatesState.status === 'loading' ? (
+              <p>載入可加入的成員…</p>
+            ) : candidates.length === 0 ? (
               <>
-                <p>目前沒有角色。</p>
-                <p className="field-hint">
-                  {isAdmin ? (
-                    <>
-                      請先到<Link to="/roles">角色</Link>
-                      建立角色，才能把人加入專案。
-                    </>
-                  ) : (
-                    '還沒有可指派的角色，請洽系統管理者建立。'
-                  )}
-                </p>
-              </>
-            ) : (
-              <MemberRoleFields
-                error={rolesError}
-                firstRef={addRolesRef}
-                onChange={(next) => {
-                  setNewRoleIds(next)
-                  setRolesError('')
-                }}
-                roles={addableRoles}
-                selected={newRoleIds}
-              />
-            )}
-            <button
-              className="btn-primary"
-              disabled={
-                busy ||
-                !candidatesReady ||
-                !rolesReady ||
-                candidates.length === 0 ||
-                roles.length === 0
-              }
-              type="submit"
-            >
-              加入成員
-            </button>
-          </>
-        )}
-        {alertFor('add')}
-      </form>
-
-      <h3>成員列表</h3>
-      {membersState.status === 'ready' && members.length > 0 && rolesReady && (
-        <section aria-label="批次角色操作" className="member-batch-roles">
-          <p>已選取 {selectedMemberIds.length} 位成員。</p>
-          <label>
-            批次角色
-            <select
-              disabled={busy}
-              onChange={(event) => setBatchRoleId(event.target.value)}
-              value={batchRoleId}
-            >
-              <option value="">選擇角色</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            disabled={busy || !batchRoleId || selectedMemberIds.length === 0}
-            onClick={() => void submitBatchRole('assign')}
-            type="button"
-          >
-            {busy ? '正在更新角色…' : '批次指派角色'}
-          </button>
-          <button
-            disabled={busy || !batchRoleId || selectedMemberIds.length === 0}
-            onClick={() => void submitBatchRole('revoke')}
-            type="button"
-          >
-            {busy ? '正在更新角色…' : '批次收回角色'}
-          </button>
-          {batchRoleError && (
-            <p ref={batchRoleErrorRef} role="alert" tabIndex={-1}>
-              {batchRoleError}
-            </p>
-          )}
-          {batchRoleNotice && <p role="status">{batchRoleNotice}</p>}
-        </section>
-      )}
-      {membersState.status === 'failed' ? (
-        <div className="member-load-error">
-          <p role="alert">無法載入成員列表：{membersState.message}</p>
-          <button onClick={reload} type="button">
-            重新載入
-          </button>
-        </div>
-      ) : membersState.status === 'loading' ? (
-        <p>載入中…</p>
-      ) : members.length === 0 ? (
-        <div className="member-empty">
-          <p>目前沒有成員。</p>
-          <p className="field-hint">
-            先在上方選一個帳號並指定角色，把他加入專案。
-          </p>
-        </div>
-      ) : (
-        <ul className="member-list">
-          {members.map((member) => (
-            <li
-              className={
-                member.is_effectively_active
-                  ? 'member-card'
-                  : 'member-card member-card-inactive'
-              }
-              key={member.id}
-            >
-              <div className="member-card-main">
-                <label className="member-batch-select">
-                  <input
-                    checked={selectedMemberIds.includes(member.user_id)}
-                    disabled={
-                      busy ||
-                      !member.is_active ||
-                      member.user_id === currentUser.id
-                    }
-                    aria-describedby={
-                      !member.is_active
-                        ? `inactive-member-${member.id}`
-                        : undefined
-                    }
-                    onChange={(event) =>
-                      setSelectedMemberIds((current) =>
-                        event.target.checked
-                          ? [...current, member.user_id]
-                          : current.filter((id) => id !== member.user_id),
-                      )
-                    }
-                    type="checkbox"
-                    value={member.user_id}
-                  />
-                  選取 {personLabel(member)} 的角色
-                </label>
-                {!member.is_active && (
-                  <p
-                    className="field-hint"
-                    id={`inactive-member-${member.id}`}
-                  >
-                    此帳號已停用，不能批次修改角色。
+                <p>沒有可加入的成員。</p>
+                {isAdmin ? (
+                  <p className="field-hint">
+                    要加入新的人，請先到
+                    <Link to="/accounts">{ACCOUNT_LABEL}</Link>建立帳號。
+                  </p>
+                ) : (
+                  <p className="field-hint">
+                    可加入尚未參與這個專案的成員；需要新增帳號請洽系統管理者。
                   </p>
                 )}
-                <p className="member-card-name">
-                  {isAdmin ? (
-                    <Link
-                      to={`/accounts/${encodeURIComponent(member.user_id)}`}
-                    >
-                      {member.name_zh ?? member.username}
-                    </Link>
-                  ) : (
-                    (member.name_zh ?? member.username)
-                  )}
-                  {!member.is_active ? (
-                    <span>（已停用）</span>
-                  ) : !member.is_effectively_active ? (
-                    <span>（已到期）</span>
-                  ) : null}
-                </p>
-                <p className="field-hint">
-                  {[
-                    member.name_zh ? member.username : null,
-                    member.company_name ?? '未連結公司',
-                    member.email,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-                <p className="member-card-roles">
-                  {member.role_ids.length === 0 ? (
-                    <span className="member-warning">
-                      尚未指派角色，請修改角色
-                    </span>
-                  ) : (
-                    // 名稱由後端附上，建立者角色等不可指派的角色也能顯示。
-                    member.role_names.join('、')
-                  )}
-                </p>
-              </div>
-              {removing?.id === member.id ? (
-                <ConfirmBox
-                  busy={busy}
-                  confirmLabel="確認移出"
-                  label="移出確認"
-                  onCancel={() => setRemoving(null)}
-                  onConfirm={confirmRemove}
-                  variant="danger"
-                >
-                  <p>
-                    要把「{personLabel(member)}」移出專案嗎？
-                    移出後這個人在本專案的角色會一併移除；不影響他在其他專案的角色。
-                  </p>
-                  {alertFor('remove')}
-                </ConfirmBox>
-              ) : (
-                <div className="member-card-actions">
-                  <button
-                    aria-label={`修改「${personLabel(member)}」的角色`}
-                    disabled={busy || !rolesReady}
-                    onClick={() => startEdit(member)}
-                    type="button"
-                  >
-                    修改角色
-                  </button>
-                  <button
-                    aria-label={`將「${personLabel(member)}」移出專案`}
-                    disabled={busy}
-                    onClick={() => {
-                      clearMessages()
-                      setRemoving(member)
+              </>
+            ) : (
+              <div>
+                <label>
+                  <span>
+                    成員
+                    <RequiredMark />
+                  </span>
+                  <select
+                    aria-describedby={
+                      userError ? 'member-user-error' : undefined
+                    }
+                    aria-invalid={userError ? true : undefined}
+                    onChange={(event) => {
+                      setNewUserId(event.target.value)
+                      setNewRoleIds([])
+                      setUserError('')
+                      setRolesError('')
                     }}
-                    type="button"
+                    ref={userRef}
+                    value={newUserId}
                   >
-                    移出專案
-                  </button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+                    <option value="">請選擇成員</option>
+                    {candidates.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {personLabel(user)} ·{' '}
+                        {user.company_name ?? '未連結公司'}
+                        {user.is_external_collaborator
+                          ? ' · 外部協作人員'
+                          : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selectedCandidate &&
+                  (!selectedCandidate.module_status.project_use ||
+                    !selectedCandidate.module_status.inspection_use) && (
+                    <p className="field-hint">
+                      {[
+                        selectedCandidate.module_status.project_use
+                          ? null
+                          : '尚未開通專案權限，請系統管理者或被委派者開通',
+                        selectedCandidate.module_status.inspection_use
+                          ? null
+                          : '尚未開通查核權限，請系統管理者或被委派者開通',
+                      ]
+                        .filter(Boolean)
+                        .join('；')}
+                    </p>
+                  )}
+                {userError && (
+                  <p className="field-error" id="member-user-error">
+                    {userError}
+                  </p>
+                )}
+              </div>
+            )}
+            {!noCandidates && (
+              <>
+                {rolesState.status === 'failed' ? (
+                  <div className="member-load-error">
+                    <p role="alert">無法載入角色：{rolesState.message}</p>
+                    <button onClick={reload} type="button">
+                      重新載入
+                    </button>
+                  </div>
+                ) : rolesState.status === 'loading' ? (
+                  <p>載入角色…</p>
+                ) : roles.length === 0 ? (
+                  <>
+                    <p>目前沒有角色。</p>
+                    <p className="field-hint">
+                      {isAdmin ? (
+                        <>
+                          請先到<Link to="/roles">角色</Link>
+                          建立角色，才能把人加入專案。
+                        </>
+                      ) : (
+                        '還沒有可指派的角色，請洽系統管理者建立。'
+                      )}
+                    </p>
+                  </>
+                ) : (
+                  <MemberRoleFields
+                    error={rolesError}
+                    firstRef={addRolesRef}
+                    onChange={(next) => {
+                      setNewRoleIds(next)
+                      setRolesError('')
+                    }}
+                    roles={addableRoles}
+                    selected={newRoleIds}
+                  />
+                )}
+                <button
+                  className="btn-primary"
+                  disabled={
+                    busy ||
+                    !candidatesReady ||
+                    !rolesReady ||
+                    candidates.length === 0 ||
+                    roles.length === 0
+                  }
+                  type="submit"
+                >
+                  加入成員
+                </button>
+              </>
+            )}
+            {alertFor('add')}
+          </form>
+          {mode === 'add' && <Link to={memberListPath}>取消</Link>}
+        </>
+      ) : null}
+
+      {mode === 'list' && (
+        <>
+          <h3>成員列表</h3>
+          {membersState.status === 'ready' &&
+            members.length > 0 &&
+            rolesReady && (
+              <section
+                aria-label="批次角色操作"
+                className="member-batch-roles"
+              >
+                <p>已選取 {selectedMemberIds.length} 位成員。</p>
+                <label>
+                  批次角色
+                  <select
+                    disabled={busy}
+                    onChange={(event) => setBatchRoleId(event.target.value)}
+                    value={batchRoleId}
+                  >
+                    <option value="">選擇角色</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  disabled={
+                    busy || !batchRoleId || selectedMemberIds.length === 0
+                  }
+                  onClick={() => void submitBatchRole('assign')}
+                  type="button"
+                >
+                  {busy ? '正在更新角色…' : '批次指派角色'}
+                </button>
+                <button
+                  disabled={
+                    busy || !batchRoleId || selectedMemberIds.length === 0
+                  }
+                  onClick={() => void submitBatchRole('revoke')}
+                  type="button"
+                >
+                  {busy ? '正在更新角色…' : '批次收回角色'}
+                </button>
+                {batchRoleError && (
+                  <p ref={batchRoleErrorRef} role="alert" tabIndex={-1}>
+                    {batchRoleError}
+                  </p>
+                )}
+                {batchRoleNotice && <p role="status">{batchRoleNotice}</p>}
+              </section>
+            )}
+          {membersState.status === 'failed' ? (
+            <div className="member-load-error">
+              <p role="alert">無法載入成員列表：{membersState.message}</p>
+              <button onClick={reload} type="button">
+                重新載入
+              </button>
+            </div>
+          ) : members.length === 0 ? (
+            <div className="member-empty">
+              <p>目前沒有成員。</p>
+              <p className="field-hint">
+                使用上方「加入成員」建立第一筆成員資料。
+              </p>
+            </div>
+          ) : (
+            <ul className="member-list">
+              {members.map((member) => (
+                <li
+                  className={
+                    member.is_effectively_active
+                      ? 'member-card'
+                      : 'member-card member-card-inactive'
+                  }
+                  key={member.id}
+                >
+                  <div className="member-card-main">
+                    {rowNotice?.userId === member.user_id && (
+                      <p className="notice-success" role="status">
+                        {rowNotice.text}
+                      </p>
+                    )}
+                    <label className="member-batch-select">
+                      <input
+                        checked={selectedMemberIds.includes(member.user_id)}
+                        disabled={
+                          busy ||
+                          !member.is_active ||
+                          member.user_id === currentUser.id
+                        }
+                        aria-describedby={
+                          !member.is_active
+                            ? `inactive-member-${member.id}`
+                            : undefined
+                        }
+                        onChange={(event) =>
+                          setSelectedMemberIds((current) =>
+                            event.target.checked
+                              ? [...current, member.user_id]
+                              : current.filter((id) => id !== member.user_id),
+                          )
+                        }
+                        type="checkbox"
+                        value={member.user_id}
+                      />
+                      選取 {personLabel(member)} 的角色
+                    </label>
+                    {!member.is_active && (
+                      <p
+                        className="field-hint"
+                        id={`inactive-member-${member.id}`}
+                      >
+                        此帳號已停用，不能批次修改角色。
+                      </p>
+                    )}
+                    <p className="member-card-name">
+                      {isAdmin ? (
+                        <Link
+                          to={`/accounts/${encodeURIComponent(member.user_id)}`}
+                        >
+                          {member.name_zh ?? member.username}
+                        </Link>
+                      ) : (
+                        (member.name_zh ?? member.username)
+                      )}
+                      {!member.is_active ? (
+                        <span>（已停用）</span>
+                      ) : !member.is_effectively_active ? (
+                        <span>（已到期）</span>
+                      ) : null}
+                    </p>
+                    <p className="field-hint">
+                      {[
+                        member.name_zh ? member.username : null,
+                        member.company_name ?? '未連結公司',
+                        member.email,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                    <p className="member-card-roles">
+                      {member.role_ids.length === 0 ? (
+                        <span className="member-warning">
+                          尚未指派角色，請修改角色
+                        </span>
+                      ) : (
+                        // 名稱由後端附上，建立者角色等不可指派的角色也能顯示。
+                        member.role_names.join('、')
+                      )}
+                    </p>
+                  </div>
+                  {removing?.id === member.id ? (
+                    <ConfirmBox
+                      busy={busy}
+                      confirmLabel="確認移出"
+                      label="移出確認"
+                      onCancel={() => setRemoving(null)}
+                      onConfirm={confirmRemove}
+                      variant="danger"
+                    >
+                      <p>
+                        要把「{personLabel(member)}」移出專案嗎？
+                        移出後這個人在本專案的角色會一併移除；不影響他在其他專案的角色。
+                      </p>
+                      {alertFor('remove')}
+                    </ConfirmBox>
+                  ) : (
+                    <div className="member-card-actions">
+                      <Link
+                        className="btn-sm"
+                        aria-label={`修改「${personLabel(member)}」的角色`}
+                        aria-disabled={busy || !rolesReady}
+                        tabIndex={busy || !rolesReady ? -1 : undefined}
+                        onClick={(event) => {
+                          if (busy || !rolesReady) event.preventDefault()
+                          else {
+                            clearMessages()
+                            setRemoving(null)
+                          }
+                        }}
+                        to={`${memberListPath}/${encodeURIComponent(member.user_id)}/edit`}
+                        state={{ returnTo: memberListPath }}
+                      >
+                        修改角色
+                      </Link>
+                      <button
+                        aria-label={`將「${personLabel(member)}」移出專案`}
+                        disabled={busy}
+                        onClick={() => {
+                          clearMessages()
+                          setRemoving(member)
+                        }}
+                        type="button"
+                      >
+                        移出專案
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </section>
   )

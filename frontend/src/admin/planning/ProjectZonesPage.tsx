@@ -5,7 +5,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
-import { useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
 import { HttpError, isForbidden } from '../../http'
 import { ConfirmBox } from '../../ui/ConfirmBox'
@@ -15,6 +15,7 @@ import { planningClient, planningErrorMessage } from './api'
 import type { PlanningClient, ProjectZone } from './api'
 import { UnsavedLeaveBox } from '../../ui/navigation'
 import { useUnsavedNavigationGuard } from '../../ui/navigation'
+import ProjectDeniedPage from '../projectHome/ProjectDeniedPage'
 
 // 業務錯誤碼（非 422 欄位清單）直接對應到名稱欄，與 ADM-R28 的欄旁錯誤一致。
 const NAME_FIELD_CODES: ReadonlySet<string> = new Set([
@@ -45,20 +46,38 @@ export default function ProjectZonesPage({
   viewerPermissions: string[]
 }) {
   const { projectId = '' } = useParams()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const isAddPage = location.pathname.endsWith('/zones/new')
+  const listPath = `/projects/${encodeURIComponent(projectId)}/zones`
+  const zoneNotice = (
+    location.state as { zoneNotice?: { text: string } } | null
+  )?.zoneNotice
   const [zones, setZones] = useState<ProjectZone[]>([])
   const [name, setName] = useState('')
   const [editing, setEditing] = useState<ProjectZone | null>(null)
   const [deleting, setDeleting] = useState<ProjectZone | null>(null)
   const [loadedProjectId, setLoadedProjectId] = useState('')
   const [loadFailed, setLoadFailed] = useState(false)
+  const [loadForbidden, setLoadForbidden] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const loading = loadedProjectId !== projectId
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [deleteError, setDeleteError] = useState('')
   const [notice, setNotice] = useState('')
+  const visibleNotice = notice || (!isAddPage ? (zoneNotice?.text ?? '') : '')
   const [nameError, setNameError] = useState(false)
   const [serverNameError, setServerNameError] = useState('')
+  const [formRouteKey, setFormRouteKey] = useState(`${projectId}:${isAddPage}`)
+  const currentFormRouteKey = `${projectId}:${isAddPage}`
+  if (formRouteKey !== currentFormRouteKey) {
+    // 已確認離開新增網址後丟棄草稿；被 guard 攔下時路徑不變，草稿保留。
+    setFormRouteKey(currentFormRouteKey)
+    setName('')
+    setNameError(false)
+    setServerNameError('')
+  }
   const nameInput = useRef<HTMLInputElement>(null)
   const errorMessage = useRef<HTMLParagraphElement>(null)
   const deleteErrorMessage = useRef<HTMLParagraphElement>(null)
@@ -90,9 +109,8 @@ export default function ProjectZonesPage({
     if (deleteError) focusLocalError(deleteErrorMessage.current)
   }, [deleteError])
 
-  // 進入改名時把焦點放到名稱欄。改名表單掛在該列內、新增表單掛在頁底，
-  // 共用同一個 ref；從一列切到另一列時元件不一定重新掛載，autoFocus 不
-  // 會再生效，所以要自己移。
+  // 進入改名時把焦點放到列內名稱欄；從一列切到另一列時元件不一定重新
+  // 掛載，autoFocus 不會再生效，所以要自己移。
   const editingId = editing?.id
   useEffect(() => {
     if (editingId) nameInput.current?.focus()
@@ -118,6 +136,7 @@ export default function ProjectZonesPage({
         setZones(result)
         setError('')
         setLoadFailed(false)
+        setLoadForbidden(false)
         setLoadedProjectId(projectId)
       },
       (caught: unknown) => {
@@ -126,6 +145,7 @@ export default function ProjectZonesPage({
         // 否則會在看不到既有分區的情況下重複建立。
         setZones([])
         setLoadFailed(true)
+        setLoadForbidden(isForbidden(caught))
         setError(
           isForbidden(caught)
             ? '你沒有讀取這個專案分區的權限。'
@@ -137,11 +157,14 @@ export default function ProjectZonesPage({
     return () => {
       active = false
     }
-  }, [client, projectId, reloadKey])
+  }, [client, projectId, reloadKey, isAddPage])
 
   function clearNameErrors() {
     setNameError(false)
     setServerNameError('')
+    if (zoneNotice) {
+      navigate(location.pathname, { replace: true, state: null })
+    }
   }
 
   function cancelEditing() {
@@ -222,8 +245,18 @@ export default function ProjectZonesPage({
         focusRowAfterEdit.current = true
       } else {
         const created = await client.createZone(projectId, name)
-        setZones((current) => [...current, created])
-        setNotice(`已新增分區「${created.name}」。`)
+        if (isAddPage) {
+          leaveGuard.allowNavigation(() =>
+            navigate(listPath, {
+              state: {
+                zoneNotice: { text: `已新增分區「${created.name}」。` },
+              },
+            }),
+          )
+        } else {
+          setZones((current) => [...current, created])
+          setNotice(`已新增分區「${created.name}」。`)
+        }
       }
       setEditing(null)
       setName('')
@@ -320,6 +353,39 @@ export default function ProjectZonesPage({
     )
   }
 
+  if (isAddPage) {
+    if (!canManage || (loadFailed && loadForbidden)) {
+      return <ProjectDeniedPage headingLevel={2} />
+    }
+    if (loading) return <p role="status">載入中…</p>
+    if (loadFailed) {
+      return (
+        <section aria-labelledby="project-zones-heading">
+          <h2 id="project-zones-heading">分區</h2>
+          <p role="alert">{error}</p>
+          <button onClick={() => setReloadKey((key) => key + 1)} type="button">
+            重新載入
+          </button>
+          <Link to={listPath}>返回分區清單</Link>
+        </section>
+      )
+    }
+    return (
+      <section aria-labelledby="project-zones-heading">
+        <h2 id="project-zones-heading">分區</h2>
+        <p>管理專案內可供任務選擇的地點分區。</p>
+        <UnsavedLeaveBox guard={leaveGuard} />
+        {error && (
+          <p ref={errorMessage} role="alert" tabIndex={-1}>
+            {error}
+          </p>
+        )}
+        {renderNameForm(false)}
+        <Link to={listPath}>取消</Link>
+      </section>
+    )
+  }
+
   return (
     <section aria-labelledby="project-zones-heading">
       <h2 id="project-zones-heading" ref={pageHeading} tabIndex={-1}>
@@ -344,9 +410,16 @@ export default function ProjectZonesPage({
       {!loading && !loadFailed && zones.length === 0 ? (
         <p>尚未設定分區。</p>
       ) : null}
-      {notice && (
+      {visibleNotice && (
         <p className="notice-success" role="status">
-          {notice}
+          {visibleNotice}
+        </p>
+      )}
+      {canManage && (
+        <p>
+          <Link className="btn-primary" to={`${listPath}/new`}>
+            新增分區
+          </Link>
         </p>
       )}
       <ul className="named-list">
@@ -419,11 +492,6 @@ export default function ProjectZonesPage({
           </li>
         ))}
       </ul>
-      {canManage &&
-        !loading &&
-        !loadFailed &&
-        !editing &&
-        renderNameForm(false)}
     </section>
   )
 }

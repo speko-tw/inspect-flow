@@ -75,10 +75,17 @@
 }
 
 .member-card-actions button,
+.member-card-actions a,
 .member-actions button,
 .member-add-form button,
 .member-edit-view button {
   min-height: 44px;
+}
+
+.member-card-actions a,
+.member-add-link {
+  display: inline-flex;
+  align-items: center;
 }
 
 .member-card > .confirm-box,

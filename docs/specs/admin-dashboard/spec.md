@@ -111,6 +111,7 @@
 | ADM-R49 | 任何身分**不得**看到實際權限不允許的寫入入口；唯讀專案角色不得看到新增查核項目等寫入連結。專案首頁的下一步只在使用者有實際權限時顯示（新增查核項目依摘要的 `can_apply_templates`）；主管任務清單與詳情使用允許欄位中的地點作標題，任何情況都不顯示 UUID（指派人姓名為空時顯示「未指派」、專案名稱取不到時顯示通用文字），也不顯示任務編號；非 Admin 畫面不得顯示「管理後台」。描述帳號與操作能力時只使用「帳號、專案、成員、角色、權限、任務」六個白話詞，不向使用者顯示「模組」「逐項授權」等內部術語 | 必須 | 負責人 G7 易用性修正指示（2026-10-19）；發版前逐身分易用性走查依「簡單、好用」原則補明首頁入口與 UUID 規則（[#713](https://github.com/speko-tw/inspect-flow/issues/713)）；入口須符合 [KD-69](../../intents/03-decisions-and-stack.md#kd-69) 兩層權限及既有路由授權；畫面呈現細節為規格設計 |
 | ADM-R50 | 本需求**取代** ADM-R15、ADM-R23～R25、R28 中與 UI 路徑、登入落點及導覽項目有關的舊前綴路徑規則。頁面路徑為 `/tasks(/:id)`、`/projects/...`、`/overview(/projects/:id(/tasks/:taskId))`、`/templates`、`/accounts(/:id)`、`/companies`、`/roles`、`/logs`、`/settings`；`/login`、`/setup`、`/` 不變。舊 `/admin/...`、`/field/...`、`/change-password` UI 網址一律 404，不轉址；`/api/v1/...` API 路徑不變。`/overview` 及其下所有頁面只允許 Admin 或具 `all_project_progress.read` 者；專案範圍進度由「專案 → 進度」提供，依既有專案權限守門；`/tasks` 與任務詳情需 `can_inspect_tasks`，Admin 放行；`/projects` 需 `has_project_access` 或 `can_create_project`，Admin 放行；`/templates` 只需 Admin 或 `template.manage`，`template.use` 不足以顯示入口；`/accounts` 需 Admin 或至少一項模組委派；`/companies`、`/roles`、`/logs` 需 Admin；已登入帳號均可進 `/settings`。導覽固定排序「總覽｜任務｜專案｜範本｜管理（帳號／公司／角色／紀錄）」，每項只在帳號具相應權限時顯示；委派者若只有帳號入口，直接顯示帳號連結、不顯示管理下拉。登入、`/` 與成功變更密碼後的落點依序為：Admin 或具總覽權限者 `/overview`；具 `can_inspect_tasks` 且沒有 `can_create_project`、`can_manage_project_planning_or_members` 者 `/tasks`（即使具唯讀 `has_project_access` 也優先到任務）；`has_project_access` 或 `can_create_project` 者 `/projects`；其餘具 `can_inspect_tasks` 者 `/tasks`；Admin 或 `template.manage` 者 `/templates`；具帳號管理委派者 `/accounts`；其他帳號到 `/settings` 並顯示「尚未開通任何功能，請洽系統管理者」。 | 必須 | #705 導覽與落點規則；有效權限依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)、`authentication` AUT-R08、AUT-R52；路由與呈現細節為規格設計；KD-12 意圖變更待負責人確認 |
 | ADM-R51 | 總覽的任務資料**必須**只露出畫面上看得到的內容：工程師彙總的 `q` 只比對回應中的 `username` 與 `name_zh`，**不得**比對 email、工號、英文姓名等未顯示的欄位；專案任務清單與單筆任務明細**不得**包含 `DRAFT` 任務（草稿只給內業，與摘要計數及 IP-R09 一致），單筆查詢草稿任務回 404，`CANCELLED` 維持原行為。 | 必須 | 發版前安全性檢查（#711）；沿用 ADM-R06 白名單精神與 IP-R09，行為細節為規格設計（非負責人裁定） |
+| ADM-R52 | 成員新增與角色修改**必須**使用獨立網址 `/projects/:projectId/members/new`、`/projects/:projectId/members/:userId/edit`；分區新增**必須**使用 `/projects/:projectId/zones/new`，分區改名維持清單列內編輯。清單入口使用上述網址，表單儲存或取消回到原成員清單或詳情；無管理權限者直接開表單網址時不得看到表單，重新整理仍停留在對應表單網址；不提供舊表單網址的別名或轉址。候選或角色載入失敗須在對應表單就近提示並提供重試，使用者可返回清單；失敗不得遮蔽成員清單或改變其權限行為。 | 必須 | [負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308) |
 
 ## 資料
 
@@ -231,6 +232,7 @@ ADM-AC50 是目前 UI 路由、登入落點及導覽權限的權威驗收；ADM-
 
 | ADM-AC50 | `role-tasks.md` 列出的八種身分；各自的 `/auth/me` 有對應權限摘要（含 AUT-R54 的 `can_manage_project_planning_or_members`）；每種身分備有允許及拒絕的路由 | 逐一登入並只用畫面點擊；回讀 `/auth/me` 的 `can_manage_project_planning_or_members`；直接輸入所有新 UI 路徑及舊 `/admin/...`、`/field/...`、`/change-password` 路徑；測一般及強制變更密碼 | 導覽項目、登入與 `/` 落點符合 ADM-R50；現場工程師與外部協作人員看不到總覽，直接開 `/overview` 也被拒絕；八種身分只能進入有權路由，無權直接路由顯示有出路的拒絕畫面，未知路徑與所有舊 UI 路徑回 404；`template.use` 單獨不顯示範本入口；只有範本管理者／Admin 顯示範本入口；無權帳號到 `/settings` 並看到指定說明；變更密碼都在 `/settings`，成功回原本可存取路徑；導覽順序及管理子項符合 ADM-R50 | ADM-R23～R25、R28、R50、AUT-R52～R53、KD-69、KD-71 |
 | ADM-AC51 | 專案有 `PENDING`、`CANCELLED`、`DRAFT` 任務；某工程師的 email、工號、英文姓名帶有可辨識字串 | 具「看全部專案進度」者（或 Admin）以這些字串查工程師彙總，並查任務清單與單筆草稿任務 | 以 email、工號、英文姓名搜尋都查不到該工程師，以 username、中文姓名可查到；任務清單不含草稿且仍含已取消任務；單筆查草稿任務回 404 | ADM-R51、ADM-R06、IP-R09 |
+| ADM-AC52 | 具成員管理權的專案成員與無此權限的專案使用者；專案有可加入的人員、既有成員與分區 | 從成員清單開加入表單並儲存；從成員列開角色修改、取消或儲存；直接開三種表單網址並重新整理；模擬候選／角色載入失敗及重試；從分區清單新增分區及原地重新命名 | 新增網址只顯示加入表單，儲存回成員清單且成功訊息緊鄰新增成員並在後續操作後消失；候選或角色失敗在表單就近提示、可重試或返回清單，成員清單仍可顯示；角色編輯網址只顯示角色表單，取消或儲存回原成員清單或詳情，至少保留一個角色及欄位錯誤定位；分區新增網址只顯示新增表單，儲存回分區清單，改名仍在原列；重新整理維持表單路徑；無管理權限者直接開網址看不到表單；沒有舊網址別名或轉址 | ADM-R52、ADM-R17、ADM-R21、ADM-R22、ADM-R26、ADM-R27、IP-R10 |
 
 ## 待釐清
 
@@ -281,6 +283,8 @@ ADM-AC50 是目前 UI 路由、登入落點及導覽權限的權威驗收；ADM-
 - 規格澄清（#727，依 PR-18／PR-19）：ADM-R15、ADM-AC11、ADM-AC14 明定重設臨時密碼須先確認對象與後果，取消不得寫入；ADM-R37、ADM-AC36 補明重設臨時密碼的最終確認鈕用紅色。
 
 - 規格澄清（#734、#735）：ADM-R28／ADM-AC27 補明就近回饋、入視窗、焦點及清單訊息的生命週期；依 [UDS-R18](../ui-design-system/spec.md) 與[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)。
+
+- 範圍變更（負責人裁定，#534，2026-10-26）：新增 ADM-R52、ADM-AC52，明定成員新增／角色修改與分區新增的獨立網址、返回路徑、直接網址權限及重新整理行為；分區改名維持原列編輯 — [負責人裁定](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)。
 
 - 規格澄清（#731）：補明批次外層、子清單與單筆停用／重新啟用入口的 200 筆上限、422 欄位定位與白話提示；角色子清單保留 64 筆，跨公司停用人員合計最多 200 人。
 
