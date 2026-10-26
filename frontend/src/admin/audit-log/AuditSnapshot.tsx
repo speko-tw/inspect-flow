@@ -2,6 +2,7 @@ import permissionCodeContract from '../../permissionCodeContract'
 
 // T13：只解讀事件目錄的常用欄位；不猜不認得的識別碼或歷史名稱。
 const FIELD_LABELS: Record<string, string> = {
+  role_ids: '專案角色',
   name: '名稱',
   title: '名稱',
   username: '帳號名稱',
@@ -66,6 +67,7 @@ const permissionNames = new Map(
 const UUID = /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/i
 
 type Lookup = {
+  roleName?: (id: string) => string | null
   userName: (id: string) => string | null
   projectName: (id: string) => string | null
 }
@@ -115,6 +117,9 @@ function readable(
     return items.length ? items.join('、') : value.length ? null : '無'
   }
   if (typeof value !== 'string') return null
+  if (field === 'role_ids') {
+    return lookup.roleName?.(value) ?? '已刪除的角色'
+  }
   if (field.endsWith('user_id')) return lookup.userName(value)
   if (field === 'project_id') return lookup.projectName(value)
   if (field.endsWith('_id') || field.endsWith('_ids') || UUID.test(value)) {
@@ -136,11 +141,22 @@ export function AuditChanges({
   before,
   after,
   lookup,
+  eventType,
 }: {
+  eventType?: string
   before: unknown
   after: unknown
   lookup: Lookup
 }) {
+  if (eventType === 'user.password_set') {
+    return (
+      <p role="status">
+        {record(after).is_temporary === false
+          ? '已變更密碼（不記錄密碼內容）'
+          : '已重設臨時密碼（不記錄密碼內容）'}
+      </p>
+    )
+  }
   const previous = record(before)
   const current = record(after)
   const keys = [

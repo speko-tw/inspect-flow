@@ -28,6 +28,7 @@ export interface TaskInspectionItem {
 
 /** 依 IP-R05，指派候選人只是建議，並非執行者白名單。 */
 export interface SuggestedAssignee {
+  is_active?: boolean
   id: string
   username: string
   name_zh: string | null

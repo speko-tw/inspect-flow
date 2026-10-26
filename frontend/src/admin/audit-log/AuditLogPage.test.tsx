@@ -26,10 +26,16 @@ function mockFetch(
           })
         : auditLogPageFixture({ next_cursor: 'second-page' }),
     ),
+  rolesResponse = () =>
+    Response.json({
+      items: [{ id: 'field-role', name: '現場工程師' }],
+      next_cursor: null,
+    }),
 ) {
   const fetcher = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input), 'http://localhost')
+      if (url.pathname.endsWith('/roles')) return rolesResponse()
       if (url.pathname.endsWith('/projects')) {
         return Response.json({
           items: [{ id: projectId, name: '甲專案', project_code: 'P-1' }],
@@ -412,3 +418,37 @@ it('T13：範本快照先顯示白話欄位，識別碼只在進階原文', asyn
   expect(originals[1].textContent).toBe(JSON.stringify(after, null, 2))
   expect(originals[1]).toBeVisible()
 })
+
+it.each([false, true])(
+  '角色名稱解析與目錄失敗退化（失敗 %s）',
+  async (failed) => {
+    mockFetch(
+      () =>
+        Response.json(
+          auditLogPageFixture({
+            items: [
+              auditLogEntryFixture({
+                event_type: 'project_member.roles_changed',
+                entity_type: 'project_member',
+                before: { role_ids: [] },
+                after: { role_ids: ['field-role'] },
+              }),
+            ],
+          }),
+        ),
+      () =>
+        failed
+          ? Response.json({}, { status: 503 })
+          : Response.json({
+              items: [{ id: 'field-role', name: '現場工程師' }],
+              next_cursor: null,
+            }),
+    )
+    render(<AuditLogPage />)
+    fireEvent.click(await screen.findByText('查看改前與改後內容'))
+    expect(
+      await screen.findByText(failed ? '角色名稱暫時無法顯示' : '現場工程師'),
+    ).toBeVisible()
+    expect(screen.queryByText('已刪除的角色')).toBeNull()
+  },
+)

@@ -225,3 +225,31 @@ describe('Dashboard 任務唯讀頁', () => {
     expect(screen.queryByText('陳建宏')).not.toBeInTheDocument()
   })
 })
+
+it.each([
+  ['COMPLETED', false],
+  ['CANCELLED', false],
+  ['PENDING', true],
+  ['PENDING', false],
+])('主管總覽停用提醒依 %s、封存 %s 判斷', async (status, plan_archived) => {
+  api.listDashboardTasks.mockResolvedValue({
+    items: [
+      {
+        ...task,
+        status,
+        plan_archived,
+        suggested_assignee: {
+          ...task.suggested_assignee,
+          is_active: false,
+        },
+      },
+    ],
+    next_cursor: null,
+  })
+  renderAt('/overview/projects/project-1/tasks')
+  const warning = !plan_archived && status === 'PENDING'
+  expect(
+    await screen.findByText(warning ? '（已停用，請改派）' : '（已停用）'),
+  ).toBeVisible()
+  if (!warning) expect(screen.queryByText(/請改派/)).toBeNull()
+})

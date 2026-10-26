@@ -212,7 +212,7 @@ export default function SaveTemplateFromProjectPage() {
       </header>
       <ol className="save-template-steps">
         <li>
-          <h2>1. 選擇專案</h2>
+          <h2>選擇專案</h2>
           {stepError('projects')}
           <label htmlFor="save-template-project-search">搜尋專案</label>
           <input
@@ -237,7 +237,7 @@ export default function SaveTemplateFromProjectPage() {
         </li>
         {project && (
           <li>
-            <h2>2. 選擇查核項目</h2>
+            <h2>選擇查核項目</h2>
             {stepError('items')}
             {loading ? <p role="status">載入中…</p> : null}
             {!loading && (
@@ -264,7 +264,7 @@ export default function SaveTemplateFromProjectPage() {
         )}
         {source && (
           <li>
-            <h2>3. 選擇範本庫位置</h2>
+            <h2>選擇範本庫位置</h2>
             <div className="save-template-target">
               {stepError('target')}
               <div aria-disabled={busy} inert={busy}>

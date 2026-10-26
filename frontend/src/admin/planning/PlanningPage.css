@@ -2,3 +2,13 @@
   margin: 0.25rem 0 0.75rem;
   color: var(--text-muted);
 }
+
+.planning-task-item-choice {
+  margin-block: var(--space-4);
+}
+
+.planning-task-item-choice > details {
+  margin-inline-start: var(--space-5);
+  padding: var(--space-2);
+  border-inline-start: 2px solid var(--border);
+}

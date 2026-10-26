@@ -1,3 +1,4 @@
+import { inactiveAssigneeNotice } from '../../ui/SuggestedAssignee'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 
@@ -1537,6 +1538,17 @@ export default function PlanningPage({
                         {task.assignee?.name_zh ??
                           task.assignee?.username ??
                           '未指派'}
+                        {task.assignee?.is_active === false &&
+                          (inactiveAssigneeNotice(
+                            task.status,
+                            selectedPlanDetail.archived,
+                          ).includes('請改派') ? (
+                            <strong className="field-error">
+                              （已停用，請改派）
+                            </strong>
+                          ) : (
+                            <span className="muted-text">（已停用）</span>
+                          ))}
                       </p>
                       {task.status === 'CANCELLED' && (
                         <p>取消原因：{task.cancellation_reason}</p>
@@ -1660,6 +1672,12 @@ export default function PlanningPage({
                                   type="button"
                                 >
                                   修改建議指派
+                                  {task.assignee?.is_active === false
+                                    ? inactiveAssigneeNotice(
+                                        task.status,
+                                        selectedPlanDetail.archived,
+                                      )
+                                    : ''}
                                 </button>
                               )}
                             </>
@@ -1808,11 +1826,18 @@ export default function PlanningPage({
                                     editingTaskItems.itemIds.includes(item.id),
                                 )
                                 .map((item) => {
-                                  const existingTasks = tasksForItem(item.id)
+                                  const existingTasks = tasksForItem(
+                                    item.id,
+                                  ).filter(
+                                    (existing) => existing.id !== task.id,
+                                  )
                                   const selected =
                                     editingTaskItems.itemIds.includes(item.id)
                                   return (
-                                    <div key={item.id}>
+                                    <div
+                                      className="planning-task-item-choice"
+                                      key={item.id}
+                                    >
                                       <label>
                                         <input
                                           checked={selected}
