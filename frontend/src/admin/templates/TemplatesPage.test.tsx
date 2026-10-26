@@ -437,10 +437,16 @@ it('存檔後返回並選取新範本，顯示目標類別與系統', async () =
 
   // 本檔第一個測試會讓 getByRole 第一次建立 ARIA 角色表，成本高；
   // 用 findByRole 輪詢時，每次輪詢都占住主執行緒，擠掉頁面載入。
-  // 高負載下頁面還沒載完就逾時（#744）。等待改用輕量文字查詢，
-  // 載入完成後再同步斷言它是標題。
+  // 高負載下頁面還沒載完就逾時（#744）。先用輕量文字查詢等標題出現，
+  // 再同步斷言它是標題。
   await screen.findByText('欄杆尺寸', { selector: 'h2' })
   expect(screen.getByRole('heading', { name: '欄杆尺寸' })).toBeInTheDocument()
+  // #744：類別、系統與項目依序載入，先等真實資料前提再驗選取結果。
+  const navigation = screen.getByRole('complementary', {
+    name: '範本庫導覽',
+  })
+  await within(navigation).findByRole('button', { name: '土木工程' })
+  await within(navigation).findByRole('button', { name: '護欄' })
   const navAfterRoute = screen.getByRole('complementary', {
     name: '範本庫導覽',
   })
@@ -461,6 +467,46 @@ it('存檔後返回並選取新範本，顯示目標類別與系統', async () =
   expect(screen.getByRole('link', { name: '從專案存為範本' })).toHaveAttribute(
     'href',
     '/templates/from-project',
+  )
+})
+
+it('逐階延遲系統與項目仍保留返回選取，資料齊備後才消費 state', async () => {
+  const fetchMock = templateFetch({
+    items: [{ ...sampleItem, id: 'saved-template' }],
+  })
+  const systemGate = holdRequests(fetchMock, 'GET', /categories\/.*\/systems/)
+  const itemGate = holdRequests(fetchMock, 'GET', /systems\/.*\/templates/)
+  render(<TemplatesPage canManage />, [
+    {
+      pathname: '/templates',
+      state: {
+        savedTemplateId: 'saved-template',
+        savedCategoryId: category.id,
+        savedSystemId: system.id,
+        savedTemplateTitle: sampleItem.title,
+        savedTemplatePath: '土木工程 / 護欄',
+      },
+    },
+  ])
+  const navigation = await screen.findByRole('complementary', {
+    name: '範本庫導覽',
+  })
+  await within(navigation).findByRole('button', { name: '土木工程' })
+  expect(screen.getByTestId('route-state')).toHaveTextContent('saved-template')
+  expect(screen.queryByRole('heading', { name: sampleItem.title })).toBeNull()
+  await act(async () => systemGate.resolve())
+  await within(navigation).findByRole('button', { name: system.name })
+  expect(screen.getByTestId('route-state')).toHaveTextContent('saved-template')
+  expect(screen.queryByRole('heading', { name: sampleItem.title })).toBeNull()
+  await act(async () => itemGate.resolve())
+  expect(
+    await screen.findByRole('heading', { name: sampleItem.title }),
+  ).toBeInTheDocument()
+  expect(
+    within(navigation).getByRole('button', { name: sampleItem.title }),
+  ).toHaveAttribute('aria-current', 'true')
+  await waitFor(() =>
+    expect(screen.getByTestId('route-state')).toHaveTextContent('null'),
   )
 })
 

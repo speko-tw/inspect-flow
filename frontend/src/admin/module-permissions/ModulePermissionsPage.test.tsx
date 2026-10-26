@@ -2224,6 +2224,9 @@ describe('ModulePermissionsPage', () => {
         ),
       ).toBe(true)
     })
+    expect(
+      await within(summary).findByText('已補上功能權限；還缺專案角色。'),
+    ).toBeVisible()
     // T6：補上功能後自動重查，無須再按檢查，並只列剩下的角色缺口。
     expect(
       await within(summary).findByText(
@@ -3066,6 +3069,9 @@ describe('#734 T5/T6 診斷區塊與完整缺口', () => {
         '他還不是這個專案的成員，請先到專案成員頁加入。',
       ),
     ).toBeVisible()
+    expect(
+      within(area).getByText('已補上功能權限；還缺專案成員身分。'),
+    ).toBeVisible()
     expect(within(area).queryByText(/他也還沒開通查核功能/)).toBeNull()
     expect(
       within(area).queryByRole('button', { name: '開通查核功能' }),
@@ -3078,12 +3084,136 @@ describe('#734 T5/T6 診斷區塊與完整缺口', () => {
     ).toHaveLength(1)
   })
 
+  function repairDiagnosticResponse(layer: string) {
+    return Response.json({
+      user: { id: 'person', is_active: true, is_admin: false },
+      module_permissions:
+        layer === 'module'
+          ? []
+          : [
+              {
+                code: 'inspection.use',
+                module: 'inspection',
+                source: 'manual',
+              },
+            ],
+      project_roles: [],
+      diagnostics: [
+        {
+          action: 'task_list',
+          module: 'inspection',
+          required_module_codes: ['inspection.use'],
+          required_project_codes: ['inspection_task.read'],
+          allowed: false,
+          missing_layers: [layer],
+          missing_codes: [
+            layer === 'module' ? 'inspection.use' : 'inspection_task.read',
+          ],
+        },
+      ],
+    })
+  }
+
+  it.each(['module', 'project_role'])(
+    '補救 %s 寫入成功但重查失敗仍保留補救結果',
+    async (layer) => {
+      let checks = 0
+      permissionPage({
+        openWizard: false,
+        permissionCodes: layer === 'module' ? [] : ['inspection.use'],
+        diagnosticResponse: async () => {
+          if (++checks > 1)
+            return Response.json({ detail: 'boom' }, { status: 500 })
+          return repairDiagnosticResponse(layer)
+        },
+      })
+      const area = await openDiagnostic()
+      const label = layer === 'module' ? '功能權限' : '「現場工程師」角色'
+      fireEvent.click(
+        await within(area).findByRole('button', {
+          name: layer === 'module' ? '開通查核功能' : `補上${label}`,
+        }),
+      )
+      expect(
+        await within(area).findByText(
+          `已補上${label}，但重新檢查失敗，請重試檢查。`,
+        ),
+      ).toBeVisible()
+      expect(within(area).getByRole('alert')).toBeVisible()
+    },
+  )
+
+  it.each(['module', 'project_role'])(
+    '重查仍缺 %s 時不能宣稱已補上',
+    async (layer) => {
+      const { calls } = permissionPage({
+        openWizard: false,
+        permissionCodes: layer === 'module' ? [] : ['inspection.use'],
+        diagnosticResponse: async () => repairDiagnosticResponse(layer),
+      })
+      const area = await openDiagnostic()
+      fireEvent.click(
+        await within(area).findByRole('button', {
+          name: layer === 'module' ? '開通查核功能' : '補上「現場工程師」角色',
+        }),
+      )
+      expect(
+        await within(area).findByText(
+          `補救已送出，但仍缺${layer === 'module' ? '功能權限' : '專案角色'}，請重試檢查。`,
+        ),
+      ).toBeVisible()
+      expect(within(area).queryByText(/已補上/)).toBeNull()
+      expect(calls.some((call) => call.method !== 'GET')).toBe(true)
+    },
+  )
+
+  it('非成員補功能後實際仍缺功能時保留兩項缺口', async () => {
+    permissionPage({
+      openWizard: false,
+      diagnosticResponse: async () =>
+        Response.json(
+          { error: { code: 'resource.not_found' } },
+          { status: 404 },
+        ),
+      accessResponse: async () =>
+        Response.json({ permission_codes: [], delegated_modules: [] }),
+    })
+    const area = await openDiagnostic()
+    fireEvent.click(
+      await within(area).findByRole('button', {
+        name: '開通查核功能',
+      }),
+    )
+    expect(
+      await within(area).findByText(
+        '補救已送出，但仍缺功能權限與專案成員身分，請重試檢查。',
+      ),
+    ).toBeVisible()
+    expect(within(area).queryByText(/已補上/)).toBeNull()
+  })
+
+  it('補完角色直接 allowed 時留下角色補救結果', async () => {
+    permissionPage({ openWizard: false, permissionCodes: ['inspection.use'] })
+    const area = await openDiagnostic()
+    fireEvent.click(
+      await within(area).findByRole('button', {
+        name: '補上「現場工程師」角色',
+      }),
+    )
+    expect(
+      await within(area).findByText('這個人具備此操作所需的有效權限。'),
+    ).toBeVisible()
+    expect(within(area).getByText('已補上「現場工程師」角色。')).toBeVisible()
+  })
+
   it('先補角色也會自動只顯示剩餘的功能缺口', async () => {
     const { calls } = permissionPage({ openWizard: false })
     const area = await openDiagnostic()
     const result = await within(area).findByRole('status')
     expect(result).toHaveTextContent('缺少查核功能的權限')
-    expect(result).toHaveTextContent('沒有可以查看或執行任務的角色')
+    expect(result).toHaveTextContent(
+      '缺少查核功能的權限；這個專案裡沒有可以查看或執行任務的角色。',
+    )
     fireEvent.click(
       within(area).getByRole('button', {
         name: '補上「現場工程師」角色',
@@ -3091,7 +3221,11 @@ describe('#734 T5/T6 診斷區塊與完整缺口', () => {
     )
     expect(await within(area).findByText('缺少查核功能的權限。')).toBeVisible()
     expect(within(area).queryByText(/沒有可以查看或執行任務的角色/)).toBeNull()
-    expect(await within(area).findByText('已更新專案角色。')).toBeVisible()
+    expect(
+      await within(area).findByText(
+        '已補上「現場工程師」角色；還缺功能權限。',
+      ),
+    ).toBeVisible()
     expect(
       calls.filter(
         (call) => call.method === 'POST' && call.path.endsWith('/members'),
@@ -3105,7 +3239,7 @@ describe('#734 T5/T6 診斷區塊與完整缺口', () => {
     ).toHaveLength(0)
     fireEvent.click(within(area).getByRole('button', { name: '檢查' }))
     await within(area).findByText('缺少查核功能的權限。')
-    expect(within(area).queryByText('已更新專案角色。')).toBeNull()
+    expect(within(area).queryByText(/已補上.*角色；還缺/)).toBeNull()
   })
 })
 

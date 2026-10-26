@@ -157,6 +157,12 @@ export function addNumberField(point: InspectionPoint): InspectionPoint {
   }
 }
 
+/**
+ * 切換為數值標準：回傳帶標準草稿的項次，已有的標準值會沿用。
+ *
+ * 項次沒有數字欄位時先新增一個；只有一個數字欄位時自動綁定，多個時
+ * 留空由管理者選擇（TPL-R16）。新標準的預設條件為範圍、形式為區間。
+ */
 export function numberStandard(point: InspectionPoint): InspectionPoint {
   let next = point
   if (!numberFields(point).length) next = addNumberField(point)
@@ -220,6 +226,8 @@ export function forWire(
       const bound = fields.find(
         (field) => Boolean(boundKey) && field.clientKey === boundKey,
       )
+      // TPL-R13：區間形式只送上下限，其餘形式只送 value 與 tolerance，
+      // 兩種形式不得混填。
       const interval =
         numeric?.condition === 'range' && rangeForm(numeric) === 'interval'
       const clean = (value: string | null | undefined) => value?.trim() || null
@@ -228,6 +236,8 @@ export function forWire(
         sequence: point.sequence,
         title: point.title.trim(),
         instruction: point.instruction,
+        // TPL-R17：被數值標準綁定的欄位寫入時 unit 一律為 null，標準的
+        // unit 取自該欄位（TPL-R11）。
         measurement_fields: fields.map((field) => ({
           ...(includeIds && field.id ? { id: field.id } : {}),
           client_id: field.client_id,

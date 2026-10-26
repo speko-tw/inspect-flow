@@ -3006,6 +3006,114 @@ describe('#727c 各動作依實際權限', () => {
   })
 })
 
+it('IP-AC24：新增不選停用項目，草稿只保留原有停用項目', async () => {
+  const client = createMockPlanningClient()
+  const projectId = 'project-demo-1'
+  const items = await client.listProjectItems(projectId)
+  const plan = await client.createPlan(projectId, { name: '停用保留計畫' })
+  await client.createTask(plan.id, {
+    name: '保留原項目',
+    item_ids: [items[0].id],
+    zone_id: null,
+    location_text: '工地',
+    suggested_assignee_id: null,
+  })
+  client.listProjectItems = vi.fn(async () => [
+    { ...items[0], is_active: false },
+    { ...items[1], is_active: true },
+    {
+      ...items[1],
+      id: 'other-inactive',
+      title: '其他停用項目',
+      is_active: false,
+    },
+  ])
+  const updateItems = vi.spyOn(client, 'updateTaskItems')
+  render(<PlanningPage client={client} initialProjectId={projectId} />)
+  fireEvent.click(
+    await screen.findByRole('button', { name: /停用保留計畫（/ }),
+  )
+  await openTaskCreationForm()
+  const newForm = document.querySelector(
+    '[data-error-context="task"]',
+  ) as HTMLFormElement
+  expect(
+    within(newForm).queryByLabelText(new RegExp(items[0].title)),
+  ).toBeNull()
+  expect(within(newForm).queryByLabelText(/其他停用項目/)).toBeNull()
+  expect(
+    within(newForm).getByLabelText(new RegExp(items[1].title)),
+  ).not.toBeChecked()
+  const article = (
+    await screen.findByRole('heading', { name: /保留原項目/ })
+  ).closest('article')!
+  fireEvent.click(
+    within(article).getByRole('button', { name: '修改查核項目' }),
+  )
+  const editForm = document.querySelector(
+    '[data-error-context="items"]',
+  ) as HTMLFormElement
+  expect(
+    within(editForm).getByLabelText(new RegExp(items[0].title)),
+  ).toBeChecked()
+  expect(
+    within(editForm).getByLabelText(new RegExp(items[1].title)),
+  ).not.toBeChecked()
+  expect(within(editForm).queryByLabelText(/其他停用項目/)).toBeNull()
+  expect(within(editForm).getByText(/已停用/)).toBeVisible()
+  expect(within(editForm).getByText('取消勾選後無法再加回。')).toBeVisible()
+  // 只加選啟用項目後送出：原有的停用項目仍在 item_ids 內（IP-R24）。
+  fireEvent.click(within(editForm).getByLabelText(new RegExp(items[1].title)))
+  fireEvent.click(
+    within(editForm).getByRole('button', { name: '儲存查核項目' }),
+  )
+  await waitFor(() =>
+    expect(updateItems).toHaveBeenCalledWith(expect.any(String), {
+      item_ids: [items[0].id, items[1].id],
+    }),
+  )
+})
+
+it('IP-AC24：項目重載裁除剛停用的勾選，提交只含啟用項目', async () => {
+  const client = createMockPlanningClient()
+  const projectId = 'project-demo-1'
+  const items = await client.listProjectItems(projectId)
+  const plan = await client.createPlan(projectId, { name: '重載測試' })
+  const create = vi.spyOn(client, 'createTask')
+  const view = render(
+    <PlanningPage client={client} initialProjectId={projectId} />,
+  )
+  fireEvent.click(await screen.findByRole('button', { name: /重載測試（/ }))
+  await openTaskCreationForm()
+  fireEvent.click(screen.getByLabelText(new RegExp(items[0].title)))
+  fireEvent.click(screen.getByLabelText(new RegExp(items[1].title)))
+  const reloaded = {
+    ...client,
+    listProjectItems: vi.fn(async () => [
+      { ...items[0], is_active: false },
+      items[1],
+    ]),
+  }
+  view.rerender(
+    <PlanningPage client={reloaded} initialProjectId={projectId} />,
+  )
+  expect(
+    await screen.findByText(`已移除剛停用的項目：${items[0].title}`),
+  ).toBeVisible()
+  expect(screen.queryByLabelText(new RegExp(items[0].title))).toBeNull()
+  expect(screen.getByLabelText(new RegExp(items[1].title))).toBeChecked()
+  fireEvent.change(screen.getByLabelText('補充地點'), {
+    target: { value: '工地' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
+  await waitFor(() =>
+    expect(create).toHaveBeenCalledWith(
+      plan.id,
+      expect.objectContaining({ item_ids: [items[1].id] }),
+    ),
+  )
+})
+
 it('停用的建議指派人顯示改派提醒並靠近修改入口', async () => {
   const client = createMockPlanningClient()
   const plan = await client.createPlan('project-demo-1', { name: '停用改派' })
@@ -3081,3 +3189,249 @@ it.each([
     expect(screen.queryByText(/請改派/)).toBeNull()
   },
 )
+
+async function seedDraftWithItems(planName: string) {
+  const client = createMockPlanningClient()
+  const projectId = 'project-demo-1'
+  const items = await client.listProjectItems(projectId)
+  const plan = await client.createPlan(projectId, { name: planName })
+  return { client, projectId, items, plan }
+}
+
+it('IP-AC24：取消勾選停用項目後焦點移到選單群組，警告綁在勾選框', async () => {
+  const { client, projectId, items } = await seedDraftWithItems('焦點計畫')
+  await client.createTask((await client.listPlans(projectId)).items[0].id, {
+    name: '保留停用',
+    item_ids: [items[0].id],
+    zone_id: null,
+    location_text: '工地',
+    suggested_assignee_id: null,
+  })
+  client.listProjectItems = vi.fn(async () => [
+    { ...items[0], is_active: false },
+    items[1],
+  ])
+  render(<PlanningPage client={client} initialProjectId={projectId} />)
+  fireEvent.click(await screen.findByRole('button', { name: /焦點計畫（/ }))
+  const article = (
+    await screen.findByRole('heading', { name: /保留停用/ })
+  ).closest('article')!
+  fireEvent.click(
+    within(article).getByRole('button', { name: '修改查核項目' }),
+  )
+  const editForm = document.querySelector(
+    '[data-error-context="items"]',
+  ) as HTMLFormElement
+  const box = within(editForm).getByLabelText(new RegExp(items[0].title))
+  const note = document.getElementById(box.getAttribute('aria-describedby')!)
+  expect(note).toHaveTextContent('取消勾選後無法再加回。')
+  fireEvent.click(box)
+  expect(
+    within(editForm).queryByLabelText(new RegExp(items[0].title)),
+  ).toBeNull()
+  expect(
+    within(editForm).getByRole('group', { name: /選擇一筆以上查核項目/ }),
+  ).toHaveFocus()
+})
+
+it('IP-AC24：送出時項目剛被停用，自動重載並保留其他欄位', async () => {
+  const { client, projectId, items } = await seedDraftWithItems('自動重載計畫')
+  let deactivated = false
+  client.listProjectItems = vi.fn(async () =>
+    deactivated ? [{ ...items[0], is_active: false }, items[1]] : items,
+  )
+  client.createTask = vi.fn(async () => {
+    deactivated = true
+    throw new ManagementApiError(409, 'project_inspection_item.inactive')
+  })
+  render(<PlanningPage client={client} initialProjectId={projectId} />)
+  fireEvent.click(
+    await screen.findByRole('button', { name: /自動重載計畫（/ }),
+  )
+  await openTaskCreationForm()
+  fireEvent.click(screen.getByLabelText(new RegExp(items[0].title)))
+  fireEvent.click(screen.getByLabelText(new RegExp(items[1].title)))
+  fireEvent.change(screen.getByLabelText('補充地點'), {
+    target: { value: '工地北側' },
+  })
+  fireEvent.change(screen.getByLabelText(/任務名稱/), {
+    target: { value: '我自己取的名稱' },
+  })
+  const before = vi.mocked(client.listProjectItems).mock.calls.length
+  fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
+  // 不要求使用者手動重新載入：項目清單自動再讀一次。
+  await waitFor(() =>
+    expect(vi.mocked(client.listProjectItems).mock.calls.length).toBe(
+      before + 1,
+    ),
+  )
+  expect(
+    await screen.findByText(
+      '所選的查核項目剛被停用，清單已更新並取消勾選，請確認後再送出。',
+    ),
+  ).toBeVisible()
+  expect(
+    await screen.findByText(`已移除剛停用的項目：${items[0].title}`),
+  ).toBeVisible()
+  expect(screen.queryByLabelText(new RegExp(items[0].title))).toBeNull()
+  expect(screen.getByLabelText(new RegExp(items[1].title))).toBeChecked()
+  expect(screen.getByLabelText('補充地點')).toHaveValue('工地北側')
+  expect(screen.getByLabelText(/任務名稱/)).toHaveValue('我自己取的名稱')
+  // 重載只發生一次，沒有重載迴圈。
+  expect(vi.mocked(client.listProjectItems).mock.calls.length).toBe(before + 1)
+})
+
+it('IP-AC24：修改草稿時新勾選的項目剛被停用，重載後裁掉並保留原有的停用項目', async () => {
+  const { client, projectId, items, plan } =
+    await seedDraftWithItems('草稿重載計畫')
+  await client.createTask(plan.id, {
+    name: '草稿重載任務',
+    item_ids: [items[0].id],
+    zone_id: null,
+    location_text: '工地',
+    suggested_assignee_id: null,
+  })
+  // items[0] 從頭就是停用（草稿原本已含），重載後仍須保留勾選。
+  let deactivated = false
+  client.listProjectItems = vi.fn(async () => [
+    { ...items[0], is_active: false },
+    deactivated ? { ...items[1], is_active: false } : items[1],
+  ])
+  const realUpdate = client.updateTaskItems.bind(client)
+  client.updateTaskItems = vi.fn(async (taskId, body) => {
+    if (!deactivated) {
+      deactivated = true
+      throw new ManagementApiError(409, 'project_inspection_item.inactive')
+    }
+    return realUpdate(taskId, body)
+  })
+  render(<PlanningPage client={client} initialProjectId={projectId} />)
+  fireEvent.click(
+    await screen.findByRole('button', { name: /草稿重載計畫（/ }),
+  )
+  const article = (
+    await screen.findByRole('heading', { name: /草稿重載任務/ })
+  ).closest('article')!
+  fireEvent.click(
+    within(article).getByRole('button', { name: '修改查核項目' }),
+  )
+  const form = document.querySelector(
+    '[data-error-context="items"]',
+  ) as HTMLFormElement
+  fireEvent.click(within(form).getByLabelText(new RegExp(items[1].title)))
+  const before = vi.mocked(client.listProjectItems).mock.calls.length
+  fireEvent.click(within(form).getByRole('button', { name: '儲存查核項目' }))
+  await waitFor(() =>
+    expect(vi.mocked(client.listProjectItems).mock.calls.length).toBe(
+      before + 1,
+    ),
+  )
+  expect(
+    await within(form).findByText(
+      '所選的查核項目剛被停用，清單已更新並取消勾選，請確認後再送出。',
+    ),
+  ).toBeVisible()
+  await waitFor(() =>
+    expect(
+      within(form).queryByLabelText(new RegExp(items[1].title)),
+    ).toBeNull(),
+  )
+  expect(within(form).getByLabelText(new RegExp(items[0].title))).toBeChecked()
+  // 重載只發生一次，沒有重載迴圈。
+  expect(vi.mocked(client.listProjectItems).mock.calls.length).toBe(before + 1)
+  // 再送出：item_ids 仍含原有的停用項目、不含剛停用的新項目。
+  fireEvent.click(within(form).getByRole('button', { name: '儲存查核項目' }))
+  await waitFor(() =>
+    expect(client.updateTaskItems).toHaveBeenLastCalledWith(
+      expect.any(String),
+      { item_ids: [items[0].id] },
+    ),
+  )
+})
+
+it('IP-AC24：修改草稿重載後伺服器集合已不含某停用項目時，該項目被裁掉', async () => {
+  const { client, projectId, items, plan } =
+    await seedDraftWithItems('伺服器已改計畫')
+  const task = await client.createTask(plan.id, {
+    name: '伺服器已改任務',
+    item_ids: [items[0].id, items[1].id],
+    zone_id: null,
+    location_text: '工地',
+    suggested_assignee_id: null,
+  })
+  // 兩項都是停用的原有項目；編輯期間別人把 items[0] 從任務移除。
+  client.listProjectItems = vi.fn(async () =>
+    items.map((item) => ({ ...item, is_active: false })),
+  )
+  let serverChanged = false
+  const realGetPlan = client.getPlan.bind(client)
+  client.getPlan = vi.fn(async (planId) => {
+    const detail = await realGetPlan(planId)
+    if (!serverChanged) return detail
+    return {
+      ...detail,
+      tasks: detail.tasks?.map((t) =>
+        t.id === task.id
+          ? { ...t, items: t.items.filter((i) => i.id !== items[0].id) }
+          : t,
+      ),
+    }
+  })
+  client.updateTaskItems = vi.fn(async () => {
+    serverChanged = true
+    throw new ManagementApiError(409, 'project_inspection_item.inactive')
+  })
+  render(<PlanningPage client={client} initialProjectId={projectId} />)
+  fireEvent.click(
+    await screen.findByRole('button', { name: /伺服器已改計畫（/ }),
+  )
+  const article = (
+    await screen.findByRole('heading', { name: /伺服器已改任務/ })
+  ).closest('article')!
+  fireEvent.click(
+    within(article).getByRole('button', { name: '修改查核項目' }),
+  )
+  const form = document.querySelector(
+    '[data-error-context="items"]',
+  ) as HTMLFormElement
+  expect(within(form).getByLabelText(new RegExp(items[0].title))).toBeChecked()
+  fireEvent.click(within(form).getByRole('button', { name: '儲存查核項目' }))
+  await waitFor(() =>
+    expect(
+      within(form).queryByLabelText(new RegExp(items[0].title)),
+    ).toBeNull(),
+  )
+  expect(within(form).getByLabelText(new RegExp(items[1].title))).toBeChecked()
+})
+
+it('IP-AC24：專案項目全被停用時，新增任務提示先新增或恢復', async () => {
+  const { client, projectId, items } = await seedDraftWithItems('全停用計畫')
+  client.listProjectItems = vi.fn(async () =>
+    items.map((item) => ({ ...item, is_active: false })),
+  )
+  render(<PlanningPage client={client} initialProjectId={projectId} />)
+  fireEvent.click(await screen.findByRole('button', { name: /全停用計畫（/ }))
+  await openTaskCreationForm()
+  expect(
+    await screen.findByText(
+      '目前沒有啟用的查核項目，請先到專案查核項目新增或恢復。',
+    ),
+  ).toBeVisible()
+  expect(
+    screen.queryByText('這個專案還沒有查核項目，請先到專案查核項目新增。'),
+  ).toBeNull()
+})
+
+it('IP-AC24：專案沒有任何查核項目時用另一句提示', async () => {
+  const { client, projectId } = await seedDraftWithItems('無項目計畫')
+  client.listProjectItems = vi.fn(async () => [])
+  render(<PlanningPage client={client} initialProjectId={projectId} />)
+  fireEvent.click(await screen.findByRole('button', { name: /無項目計畫（/ }))
+  await openTaskCreationForm()
+  expect(
+    await screen.findByText(
+      '這個專案還沒有查核項目，請先到專案查核項目新增。',
+    ),
+  ).toBeVisible()
+  expect(screen.queryByText(/目前沒有啟用的查核項目/)).toBeNull()
+})

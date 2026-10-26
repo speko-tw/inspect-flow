@@ -324,6 +324,8 @@ def test_project_scoped_catalog_covers_all_project_event_families():
         "inspection_task.items_updated",
         "project_inspection_item.updated",
         "project_inspection_item.deleted",
+        "project_inspection_item.deactivated",
+        "project_inspection_item.reactivated",
         "template_item.created_from_project",
     }
     project_entities = {

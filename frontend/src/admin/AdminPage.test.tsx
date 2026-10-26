@@ -487,6 +487,9 @@ function managementFetch({
             companies.find((c) => c.id === row?.company_id)?.name ?? null,
         })
       }
+      if (parsed.pathname.endsWith('/participating-projects')) {
+        return Response.json({ items: [] })
+      }
       if (url.endsWith('/users/user-1/deactivation-check')) {
         return Response.json({ user_id: 'user-1', last_manager_projects: [] })
       }
@@ -894,20 +897,28 @@ describe('admin user and company pages', () => {
     // 100 列表格上的 getByRole 每次要檢查全部節點的可及性，高負載下
     // 三次查詢就超過 5 秒測試逾時（#744）；按鈕改用文字加標籤查詢。
     expect(await screen.findByText('目標公司0')).toBeInTheDocument()
+    const list = screen.getByRole('region', { name: '公司管理' })
     expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
-    // 每個測試只在第一次保留 getByRole，驗證按鈕的無障礙名稱。
-    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    // 每個測試只在第一次保留清單範圍內的 getByRole，驗證按鈕的無障礙名稱。
+    // 續載鈕限定所屬清單，避開其他管理面板（#741、#744）。
+    fireEvent.click(within(list).getByRole('button', { name: '載入更多' }))
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('搜尋公司'), {
       target: { value: '目標公司' },
     })
-    fireEvent.click(screen.getByText('搜尋', { selector: 'button' }))
+    fireEvent.click(
+      within(screen.getByLabelText('搜尋公司').closest('form')!).getByRole(
+        'button',
+        { name: '搜尋' },
+      ),
+    )
     expect(await screen.findByText('目標公司0')).toBeInTheDocument()
     expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('搜尋公司'), {
       target: { value: '草稿不應套用' },
     })
+    // 清單已載入 100 列，這裡改用文字查詢避免高負載逾時（#744）。
     fireEvent.click(screen.getByText('載入更多', { selector: 'button' }))
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
   })
@@ -1476,7 +1487,13 @@ describe('admin user and company pages', () => {
     const fetchMock = managementFetch()
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
-    fireEvent.click(screen.getByRole('button', { name: '修改資料' }))
+    // 基本資料操作不需遍歷同頁的權限與角色面板（#744）。
+    const section = screen
+      .getByRole('heading', { name: '鄧安娜', level: 1 })
+      .closest('section')
+    expect(section).not.toBeNull()
+    const basic = within(section as HTMLElement)
+    fireEvent.click(basic.getByRole('button', { name: '修改資料' }))
     const editForm = screen
       .getByRole('heading', { name: '修改帳號資料' })
       .closest('form')
@@ -1494,12 +1511,12 @@ describe('admin user and company pages', () => {
     )
     await waitFor(() => {
       expect(
-        screen.queryByRole('heading', { name: '修改帳號資料' }),
+        basic.queryByRole('heading', { name: '修改帳號資料' }),
       ).not.toBeInTheDocument()
     })
-    expect(screen.getByText('帳號：anna.new')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
-    const assignment = screen.getByRole('region', { name: '操作確認' })
+    expect(basic.getByText('帳號：anna.new')).toBeInTheDocument()
+    fireEvent.click(basic.getByRole('button', { name: '指派管理者' }))
+    const assignment = basic.getByRole('region', { name: '操作確認' })
     expect(assignment).toHaveTextContent('anna.new')
     expect(assignment).toHaveTextContent('系統全部權限')
     // 授予權限用主要色；立刻剝奪他人存取的動作才用危險色（#500）。
@@ -1513,8 +1530,8 @@ describe('admin user and company pages', () => {
       ).toHaveFocus(),
     )
     ;(document.activeElement as HTMLElement).blur()
-    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
-    const switched = screen.getByRole('region', { name: '操作確認' })
+    fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
+    const switched = basic.getByRole('region', { name: '操作確認' })
     expect(switched).toHaveTextContent(
       '要停用的帳號：鄧安娜（anna.new）他會立刻被登出，之後不能再登入',
     )
@@ -1524,9 +1541,9 @@ describe('admin user and company pages', () => {
       ).toHaveFocus(),
     )
     fireEvent.click(within(switched).getByRole('button', { name: '取消' }))
-    fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(basic.getByRole('button', { name: '指派管理者' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
         { name: '取消' },
       ),
@@ -1538,24 +1555,24 @@ describe('admin user and company pages', () => {
           init?.method === 'PUT',
       ),
     ).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(basic.getByRole('button', { name: '指派管理者' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
         { name: '確認' },
       ),
     )
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: '收回管理者' }),
+        basic.getByRole('button', { name: '收回管理者' }),
       ).toBeInTheDocument()
     })
-    fireEvent.click(screen.getByRole('button', { name: '收回管理者' }))
-    expect(screen.getByRole('region', { name: '操作確認' })).toHaveTextContent(
+    fireEvent.click(basic.getByRole('button', { name: '收回管理者' }))
+    expect(basic.getByRole('region', { name: '操作確認' })).toHaveTextContent(
       'anna.new',
     )
     expect(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
         { name: '確認' },
       ),
@@ -1565,7 +1582,7 @@ describe('admin user and company pages', () => {
         String(url).endsWith('/users/user-1/admin') && init?.method === 'PUT',
     ).length
     fireEvent.click(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
         { name: '取消' },
       ),
@@ -1577,20 +1594,20 @@ describe('admin user and company pages', () => {
           init?.method === 'PUT',
       ),
     ).toHaveLength(adminActionsBeforeCancel)
-    fireEvent.click(screen.getByRole('button', { name: '收回管理者' }))
+    fireEvent.click(basic.getByRole('button', { name: '收回管理者' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
         { name: '確認' },
       ),
     )
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: '指派管理者' }),
+        basic.getByRole('button', { name: '指派管理者' }),
       ).toBeInTheDocument()
     })
-    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
-    const deactivation = screen.getByRole('region', { name: '操作確認' })
+    fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
+    const deactivation = basic.getByRole('region', { name: '操作確認' })
     expect(deactivation).toHaveTextContent('anna.new')
     expect(deactivation).toHaveTextContent('不能再登入')
     expect(
@@ -1623,8 +1640,14 @@ describe('admin user and company pages', () => {
     const fetchMock = managementFetch()
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
-    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
-    const deactivation = screen.getByRole('region', { name: '操作確認' })
+    // 基本資料操作不需遍歷同頁的權限與角色面板（#744）。
+    const section = screen
+      .getByRole('heading', { name: '鄧安娜', level: 1 })
+      .closest('section')
+    expect(section).not.toBeNull()
+    const basic = within(section as HTMLElement)
+    fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
+    const deactivation = basic.getByRole('region', { name: '操作確認' })
     fireEvent.click(within(deactivation).getByRole('button', { name: '取消' }))
     expect(
       fetchMock.mock.calls.some(
@@ -1634,8 +1657,8 @@ describe('admin user and company pages', () => {
       ),
     ).toBe(false)
     // 取消後重新開啟確認框，仍可完成停用。
-    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
-    const disableConfirmation = screen.getByRole('region', {
+    fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
+    const disableConfirmation = basic.getByRole('region', {
       name: '操作確認',
     })
     await waitFor(() =>
@@ -1651,11 +1674,11 @@ describe('admin user and company pages', () => {
       }),
     )
     await waitFor(() => {
-      expect(screen.getByText('狀態：已停用')).toBeInTheDocument()
+      expect(basic.getByText('狀態：已停用')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '啟用帳號' }))
-    const activation = screen.getByRole('region', { name: '操作確認' })
+    fireEvent.click(basic.getByRole('button', { name: '啟用帳號' }))
+    const activation = basic.getByRole('region', { name: '操作確認' })
     await waitFor(() =>
       expect(
         within(activation).getByRole('button', { name: '確認' }),
@@ -1663,7 +1686,7 @@ describe('admin user and company pages', () => {
     )
     fireEvent.click(within(activation).getByRole('button', { name: '確認' }))
     await waitFor(() => {
-      expect(screen.getByText('狀態：啟用中')).toBeInTheDocument()
+      expect(basic.getByText('狀態：啟用中')).toBeInTheDocument()
     })
 
     expect(
