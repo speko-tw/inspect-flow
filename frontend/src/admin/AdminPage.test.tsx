@@ -895,7 +895,8 @@ describe('admin user and company pages', () => {
     // 三次查詢就超過 5 秒測試逾時（#744）；按鈕改用文字加標籤查詢。
     expect(await screen.findByText('目標公司0')).toBeInTheDocument()
     expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('載入更多', { selector: 'button' }))
+    // 每個測試只在第一次保留 getByRole，驗證按鈕的無障礙名稱。
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('搜尋公司'), {
@@ -1622,6 +1623,17 @@ describe('admin user and company pages', () => {
     const fetchMock = managementFetch()
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
+    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
+    const deactivation = screen.getByRole('region', { name: '操作確認' })
+    fireEvent.click(within(deactivation).getByRole('button', { name: '取消' }))
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1/active') &&
+          init?.method === 'PUT',
+      ),
+    ).toBe(false)
+    // 取消後重新開啟確認框，仍可完成停用。
     fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
     const disableConfirmation = screen.getByRole('region', {
       name: '操作確認',

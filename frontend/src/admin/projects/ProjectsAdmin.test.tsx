@@ -847,7 +847,8 @@ describe('admin projects page', () => {
       screen.getByText('示範工程0', { selector: 'h3' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('目標工程')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('載入更多', { selector: 'button' }))
+    // 每個測試只在第一次保留 getByRole，驗證按鈕的無障礙名稱。
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     await screen.findAllByText('目標工程')
     expect(
       screen.getByText('目標工程', { selector: 'h3' }),
@@ -883,7 +884,7 @@ describe('admin projects page', () => {
     expect(firstCard).not.toBeNull()
     expect(within(firstCard!).getByText('啟用成員 0 人')).toBeVisible()
 
-    fireEvent.click(screen.getByText('載入更多', { selector: 'button' }))
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     const secondPageHeading = await screen.findByText('第二頁工程', {
       selector: 'h3',
     })
