@@ -126,7 +126,8 @@ def get_project_workflow_summary(
     item_count = (
         session.scalar(
             select(func.count(ProjectInspectionItem.id)).where(
-                ProjectInspectionItem.project_id == project_id
+                ProjectInspectionItem.project_id == project_id,
+                ProjectInspectionItem.is_active.is_(True),
             )
         )
         or 0

@@ -451,6 +451,12 @@ def _reject_unchanged_update(
     before: dict[str, Any],
     after: dict[str, Any],
 ) -> None:
+    """拒絕沒有變動的修改事件（ALG-R09）。
+
+    修改事件只准記有變動的欄位，所以前後完全相同、或共同欄位中有值
+    沒變就拒絕；目錄標為「一律記錄」的欄位不受此限。
+    「每次都寫」的事件（ALG-R16）不會呼叫這裡。
+    """
     if before == after:
         raise UnchangedAuditFieldError(
             f"{definition.event_type}: before and after are identical "
@@ -472,6 +478,14 @@ def _validate_shape(
     before: dict[str, Any] | None,
     after: dict[str, Any] | None,
 ) -> None:
+    """依事件種類檢查 ``before`` 與 ``after`` 的形狀（ALG-R09）。
+
+    新增事件 ``before`` 必須為空、刪除事件 ``after`` 必須為空，缺少
+    目錄宣告的必要欄位就拒絕（ALG-R11）；修改事件須兩側都有，且一律
+    記錄的欄位要同時出現（ALG-R16 的「每次都寫」事件則要求全部宣告
+    欄位）。``before_optional`` 的事件允許沒有 ``before``，此時
+    ``after`` 要帶齊所有欄位。
+    """
     if definition.kind is AuditEventKind.CREATED:
         if before is not None:
             raise InvalidAuditEventShapeError(
@@ -821,6 +835,11 @@ def record_audit_event_in_independent_transaction(
 
 
 def _write_independent_audit_event(item: _PendingAuditEvent) -> uuid.UUID:
+    """以獨立的資料庫連線與自己的交易寫入一筆已驗證的安全事件。
+
+    與呼叫端的交易無關：呼叫端回滾後事件仍保留（DOM-R22 的安全事件，
+    例如被拒絕的授權）。``item`` 已在入口完成驗證與正規化。
+    """
     factory = get_session_factory(item.engine)
     with factory.begin() as independent_session:
         log = _record_audit_event(

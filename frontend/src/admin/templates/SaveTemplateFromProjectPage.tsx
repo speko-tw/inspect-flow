@@ -179,7 +179,7 @@ export default function SaveTemplateFromProjectPage() {
         },
       })
     } catch (caught) {
-      setStepError('save', templateErrorMessage(caught, name.trim()))
+      setStepError('save', templateErrorMessage(caught, name.trim(), 'save'))
     } finally {
       setBusy(false)
     }
@@ -240,23 +240,30 @@ export default function SaveTemplateFromProjectPage() {
             <h2>選擇查核項目</h2>
             {stepError('items')}
             {loading ? <p role="status">載入中…</p> : null}
+            {/* TPL-R28：存為範本不列停用來源，須先到專案恢復。 */}
             {!loading && (
               <ul>
-                {projectItems.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      aria-pressed={source?.id === item.id}
-                      disabled={busy}
-                      onClick={() => void chooseSource(item)}
-                      type="button"
-                    >
-                      {item.title}（{item.inspection_points.length}{' '}
-                      個查核項次； 來源範本：{item.source_template_name}）
-                    </button>
-                  </li>
-                ))}
+                {projectItems
+                  .filter((item) => item.is_active !== false)
+                  .map((item) => (
+                    <li key={item.id}>
+                      <button
+                        aria-pressed={source?.id === item.id}
+                        disabled={busy}
+                        onClick={() => void chooseSource(item)}
+                        type="button"
+                      >
+                        {item.title}（{item.inspection_points.length}{' '}
+                        個查核項次； 來源範本：{item.source_template_name}）
+                      </button>
+                    </li>
+                  ))}
               </ul>
             )}
+            {!loading &&
+              projectItems.some((item) => item.is_active === false) && (
+                <p>停用項目須先恢復，才能存為範本。</p>
+              )}
           </li>
         )}
         {source && (
