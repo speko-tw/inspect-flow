@@ -69,11 +69,22 @@ export function saveProjectItemAsTemplate(
   })
 }
 
+/**
+ * 把範本相關錯誤轉成白話訊息。`purpose` 區分「套用範本」與「存為範本」：
+ * 同一個 `project_inspection_item.inactive_name` 在套用時代表同名衝突
+ * 全為停用項目，在存為範本時則是來源項目本身已停用（TPL-R28）。
+ */
 export function templateErrorMessage(
   error: unknown,
   conflictingTemplateName?: string,
+  purpose: 'apply' | 'save' = 'apply',
 ): string {
   if (error instanceof HttpError) {
+    if (error.code === 'project_inspection_item.inactive_name') {
+      return purpose === 'save'
+        ? '來源項目已停用，請先到已停用清單恢復，才能存為範本。'
+        : '同名項目已停用，可在已停用清單恢復。'
+    }
     if (
       error.status === 409 &&
       error.code === 'project_inspection_item.duplicate_name'

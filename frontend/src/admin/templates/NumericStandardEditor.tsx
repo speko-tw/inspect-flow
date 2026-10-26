@@ -10,6 +10,7 @@ import {
 type Props = {
   point: InspectionPoint
   pointIndex: number
+  /** 錯誤 key 的項次前綴；專案項目編輯改用穩定識別而非索引。 */
   errorPointKey?: string
   errors: Record<string, string>
   updatePoint: (index: number, changes: Partial<InspectionPoint>) => void
@@ -17,9 +18,17 @@ type Props = {
     index: number,
     changes: Partial<NonNullable<InspectionPoint['numeric_standard']>>,
   ) => void
+  /** 依 IP-R13，鎖定時不得改判定方式與綁定欄位，內容仍可更正。 */
   structureLocked?: boolean
 }
 
+/**
+ * 編輯單一查核項次的判定標準：無、文字或數值（TPL-R11、TPL-R13）。
+ *
+ * 數值標準必須綁定該項次的一個數字實測欄位，單位由該欄位帶入、在此
+ * 唯讀顯示（TPL-R17）；錯誤依 `errors` 的 key 顯示在對應欄位旁
+ * （TPL-R18）。
+ */
 export function NumericStandardEditor({
   point,
   pointIndex,
@@ -34,6 +43,8 @@ export function NumericStandardEditor({
   const standard = point.numeric_standard
   const key = errorPointKey ?? `point:${index}`
   const numberOptions = numberFields(point)
+  // 單位以綁定欄位為準，標準自己的 unit 只是備援；寫入時綁定欄位的
+  // unit 為 null、標準的 unit 取自該欄位（TPL-R17）。
   const unit = boundField(point)?.unit || standard?.unit || ''
   return (
     <section className="tpl-point-section" aria-label="判定標準">
@@ -61,6 +72,9 @@ export function NumericStandardEditor({
                   if (kind === 'numeric') {
                     const next = numberStandard(point)
                     updatePoint(index, next)
+                    // 項次原本沒有數字欄位時會自動新增一個（TPL-R16），
+                    // 焦點移到它的名稱欄；欄位要等這次更新 render 後才
+                    // 存在，所以延後一拍再聚焦。
                     if (!numberFields(point).length) {
                       window.setTimeout(() => {
                         document
@@ -73,6 +87,8 @@ export function NumericStandardEditor({
                       }, 0)
                     }
                   } else if (kind === 'text') {
+                    // 只清除數值標準，實測欄位保留；欄位可以不綁定任何
+                    // 標準（TPL-R11）。
                     updatePoint(index, {
                       numeric_standard: null,
                       text_standard: point.text_standard ?? { text: '' },
@@ -126,6 +142,8 @@ export function NumericStandardEditor({
                     const field = numberOptions.find(
                       (row) => row.clientKey === event.target.value,
                     )
+                    // 改綁時丟掉舊綁定的持久 id，只留 clientKey 當關聯，
+                    // 單位改成新欄位的單位。
                     updateNumeric(index, {
                       measurement_field_id: undefined,
                       measurement_field_client_id: undefined,
@@ -179,6 +197,10 @@ export function NumericStandardEditor({
                     name={`condition-${index}`}
                     onChange={() => {
                       const selected = condition as '<=' | '>=' | '=' | 'range'
+                      // 非 range 條件不得帶範圍形式與上下限（TPL-R13），
+                      // 切換時清成 null；value 與 tolerance 保留，切回
+                      // 其他條件時不必重填。range 沿用原形式，沒有則
+                      // 預設區間。
                       updateNumeric(index, {
                         condition: selected,
                         range_form:
@@ -256,6 +278,8 @@ export function NumericStandardEditor({
                 {inputError(`${key}:lower`) && (
                   <p className="field-error">{inputError(`${key}:lower`)}</p>
                 )}
+                {/* 「下限不能大於上限」是兩欄之間的錯誤，顯示並聚焦在
+                    下限欄（TPL-R13）。 */}
                 {inputError(`${key}:range`) && (
                   <p className="field-error">{inputError(`${key}:range`)}</p>
                 )}
@@ -308,6 +332,7 @@ export function NumericStandardEditor({
                 {inputError(`${key}:value`) && (
                   <p className="field-error">{inputError(`${key}:value`)}</p>
                 )}
+                {/* TPL-R13：範圍的容許誤差必填、「＝」選填。 */}
                 {(standard.condition === 'range' ||
                   standard.condition === '=' ||
                   standard.tolerance) && (

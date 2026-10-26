@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -232,8 +232,202 @@ try {
   const noTemplateAccess = await api('/template-categories')
   assert.equal(noTemplateAccess.status, 403)
 
+  // IP-AC23～26：真 API 保留草稿，UI 停用、過濾與恢復，兩種外觀留證。
+  await signIn('admin', 'DemoAdmin2026')
+  const itemBase = `/projects/${result.projects.B}/inspection-items`
+  const activationItems = await api(itemBase)
+  assert.equal(activationItems.status, 200)
+  const activationItem = activationItems.data.items.find(
+    (item) => item.title === '接地電阻量測',
+  )
+  assert.ok(activationItem, 'fixture must contain the item applied above')
+  // 測試產物跟隨隔離工作目錄，交付時再複製到指定位置。
+  const shots = path.join(work, 'screenshots', 'project-items')
+  await mkdir(shots, { recursive: true })
+  const activationZones = await api(`/projects/${result.projects.B}/zones`)
+  assert.equal(activationZones.status, 200)
+  assert.ok(activationZones.data.items.length > 0)
+  const activationZoneId = activationZones.data.items[0].id
+  const originalAppearance = (await api('/auth/me')).data.appearance
+  assert.equal(
+    (await api('/auth/me', 'PATCH', { appearance: 'system' })).status,
+    200,
+  )
+  for (const [width, scheme] of [
+    [1280, 'light'],
+    [360, 'dark'],
+  ]) {
+    await page.setViewportSize({ width, height: 1000 })
+    await page.emulateMedia({ colorScheme: scheme })
+    assert.equal(
+      (await api('/auth/me', 'PATCH', { appearance: scheme })).status,
+      200,
+    )
+    const planName = `停用選單驗收 ${width}`
+    const plan = await api(
+      `/projects/${result.projects.B}/inspection-plans`,
+      'POST',
+      {
+        name: planName,
+      },
+    )
+    assert.equal(plan.status, 201)
+    const draft = await api(
+      `/inspection-plans/${plan.data.id}/tasks`,
+      'POST',
+      {
+        name: `保留停用項目 ${width}`,
+        item_ids: [activationItem.id],
+        zone_id: activationZoneId,
+      },
+    )
+    assert.equal(draft.status, 201, JSON.stringify(draft.data))
+    const taskPath = `/inspection-tasks/${draft.data.id}`
+    const beforeActivation = await api(taskPath)
+    await page.goto(`${base}${itemBase}`)
+    await page.waitForFunction(
+      (theme) => document.documentElement.dataset.theme === theme,
+      scheme,
+    )
+    const itemRow = page.locator('.project-item-list > li').filter({
+      has: page.getByRole('link', {
+        name: `修改「${activationItem.title}」`,
+        exact: true,
+      }),
+    })
+    await itemRow
+      .getByRole('button', { name: `刪除「${activationItem.title}」` })
+      .click()
+    const blocked = itemRow.getByRole('group', { name: '無法刪除查核項目' })
+    await blocked.getByRole('button', { name: '停用這個項目' }).waitFor()
+    await page.screenshot({
+      path: path.join(shots, `${width}-${scheme}-panel.png`),
+      fullPage: true,
+    })
+    await blocked.getByRole('button', { name: '停用這個項目' }).click()
+    const confirmation = itemRow.getByRole('group', { name: '停用查核項目' })
+    await confirmation.getByText(/既有任務與查核紀錄不受影響/).waitFor()
+    await page.screenshot({
+      path: path.join(shots, `${width}-${scheme}-confirm.png`),
+      fullPage: true,
+    })
+    const deactivation = page.waitForResponse((r) =>
+      r.url().endsWith(':deactivate'),
+    )
+    await confirmation.getByRole('button', { name: '確認停用' }).click()
+    assert.equal((await deactivation).status(), 200)
+    const summary = page.getByText('已停用（1）', { exact: true })
+    await summary.waitFor()
+    assert.equal(
+      await page
+        .getByRole('link', {
+          name: `修改「${activationItem.title}」`,
+          exact: true,
+        })
+        .count(),
+      0,
+    )
+    await summary.click()
+    await page
+      .getByRole('button', { name: `恢復「${activationItem.title}」` })
+      .waitFor()
+    await page.screenshot({
+      path: path.join(shots, `${width}-${scheme}-inactive.png`),
+      fullPage: true,
+    })
+    assert.deepEqual((await api(taskPath)).data, beforeActivation.data)
+    await page.goto(`${base}${itemBase}/${activationItem.id}`)
+    await page
+      .getByText('此查核項目已停用，請先在已停用清單恢復。', { exact: true })
+      .waitFor()
+    assert.equal(
+      await page.getByRole('button', { name: '儲存變更' }).isDisabled(),
+      true,
+    )
+    const rejectedNew = await api(
+      `/inspection-plans/${plan.data.id}/tasks`,
+      'POST',
+      {
+        name: '不可新增停用選項',
+        item_ids: [activationItem.id],
+        zone_id: activationZoneId,
+      },
+    )
+    assert.equal(rejectedNew.status, 409)
+    if (width === 360) {
+      await page.getByRole('button', {
+        name: /切換專案頁面/,
+      }).click()
+    }
+    await page.getByRole('link', { name: '計畫與任務', exact: true }).click()
+    const activationPlanButton = page.locator('.plan-list').getByRole(
+      'button', { name: new RegExp(planName) },
+    )
+    await activationPlanButton.waitFor()
+    const activationPlanLabel = await activationPlanButton.innerText()
+    assert.equal(
+      activationPlanLabel.replace(/\s/g, ''),
+      `${planName}（草稿）`.replace(/\s/g, ''),
+    )
+    process.stdout.write(JSON.stringify({ activationPlanLabel }) + '\n')
+    await activationPlanButton.click()
+    await page.getByRole('button', { name: '＋ 新增任務' }).click()
+    const taskForm = page.locator('[data-error-context="task"]')
+    assert.equal(
+      await taskForm.locator(`input[value="${activationItem.id}"]`).count(),
+      0,
+    )
+    const draftArticle = page.locator('article').filter({
+      has: page.getByRole('heading', {
+        name: new RegExp(`保留停用項目 ${width}`),
+      }),
+    })
+    await draftArticle.getByRole('button', { name: '修改查核項目' }).click()
+    const retainedInput = page
+      .locator('[data-error-context="items"]')
+      .locator(`input[value="${activationItem.id}"]`)
+    assert.equal(await retainedInput.isChecked(), true)
+    assert.equal((await api(`${taskPath}:dispatch`, 'POST')).status, 200)
+    await page.goto(`${base}${itemBase}`)
+    await page.getByText('已停用（1）', { exact: true }).click()
+    await page
+      .getByRole('button', { name: `恢復「${activationItem.title}」` })
+      .click()
+    const reactivation = page.waitForResponse((r) =>
+      r.url().endsWith(':activate'),
+    )
+    await page.getByRole('button', { name: '確認恢復' }).click()
+    assert.equal((await reactivation).status(), 200)
+    await page
+      .getByRole('link', {
+        name: `修改「${activationItem.title}」`,
+        exact: true,
+      })
+      .waitFor()
+    assert.equal(
+      await page.getByText('已停用（1）', { exact: true }).count(),
+      0,
+    )
+    await page.screenshot({
+      path: path.join(shots, `${width}-${scheme}-restored.png`),
+      fullPage: true,
+    })
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    )
+  }
+  assert.equal(
+    (await api('/auth/me', 'PATCH', { appearance: originalAppearance }))
+      .status,
+    200,
+  )
+
   process.stdout.write(JSON.stringify({
     result: 'PASS',
+    activation: 'filtering, draft dispatch and restoration verified',
     browser: 'Google Chrome via Playwright',
     wholeSystem: 'two items applied from the demo-office project route',
     singleItem: 'bound numeric field and unit applied from the UI',
@@ -242,6 +436,15 @@ try {
     external: 'library readable; template write and project apply denied',
     noTemplateModule: 'template library API returned 403',
   }, null, 2) + '\n')
+} catch (error) {
+  await writeFile(
+    path.join(work, '717-browser-failure.txt'),
+    await page.locator('body').innerText(),
+  )
+  await page.screenshot({
+    path: path.join(work, '717-browser-failure.png'), fullPage: true,
+  })
+  throw error
 } finally {
   await browser.close()
 }

@@ -1457,3 +1457,85 @@ describe('專案範本套用與存為範本：防連點（#507）', () => {
     expect(container.querySelector('form')).toBeNull()
   })
 })
+
+it('TPL-AC32：停用同名提供恢復連結，啟用同名保留改名提示', async () => {
+  mockApi({
+    projectItems: [{ ...PROJECT_ITEM, is_active: false }],
+  })
+  renderPage()
+  await chooseSystem()
+  const radio = screen.getByLabelText('單一項目：管線查核')
+  expect(radio).toBeDisabled()
+  expect(screen.getByText('同名項目已停用，可在已停用清單恢復')).toBeVisible()
+  const link = screen.getByRole('link', { name: '前往已停用清單' })
+  expect(link).toHaveAttribute('href', '/projects/project-1/inspection-items')
+  expect(screen.queryByText('專案已有同名項目，需要第二份請先改名')).toBeNull()
+  fireEvent.click(link)
+  expect(await screen.findByText('PROJECT_DETAIL')).toBeVisible()
+})
+
+it('TPL-AC32：專案存為範本清單不列停用項目並提示恢復', async () => {
+  mockApi({
+    canSave: true,
+    projectItems: [
+      PROJECT_ITEM,
+      { ...PROJECT_ITEM, id: 'inactive', title: '停用來源', is_active: false },
+    ],
+  })
+  renderPage()
+  expect(await screen.findByRole('button', { name: '存為範本' })).toBeEnabled()
+  expect(screen.queryByText('停用來源')).toBeNull()
+  expect(screen.getByText('停用項目須先恢復，才能存為範本。')).toBeVisible()
+})
+
+it('TPL-AC32：沒有停用項目時不顯示先恢復的提示', async () => {
+  mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
+  renderPage()
+  expect(await screen.findByRole('button', { name: '存為範本' })).toBeEnabled()
+  expect(screen.queryByText('停用項目須先恢復，才能存為範本。')).toBeNull()
+})
+
+it('TPL-AC32：網址帶入停用來源時不進入存檔狀態', async () => {
+  mockApi({
+    canSave: true,
+    projectItems: [{ ...PROJECT_ITEM, is_active: false }],
+  })
+  renderPage(
+    { ...USER, has_template_access: true },
+    [],
+    false,
+    false,
+    false,
+    PROJECT_ITEM.id,
+  )
+  expect(
+    await screen.findByText('停用項目須先恢復，才能存為範本。'),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('heading', { name: /存為範本/ }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '存入這個系統' })).toBeNull()
+})
+
+it('TPL-AC32：存為範本遇來源已停用，說明先恢復而非同名衝突', async () => {
+  mockApi({
+    canSave: true,
+    projectItems: [PROJECT_ITEM],
+    saveResponse: Response.json(
+      { error: { code: 'project_inspection_item.inactive_name' } },
+      { status: 409 },
+    ),
+  })
+  renderPage()
+  const row = (await screen.findByText('管線查核')).closest(
+    'li',
+  ) as HTMLElement
+  fireEvent.click(within(row).getByRole('button', { name: '存為範本' }))
+  const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+  fireEvent.click(await within(nav).findByRole('button', { name: '建築工程' }))
+  fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
+  fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '來源項目已停用，請先到已停用清單恢復，才能存為範本。',
+  )
+})

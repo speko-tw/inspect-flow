@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     ForeignKey,
     ForeignKeyConstraint,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    true,
 )
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Mapped, mapped_column, validates
@@ -278,6 +280,10 @@ class ProjectInspectionItem(AuditMixin, TimestampedBase):
     source_category_name: Mapped[str | None] = mapped_column(String)
     source_system_name: Mapped[str | None] = mapped_column(String)
     applied_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    # IP-R23：停用僅影響新任務選用，不更動任何既有快照。
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
+    )
     standard_revision: Mapped[int] = mapped_column(
         nullable=False, default=1, server_default="1"
     )

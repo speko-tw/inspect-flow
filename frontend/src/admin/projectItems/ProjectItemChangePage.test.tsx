@@ -1305,6 +1305,30 @@ describe('ProjectItemChangePage review round 2', () => {
         preview.item.title,
       ),
     )
+    fireEvent.change(screen.getByLabelText('查核項目名稱'), {
+      target: { value: '再次改名' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    const renameDialog = await screen.findByRole('dialog')
+    expect(
+      within(renameDialog).getByRole('radio', { name: noReinspectChoice }),
+    ).toBeChecked()
+    expect(renameDialog).toHaveTextContent('你選擇「不要」重新查核')
+    expect(api.update).toHaveBeenCalledTimes(1)
+    fireEvent.click(
+      within(renameDialog).getByRole('button', { name: '確認儲存' }),
+    )
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(2))
+    expect(api.update).toHaveBeenLastCalledWith(
+      'p',
+      'item-1',
+      expect.objectContaining({ title: '再次改名', reinspect: false }),
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('查核項目名稱')).toHaveValue(
+        preview.item.title,
+      ),
+    )
     fireEvent.change(screen.getByLabelText('項目說明'), {
       target: { value: '改過的項目說明' },
     })
@@ -1663,4 +1687,53 @@ it.each([false, true])('標準值變更須明確選擇，含改名=%s', async (r
     within(dialog).getByRole('button', { name: '確認儲存' }),
   ).toBeDisabled()
   expect(api.update).not.toHaveBeenCalled()
+})
+
+it('IP-AC25：改名遇停用同名項目時保留輸入並引導恢復', async () => {
+  const api = apiWith({
+    update: vi
+      .fn()
+      .mockRejectedValue(
+        new ManagementApiError(409, 'project_inspection_item.inactive_name'),
+      ),
+  })
+  renderPage(api)
+  fireEvent.change(await screen.findByLabelText('查核項目名稱'), {
+    target: { value: '停用的同名項目' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+  const dialog = await screen.findByRole('dialog')
+  fireEvent.click(within(dialog).getByRole('button', { name: '確認儲存' }))
+  expect(
+    await screen.findByText('同名項目已停用，可在已停用清單恢復。'),
+  ).toBeVisible()
+  expect(screen.getByLabelText('查核項目名稱')).toHaveValue('停用的同名項目')
+})
+
+describe('IP-AC23：停用項目唯讀', () => {
+  it('載入停用項目時顯示唯讀與先恢復的提示', async () => {
+    const inactive = structuredClone(preview)
+    inactive.item.is_active = false
+    inactive.readOnly = true
+    renderPage(apiWith({ loadPreview: vi.fn(async () => inactive) }))
+    expect(await screen.findByText('唯讀瀏覽')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '此查核項目已停用，請先在已停用清單恢復。',
+    )
+  })
+
+  it('送出時才發現已被停用：改為唯讀並收起確認框', async () => {
+    const api = apiWith({
+      update: vi.fn(async () => {
+        throw new ManagementApiError(409, 'project_inspection_item.inactive')
+      }),
+    })
+    renderPage(api)
+    await confirm('yes')
+    expect(await screen.findByText('唯讀瀏覽')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '此查核項目已停用，請先在已停用清單恢復。',
+    )
+  })
 })

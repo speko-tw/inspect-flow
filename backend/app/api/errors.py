@@ -328,6 +328,14 @@ class ErrorCode(DescribedStrEnum):
         "inspection_task.reason_required",
         "A cancellation reason is required.",
     )
+    PROJECT_INSPECTION_ITEM_INACTIVE = (
+        "project_inspection_item.inactive",
+        "Restore the inactive inspection item before using or editing it.",
+    )
+    PROJECT_INSPECTION_ITEM_INACTIVE_NAME = (
+        "project_inspection_item.inactive_name",
+        "An inactive project inspection item already uses this name.",
+    )
     PROJECT_INSPECTION_ITEM_IN_USE = (
         "project_inspection_item.in_use",
         "The inspection item is referenced by a task.",
