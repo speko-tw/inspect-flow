@@ -65,6 +65,12 @@ class RenameCompanyRequest(BaseModel):
 
 
 class CompanyStatusRequest(BatchLimitedRequest):
+    """啟用或停用一家公司；停用時可勾選一併停用的人員（DOM-R33）。
+
+    ``disable_user_ids`` 只在停用公司時有意義，由操作者決定實際
+    停用哪些人，沒被勾選的人員維持啟用。
+    """
+
     is_active: bool
     disable_user_ids: list[UUID] = Field(
         default_factory=list, max_length=MAX_BATCH_ITEMS
@@ -72,6 +78,8 @@ class CompanyStatusRequest(BatchLimitedRequest):
 
 
 class BatchCompanyStatusItem(BaseModel):
+    """批次中一家公司的目標狀態與其一併停用的人員（ADM-R13）。"""
+
     company_id: UUID
     is_active: bool
     disable_user_ids: list[UUID] = Field(
@@ -99,6 +107,7 @@ class ActiveCompanyUsersResponse(BaseModel):
 
 
 def _get_company(db: Session, company_id: UUID) -> Company:
+    """取得公司；不存在回 404，所有以公司 id 定址的端點共用。"""
     company = db.get(Company, company_id)
     if company is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
@@ -112,6 +121,10 @@ def list_companies(
     limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> CompanyListResponse:
+    """依名稱排序、cursor 分頁列出公司，``q`` 做不分大小寫的包含搜尋。
+
+    搜尋與分頁屬 ADM-R13（AC：ADM-AC10）：跨頁不重複、不遺漏。
+    """
     filters = []
     query = (q or "").strip()
     if query:
@@ -145,6 +158,11 @@ def get_active_users(
     company_id: UUID,
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> ActiveCompanyUsersResponse:
+    """回傳公司目前啟用中的人員與人數（DOM-R33）。
+
+    停用公司前畫面要先顯示「還有 N 位啟用中的人員」，供操作者
+    決定一併停用誰；這個端點只讀，不改動任何人員。
+    """
     _get_company(db, company_id)
     users = list_active_users(db, company_id)
     return ActiveCompanyUsersResponse(
@@ -196,16 +214,25 @@ def change_company_status(
     body: CompanyStatusRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> Company:
+    """啟用或停用公司，停用時可同交易一併停用勾選的人員。
+
+    依 DOM-R32，停用公司本身不改動旗下人員；依 DOM-R33，只有操作
+    者明確勾選的人員才會被停用。
+    """
     company = _get_company(db, company_id)
+    # 一併停用是停用公司時的選項（DOM-R33），啟用公司不得帶名單。
     if body.is_active and body.disable_user_ids:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     active_users = list_active_users(db, company_id)
     by_id: dict[UUID, User] = {user.id: user for user in active_users}
     chosen = set(body.disable_user_ids)
+    # 名單只能是這家公司目前啟用中的人員且不得重複（DOM-R33）。
     if len(chosen) != len(body.disable_user_ids) or chosen - by_id.keys():
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
 
     def update_company_status() -> Company:
+        # 逐一走 set_is_active，內建帳號與最後一位 Admin 仍受
+        # DOM-R06、DOM-R07 保護；任一失敗則整筆不生效。
         for user_id in chosen:
             set_is_active(db, by_id[user_id], False)
         return update_company(db, company, is_active=body.is_active)
@@ -226,7 +253,12 @@ def batch_change_company_status(
     body: BatchCompanyStatusRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> BatchCompanyStatusResponse:
-    """Apply selected company statuses atomically (ADM-R13)."""
+    """Apply selected company statuses atomically (ADM-R13).
+
+    請求層的檢查與加鎖在寫入前完成；DOM-R06、R07（內建帳號、
+    最後一位 Admin）在逐筆寫入時才觸發，由整個請求的交易回滾
+    保證整批不變（ADM-AC10）。
+    """
     items = body.items
     require_batch_size(len(items))
     # ADM-R13、#731：停用人員合計沿用帳號批次的 200 人上限，
@@ -242,11 +274,14 @@ def batch_change_company_status(
             fields=[{"path": "/items", "code": FieldErrorCode.TOO_LONG.value}],
         )
     company_ids = [item.company_id for item in items]
+    # 同一家公司不得在一批中出現兩次，否則最終狀態取決於順序。
     if not items or len(set(company_ids)) != len(company_ids):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     if any(item.is_active and item.disable_user_ids for item in items):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
 
+    # 先鎖公司再鎖人員，且各自依 id 排序，讓同時送出的批次以相同
+    # 順序取得列鎖；鎖定後才比對存在性，避免檢查與寫入之間被改動。
     companies = list(
         db.scalars(
             select(Company)
@@ -269,6 +304,8 @@ def batch_change_company_status(
         )
     if len(set(selected_user_ids)) != len(selected_user_ids):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    # 只鎖仍啟用的人員：已停用者不在 DOM-R33 的可勾選名單內，
+    # 出現在名單中就視為無效請求。
     selected_users = (
         list(
             db.scalars(
@@ -288,6 +325,7 @@ def batch_change_company_status(
     if set(users_by_id) != set(selected_user_ids):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     companies_by_id = {company.id: company for company in companies}
+    # 勾選的人員必須屬於同一筆項目的公司，不能借公司入口停用他人。
     for item in items:
         if any(
             users_by_id[user_id].company_id != item.company_id

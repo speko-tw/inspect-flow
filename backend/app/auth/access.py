@@ -262,7 +262,13 @@ _mark(require_admin, RouteAccessDeclaration(level=AccessLevel.ADMIN_REQUIRED))
 def require_admin_or_any_project_permission(
     permission_code: str,
 ) -> Callable[..., User]:
-    """Allow Admin or a user holding a permission in any project."""
+    """Allow Admin or a user holding a permission in any project.
+
+    給「跨專案入口」用（例如現場 Task 清單
+    GET /field/inspection-tasks）：不指定專案，只要在任一專案持有
+    該代碼即放行；非 Admin 另須具該代碼所屬模組的「可使用」
+    （AUT-R19）。具體專案內的動作仍由各專案端點另行檢查。
+    """
     if not is_permission_code_registered(permission_code):
         raise ValueError(f"unregistered permission code: {permission_code}")
 
@@ -273,7 +279,8 @@ def require_admin_or_any_project_permission(
         if user.is_admin:
             return user
         access = calculate_effective_access(db, user_id=user.id)
-        # 依 AUT-R19，專案代碼須搭配其模組可使用權限。
+        # 依 AUT-R19，專案代碼須搭配其模組可使用權限；因此要同時
+        # 看專案代碼與模組「可使用」，不能只看專案角色。
         module = permission_code_module(permission_code)
         module_use = f"{module}.use" if module is not None else None
         if not any(
@@ -308,6 +315,8 @@ def require_module_permission(permission_code: str) -> Callable[..., User]:
         user: User = Depends(require_login, scope="function"),  # noqa
         db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
+        # 只看模組權限；Admin 在 permission_gaps 內放行，委派者
+        # 沒有該代碼仍是 403（AUT-R48：委派不附帶模組編輯能力）。
         access = calculate_effective_access(db, user_id=user.id)
         missing_module, missing_project = permission_gaps(
             access, module_codes=(permission_code,)
@@ -338,6 +347,8 @@ def require_module_delegation(
         user: User = Depends(require_login, scope="function"),  # noqa
         db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
+        # 委派只決定能不能授權／收回，不給編輯能力（AUT-R48、
+        # AUT-R49），所以這裡只看 delegated_modules。
         access = calculate_effective_access(db, user_id=user.id)
         if module is None:
             allowed = bool(access.delegated_modules)
@@ -383,6 +394,8 @@ def require_module_or_any_project_permission(
         access = calculate_effective_access(db, user_id=user.id)
         if access.is_admin:
             return user
+        # 兩條路任一成立即可：有模組權限，或在任一專案持有專案
+        # 代碼；後者須具該模組「可使用」（AUT-R19）。
         module = permission_code_module(project_permission_code)
         module_use_code = f"{module}.use" if module else None
         project_granted = any(
@@ -435,6 +448,10 @@ def require_module_and_project_permission(
         user: User = Depends(require_login, scope="function"),  # noqa
         db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
+        # 路徑專案 id 不是 UUID 一律 422（含 Admin），與
+        # require_project_permission 相同；不同處是這裡另要求指定的
+        # 模組權限代碼。非 Admin 須模組與專案兩邊都具備，缺哪邊都
+        # 403；Admin 放行。
         project_id = _parse_uuid(request.path_params.get(param_name))
         if project_id is None:
             raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
@@ -490,6 +507,9 @@ def require_project_permission(
         user: User = Depends(require_login, scope="function"),  # noqa
         db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
+        # 宣告為 UUID 的其他路徑參數也在授權前先驗格式，格式錯誤
+        # 一律 422（含 Admin），避免先回 403／404 洩漏資源是否存在，
+        # 也讓畸形 id 的回應一致（#472）。
         for name in uuid_path_params:
             raw_value = request.path_params.get(name)
             if raw_value is not None and _parse_uuid(raw_value) is None:
