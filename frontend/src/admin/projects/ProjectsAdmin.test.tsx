@@ -874,24 +874,27 @@ describe('admin projects page', () => {
     projectFetch({ projects })
     renderAt('/projects')
 
+    // 卡片很多時 getByRole 在高負載下過慢，本檔兩個分頁測試改用
+    // 文字加標籤查詢，避免超過 5 秒測試逾時（#744）。
     await screen.findAllByText('示範工程0')
     expect(
-      screen.getByRole('heading', { name: /示範工程0/ }),
+      screen.getByText('示範工程0', { selector: 'h3' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('目標工程')).not.toBeInTheDocument()
+    // 每個測試只在第一次保留 getByRole，驗證按鈕的無障礙名稱。
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     await screen.findAllByText('目標工程')
     expect(
-      screen.getByRole('heading', { name: /目標工程/ }),
+      screen.getByText('目標工程', { selector: 'h3' }),
     ).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('搜尋專案'), {
       target: { value: 'demo-050' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    fireEvent.click(screen.getByText('搜尋', { selector: 'button' }))
     await screen.findAllByText('目標工程')
     expect(
-      screen.getByRole('heading', { name: /目標工程/ }),
+      screen.getByText('目標工程', { selector: 'h3' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('示範工程0')).not.toBeInTheDocument()
   })
@@ -908,16 +911,16 @@ describe('admin projects page', () => {
     const fetchMock = projectFetch({ projects })
     renderAt('/projects')
 
-    await screen.findByRole('heading', { name: /計數工程0/ })
+    await screen.findByText('計數工程0', { selector: 'h3' })
     const firstCard = screen
-      .getByRole('heading', { name: /計數工程0/ })
+      .getByText('計數工程0', { selector: 'h3' })
       .closest('article')
     expect(firstCard).not.toBeNull()
     expect(within(firstCard!).getByText('啟用成員 0 人')).toBeVisible()
 
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
-    const secondPageHeading = await screen.findByRole('heading', {
-      name: /第二頁工程/,
+    const secondPageHeading = await screen.findByText('第二頁工程', {
+      selector: 'h3',
     })
     const secondPageCard = secondPageHeading.closest('article')
     expect(secondPageCard).not.toBeNull()
