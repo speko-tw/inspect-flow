@@ -90,11 +90,15 @@ class RoleListResponse(BaseModel):
 
 
 class PermissionCodeResponse(BaseModel):
+    """一個可指派給角色的權限代碼與其說明。"""
+
     code: str
     description: str
 
 
 class PermissionCodeListResponse(BaseModel):
+    """設定角色時可選的權限代碼清單。"""
+
     items: list[PermissionCodeResponse]
 
 
@@ -111,6 +115,9 @@ class CreatorRoleResponse(BaseModel):
 
 
 def _role_response(role: Role, usage: RoleUsage) -> RoleResponse:
+    """組成角色回應；人數來自 ``usage``，供修改與刪除前顯示影響
+    範圍（DOM-R55）。
+    """
     return RoleResponse(
         id=role.id,
         name=role.name,
@@ -141,6 +148,11 @@ def _get_role(db: Session, role_id: UUID) -> Role:
 
 
 def _get_creator_setting(db: Session) -> CreatorRoleSetting:
+    """讀取建立者角色設定；缺列回 500。
+
+    ``creator_role_id`` 不可空值（DOM-R64），沒有這一列代表資料
+    本身不完整，不是呼叫端的輸入錯誤。
+    """
     setting = get_creator_role_setting(db)
     if setting is None:
         raise APIError(ErrorCode.SERVER_INTERNAL_ERROR, 500)
@@ -148,7 +160,13 @@ def _get_creator_setting(db: Session) -> CreatorRoleSetting:
 
 
 def _translate_integrity_error(exc: IntegrityError) -> APIError | None:
-    """Map role uniqueness conflicts to the role-specific 409 code."""
+    """Map role uniqueness conflicts to the role-specific 409 code.
+
+    名稱唯一且不分大小寫由 ``ix_roles_name_lower`` 保證（DOM-R34）。
+    PostgreSQL 的錯誤帶約束名（``diag.constraint_name``），SQLite
+    沒有，只能比對錯誤訊息文字，所以兩種都要檢查；其他 IntegrityError
+    回 ``None``，由呼叫端原樣拋出。
+    """
     diagnostic = getattr(exc.orig, "diag", None)
     constraint = getattr(diagnostic, "constraint_name", None)
     details = str(exc.orig).lower()
@@ -158,6 +176,7 @@ def _translate_integrity_error(exc: IntegrityError) -> APIError | None:
 
 
 def _translate_permission_error() -> APIError:
+    """未登記、格式錯誤或模組範圍的權限代碼一律回 422（DOM-R55）。"""
     return APIError(ErrorCode.ROLE_PERMISSION_CODE_INVALID, 422)
 
 
@@ -201,6 +220,8 @@ def list_roles(
 @router.get("/permission-codes", response_model=PermissionCodeListResponse)
 def list_permission_codes() -> PermissionCodeListResponse:
     """Return the registered codes that can be assigned to roles."""
+    # 角色只能持有專案範圍代碼；模組範圍代碼逐人授予（DOM-R59），
+    # 放進角色會被 RolePermission 驗證拒絕，所以不列給畫面選。
     descriptions = permission_code_descriptions()
     return PermissionCodeListResponse(
         items=[
@@ -288,6 +309,8 @@ def update_role_endpoint(
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> RoleResponse:
     role = _get_role(db, role_id)
+    # exclude_unset 區分「沒傳」與「明確傳 null」：沒傳的欄位不動，
+    # 傳 null 的欄位沒有意義，一律 422。
     changes = body.model_dump(exclude_unset=True)
     if "name" in changes and changes["name"] is None:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
@@ -306,6 +329,8 @@ def update_role_endpoint(
             raise error from exc
         raise
     except RoleUnchangedError as exc:
+        # 沒有任何欄位會真的改變就拒絕，避免寫出沒有稽核事件的更新
+        # （DOM-R20、DOM-R22）。
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     except InvalidExternalRoleError as exc:
         raise APIError(ErrorCode.ROLE_EXTERNAL_ALLOWED_INVALID, 422) from exc
@@ -314,6 +339,7 @@ def update_role_endpoint(
             ErrorCode.ROLE_EXTERNAL_IN_USE, 422, details=exc.details
         ) from exc
     except CreatorRolePermissionsError as exc:
+        # DOM-R64：建立者角色必須保留三項專案權限，移除任一項即拒絕。
         raise APIError(
             ErrorCode.ROLE_CREATOR_ROLE_REQUIRES_PERMISSIONS,
             422,
@@ -331,7 +357,10 @@ def remove_role(
     role_id: UUID,
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> None:
-    """Delete a role and its assignments as DOM-R21 requires."""
+    """Delete a role and its assignments as DOM-R21 requires.
+
+    目前的建立者角色不得刪除（DOM-R64，422），須先改設另一個。
+    """
     role = _get_role(db, role_id)
     try:
         delete_role(db, role)

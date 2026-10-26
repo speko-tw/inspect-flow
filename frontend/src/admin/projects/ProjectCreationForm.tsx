@@ -19,6 +19,8 @@ import {
   type ProjectInput,
 } from './api'
 
+// 表單草稿：日期與建立者角色人選用字串保存（輸入框的值），送出時才
+// 轉成 API 要的空值。
 type ProjectDraft = Omit<
   ProjectInput,
   'planned_start_date' | 'planned_completion_date' | 'creator_role_user_id'
@@ -39,7 +41,14 @@ const EMPTY_DRAFT: ProjectDraft = {
   creator_role_user_id: '',
 }
 
-/** ADM-R32：開設專案；Admin 可選填建立者角色人選。 */
+/**
+ * ADM-R32：開設專案；Admin 可選填建立者角色人選。
+ *
+ * - `cancelWithParentGuard`：父層已負責未儲存變更的離頁確認時為真，
+ *   取消直接交給 `onCancel`，不再自己跳確認框（避免問兩次）。
+ * - `formSession`／`onCreated`：送出時記下表單代號並隨結果回傳，父層
+ *   據此判斷回應回來時表單是否已被關閉或換掉（ADM-R15）。
+ */
 export function ProjectCreationForm({
   isAdmin,
   onDirtyChange,
@@ -93,11 +102,15 @@ export function ProjectCreationForm({
     let active = true
     Promise.all([
       listCompanyRoles(),
+      // 只有 Admin 能列全部人員（非 Admin 呼叫 GET /users 會 403），也
+      // 只有 Admin 能指定建立者角色人選（DOM-R65）。
       isAdmin ? listAllPages<User>('/users') : Promise.resolve([]),
     ])
       .then(([companyRoles, users]) => {
         if (!active) return
         setRoles(companyRoles)
+        // 建立者角色人選限啟用、非系統帳號、非外部協作人員（DOM-R65、
+        // DOM-R71）；後端同樣會檢查。
         setPeople(
           users.filter(
             (user) =>
@@ -137,6 +150,8 @@ export function ProjectCreationForm({
       company_role: draft.company_role,
       planned_start_date: draft.planned_start_date || null,
       planned_completion_date: draft.planned_completion_date || null,
+      // 非 Admin 開專案自己就是建立者；帶這個欄位後端會回 422
+      // （DOM-R65），所以只有 Admin 且有選人時才送。
       ...(isAdmin && draft.creator_role_user_id
         ? { creator_role_user_id: draft.creator_role_user_id }
         : {}),
@@ -151,6 +166,8 @@ export function ProjectCreationForm({
             : null,
         })
     } catch (caught) {
+      // 帶欄位指標的 422 顯示在對應欄位旁；對不上欄位的錯誤才放在
+      // 表單一般訊息區，不讓錯誤只剩一句通用說明。
       if (caught instanceof HttpError && caught.fields?.length) {
         const mapped = mapFieldErrors(caught.fields, [
           { path: '/project_code', key: 'project_code' },

@@ -21,7 +21,10 @@ from app.permission_codes import (
 )
 from app.services.permissions import calculate_effective_access
 
+# 現場執行碼只有 inspection_task.inspect（ADM-R18）。
 FIELD_PERMISSION_CODES: frozenset[str] = frozenset({"inspection_task.inspect"})
+# 內業碼：ADM-R18 所稱「任何內業權限」。單有代碼不算，還要具備該代碼
+# 所屬模組的「可使用」權限才成立（AUT-R19，見 summarize_access）。
 OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     {
         "project_member.manage",
@@ -40,6 +43,8 @@ OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
         "inspection_task.cancel",
     }
 )
+# 唯讀碼：專案範圍中以 .read 結尾者。它不代表內業或現場權限
+# （ADM-R18），所以不併入上面兩組。
 READ_ONLY_PERMISSION_CODES: frozenset[str] = frozenset(
     code.value
     for code in PermissionCode
@@ -56,6 +61,8 @@ INSPECTION_OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     for code in OFFICE_PERMISSION_CODES
     if permission_code_module(code) == "inspection"
 )
+# 規劃或管理成員用的內業碼；ADM-R23 的登入落點用它判斷：現場人員若
+# 同時能規劃或管理成員，落點就不是 /tasks。
 PROJECT_PLANNING_OR_MEMBERS_PERMISSION_CODES: frozenset[str] = frozenset(
     {
         "project_member.manage",
@@ -75,23 +82,35 @@ PROJECT_PLANNING_OR_MEMBERS_PERMISSION_CODES: frozenset[str] = frozenset(
 
 @dataclass(frozen=True)
 class AccessSummary:
+    """前端決定落點與導覽入口所需的存取摘要（AUT-R08、ADM-R23）。
+
+    各欄位都是「有效權限」算出的布林值，不是角色名稱；Admin 一律
+    全部為真。
+    """
+
     has_office_access: bool
     has_field_access: bool
     # 現場入口須同時符合查核模組與專案任務權限。
     can_inspect_tasks: bool
     can_manage_project_planning_or_members: bool
+    # has_template_access 是管理權的相容欄位，語意等同
+    # can_manage_template_library（AUT-R08）。
     has_template_access: bool
     can_browse_templates: bool
     can_manage_template_library: bool
     module_permissions: frozenset[str]
     delegated_modules: frozenset[str]
     can_create_project: bool
+    # 具 project.use 且在任一專案有 project.read；唯讀成員也算，
+    # 登入後可進「我的專案」唯讀檢視（ADM-R24）。
     has_project_access: bool
 
 
 def summarize_access(session: Session, user: User) -> AccessSummary:
     """依 AUT-R08 計算目前使用者的正式存取摘要。"""
     access = calculate_effective_access(session, user_id=user.id)
+    # Admin 不需要資料列就放行所有權限（AUT-R08、DOM-R59），
+    # 摘要直接全部為真。
     if access.is_admin:
         return AccessSummary(
             has_office_access=True,
@@ -107,6 +126,8 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
             has_project_access=True,
         )
     module_permissions = access.module_permissions
+    # 專案代碼要搭配模組「可使用」才有效（AUT-R19）；下面把所有專案
+    # 的代碼併成一組，只回答「在任一專案是否有」，不分專案。
     project_access_codes = set()
     has_project_access = "project.use" in module_permissions and any(
         "project.read" in permissions
@@ -119,6 +140,8 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
         module = permission_code_module(code)
         return module is not None and f"{module}.use" in module_permissions
 
+    # 被委派範本模組不算管理權：委派不附帶編輯能力（DOM-R61、
+    # AUT-R08），誰能維護範本庫只看 template.manage。
     has_template_access = "template.manage" in module_permissions
     can_browse_templates = "template.use" in module_permissions
     office_access = any(

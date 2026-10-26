@@ -34,6 +34,8 @@ import {
 
 const NO_PERMISSIONS_TEXT = '目前尚無可設定的權限，功能上線後會出現'
 
+// 權限勾選區的分組只為了畫面好讀，依代碼前綴歸類；不屬於任何分組的
+// 代碼（例如之後才登記的）會列在「其他」，不會被藏起來。
 const PERMISSION_GROUPS = [
   { title: '查核計畫', prefixes: ['inspection_plan.'] },
   { title: '查核任務', prefixes: ['inspection_task.'] },
@@ -46,6 +48,7 @@ const PERMISSION_GROUPS = [
   { title: '分區', prefixes: ['project_zone.'] },
 ]
 
+// 權限集合不看順序；用來判斷哪些欄位真的有變動。
 function sameCodes(left: string[], right: string[]): boolean {
   return (
     left.length === right.length &&
@@ -53,12 +56,22 @@ function sameCodes(left: string[], right: string[]): boolean {
   )
 }
 
+/**
+ * 專案角色管理：角色清單、新增與修改、刪除，以及新專案預設角色
+ * （ADM-R46；後端規則見 DOM-R55、DOM-R64）。
+ *
+ * 修改與刪除前都會向後端重新取得影響範圍，確認框顯示的數字不採用
+ * 清單上可能已過時的值（PR-18）。
+ */
 export default function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<PermissionCode[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [selected, setSelected] = useState<string[]>([])
+  // 兩個旗標都只有 Admin 能改（DOM-R70、DOM-R72）：isAssignable 決定
+  // 非 Admin 能不能指派這個角色，isExternalAllowed 決定外部協作人員
+  // 能不能持有；後端另外檢查外部可用角色的權限內容與建立者角色。
   const [isAssignable, setIsAssignable] = useState(false)
   const [isExternalAllowed, setIsExternalAllowed] = useState(false)
   const [creatorRoleId, setCreatorRoleId] = useState('')
