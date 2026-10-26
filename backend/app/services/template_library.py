@@ -20,6 +20,7 @@ from app.models import (
     TemplateTextStandard,
 )
 from app.services.audit import record_audit_event
+from app.services.batch_load import load_grouped
 from app.services.operator import get_current_operator
 
 
@@ -445,16 +446,8 @@ def _add_points(
 
 
 def _template_audit_snapshot(db: Session, item: TemplateItem) -> dict:
-    """Serialize template structure for TPL-R25 audit events."""
+    """序列化範本結構，供 TPL-R25 稽核事件使用。"""
     return _template_audit_snapshots(db, [item])[item.id]
-
-
-def _by_point(rows: Iterable, attribute: str = "inspection_point_id") -> dict:
-    """依項次分組，保留查詢已排好的順序。"""
-    grouped: dict = {}
-    for row in rows:
-        grouped.setdefault(getattr(row, attribute), []).append(row)
-    return grouped
 
 
 def _template_audit_snapshots(
@@ -462,72 +455,56 @@ def _template_audit_snapshots(
 ) -> dict[UUID, dict]:
     """批次序列化多個範本結構（TPL-R25）。
 
-    項次與其子表各以一次 IN 查詢載入，查詢次數固定、不隨項目數或
-    項次數成長（比照 #462）；輸出內容與逐項查詢時完全相同。
+    項次與其子表各以分段 IN 查詢載入（每段 500 筆），查詢次數只隨
+    段數線性成長、不隨項目數成長（比照 #462）；輸出內容與逐項查詢
+    時完全相同。
     """
     rows = list(items)
     if not rows:
         return {}
-    points = db.scalars(
-        select(TemplateInspectionPoint)
-        .where(
-            TemplateInspectionPoint.template_item_id.in_(
-                [item.id for item in rows]
-            )
-        )
-        .order_by(TemplateInspectionPoint.sequence, TemplateInspectionPoint.id)
-    ).all()
-    points_by_item = _by_point(points, "template_item_id")
-    point_ids = [point.id for point in points]
-    fields = (
-        db.scalars(
-            select(TemplateMeasurementField)
-            .where(TemplateMeasurementField.inspection_point_id.in_(point_ids))
-            .order_by(
-                TemplateMeasurementField.sort_order,
-                TemplateMeasurementField.id,
-            )
-        ).all()
-        if point_ids
-        else []
+    # 以 load_grouped 分段載入，點位數再多也不會超過 SQLite 的
+    # bind 參數上限（整系統覆蓋最多可達 40000 個點位）。
+    points_by_item = load_grouped(
+        db,
+        TemplateInspectionPoint.template_item_id,
+        [item.id for item in rows],
+        TemplateInspectionPoint.sequence,
+        TemplateInspectionPoint.id,
     )
-    texts = (
-        db.scalars(
-            select(TemplateTextStandard).where(
-                TemplateTextStandard.inspection_point_id.in_(point_ids)
-            )
-        ).all()
-        if point_ids
-        else []
+    point_ids = [
+        point.id for group in points_by_item.values() for point in group
+    ]
+    fields_by_point = load_grouped(
+        db,
+        TemplateMeasurementField.inspection_point_id,
+        point_ids,
+        TemplateMeasurementField.sort_order,
+        TemplateMeasurementField.id,
     )
-    numerics = (
-        db.scalars(
-            select(TemplateNumericStandard).where(
-                TemplateNumericStandard.inspection_point_id.in_(point_ids)
-            )
-        ).all()
-        if point_ids
-        else []
+    fields_by_id = {
+        field.id: field
+        for group in fields_by_point.values()
+        for field in group
+    }
+    text_by_point = {
+        key: group[0]
+        for key, group in load_grouped(
+            db, TemplateTextStandard.inspection_point_id, point_ids
+        ).items()
+    }
+    numeric_by_point = {
+        key: group[0]
+        for key, group in load_grouped(
+            db, TemplateNumericStandard.inspection_point_id, point_ids
+        ).items()
+    }
+    evidence_by_point = load_grouped(
+        db,
+        TemplateEvidenceRequirement.inspection_point_id,
+        point_ids,
+        TemplateEvidenceRequirement.created_at,
+        TemplateEvidenceRequirement.id,
     )
-    evidence = (
-        db.scalars(
-            select(TemplateEvidenceRequirement)
-            .where(
-                TemplateEvidenceRequirement.inspection_point_id.in_(point_ids)
-            )
-            .order_by(
-                TemplateEvidenceRequirement.created_at,
-                TemplateEvidenceRequirement.id,
-            )
-        ).all()
-        if point_ids
-        else []
-    )
-    fields_by_point = _by_point(fields)
-    fields_by_id = {field.id: field for field in fields}
-    text_by_point = {row.inspection_point_id: row for row in texts}
-    numeric_by_point = {row.inspection_point_id: row for row in numerics}
-    evidence_by_point = _by_point(evidence)
 
     snapshots: dict[UUID, dict] = {}
     for item in rows:
@@ -563,7 +540,8 @@ def _template_audit_snapshots(
             if numeric is not None:
                 # 綁定欄位屬於同一項次，已在批次載入的欄位內。
                 bound_field = fields_by_id.get(numeric.measurement_field_id)
-                assert bound_field is not None  # numeric standard FK
+                # 外鍵保證綁定欄位存在。
+                assert bound_field is not None
                 snapshot["numeric_standard"] = {
                     "value": numeric.value,
                     "condition": numeric.condition,
@@ -580,9 +558,8 @@ def _template_audit_snapshots(
             "sequence": item.sequence,
             "title": item.title,
             "instruction": item.instruction,
-            # Audit normalization sorts top-level lists as set-like
-            # payloads; wrap this sequence to preserve the user-defined
-            # inspection order.
+            # 稽核正規化會把最上層的清單當成集合排序；包一層物件，
+            # 才能保留使用者自訂的查驗項次順序。
             "inspection_points": {"items": point_snapshots},
         }
     return snapshots
