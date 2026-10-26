@@ -143,6 +143,7 @@ function memberRemoveLabel(member: ProjectMember): string {
   return label
 }
 
+/** 依 ADM-R52 按路由呈現成員清單、加入表單或角色編輯表單。 */
 export default function ProjectDetailPage() {
   const { projectId = '', userId = '' } = useParams()
   const location = useLocation()
@@ -749,7 +750,10 @@ function ProjectMembersSection({
         <p>
           <Link
             className="btn btn-primary member-add-link"
-            onClick={clearMessages}
+            onClick={() => {
+              clearMessages()
+              setRemoving(null)
+            }}
             to={`${memberListPath}/new`}
           >
             加入成員
@@ -1099,6 +1103,11 @@ function ProjectMembersSection({
                       <Link
                         className="btn btn-sm"
                         aria-label={memberEditLabel(member)}
+                        aria-describedby={
+                          member.user_id === currentUser.id
+                            ? `self-role-warning-${member.id}`
+                            : undefined
+                        }
                         aria-disabled={
                           busy ||
                           !rolesReady ||
@@ -1129,7 +1138,10 @@ function ProjectMembersSection({
                         修改角色
                       </Link>
                       {member.user_id === currentUser.id && (
-                        <span className="member-warning">
+                        <span
+                          className="member-warning"
+                          id={`self-role-warning-${member.id}`}
+                        >
                           不能修改自己的專案角色。
                         </span>
                       )}

@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { deferred, expectImeEnterIgnored } from '../../testing/submitGuard'
 import { ManagementApiError } from '../api'
-import type { PlanningClient } from './api'
+import type { PlanningClient, ProjectZone } from './api'
 import { createMockPlanningClient } from './api.mock'
 import nameTooLong from './fixtures/name-too-long-422.json'
 import ProjectZonesPage from './ProjectZonesPage'
@@ -95,8 +95,10 @@ function renderPage(
 }
 
 async function openAddForm() {
-  const link = screen.queryByRole('link', { name: '新增分區' })
-  if (link) fireEvent.click(link)
+  if (!screen.queryByRole('heading', { name: '新增分區' })) {
+    const link = await screen.findByRole('link', { name: '新增分區' })
+    fireEvent.click(link)
+  }
   await screen.findByRole('heading', { name: '新增分區' })
 }
 
@@ -660,6 +662,43 @@ function rowOf(name: string) {
 }
 
 describe('adding and renaming zones', () => {
+  it('hides the add link while zone loading is pending or has failed', async () => {
+    const client = createMockPlanningClient()
+    const pending = deferred<ProjectZone[]>()
+    const listZones = vi
+      .spyOn(client, 'listProjectZones')
+      .mockReturnValueOnce(pending.promise)
+    mount(client)
+
+    await waitFor(() => expect(listZones).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('link', { name: '新增分區' })).toBeNull()
+    pending.reject(new Error('network error'))
+    expect(
+      await screen.findByRole('button', { name: '重新載入' }),
+    ).toBeVisible()
+    expect(screen.queryByRole('link', { name: '新增分區' })).toBeNull()
+  })
+
+  it('clears a prior delete notice after entering and cancelling the add route', async () => {
+    const client = createMockPlanningClient()
+    await client.createZone(PROJECT, '北區')
+    mount(client, MANAGE, `/projects/${PROJECT}/zones`, true)
+    await screen.findByText('北區')
+
+    fireEvent.click(
+      within(rowOf('北區')).getByRole('button', { name: '刪除' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('已刪除分區')
+
+    fireEvent.click(screen.getByRole('link', { name: '新增分區' }))
+    await screen.findByLabelText('分區名稱')
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
+    await screen.findByText('尚未設定分區。')
+
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
   it('matches the add route with a trailing slash', async () => {
     mount(
       createMockPlanningClient(),

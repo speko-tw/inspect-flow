@@ -89,6 +89,17 @@
   align-items: center;
 }
 
+.member-card-actions a[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.member-card-actions a[aria-disabled='true']:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  text-decoration: none;
+}
+
 .member-card > .confirm-box,
 .member-edit-view .confirm-box {
   flex: 1 1 100%;
@@ -182,7 +193,8 @@
     flex: 1 1 8rem;
   }
 
-  .member-actions button {
+  .member-actions button,
+  .member-actions a.btn {
     flex: 1 1 8rem;
   }
 }

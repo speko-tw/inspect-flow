@@ -2585,6 +2585,12 @@ describe('admin project members', () => {
     })
     expect(link).toHaveAttribute('aria-disabled', 'true')
     expect(link).toHaveAttribute('tabindex', '-1')
+    const warning = screen.getByText('不能修改自己的專案角色。')
+    expect(warning).toHaveAttribute('id', `self-role-warning-${selfMember.id}`)
+    expect(link).toHaveAttribute(
+      'aria-describedby',
+      `self-role-warning-${selfMember.id}`,
+    )
   })
 
   it('shows the not-assignable error by role choices', async () => {
@@ -2996,6 +3002,46 @@ describe('admin project members', () => {
       'aria-invalid',
       'true',
     )
+  })
+
+  it('closes a removal confirmation when opening the add route', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+
+    fireEvent.click(screen.getByRole('button', { name: /移出專案/ }))
+    expect(screen.getByRole('group', { name: '移出確認' })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('link', { name: '加入成員' }))
+    await screen.findByRole('heading', { name: '加入成員' })
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
+
+    await screen.findByRole('heading', { name: '成員列表' })
+    expect(screen.queryByRole('group', { name: '移出確認' })).toBeNull()
+  })
+
+  it('does not return to the add form after saving and going Back', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members', adminUser, {
+      entries: ['/projects', '/projects/project-1/members'],
+      index: 1,
+    })
+    await screen.findByText('鄧安娜')
+    await openMemberAddForm()
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
+      target: { value: bob.id },
+    })
+    fireEvent.click(screen.getByLabelText('查核員'))
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+    await screen.findByRole('status')
+
+    fireEvent.click(screen.getByRole('button', { name: '成員頁上一頁' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('member-path')).toHaveTextContent('/projects'),
+    )
+    expect(screen.queryByRole('heading', { name: '加入成員' })).toBeNull()
   })
 
   it('discards edit changes on Back before reopening the same member', async () => {

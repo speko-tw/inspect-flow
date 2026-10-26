@@ -120,6 +120,8 @@ export default function ProjectZonesPage({
     setServerNameError('')
     setEditing(null)
     setDeleting(null)
+    setNotice('')
+    setDeleteError('')
   }
   const nameInput = useRef<HTMLInputElement>(null)
   const errorMessage = useRef<HTMLParagraphElement>(null)
@@ -520,7 +522,7 @@ export default function ProjectZonesPage({
           {visibleNotice}
         </p>
       )}
-      {canManage && !editing && (
+      {canManage && !editing && !loading && !loadFailed && (
         <p>
           <Link className="btn btn-primary" to={`${listPath}/new`}>
             新增分區
