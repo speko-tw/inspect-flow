@@ -435,9 +435,12 @@ it('存檔後返回並選取新範本，顯示目標類別與系統', async () =
     },
   ])
 
-  expect(
-    await screen.findByRole('heading', { name: '欄杆尺寸' }),
-  ).toBeInTheDocument()
+  // 本檔第一個測試會讓 getByRole 第一次建立 ARIA 角色表，成本高；
+  // 用 findByRole 輪詢時，每次輪詢都占住主執行緒，擠掉頁面載入。
+  // 高負載下頁面還沒載完就逾時（#744）。等待改用輕量文字查詢，
+  // 載入完成後再同步斷言它是標題。
+  await screen.findByText('欄杆尺寸', { selector: 'h2' })
+  expect(screen.getByRole('heading', { name: '欄杆尺寸' })).toBeInTheDocument()
   const navAfterRoute = screen.getByRole('complementary', {
     name: '範本庫導覽',
   })
