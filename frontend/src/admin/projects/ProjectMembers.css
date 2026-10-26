@@ -75,10 +75,29 @@
 }
 
 .member-card-actions button,
+.member-card-actions a,
 .member-actions button,
 .member-add-form button,
 .member-edit-view button {
   min-height: 44px;
+}
+
+.member-card-actions a,
+.member-add-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}
+
+.member-card-actions a[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.member-card-actions a[aria-disabled='true']:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  text-decoration: none;
 }
 
 .member-card > .confirm-box,
@@ -174,7 +193,8 @@
     flex: 1 1 8rem;
   }
 
-  .member-actions button {
+  .member-actions button,
+  .member-actions a.btn {
     flex: 1 1 8rem;
   }
 }

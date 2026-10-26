@@ -113,9 +113,13 @@ describe('特製網址的路由參數', () => {
       for (const section of [
         '',
         '/members',
+        '/members/new',
+        '/members/user-1/edit',
         '/inspection-items',
         '/inspection-items/templates',
         '/planning',
+        '/zones',
+        '/zones/new',
       ]) {
         stubBackend(user)
         await renderApp(`/projects/${EVIL}${section}`)
@@ -155,6 +159,16 @@ describe('特製網址的路由參數', () => {
 
     expect(
       await screen.findByRole('heading', { name: '找不到這個查核項目' }),
+    ).toBeVisible()
+    expect(dataRequests()).toEqual([])
+  })
+
+  it('成員角色編輯網址的 user id 格式不符：不發出 API 請求', async () => {
+    stubBackend(ADMIN)
+    await renderApp(`/projects/project-a/members/${EVIL}/edit`)
+
+    expect(
+      await screen.findByRole('heading', { name: '找不到這個頁面' }),
     ).toBeVisible()
     expect(dataRequests()).toEqual([])
   })

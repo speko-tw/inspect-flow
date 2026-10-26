@@ -47,6 +47,8 @@ import {
   type User,
   type UserDetail,
 } from './api'
+import { mapWithConcurrency } from './mapWithConcurrency'
+import { getUserParticipatingProjects } from './module-permissions/api'
 import { useCursorList } from './useCursorList'
 import UserForm from './UserForm'
 import { ACCOUNT_LABEL } from '../layout/navigationLabels'
@@ -115,6 +117,45 @@ function DeactivationWarning({
   )
 }
 
+/** ADM-R33：改派入口適用所有成員，不只最後一位管理成員。 */
+function DeactivationReassignmentLinks({
+  projects,
+}: {
+  projects: DeactivationCheck['last_manager_projects']
+}) {
+  if (!projects.length) return null
+  return (
+    <section aria-label="改派未完成任務">
+      <p>請由內業前往計畫與任務改派未完成任務。</p>
+      <ul>
+        {projects.map((project) => (
+          <li key={project.id}>
+            <Link to={`/projects/${project.id}/planning`}>
+              計畫與任務：{project.project_code}／{project.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+/** 停用確認的頁面資料；保留 API 原有的最後管理者警告契約。 */
+type DeactivationPreview = DeactivationCheck & {
+  reassignment_projects: DeactivationCheck['last_manager_projects']
+}
+
+/** ADM-R33：整合既有查詢，讓一般成員也能直接前往參與專案改派。 */
+async function loadDeactivationPreview(
+  userId: string,
+): Promise<DeactivationPreview> {
+  const [check, projects] = await Promise.all([
+    getDeactivationCheck(userId),
+    getUserParticipatingProjects(userId),
+  ])
+  return { ...check, reassignment_projects: projects }
+}
+
 /** 工號衝突由 API 判斷，錯誤需提供可執行的修正方向。 */
 function companyLinkErrorMessage(error: unknown): string {
   const message = managementErrorMessage(error).replace(/[。.!?]+$/, '')
@@ -146,7 +187,7 @@ type PendingAction = {
 
 export default function UsersPage({
   onTemporaryPassword,
-  detailUserId,
+  detailUserId: rawDetailUserId,
   initialQuery,
   hideCreateForm = false,
   externalNavigationGuard = false,
@@ -168,6 +209,8 @@ export default function UsersPage({
   onDirtyChange?: (dirty: boolean) => void
   onSelectUser?: (id: string) => void
 }) {
+  // 網址 UUID 可為大寫；統一請求鍵與比對，避免重載或漏掉到期捷徑。
+  const detailUserId = rawDetailUserId?.toLowerCase()
   const { user: currentUser } = useCurrentUser()
   const location = useLocation()
   const navigate = useNavigate()
@@ -195,6 +238,16 @@ export default function UsersPage({
   const companyListRequest = useRef<Promise<void> | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
   const [detailError, setDetailError] = useState('')
+  // 詳情更新只同步快照；若把 detailUser 放入載入依賴，儲存與重查
+  // 會再次載入並重掛表單，清掉使用者正在編輯的內容。
+  const detailSnapshot = useRef<User | null>(null)
+  useEffect(() => {
+    detailSnapshot.current = detailUser
+  }, [detailUser])
+  const detailRequest = useRef<{
+    id: string
+    promise: Promise<UserDetail>
+  } | null>(null)
   const [passwordResetError, setPasswordResetError] = useState<{
     userId: string
     message: string
@@ -230,7 +283,7 @@ export default function UsersPage({
     message: string
   } | null>(null)
   const [actionPreview, setActionPreview] = useState<
-    DeactivationCheck | RestorePreview | null
+    DeactivationPreview | RestorePreview | null
   >(null)
   const [previewError, setPreviewError] = useState('')
   const [selectedBatchUserIds, setSelectedBatchUserIds] = useState<string[]>(
@@ -244,7 +297,14 @@ export default function UsersPage({
   const [batchDeactivationPreview, setBatchDeactivationPreview] = useState<{
     users: User[]
     projects: DeactivationCheck['last_manager_projects']
+    reassignmentProjects: DeactivationCheck['last_manager_projects']
   } | null>(null)
+  const batchDeactivationRequestId = useRef(0)
+  const invalidateBatchDeactivationPreview = useCallback(() => {
+    batchDeactivationRequestId.current += 1
+    setBatchDeactivationLoading(false)
+    setBatchDeactivationPreview(null)
+  }, [])
   const [batchActivationLoading, setBatchActivationLoading] = useState(false)
   const [batchActivationBusy, setBatchActivationBusy] = useState(false)
   const [batchActivationError, setBatchActivationError] = useState('')
@@ -294,66 +354,77 @@ export default function UsersPage({
       setDetailError('')
       return
     }
-    const applyDetail = (user: User) => {
-      setDetailUser(user)
-      if (
-        editExpiryRequested &&
-        consumedExpiryRequest.current !== location.key
-      ) {
-        consumedExpiryRequest.current = location.key
-        setExpiryEditorUser(user.id)
-        setEditingUser(user.id)
-        const params = new URLSearchParams(location.search)
-        params.delete('edit')
-        navigate(
-          {
-            pathname: location.pathname,
-            search: params.toString(),
-            hash: location.hash,
-          },
-          { replace: true, state: location.state, preventScrollReset: true },
-        )
-      }
-    }
     const listed = users.find((user) => user.id === detailUserId)
     if (listed) {
-      applyDetail(listed)
+      setDetailUser(listed)
       setDetailError('')
       return
     }
+    // 路由替換仍指向同一帳號時沿用快照，避免重複 GET 與表單重掛。
+    if (detailSnapshot.current?.id === detailUserId) return
     let active = true
-    setDetailUser(null)
+    setDetailUser((current) => (current?.id === detailUserId ? current : null))
     setDetailError('')
-    void request<UserDetail>(`/users/${encodeURIComponent(detailUserId)}`)
-      .then((user) => active && applyDetail(user))
+    // 清單初次清空亦會更新 users；同一筆在途詳情可由新 effect 接手。
+    if (detailRequest.current?.id !== detailUserId) {
+      const promise = request<UserDetail>(
+        `/users/${encodeURIComponent(detailUserId)}`,
+      )
+      detailRequest.current = { id: detailUserId, promise }
+    }
+    const pending = detailRequest.current
+    void pending.promise
+      .then((user) => active && setDetailUser(user))
       .catch((caught: unknown) => {
         if (active) setDetailError(managementErrorMessage(caught))
+      })
+      .finally(() => {
+        if (detailRequest.current === pending) detailRequest.current = null
       })
     return () => {
       active = false
     }
-  }, [
-    detailUserId,
-    users,
-    editExpiryRequested,
-    location.key,
-    location.search,
-    location.pathname,
-    location.hash,
-    location.state,
-    navigate,
-  ])
+  }, [detailUserId, users])
+
+  useEffect(() => {
+    // 到期日捷徑只消費網址；replace 不得重載詳情或重掛表單（#741）。
+    if (
+      !detailUser ||
+      detailUser.id !== detailUserId ||
+      !editExpiryRequested ||
+      consumedExpiryRequest.current === location.key
+    )
+      return
+    consumedExpiryRequest.current = location.key
+    setExpiryEditorUser(detailUser.id)
+    setEditingUser(detailUser.id)
+    const params = new URLSearchParams(location.search)
+    params.delete('edit')
+    navigate(
+      {
+        pathname: location.pathname,
+        search: params.toString(),
+        hash: location.hash,
+      },
+      { replace: true, state: location.state, preventScrollReset: true },
+    )
+  }, [detailUser, detailUserId, editExpiryRequested, location, navigate])
 
   useEffect(() => {
     // T3：清單結果不屬於詳情或另一頁，不能隨共用頁面狀態留下。
+    invalidateBatchDeactivationPreview()
     setBatchDeactivationError('')
     setBatchDeactivationNotice('')
     setBatchActivationError('')
     setBatchActivationNotice('')
     setBatchActivationPreview(null)
-    setBatchDeactivationPreview(null)
     setSelectedBatchUserIds([])
-  }, [detailUserId, location.key, appliedQuery])
+  }, [
+    detailUserId,
+    location.key,
+    appliedQuery,
+    invalidateBatchDeactivationPreview,
+  ])
 
   useEffect(() => {
     if (!pendingAction || ['admin', 'reset'].includes(pendingAction.kind)) {
@@ -364,7 +435,7 @@ export default function UsersPage({
     setPreviewError('')
     setActionPreview(null)
     if (pendingAction.kind === 'deactivate') {
-      void getDeactivationCheck(pendingAction.user.id)
+      void loadDeactivationPreview(pendingAction.user.id)
         .then((data) => active && setActionPreview(data))
         .catch((caught: unknown) => {
           if (active) setPreviewError(managementErrorMessage(caught))
@@ -439,6 +510,7 @@ export default function UsersPage({
   useEffect(() => {
     return () => {
       companyRequestId.current += 1
+      batchDeactivationRequestId.current += 1
     }
   }, [loadCompanies])
 
@@ -502,18 +574,33 @@ export default function UsersPage({
         selectedBatchUserIds.includes(user.id) && user.id !== currentUser.id,
     )
     if (selected.length === 0 || batchDeactivationLoading) return
+    const requestId = ++batchDeactivationRequestId.current
     setBatchDeactivationError('')
     setBatchDeactivationNotice('')
     setBatchDeactivationLoading(true)
     try {
-      const checks = await Promise.all(
-        selected.map((user) => getDeactivationCheck(user.id)),
+      // 每個帳號兩個查詢；限制並行帳號數，避免批次預覽壓滿連線。
+      const checks = await mapWithConcurrency(
+        selected,
+        (user) => loadDeactivationPreview(user.id),
+        {
+          isStale: () => requestId !== batchDeactivationRequestId.current,
+        },
       )
+      // 搜尋或換頁後，只讓目前這一批預覽更新確認框與載入狀態。
+      if (requestId !== batchDeactivationRequestId.current) return
       const projects = new Map<
         string,
         DeactivationCheck['last_manager_projects'][number]
       >()
+      const reassignmentProjects = new Map<
+        string,
+        DeactivationCheck['last_manager_projects'][number]
+      >()
       checks.forEach((check) => {
+        check.reassignment_projects.forEach((project) =>
+          reassignmentProjects.set(project.id, project),
+        )
         check.last_manager_projects.forEach((project) =>
           projects.set(project.id, project),
         )
@@ -521,11 +608,14 @@ export default function UsersPage({
       setBatchDeactivationPreview({
         users: selected,
         projects: [...projects.values()],
+        reassignmentProjects: [...reassignmentProjects.values()],
       })
     } catch (caught) {
-      setBatchDeactivationError(managementErrorMessage(caught))
+      if (requestId === batchDeactivationRequestId.current)
+        setBatchDeactivationError(managementErrorMessage(caught))
     } finally {
-      setBatchDeactivationLoading(false)
+      if (requestId === batchDeactivationRequestId.current)
+        setBatchDeactivationLoading(false)
     }
   }
 
@@ -567,8 +657,8 @@ export default function UsersPage({
     setBatchActivationNotice('')
     setBatchActivationLoading(true)
     try {
-      const previews = await Promise.all(
-        selected.map((user) => getReactivationPreview(user.id)),
+      const previews = await mapWithConcurrency(selected, (user) =>
+        getReactivationPreview(user.id),
       )
       setBatchActivationPreview({ users: selected, previews })
       setBatchRestoreSelections(
@@ -631,7 +721,7 @@ export default function UsersPage({
   }
 
   function cancelBatchDeactivation() {
-    setBatchDeactivationPreview(null)
+    invalidateBatchDeactivationPreview()
     clearBatchMessages()
   }
 
@@ -931,9 +1021,14 @@ export default function UsersPage({
                   {pendingAction.kind === 'deactivate' &&
                     actionPreview &&
                     'last_manager_projects' in actionPreview && (
-                      <DeactivationWarning
-                        projects={actionPreview.last_manager_projects}
-                      />
+                      <>
+                        <DeactivationWarning
+                          projects={actionPreview.last_manager_projects}
+                        />
+                        <DeactivationReassignmentLinks
+                          projects={actionPreview.reassignment_projects}
+                        />
+                      </>
                     )}
                   {pendingAction.kind === 'activate' &&
                     actionPreview &&
@@ -959,6 +1054,7 @@ export default function UsersPage({
                   onCancel={() => {
                     setExpiryEditorUser(null)
                     setEditingUser(null)
+                    reportDirty(`details:${detail.id}`, false)
                   }}
                   onDirtyChange={(dirty) =>
                     reportDirty(`details:${detail.id}`, dirty)
@@ -989,7 +1085,10 @@ export default function UsersPage({
                     companies={companies}
                     error={rowError(detail.id, 'company')}
                     errorFocusRequest={saveError?.request}
-                    onCancel={() => setEditingCompany(null)}
+                    onCancel={() => {
+                      setEditingCompany(null)
+                      reportDirty(`company:${detail.id}`, false)
+                    }}
                     onDirtyChange={(dirty) =>
                       reportDirty(`company:${detail.id}`, dirty)
                     }
@@ -1076,6 +1175,7 @@ export default function UsersPage({
               onQueryChange={setQuery}
               onSearch={(event) => {
                 event.preventDefault()
+                invalidateBatchDeactivationPreview()
                 clearBatchMessages()
                 setSelectedBatchUserIds([])
                 void search(query).then(() => onQueryApplied?.(query.trim()))
@@ -1088,13 +1188,14 @@ export default function UsersPage({
                 <p>
                   找不到符合「{appliedQuery}」的帳號。{' '}
                   <button
-                    onClick={() =>
+                    onClick={() => {
+                      invalidateBatchDeactivationPreview()
                       void clearSearch().then(() => {
                         clearBatchMessages()
                         setSelectedBatchUserIds([])
                         onQueryApplied?.('')
                       })
-                    }
+                    }}
                     type="button"
                   >
                     清除搜尋
@@ -1307,11 +1408,18 @@ export default function UsersPage({
                                     actionPreview &&
                                     'last_manager_projects' in
                                       actionPreview && (
-                                      <DeactivationWarning
-                                        projects={
-                                          actionPreview.last_manager_projects
-                                        }
-                                      />
+                                      <>
+                                        <DeactivationWarning
+                                          projects={
+                                            actionPreview.last_manager_projects
+                                          }
+                                        />
+                                        <DeactivationReassignmentLinks
+                                          projects={
+                                            actionPreview.reassignment_projects
+                                          }
+                                        />
+                                      </>
                                     )}
                                   {pendingAction.kind === 'activate' &&
                                     actionPreview &&
@@ -1596,6 +1704,11 @@ export default function UsersPage({
                             </ul>
                           </div>
                         )}
+                        <DeactivationReassignmentLinks
+                          projects={
+                            batchDeactivationPreview.reassignmentProjects
+                          }
+                        />
                       </ConfirmBox>
                     )}
                   </>

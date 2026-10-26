@@ -62,8 +62,11 @@ const DashboardTaskPage = lazy(() => import('./dashboard/DashboardTaskPage'))
 const PROJECT_PAGE_ROUTES = [
   ROUTES.projectHome,
   ROUTES.projectMembers,
+  ROUTES.projectMemberNew,
+  ROUTES.projectMemberEdit,
   ROUTES.projectItems,
   ROUTES.projectZones,
+  ROUTES.projectZoneNew,
   ROUTES.projectInspectionTemplates,
   ROUTES.projectPlanning,
   ROUTES.projectPlanNew,
@@ -185,12 +188,24 @@ const PROJECT_ROUTES = (
       path={nestedRoutePath(ROUTES.projectMembers, ROUTES.adminShell)}
     />
     <Route
+      element={<ProjectSectionPage section="members" />}
+      path={nestedRoutePath(ROUTES.projectMemberNew, ROUTES.adminShell)}
+    />
+    <Route
+      element={<ProjectSectionPage section="members" />}
+      path={nestedRoutePath(ROUTES.projectMemberEdit, ROUTES.adminShell)}
+    />
+    <Route
       element={<ProjectSectionPage section="inspection-items" />}
       path={nestedRoutePath(ROUTES.projectItems, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectSectionPage section="zones" />}
       path={nestedRoutePath(ROUTES.projectZones, ROUTES.adminShell)}
+    />
+    <Route
+      element={<ProjectSectionPage section="zones" />}
+      path={nestedRoutePath(ROUTES.projectZoneNew, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectTemplatesRoute />}

@@ -232,8 +232,11 @@ describe('product route metadata', () => {
       [ROUTES.templateSaveFromProject, '/templates/from-project'],
       [ROUTES.projectHome, '/projects/p1'],
       [ROUTES.projectMembers, '/projects/p1/members'],
+      [ROUTES.projectMemberNew, '/projects/p1/members/new'],
+      [ROUTES.projectMemberEdit, '/projects/p1/members/u1/edit'],
       [ROUTES.projectItems, '/projects/p1/inspection-items'],
       [ROUTES.projectZones, '/projects/p1/zones'],
+      [ROUTES.projectZoneNew, '/projects/p1/zones/new'],
       [
         ROUTES.projectInspectionTemplates,
         '/projects/p1/inspection-items/templates',

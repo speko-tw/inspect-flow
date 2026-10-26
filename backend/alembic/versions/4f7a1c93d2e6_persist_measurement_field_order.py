@@ -11,6 +11,8 @@ down_revision: str | Sequence[str] | None = "6d2e4f8a91b0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+# 三張量測欄位表：範本、專案、任務快照。前兩張的父層欄位叫
+# inspection_point_id，快照表叫 point_id，所以連同欄位名一起列出。
 _TABLES = (
     ("template_measurement_fields", "inspection_point_id"),
     ("project_measurement_fields", "inspection_point_id"),
@@ -28,7 +30,11 @@ def upgrade() -> None:
     _sqlite_foreign_keys(False)
     try:
         for table, parent_column in _TABLES:
+            # 先加可空欄位、回填後再改 NOT NULL，既有資料列才不會在
+            # 加欄位當下違反約束。
             op.add_column(table, sa.Column("sort_order", sa.Integer()))
+            # TPL-R19：既有資料依原有的 created_at、id 排序，在同一個
+            # 查核點內從 0 起編號，保留遷移前的顯示順序。
             op.execute(
                 sa.text(
                     f"WITH ranked AS ("
@@ -40,6 +46,7 @@ def upgrade() -> None:
                     f"FROM ranked WHERE {table}.id = ranked.id"
                 )
             )
+            # SQLite 不能就地改欄位可否為空，需走 batch 重建。
             with op.batch_alter_table(table) as batch:
                 batch.alter_column(
                     "sort_order",
