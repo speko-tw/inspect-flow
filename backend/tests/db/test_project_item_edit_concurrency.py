@@ -23,6 +23,7 @@ from app.db.engine import (
 from app.main import create_app
 from app.models import (
     AuditLog,
+    InspectionTask,
     ProjectEvidenceRequirement,
     ProjectInspectionItem,
     ProjectInspectionItemChange,
@@ -1093,3 +1094,247 @@ def test_save_template_and_item_deletion_serialize_source(
     else:
         assert templates == []
         assert responses[1].json()["error"]["code"] == "resource.not_found"
+
+
+@pytest.mark.parametrize("operation", ["create", "draft"])
+@pytest.mark.parametrize("first_action", ["deactivate", "task"])
+def test_deactivation_serializes_new_task_selections(
+    engine, db_session, make_client, operation, first_action
+):
+    """IP-R24：獨立連線確定等鎖後，禁止新選已先停用的來源。"""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL row locks")
+    world, task_id = _world_with_draft_task(
+        db_session, make_client, "停用併發"
+    )
+    project_id = world["project"].id
+    source_id = world["item_two"].id
+    task_url = f"/api/v1/inspection-tasks/{task_id}"
+    before = world["admin"].get(task_url)
+    assert before.status_code == 200, before.text
+    plan_id = db_session.scalar(
+        select(InspectionTask.plan_id).where(
+            InspectionTask.id == UUID(task_id)
+        )
+    )
+    assert plan_id is not None
+    clients = _two_admin_clients(db_session, world, make_client)
+
+    def call(action, client):
+        if action == "deactivate":
+            return client.post(
+                f"/api/v1/projects/{project_id}/inspection-items/"
+                f"{source_id}:deactivate"
+            )
+        body = {"item_ids": [str(source_id)]}
+        if operation == "draft":
+            return client.put(f"{task_url}/items", json=body)
+        return client.post(
+            f"/api/v1/inspection-plans/{plan_id}/tasks",
+            json={"name": "併發新增", **body},
+        )
+
+    def matches(statement):
+        return "from project_inspection_items" in statement and (
+            "for update" in statement or "for share" in statement
+        )
+
+    other = "task" if first_action == "deactivate" else "deactivate"
+    with _LockGate(get_engine(), matches) as gate:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(call, first_action, clients[0])
+            try:
+                assert gate.acquired.wait(timeout=10)
+                second = executor.submit(call, other, clients[1])
+                # 查 pg_stat_activity 與 pg_blocking_pids 確認兩個 PID
+                # 有真實等待關係，不能用 sleep 推定序列化。
+                gate.wait_until_waiter_blocked()
+            finally:
+                gate.release.set()
+            responses = [first.result(timeout=15), second.result(timeout=15)]
+    success = 201 if operation == "create" else 200
+    expected = [200, 409] if first_action == "deactivate" else [success, 200]
+    assert [r.status_code for r in responses] == expected, [
+        r.text for r in responses
+    ]
+    db_session.expire_all()
+    source = db_session.get(ProjectInspectionItem, source_id)
+    assert source is not None and source.is_active is False
+    linked = db_session.scalars(
+        select(TaskInspectionItem).where(
+            TaskInspectionItem.project_inspection_item_id == source_id
+        )
+    ).all()
+    if first_action == "deactivate":
+        assert responses[1].json()["error"]["code"] == (
+            "project_inspection_item.inactive"
+        )
+        assert not linked
+        assert world["admin"].get(task_url).json() == before.json()
+    else:
+        # 先建成的任務變成既有引用，後續停用不得改動它的快照。
+        assert len(linked) == 1
+        result = responses[0].json()
+        stored = world["admin"].get(f"/api/v1/inspection-tasks/{result['id']}")
+        assert stored.status_code == 200, stored.text
+        assert stored.json() == {
+            **result,
+            "started_by_user": None,
+            "completed_by_user": None,
+        }
+    assert gate.commits[0] == "holder"
+
+
+def _source_lock(statement: str) -> bool:
+    """項目停用、PATCH 與存為範本共用的來源列鎖。"""
+    return "from project_inspection_items" in statement and (
+        " for update" in statement
+        or " for no key update" in statement
+        or " for share" in statement
+    )
+
+
+@pytest.mark.parametrize("first_action", ["deactivate", "patch"])
+def test_deactivation_and_item_patch_serialize_source(
+    engine, db_session, make_client, first_action
+):
+    """IP-R23：停用與項目 PATCH 搶同一來源鎖，後到者依先到結果判定。"""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL row locks")
+    world = _planning_world(db_session, make_client)
+    project_id = world["project"].id
+    item_id = world["item"].id
+    original_instruction = world["item"].instruction
+    clients = _two_admin_clients(db_session, world, make_client)
+    item_url = f"/api/v1/projects/{project_id}/inspection-items/{item_id}"
+
+    def call(action, client):
+        if action == "deactivate":
+            return client.post(f"{item_url}:deactivate")
+        return client.patch(
+            item_url,
+            json={"instruction": "並行後說明", "reinspect": False},
+        )
+
+    other = "patch" if first_action == "deactivate" else "deactivate"
+    with _LockGate(get_engine(), _source_lock) as gate:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(call, first_action, clients[0])
+            try:
+                assert gate.acquired.wait(timeout=10)
+                second = executor.submit(call, other, clients[1])
+                # 以 pg_blocking_pids 確認後到者真的在等鎖，不靠 sleep。
+                gate.wait_until_waiter_blocked()
+            finally:
+                gate.release.set()
+            responses = [first.result(timeout=15), second.result(timeout=15)]
+    expected = [200, 409] if first_action == "deactivate" else [200, 200]
+    assert [r.status_code for r in responses] == expected, [
+        r.text for r in responses
+    ]
+    assert gate.commits[0] == "holder"
+    db_session.expire_all()
+    stored = db_session.get(ProjectInspectionItem, item_id)
+    assert stored is not None and stored.is_active is False
+    if first_action == "deactivate":
+        # 先停用：PATCH 等鎖後看到停用，不得改動內容。
+        assert responses[1].json()["error"]["code"] == (
+            "project_inspection_item.inactive"
+        )
+        assert stored.instruction == original_instruction
+    else:
+        # 先修改：停用等 PATCH 提交後才生效，修改內容保留。
+        assert stored.instruction == "並行後說明"
+
+
+@pytest.mark.parametrize("first_action", ["deactivate", "save"])
+def test_deactivation_and_save_template_serialize_source(
+    engine, db_session, make_client, first_action
+):
+    """TPL-R28：停用與存為範本互斥，不會從已停用來源建出範本。"""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL row locks")
+    world = _planning_world(db_session, make_client)
+    project_id = world["project"].id
+    item_id = world["item"].id
+    operator_id = world["admin_user"].id
+    point = db_session.scalar(
+        select(ProjectInspectionPoint).where(
+            ProjectInspectionPoint.project_inspection_item_id == item_id
+        )
+    )
+    assert point is not None
+    # 存為範本要求每個項次至少一項照片需求，種子項目沒有。
+    db_session.add(
+        ProjectEvidenceRequirement(
+            project_inspection_item_id=item_id,
+            inspection_point_id=point.id,
+            min_count=1,
+            created_by=operator_id,
+            updated_by=operator_id,
+        )
+    )
+    category = TemplateCategory(
+        name="停用與存為範本",
+        created_by=operator_id,
+        updated_by=operator_id,
+    )
+    db_session.add(category)
+    db_session.flush()
+    system = TemplateSystem(
+        category_id=category.id,
+        name="停用併發系統",
+        created_by=operator_id,
+        updated_by=operator_id,
+    )
+    db_session.add(system)
+    db_session.commit()
+    system_id = system.id
+    clients = _two_admin_clients(db_session, world, make_client)
+
+    def call(action, client):
+        if action == "deactivate":
+            return client.post(
+                f"/api/v1/projects/{project_id}/inspection-items/"
+                f"{item_id}:deactivate"
+            )
+        return client.post(
+            f"/api/v1/projects/{project_id}/templates",
+            json={
+                "project_inspection_item_id": str(item_id),
+                "system_id": str(system_id),
+                "name": "停用競態範本",
+            },
+        )
+
+    other = "save" if first_action == "deactivate" else "deactivate"
+    with _LockGate(get_engine(), _source_lock) as gate:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(call, first_action, clients[0])
+            try:
+                assert gate.acquired.wait(timeout=10)
+                second = executor.submit(call, other, clients[1])
+                gate.wait_until_waiter_blocked()
+            finally:
+                gate.release.set()
+            responses = [first.result(timeout=15), second.result(timeout=15)]
+    expected = [200, 409] if first_action == "deactivate" else [201, 200]
+    assert [r.status_code for r in responses] == expected, [
+        r.text for r in responses
+    ]
+    assert gate.commits[0] == "holder"
+    db_session.expire_all()
+    stored = db_session.get(ProjectInspectionItem, item_id)
+    assert stored is not None and stored.is_active is False
+    templates = db_session.scalars(
+        select(TemplateItem).where(TemplateItem.system_id == system_id)
+    ).all()
+    if first_action == "deactivate":
+        # 先停用：存為範本等鎖後被拒，且不建立任何範本。
+        assert responses[1].json()["error"]["code"] == (
+            "project_inspection_item.inactive_name"
+        )
+        assert templates == []
+    else:
+        # 先存：完整複製後才輪到停用，範本內容不受影響。
+        assert len(templates) == 1

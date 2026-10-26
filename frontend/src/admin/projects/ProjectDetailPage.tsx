@@ -44,6 +44,8 @@ import {
 } from './api'
 import './ProjectMembers.css'
 
+// ADM-R20：加入成員與取代角色集合至少要一個角色，後端以這個錯誤碼回
+// 422；資料層仍允許沒有角色的舊成員（DOM-R36），所以只有 API 會擋。
 const ROLES_REQUIRED_CODE = 'project.member_roles_required'
 const ROLES_REQUIRED_TEXT = '請至少選一個角色。'
 
@@ -82,6 +84,11 @@ function dataOf<T>(state: Loaded<T[]>): T[] {
   return state.status === 'ready' ? state.data : []
 }
 
+/**
+ * 把後端的指派限制錯誤碼轉成白話訊息；不是這幾種就回 `null`，由呼叫
+ * 端走通用錯誤。後端才是限制的依據（DOM-R70、DOM-R72），前端另外
+ * 先濾掉選項只是少讓人踩到。
+ */
 function assignmentError(caught: unknown): string | null {
   if (!(caught instanceof ManagementApiError)) return null
   if (caught.code === 'project.role_not_assignable') {
@@ -99,6 +106,7 @@ function assignmentError(caught: unknown): string | null {
   return null
 }
 
+// 角色集合不看順序；用來判斷修改畫面有沒有未儲存的變更。
 function sameSet(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((id) => b.includes(id))
 }
@@ -174,6 +182,13 @@ function memberReturnPath(projectId: string, value: unknown): string {
   return listPath
 }
 
+/**
+ * 專案成員區段：加入成員、修改角色、移出與批次指派（ADM-R20～
+ * ADM-R22、ADM-R13）。
+ *
+ * 沒有 `project_member.manage` 時成員 API 回 403，本區段只顯示無權限
+ * 畫面（出路依 ADM-R25），不提供唯讀成員列表（ADM-R27）。
+ */
 function ProjectMembersSection({
   mode,
   memberListPath,
@@ -335,6 +350,11 @@ function ProjectMembersSection({
     setBatchRoleNotice('')
   }
 
+  /**
+   * 批次指派或收回同一個角色（ADM-R13）。API 以「完整角色集合」取代，
+   * 所以這裡先替每位成員算出新的完整集合再一次送出；任何一位會變成
+   * 零角色就整批不送（ADM-R20）。
+   */
   async function submitBatchRole(action: 'assign' | 'revoke') {
     if (selectedMemberIds.length === 0 || !batchRoleId || !guard.enter())
       return
@@ -522,6 +542,8 @@ function ProjectMembersSection({
   const selectedCandidate = candidates.find(
     (candidate) => candidate.id === newUserId,
   )
+  // 外部協作人員只能指派外部可用的角色（DOM-R72）；後端仍會檢查，
+  // 這裡先濾掉選項，避免送出後才被 422 擋回。
   const addableRoles = selectedCandidate?.is_external_collaborator
     ? roles.filter((role) => role.is_external_allowed)
     : roles

@@ -16,9 +16,25 @@ import { personLabel, startMessages } from './startMessages'
 export type TaskListChange =
   { id: string; status: 'IN_PROGRESS' } | { id: string; removed: true }
 
+/**
+ * 開始查核失敗時顯示的說明。`retryable` 只用於網路中斷，以及 401／
+ * 403／404／409 以外的其餘狀態碼，此時保留確認框讓使用者再按一次；權限不足、狀態已被改動等不可重試的
+ * 失敗只提供返回清單。
+ */
 type Failure = { message: string; retryable: boolean }
 
-/** 提供 Field 任務開始確認與狀態回饋，維持 FUI-R03 的操作限制。 */
+/**
+ * Field 任務詳情的「開始查核」操作與結果回饋（FUI-R03、FUI-R04）。
+ *
+ * 只有 `PENDING` 任務提供開始操作；`IN_PROGRESS` 顯示進行中與實際開始
+ * 者、不得重複開始，其餘狀態只能查看。畫面不做樂觀更新，狀態與權限
+ * 都以伺服器回應為準。
+ *
+ * @param back 「返回任務清單」的路徑，帶回清單原本的篩選與頁數。
+ * @param onTask 取得最新詳情後通知上層更新。
+ * @param onListChange 通知清單記憶同步（開始或已不在清單）。
+ * @param onUnauthorized 登入失效（401）時由上層重新登入（FUI-R07）。
+ */
 export default function StartAction({
   task,
   title,
@@ -49,6 +65,8 @@ export default function StartAction({
     if (started) startedRef.current?.focus()
   }, [started])
 
+  // 清單只列 PENDING 與 IN_PROGRESS（FUI-R02）：進行中改標狀態，
+  // 已完成或已取消的任務從清單移除。
   function applyLatest(latest: FieldTaskDetail) {
     onTask(latest)
     if (latest.status === 'IN_PROGRESS') {
@@ -68,6 +86,8 @@ export default function StartAction({
         onUnauthorized()
         return null
       }
+      // Field 詳情對不存在、DRAFT 或無權限一律回 404（FUI-R06），
+      // 所以只能說「找不到或已無法查看」，並從清單移除。
       if (cause instanceof FieldApiError && cause.status === 404) {
         onListChange?.({ id: task.id, removed: true })
         return { message: startMessages.missing, retryable: false }
@@ -98,6 +118,8 @@ export default function StartAction({
       return null
     }
     if (cause.status === 403) {
+      // 臨時密碼尚未變更時後端也回 403，文案要指向變更密碼，
+      // 不能說成沒有權限。
       return {
         message:
           cause.code === 'auth.password_change_required'
@@ -110,6 +132,8 @@ export default function StartAction({
       onListChange?.({ id: task.id, removed: true })
       return { message: startMessages.missing, retryable: false }
     }
+    // 409：計畫已封存時任務只能查看（FUI-R04）；其餘 409 代表任務
+    // 狀態已被改動，重抓詳情後說明實際原因。
     if (cause.status === 409) {
       if (cause.code === 'inspection_plan.archived') {
         return { message: startMessages.archived, retryable: false }
@@ -120,6 +144,8 @@ export default function StartAction({
   }
 
   async function confirmStart() {
+    // 快速連按 Enter 時，state 與停用的按鈕擋不住同一輪事件內的第二次
+    // 送出，所以另用 ref 同步擋掉（見 submitGuard）。
     if (submitting || !guard.enter()) return
     setSubmitting(true)
     setFailure(null)
@@ -142,6 +168,9 @@ export default function StartAction({
       setStarted(true)
     } catch (cause) {
       const next = await failureFor(cause)
+      // next 為 null 有兩種情況，這裡都不顯示錯誤：401 已交給
+      // onUnauthorized 處理；或 409 重抓後發現其實是本人開始，
+      // reconcile() 已套用最新資料並顯示進行中。
       if (next) {
         setFailure(next)
         setConfirming(next.retryable)
@@ -155,6 +184,8 @@ export default function StartAction({
   const failed = failure && !failure.retryable
   const assignee = task.suggested_assignee
 
+  // 進行中：不得重複開始，只顯示實際開始者（FUI-R04）。有 failure
+  // 時（例如已被別人開始）另附返回清單。
   if (task.status === 'IN_PROGRESS') {
     return (
       <>
@@ -173,6 +204,7 @@ export default function StartAction({
     )
   }
 
+  // 已完成或已取消：不提供開始操作（FUI-R04）。
   if (task.status !== 'PENDING') {
     return (
       <>
@@ -214,6 +246,8 @@ export default function StartAction({
             setFailure(null)
           }}
           onConfirm={confirmStart}
+          // 取消後焦點回到「開始查核」按鈕；它在確認收合後才重新
+          // render，所以延後再聚焦。
           returnFocus={() => {
             queueMicrotask(() =>
               document.getElementById('field-start-task')?.focus(),
@@ -237,6 +271,8 @@ export default function StartAction({
           </Button>
         </>
       )}
+      {/* 建議指派只是預設，不限制同專案其他有權限的成員開始任務
+          （FUI-R02）；非本人時只提醒，仍可開始，並記錄實際開始者。 */}
       {confirming && assignee && !assignee.is_me && (
         <p className="field-confirm-assignee-note">
           這筆任務建議由{assignee.name_zh ?? '其他成員'}
@@ -247,6 +283,7 @@ export default function StartAction({
   )
 }
 
+/** 開始失敗的說明；`role="alert"` 並可聚焦，錯誤出現時由外層聚焦。 */
 function FailureBox({
   failure,
   errorRef,
@@ -266,6 +303,7 @@ function FailureBox({
   )
 }
 
+/** 返回任務清單，`restoreTaskList` 讓清單還原原本的篩選與捲動位置。 */
 function TaskListLink({ back }: { back: string }) {
   return (
     <Link className="btn" to={back} state={{ restoreTaskList: true }}>

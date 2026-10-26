@@ -26,6 +26,8 @@ const EVENT_LABELS: Record<string, string> = {
   'project.created': '建立專案',
   'project.updated': '修改專案',
   'project_inspection_item.deleted': '刪除查核項目',
+  'project_inspection_item.deactivated': '停用查核項目',
+  'project_inspection_item.reactivated': '恢復查核項目',
   'project_inspection_item.updated': '修改查核項目',
   'project_member.assignment_denied': '指派成員角色被拒絕',
   'project_member.removed': '移除成員',
