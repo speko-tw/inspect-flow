@@ -1,3 +1,4 @@
+import { SuggestedAssignee } from '../../ui/SuggestedAssignee'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
@@ -28,9 +29,16 @@ const PAGE_SIZE = 50
 const FALLBACK_PROJECT_NAME = '這個專案'
 
 /** 建議指派的顯示名；姓名為空時不退回 user_id，改顯示「未指派」。 */
-function assigneeLabel(task: DashboardTask): string {
+function assigneeLabel(task: DashboardTask) {
   if (!task.suggested_assignee) return '未提供建議指派'
-  return task.suggested_assignee.name_zh?.trim() || '未指派'
+  return (
+    <SuggestedAssignee
+      person={task.suggested_assignee}
+      status={task.status}
+      archived={Boolean(task.plan_archived)}
+      unassignedLabel="未指派"
+    />
+  )
 }
 
 function taskStatus(status: string) {

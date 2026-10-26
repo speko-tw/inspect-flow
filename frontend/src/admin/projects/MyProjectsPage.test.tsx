@@ -66,7 +66,9 @@ describe('我的專案頁', () => {
 
     expect(await screen.findByText('你參與的專案會列在這裡。')).toBeVisible()
     expect(screen.queryByText(/有內業權限的專案/)).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '示範工程甲' })).toBeVisible()
+    expect(
+      await screen.findByRole('heading', { name: '示範工程甲' }),
+    ).toBeVisible()
     expect(screen.getByRole('link', { name: '套用範本' })).toHaveAttribute(
       'href',
       '/projects/project-1/inspection-items/templates',

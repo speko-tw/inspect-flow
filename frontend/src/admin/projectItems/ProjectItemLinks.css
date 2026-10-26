@@ -74,3 +74,10 @@
     width: 100%;
   }
 }
+
+/* 使用中說明本身已有警示框，避免全域 alert 再套一層紅框。 */
+.project-item-delete-blocked [role='alert'] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}

@@ -75,3 +75,44 @@ it('物件鍵順序不算變更，未知欄位與 UUID 不出現在白話區', (
   expect(area).toHaveTextContent('這次沒有可顯示的欄位變更')
   expect(area.textContent).not.toContain(id)
 })
+
+it('角色識別轉成專案角色名稱，遺失的角色不露 UUID', () => {
+  render(
+    <AuditChanges
+      lookup={{
+        ...lookup,
+        roleName: (id) => (id === 'field' ? '現場工程師' : null),
+      }}
+      before={{ role_ids: ['field'] }}
+      after={{ role_ids: ['field', 'deleted'] }}
+    />,
+  )
+  expect(screen.getByRole('row', { name: /專案角色/ })).toHaveTextContent(
+    '現場工程師、已刪除的角色',
+  )
+})
+
+it('重設臨時密碼只說明事件，不顯示敏感內容', () => {
+  render(
+    <AuditChanges
+      lookup={lookup}
+      eventType="user.password_set"
+      before={null}
+      after={{}}
+    />,
+  )
+  expect(screen.getByText('已重設臨時密碼（不記錄密碼內容）')).toBeVisible()
+  expect(screen.queryByText('這次沒有可顯示的欄位變更。')).toBeNull()
+})
+
+it('本人更改非臨時密碼時使用符合事件語意的說明', () => {
+  render(
+    <AuditChanges
+      lookup={lookup}
+      eventType="user.password_set"
+      before={{ is_temporary: true }}
+      after={{ is_temporary: false }}
+    />,
+  )
+  expect(screen.getByText('已變更密碼（不記錄密碼內容）')).toBeVisible()
+})

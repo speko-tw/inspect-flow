@@ -122,6 +122,7 @@ export function entityLabel(
   entry: AuditLogEntry,
   lookup: {
     userName: (id: string) => string | null
+    roleName?: (id: string) => string | null
     projectName: (id: string) => string | null
   },
 ): string {
@@ -139,7 +140,21 @@ export function entityLabel(
   const name =
     (typeof payload.name === 'string' && payload.name) ||
     (typeof payload.title === 'string' && payload.title) ||
+    (typeof payload.task_name === 'string' && payload.task_name) ||
+    (typeof payload.plan_name === 'string' && payload.plan_name) ||
+    (typeof payload.zone_name === 'string' && payload.zone_name) ||
+    (entry.entity_type !== 'project' &&
+      typeof payload.source_name === 'string' &&
+      payload.source_name) ||
     (typeof payload.bundle_name === 'string' && payload.bundle_name) ||
+    (typeof payload.name_zh === 'string' && payload.name_zh) ||
+    (typeof payload.username === 'string' && payload.username) ||
+    (entry.entity_type === 'role'
+      ? lookup.roleName?.(entry.entity_id)
+      : entry.entity_type === 'creator_role' &&
+          typeof payload.creator_role_id === 'string'
+        ? lookup.roleName?.(payload.creator_role_id)
+        : null) ||
     (entry.entity_type === 'project'
       ? lookup.projectName(entry.entity_id)
       : null)

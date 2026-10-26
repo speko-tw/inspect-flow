@@ -218,7 +218,7 @@ describe('AUT-R55 三態外觀', () => {
       </DataMemoryRouter>,
     )
     expect(screen.queryByRole('radio')).toBeNull()
-    expect(screen.getByLabelText('目前密碼')).toBeVisible()
+    expect(screen.getByLabelText('臨時密碼')).toBeVisible()
   })
 })
 

@@ -1780,11 +1780,6 @@ function ModulePermissionsPageContent({
                 />
                 <strong>{role.name}</strong>
               </label>
-              <p>角色可用權限（{role.permission_codes.length} 項）</p>
-              <RolePermissionSummary
-                codes={role.permission_codes}
-                name={role.name}
-              />
               <p>比目前多給的能力</p>
               <RolePermissionSummary
                 codes={role.permission_codes.filter(

@@ -5,7 +5,14 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useNavigate,
+  useLocation,
+  useNavigationType,
+} from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../../auth/api'
@@ -307,6 +314,16 @@ function ProjectSwitcher() {
   )
 }
 
+function SaveRouteProbe() {
+  const location = useLocation()
+  const action = useNavigationType()
+  return (
+    <div data-testid="save-route-probe">
+      {JSON.stringify({ action, state: location.state })}
+    </div>
+  )
+}
+
 function renderPage(
   user: CurrentUser = { ...USER, has_template_access: managerMock },
   viewerPermissions = ['project_inspection_item.edit'],
@@ -327,6 +344,7 @@ function renderPage(
       ]}
     >
       <CurrentUserProvider value={{ user, clear: vi.fn() }}>
+        <SaveRouteProbe />
         {showProjectSwitcher && <ProjectSwitcher />}
         <Routes>
           <Route
@@ -1077,6 +1095,16 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(
       screen.queryByRole('button', { name: '存為範本' }),
     ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+    expect(await screen.findByText('PROJECT_DETAIL')).toBeVisible()
+    const route = JSON.parse(
+      screen.getByTestId('save-route-probe').textContent!,
+    )
+    expect(route.action).toBe('REPLACE')
+    expect(route.state).toMatchObject({
+      savedFromItemId: PROJECT_ITEM.id,
+      savedTemplateTitle: '管線查核',
+    })
   })
 
   it('可編輯項目但無範本管理權限時只提示一次存回範本需求', async () => {

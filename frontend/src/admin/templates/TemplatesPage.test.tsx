@@ -1751,6 +1751,7 @@ describe('TemplatesPage', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: '移除欄位' })[0])
     expect(screen.queryByText(typeMessage)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '前往判定標準' })).toBeVisible()
     expect(
       screen.getByText('這個欄位仍綁定數值標準，請先解除綁定後再移除。'),
     ).toBeInTheDocument()

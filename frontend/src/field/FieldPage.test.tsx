@@ -416,9 +416,7 @@ describe('今日任務首頁', () => {
     )
     renderPage()
     expect(await screen.findByText('目前沒有符合的任務')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: '查看全部任務' }),
-    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '查看全部任務' })).toBeNull()
   })
 
   it('沒有查核權限但有專案權限時，不呼叫任務 API 並提供專案入口', () => {
@@ -717,11 +715,8 @@ it('管理者沒有指派任務時預設全部，仍有共用管理選單與 Adm
     'aria-pressed',
     'true',
   )
-  const notice = screen.getByRole('region', { name: '我的任務提醒' })
-  expect(notice).toHaveTextContent('目前沒有指派給你的任務')
-  expect(
-    within(notice).getByRole('button', { name: '查看全部任務' }),
-  ).toBeVisible()
+  expect(screen.queryByRole('region', { name: '我的任務提醒' })).toBeNull()
+  expect(screen.getByRole('heading', { name: '全部任務' })).toBeVisible()
   expect(screen.getByText('Admin')).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: '管理 ▾' }))
   expect(screen.getByRole('link', { name: '帳號' })).toHaveAttribute(
@@ -758,4 +753,49 @@ it('有指派的人維持預設我的任務，明確切換不被自動覆蓋', a
   )
   await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
   expect(screen.getByTestId('location')).toHaveTextContent('scope=mine')
+})
+
+it('我的任務空清單只在空狀態說明，不重複顯示頂部橫幅', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        items: [],
+        next_cursor: null,
+      }),
+    ),
+  )
+  renderPage()
+  await screen.findByText('目前沒有符合的任務')
+  fireEvent.click(screen.getByRole('button', { name: '我的任務' }))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', {
+        name: '我的任務',
+      }),
+    ).toHaveAttribute('aria-pressed', 'true'),
+  )
+  expect(screen.queryByRole('region', { name: '我的任務提醒' })).toBeNull()
+})
+
+it('現場清單的停用建議人顯示改派提醒', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        items: [
+          {
+            ...TASK,
+            suggested_assignee: {
+              name_zh: '示範同事',
+              is_active: false,
+            },
+          },
+        ],
+        next_cursor: null,
+      }),
+    ),
+  )
+  renderPage()
+  expect(await screen.findByText('（已停用，請改派）')).toBeVisible()
 })

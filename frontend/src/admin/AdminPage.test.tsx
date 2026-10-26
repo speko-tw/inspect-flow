@@ -1521,7 +1521,7 @@ describe('admin user and company pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
     const switched = screen.getByRole('region', { name: '操作確認' })
     expect(switched).toHaveTextContent(
-      '停用鄧安娜（anna.new）他會立刻被登出，之後不能再登入',
+      '要停用的帳號：鄧安娜（anna.new）他會立刻被登出，之後不能再登入',
     )
     await waitFor(() =>
       expect(

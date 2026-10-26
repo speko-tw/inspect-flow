@@ -128,7 +128,11 @@ for _event, _entity, _kind, _fields in (
         _event,
         entity_type=_entity,
         kind=_kind,
-        fields=_fields,
+        # ALG-R22：名稱快照避免任務刪除後無法辨認；舊事件得不帶此欄。
+        fields=(*_fields, "task_name")
+        if _entity == "inspection_task"
+        else _fields,
+        optional_fields=("task_name",) if _entity == "inspection_task" else (),
         project_scoped=True,
         always_recorded=("reinspection_required",)
         if _event == "project_inspection_item.updated"
@@ -801,7 +805,7 @@ def update_task_location(
             entity_id=task.id,
             project_id=task.project_id,
             before=before,
-            after=after,
+            after={**after, "task_name": task.name},
         )
     return task
 
@@ -899,7 +903,7 @@ def update_draft_task_items(
         entity_id=locked_task.id,
         project_id=locked_task.project_id,
         before={"items": before_items},
-        after={"items": after_items},
+        after={"items": after_items, "task_name": locked_task.name},
     )
     return locked_task
 
@@ -950,6 +954,7 @@ def delete_draft_inspection_task(
         "project_id": str(task.project_id),
         "status": task.status,
         "item_count": item_count,
+        "task_name": task.name,
     }
     session.delete(task)
     session.flush()
@@ -991,7 +996,11 @@ def cancel_inspection_task(
         entity_id=task.id,
         project_id=task.project_id,
         before={"status": before_status},
-        after={"status": "CANCELLED", "cancellation_reason": normalized},
+        after={
+            "status": "CANCELLED",
+            "cancellation_reason": normalized,
+            "task_name": task.name,
+        },
     )
     _refresh_plan_status(session, plan)
     return task
@@ -1078,7 +1087,7 @@ def restore_inspection_task(
         entity_id=task.id,
         project_id=task.project_id,
         before={"status": before_status},
-        after={"status": restored},
+        after={"status": restored, "task_name": task.name},
     )
     _refresh_plan_status(session, plan)
     return task
