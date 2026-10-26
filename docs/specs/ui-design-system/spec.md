@@ -5,7 +5,7 @@
 **引用意圖**：[PR-10](../../intents/02-principles.md#pr-10)、[PR-18](../../intents/02-principles.md#pr-18)、[PR-19](../../intents/02-principles.md#pr-19)、[KD-70](../../intents/03-decisions-and-stack.md#kd-70)
 **被擋議題**：無；#515 已由 authentication AUT-R55／domain-model DOM-R78 承接，依[負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)於同一 PR 同步規格與實作。
 
-UDS-R18／UDS-AC17 依[負責人指示](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)於 #735 同步實作；UDS-R19／UDS-AC18 依 #737 工作單同步實作；其他條目沿用既有凍結狀態。
+UDS-R18／UDS-AC17 依[負責人指示](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)於 #735 同步實作；UDS-R19／UDS-AC18 依 #737 工作單同步實作；UDS-R04／R05／R06 的主要按鈕層級、頁內分頁與深淺色一致性依[負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)於 #738 同步實作；其他條目沿用既有凍結狀態。
 
 ## 目的
 
@@ -56,9 +56,9 @@ UDS-R18／UDS-AC17 依[負責人指示](https://github.com/speko-tw/inspect-flow
 | UDS-R01 | Field 與 Admin 的視覺及互動**必須**以工程作業台為主軸；品牌設計系統提供配色與品牌基因，操作版面及元件得依任務演進，驗證有效的成果應回饋品牌設計系統。 | 必須 | KD-70；負責人指示 #534（2026-10-16） |
 | UDS-R02 | 介面**必須**依任務分工清單、詳情與表單資訊密度；工作清單名稱優先，狀態與下一步相鄰；桌機得使用清單／詳情並列，手機應逐層瀏覽。 | 必須／應 | PR-19；原型設計原則 1、2；#413 |
 | UDS-R03 | 新增與修改**必須**有明確分開的入口；詳情應聚焦工作內容，表單應按用途分組呈現必填、說明、錯誤與完成條件。 | 必須／應 | PR-19；原型設計原則 2；#514 |
-| UDS-R04 | 每頁**必須**至多有一個視覺醒目的主要操作；按鈕應提供 primary、secondary、tertiary 與 destructive 語意，並以一致視覺階層表達優先序。 | 必須／應 | PR-19；核可原型設計原則 3；設計系統回饋第 5 項 |
+| UDS-R04 | 每頁**必須**至多有一個視覺醒目的主要操作；按鈕應提供 primary、secondary、tertiary 與 destructive 語意，並以一致視覺階層表達優先序。主要按鈕**必須**不只靠顏色辨認：高度 48px（`--control-primary-height`）、左右留白 24px、最小寬度 8rem（窄螢幕可縮到容器寬）、字重 700；次要按鈕高度 44px、字重 500。清單卡片內的「開啟」等逐項動作改用外框強調（品牌色 2px 外框），不得用實心主要按鈕；危險操作的觸發鈕用外框紅，實心紅只留給確認框內不可復原的確認鈕。 | 必須／應 | PR-19；核可原型設計原則 3；設計系統回饋第 5 項；[負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308) |
 | UDS-R05 | 互動元件**必須**依其操作方式定義適用的 hover、pressed、selected、focus-visible、disabled 狀態；執行非同步操作的元件或其關聯回饋**必須**提供 loading、success、error 狀態。靜態元件不得被要求呈現互動狀態。狀態及語意應有可辨識的文字、形狀或圖示線索，不得只靠顏色；各元件的狀態適用範圍依「元件狀態矩陣」驗收。 | 必須／應 | PR-19；設計系統回饋第 5 項；WCAG 2.2 SC 1.4.11、2.4.7 |
-| UDS-R06 | 前端**必須**使用語意 token，而非在各頁散置顏色或間距值；至少涵蓋品牌色、頁面／表面、文字、邊界、焦點、選取、狀態色、間距、圓角、陰影、字型與動態時間。淺色與深色主題須各自映射語意角色；主要按鈕、選取狀態、一般按鈕在兩主題均須保留相同視覺層級。 | 必須 | KD-70；核可原型 token；設計系統回饋第 3 項；負責人裁定（#534，2026-10-26） |
+| UDS-R06 | 前端**必須**使用語意 token，而非在各頁散置顏色或間距值；至少涵蓋品牌色、頁面／表面、文字、邊界、焦點、選取、狀態色、間距、圓角、陰影、字型與動態時間。淺色與深色主題須各自映射語意角色；主要按鈕、選取狀態、一般按鈕在兩主題均須保留相同視覺層級。 | 必須 | KD-70；核可原型 token；設計系統回饋第 3 項；[負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308) |
 | UDS-R07 | 表單**必須**把可定位錯誤顯示在欄位旁並聚焦；表單錯誤摘要應可導向對應欄位。送出中應停用送出按鈕並防止重複提交，保留使用者輸入。 | 必須／應 | PR-19；設計系統回饋第 4 項；#514 |
 | UDS-R08 | 以 Enter 送出時，若輸入法正處於 IME 組字，**必須**不提交表單；確認操作 callback 的同步例外與非同步拒絕應轉成可見錯誤回饋。 | 必須／應 | #514 核可範圍；設計系統回饋第 4 項 |
 | UDS-R09 | 破壞性或有重大影響的操作**必須**先顯示受影響對象及後果，並在使用者明確確認後才送出；未儲存內容離開前**必須**提示。 | 必須 | PR-18、PR-19 |
@@ -97,7 +97,8 @@ UDS-R18／UDS-AC17 依[負責人指示](https://github.com/speko-tw/inspect-flow
 
 | 元件／模式 | 必要變體或內容 | 必要狀態／行為 |
 |---|---|---|
-| Button／IconButton | Button 提供 primary、secondary、tertiary、destructive；IconButton 須有可及名稱 | 互動狀態依元件狀態矩陣；每頁最多一個醒目 primary |
+| Button／IconButton | Button 提供 primary、secondary、tertiary、destructive；IconButton 須有可及名稱；另有外框強調（卡片逐項動作）與外框紅（危險操作觸發鈕） | 互動狀態依元件狀態矩陣；每頁最多一個醒目 primary，primary 尺寸依 UDS-R04 |
+| 頁內分頁（PageTabs） | 同頁切換檢視；每個分頁須有可及名稱並指向所控面板；目前分頁有 3px 選取線與文字色，不靠顏色單獨傳達 | selected、focus-visible、方向鍵（←／→ 循環）、Home／End；帶 Alt／Ctrl／Meta／Shift 的組合鍵不攔截；強制色彩模式保留選取線 |
 | Form field | label、required、hint、error；Input、Select、Textarea | 互動狀態依元件狀態矩陣；可定位錯誤貼欄位，摘要可導覽 |
 | Badge／Tag | 狀態 badge 與中性 tag 分開，不以單色承載唯一資訊 | 狀態語意依元件狀態矩陣；靜態 Badge／Tag 不需互動狀態 |
 | Card／Info row／Stat summary | 依掃描清單、詳情、欄位群組或彙總資料選用；列表不得一律卡片化 | 互動列依元件狀態矩陣；靜態摘要不得偽裝成按鈕 |
@@ -114,6 +115,7 @@ UDS-R18／UDS-AC17 依[負責人指示](https://github.com/speko-tw/inspect-flow
 | 元件 | hover／pressed | focus-visible | selected | loading | success／error | disabled | 備註 |
 |---|---|---|---|---|---|---|---|
 | Button／IconButton | 可操作時必須 | 必須 | 僅選項型按鈕適用 | 觸發非同步操作時必須 | 由關聯狀態回饋呈現 | 有不可操作情境時必須 | IconButton 須保留可及名稱；loading 時防止重複送出 |
+| 頁內分頁 | 可操作時必須 | 必須；環畫在分頁內側，不被橫向捲動裁切 | 必須：目前分頁以選取線＋文字色辨認 | 切換面板需非同步載入時由面板回饋呈現 | 由面板回饋呈現 | 有不可操作情境時必須 | 只有目前分頁在 Tab 順序內，其餘以方向鍵到達；方向鍵循環、Home／End 跳首尾；帶修飾鍵不攔截 |
 | Input／Select／Textarea | 依原生或自訂控制項互動呈現 | 必須 | 僅選項型控制項適用 | 僅非同步驗證時呈現 | invalid 由欄位錯誤呈現；驗證結果依適用行為回饋 | 有不可編輯情境時必須 | focus 與 invalid 須可辨識且不只靠顏色 |
 | Form field／錯誤摘要 | 含可操作連結時依連結行為 | 含可操作連結時必須 | 不適用 | 表單非同步送出時由表單回饋呈現 | 欄位錯誤及送出結果必須 | 不適用 | 靜態 label、hint、摘要文字不需互動狀態 |
 | Badge／Tag | 不適用 | 不適用 | 不適用 | 不適用 | 僅作狀態語意分類，不代表操作結果回饋 | 不適用 | 靜態呈現；若包裝成連結或控制項，由該控制項承擔狀態 |
@@ -149,7 +151,7 @@ UDS-R18／UDS-AC17 依[負責人指示](https://github.com/speko-tw/inspect-flow
 |---|---|---|---|---|
 | UDS-AC01 | 負責人核可的第 2 版互動原型與試用紀錄已公開 | 檢查本規格來源 | 規格連結至[核可原型](https://claude.ai/artifact/NZSYmmJhqY5ddpczkuLJ6e)，並引用 KD-70；重大畫面仍依 RG-M21 通過原型關卡後才實作 | UDS-R01 |
 | UDS-AC02 | 桌機與手機主要任務頁面 | 依序走查清單、詳情及表單 | 清單名稱／狀態／下一步可掃描；桌機清單與詳情可並列；手機可逐層進入；新增與修改入口分開 | UDS-R02、R03 |
-| UDS-AC03 | 每一主要頁面含主要與次要動作，元件狀態適用範圍已依元件狀態矩陣判定 | 檢視視覺階層、鍵盤操作及非同步回饋 | 每頁至多一個醒目 primary；按鈕層級一致；互動元件與非同步回饋具備矩陣列出的適用狀態；靜態元件不被要求提供互動狀態；selected／status 不只靠顏色表達 | UDS-R04、R05 |
+| UDS-AC03 | 每一主要頁面含主要與次要動作，元件狀態適用範圍已依元件狀態矩陣判定 | 檢視視覺階層、鍵盤操作及非同步回饋 | 每頁至多一個醒目 primary；primary 實測高度 ≥48px、左右留白 ≥24px、最小寬度 ≥8rem、字重 ≥700，且高於次要按鈕（44px、字重 500）；清單卡片的逐項動作為外框強調而非實心；危險觸發鈕為外框紅；按鈕層級一致；互動元件與非同步回饋具備矩陣列出的適用狀態；靜態元件不被要求提供互動狀態；selected／status 不只靠顏色表達（分段與晶片選取加勾號） | UDS-R04、R05 |
 | UDS-AC04 | 淺色與深色主題的所有語意 token 已載入 | 檢查 computed styles／token mapping | token 覆蓋表列分類；兩主題映射相同語意角色；不得由頁面散置色值取代共用 token | UDS-R06 |
 | UDS-AC05 | 表單含可定位錯誤、摘要與非同步送出 | 提交錯誤資料、重複觸發送出及修正 | 欄旁錯誤可見且第一個錯誤可聚焦；摘要可導覽；載入中阻止重送並保留輸入；成功及失敗均有明確訊息 | UDS-R07 |
 | UDS-AC06 | 輸入框有未完成的 IME 組字；確認 callback 可同步或非同步失敗 | 按 Enter 或觸發確認失敗 | 組字期間不提交；同步例外與 Promise rejection 轉為可見錯誤，畫面不假報成功 | UDS-R08 |
@@ -174,8 +176,6 @@ UDS-R18／UDS-AC17 依[負責人指示](https://github.com/speko-tw/inspect-flow
 
 ## 變更紀錄
 
-- 規格澄清：負責人裁定（#534，2026-10-26），主要按鈕可操作性須有足夠尺寸、字重與留白；淺深色保持主要按鈕 > 選取 > 一般按鈕的相同層級；淺色主要動作採品牌深藍 `#002060`／hover `#123b79`，深色沿用合格對比的淺藍對應。另統一工程師工作量分頁及區塊標題的共用元件呈現。
-
 - 範圍變更（負責人指示，#515）：外觀三態由本人偏好契約承接，確認個人設定入口、首次繪製快取與跨裝置驗收 UDS-AC04／08／14 — [負責人同意](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6370968608)
 
 - 範圍變更（負責人指示，#734）：新增 UDS-R18、UDS-AC17 回饋擺放、捲動、焦點與批次規則；依[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)於 #735 同步實作。
@@ -187,3 +187,5 @@ UDS-R18／UDS-AC17 依[負責人指示](https://github.com/speko-tw/inspect-flow
 - 規格澄清（負責人試用回饋 #734，W-734R）：UDS-R18、UDS-AC17 補明發版前重測行為，依 [#734](https://github.com/speko-tw/inspect-flow/issues/734) 同步實作與驗收。
 
 - 規格澄清（#734，第 2 輪審查）：補齊錯誤聚焦、解除綁定清理及單次存檔提示的驗收操作。
+
+- 規格澄清：[負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)，主要按鈕可操作性須有足夠尺寸、字重與留白；淺深色保持主要按鈕 > 選取 > 一般按鈕的相同層級；淺色主要動作採品牌深藍 `#002060`／hover `#123b79`，深色沿用合格對比的淺藍對應。#738 依此統一工程師工作量分頁、區塊標題與頁內分頁元件；UDS-R04／AC03 寫明主要按鈕的可驗收尺寸與卡片逐項動作、危險觸發鈕的處理，元件語彙與狀態矩陣補「頁內分頁」列。

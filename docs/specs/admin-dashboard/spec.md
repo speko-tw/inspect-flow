@@ -64,7 +64,7 @@
 | ADM-R02 | 今日工作量與「派給誰」**必須**只計非封存 Plan 下狀態為 `PENDING` 或 `IN_PROGRESS` 的 Task；不依日期篩選，排除 `DRAFT`、`CANCELLED` 及封存 Plan 下的 Task | 必須 | 負責人裁定（[#104 留言](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977711401)）；`inspection-planning`、`state-machines` |
 | ADM-R03 | 完成數**必須**只計 `COMPLETED` Task；完成率**必須**為 `COMPLETED` 數 ÷ 同一查詢範圍內所有非取消且已派出的 Task 數（含 `PENDING`、`IN_PROGRESS`、`COMPLETED`）。分母為 0 時回傳 `0` | 必須 | 完成數與完成率 0.5.x 依 Task 狀態計算（依 [KD-66](../../intents/03-decisions-and-stack.md#kd-66) 與 #388）；公式為規格設計（非負責人裁定） |
 | ADM-R04 | 專案進度**必須**按專案呈現已派出 Task 總數、完成數與完成率，使用 ADM-R03 口徑；封存 Plan 不排除在歷史完成數與分母之外 | 必須 | 功能範圍依 #375、#388；封存 Plan 的計算口徑為規格設計（非負責人裁定） |
-| ADM-R05 | 工程師工作量**必須**分開呈現「派給誰」的 `PENDING`／`IN_PROGRESS` 數與「誰查的」依 `completed_by` 歸屬的 `COMPLETED` 數；不得混為單一數字。另應呈現由 `started_by` 歸屬的 `IN_PROGRESS` 開始者數；畫面欄名依序為「待開始」「進行中」「實際進行」「累計完成」，並說明各欄歸屬依據及數字可能重複、不得加總 | 必須／應 | 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977779246)）；額外開始者數為規格設計（非負責人裁定） |
+| ADM-R05 | 工程師工作量**必須**分開呈現「派給誰」的 `PENDING`／`IN_PROGRESS` 數與「誰查的」依 `completed_by` 歸屬的 `COMPLETED` 數；不得混為單一數字。另應呈現由 `started_by` 歸屬的 `IN_PROGRESS` 開始者數；畫面欄名依序為「待開始」「進行中」「實際進行」「累計完成」，並說明各欄歸屬依據及數字可能重複、不得加總 | 必須／應 | 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977779246)）、[負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)（欄名與說明句）；額外開始者數為規格設計（非負責人裁定） |
 | ADM-R06 | 專案範圍總覽**必須**只回傳目前使用者具「看專案進度與工作量」專案權限（且具查核模組「可使用」，AUT-R19）可存取的專案；全部專案總覽**必須**要求專案模組「看全部專案進度」模組權限（`all_project_progress.read`），專案權限不得擴大成全部專案範圍。「看全部專案進度」本身即可看各專案進度與任務明細，**不需**查核模組「可使用」；可見的任務欄位固定為任務清單、狀態、地點、建議指派四項白名單，所有入口（總覽、任務明細頁、API）一致，**不得**回傳照片或查核結果，照片與結果的下載另行檢查權限；要看照片與結果，須加入該專案並取得唯讀的專案角色（例如「專案查閱人員」）。此權限不得用來修改任何專案（DOM-R66），只有 Admin 能授予（DOM-R61）。專案進度與任務明細由查核模組提供唯讀查詢，專案模組不直接讀查核資料表（DOM-R60）。狀態含只供提醒的 plan_archived，建議指派含 is_active，均依 IP-R12 區分仍可執行與歷史任務，不擴大照片、結果或修改權限。 | 必須 | 負責人裁定（[#538 第 9 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）、負責人裁定（[#538 第 15 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）、負責人裁定（[#538 第 24 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）：看全部專案進度到任務明細、不另需查核模組「可使用」、欄位固定為四項白名單、所有入口一致、照片與結果的下載另行檢查；權限名稱、範圍與分組依 [權限表](../../intents/07-permission-model.md#permission-table) 及 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)；進度由查核模組提供唯讀查詢是規格設計（非負責人裁定）（兩位專家審查建議） |
 | ADM-R07 | 只有 Admin **得**進入稽核查詢頁及呼叫查詢 API；介面唯讀，不新增、修改或刪除紀錄 | 必須 | 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、ALG-R04 |
 | ADM-R08 | 稽核查詢**必須**支援專案、操作者、時間範圍、事件類型篩選與穩定 cursor 分頁；沿用 `audit-log` 定義的事件及欄位 | 必須 | 負責人裁定選 C（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；欄位及 cursor 契約沿用 [audit-log](../audit-log/spec.md) 與 [KD-13](../../intents/03-decisions-and-stack.md#kd-13) |
@@ -240,7 +240,7 @@ ADM-AC50 是目前 UI 路由、登入落點及導覽權限的權威驗收；ADM-
 
 ## 變更紀錄
 
-- 規格澄清：負責人裁定（#534，2026-10-26），工程師工作量四欄改為「待開始／進行中／實際進行／累計完成」；明示依建議指派者、實際開始者及實際完成累計歸屬，同一任務可能重複計入、不能加總。
+- 規格澄清：[負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)，工程師工作量四欄改為「待開始／進行中／實際進行／累計完成」；明示依建議指派者、實際開始者及實際完成累計歸屬，同一任務可能重複計入、不能加總。
 
 - 規格澄清及待確認的意圖變更跟進（#705）：新增 ADM-R50／ADM-AC50，統一路由、導覽權限、登入與密碼變更落點、舊 UI 網址 404；KD-12 的路由群組拆包方向待負責人確認。
 - 規格澄清（#705）：ADM-R23、ADM-R25、ADM-R50、ADM-AC23、ADM-AC50 的任務落點以 AUT-R08 `can_manage_project_planning_or_members` 摘要判斷專案成員、計畫與任務管理權。
