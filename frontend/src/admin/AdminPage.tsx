@@ -36,6 +36,8 @@ import CompaniesPage from './CompaniesPage'
 import PeoplePage from './people/PeoplePage'
 import RolesPage from './roles/RolesPage'
 import ProjectHomePage from './projectHome/ProjectHomePage'
+import ProjectEditPage from './projects/ProjectEditPage'
+import ProjectCreatePage from './projects/ProjectCreatePage'
 import ProjectSectionPage from './projectHome/ProjectSectionPage'
 import { WorkflowSummaryProvider } from './projectHome/WorkflowSummaryProvider'
 import ProjectsPage from './projects/ProjectsPage'
@@ -61,6 +63,7 @@ const DashboardTaskPage = lazy(() => import('./dashboard/DashboardTaskPage'))
 
 const PROJECT_PAGE_ROUTES = [
   ROUTES.projectHome,
+  ROUTES.projectEdit,
   ROUTES.projectMembers,
   ROUTES.projectMemberNew,
   ROUTES.projectMemberEdit,
@@ -177,6 +180,10 @@ const PROJECT_ROUTES = (
     <Route
       element={<ProjectHomePage />}
       path={nestedRoutePath(ROUTES.projectHome, ROUTES.adminShell)}
+    />
+    <Route
+      element={<ProjectEditPage />}
+      path={nestedRoutePath(ROUTES.projectEdit, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectSectionPage section="members" />}
@@ -435,6 +442,10 @@ function AdminPageContent() {
               element={<ProjectsPage />}
             />
             <Route
+              element={<ProjectCreatePage />}
+              path={nestedRoutePath(ROUTES.projectNew, ROUTES.adminShell)}
+            />
+            <Route
               path={nestedRoutePath(ROUTES.dashboard, ROUTES.adminShell)}
               element={<DashboardRoute access={dashboardAccess} user={user} />}
             />
@@ -537,6 +548,10 @@ function MemberAdminShell({
                 <Navigate replace to={indexTarget} />
               )
             }
+          />
+          <Route
+            element={<ProjectCreatePage />}
+            path={nestedRoutePath(ROUTES.projectNew, ROUTES.adminShell)}
           />
           {canManageAccounts && (
             <Route

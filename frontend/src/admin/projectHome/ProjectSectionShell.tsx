@@ -63,12 +63,18 @@ export default function ProjectSectionShell({
   projectId,
   activeSection,
   viewerPermissions,
+  backTo,
+  backLabel,
+  backState,
   children,
 }: {
   project: { project_code: string; name: string } | null
   projectId: string
   activeSection: ProjectSection
   viewerPermissions: string[]
+  backTo?: string
+  backLabel?: string
+  backState?: unknown
   children: ReactNode
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -120,7 +126,9 @@ export default function ProjectSectionShell({
   return (
     <div className="project-home-layout">
       <header className="project-home-header">
-        <BackLink to={ROUTES.adminProjects.path}>返回專案清單</BackLink>
+        <BackLink state={backState} to={backTo ?? ROUTES.adminProjects.path}>
+          {backLabel ?? '返回專案清單'}
+        </BackLink>
         <h1>
           {project ? (
             <>

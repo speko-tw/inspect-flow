@@ -18,10 +18,12 @@ type ErrorMessage = (error: unknown) => string
 export function useCursorList<T>(
   fetchPage: FetchPage<T>,
   getErrorMessage: ErrorMessage,
+  initialQueryValue = '',
 ) {
+  const [initialQuery] = useState(initialQueryValue)
   const [items, setItems] = useState<T[]>([])
-  const [query, setQuery] = useState('')
-  const [appliedQuery, setAppliedQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery)
+  const [appliedQuery, setAppliedQuery] = useState(initialQuery)
   const [error, setError] = useState('')
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -66,14 +68,14 @@ export function useCursorList<T>(
     // 延後到 microtask：StrictMode 開發模式會立刻卸載再重掛，
     // 第一次掛載的 cleanup 先把 active 設為 false，就不會發出重複請求。
     queueMicrotask(() => {
-      if (active) void loadFirstPage('')
+      if (active) void loadFirstPage(initialQuery)
     })
     return () => {
       // 舊頁面的回應不可覆寫新列表或卸載後的狀態。
       active = false
       requestId.current += 1
     }
-  }, [loadFirstPage])
+  }, [initialQuery, loadFirstPage])
 
   const search = useCallback(
     async (value: string) => {

@@ -885,10 +885,14 @@ describe('登入逾時與未儲存頁面（#623）', () => {
     })
     renderApp('/projects')
     await screen.findByRole('heading', { name: '專案' })
-    const createProjectButton = await screen.findByRole('button', {
+    const createProjectLink = await screen.findByRole('link', {
       name: '新增專案',
     })
-    fireEvent.click(createProjectButton)
+    fireEvent.click(createProjectLink)
+    await screen.findByRole('heading', {
+      level: 2,
+      name: '新增專案',
+    })
     const projectName = screen.getByLabelText(/工程名稱/)
     fireEvent.change(projectName, {
       target: { value: '逾時前的草稿' },
@@ -940,8 +944,9 @@ describe('登入逾時與未儲存頁面（#623）', () => {
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: '專案' }),
+      await screen.findByRole('heading', { level: 2, name: '新增專案' }),
     ).toBeVisible()
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('')
     expect(screen.getByRole('button', { name: '新增專案' })).toBeVisible()
   })
 })

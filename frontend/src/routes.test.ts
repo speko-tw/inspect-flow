@@ -225,12 +225,14 @@ describe('product route metadata', () => {
       [ROUTES.adminRoles, '/roles'],
       [ROUTES.adminAuditLogs, '/logs'],
       [ROUTES.adminProjects, '/projects'],
+      [ROUTES.projectNew, '/projects/new'],
       [ROUTES.dashboardIndex, '/overview'],
       [ROUTES.dashboardTasks, '/overview/projects/p1/tasks'],
       [ROUTES.dashboardTask, '/overview/projects/p1/tasks/t1'],
       [ROUTES.adminTemplates, '/templates'],
       [ROUTES.templateSaveFromProject, '/templates/from-project'],
       [ROUTES.projectHome, '/projects/p1'],
+      [ROUTES.projectEdit, '/projects/p1/edit'],
       [ROUTES.projectMembers, '/projects/p1/members'],
       [ROUTES.projectMemberNew, '/projects/p1/members/new'],
       [ROUTES.projectMemberEdit, '/projects/p1/members/u1/edit'],
@@ -272,5 +274,16 @@ describe('product route metadata', () => {
       }),
     ).toBe(true)
     expect(canVisit(delegate, '/roles')).toBe(false)
+  })
+
+  it('limits project creation to admins and users with create permission', () => {
+    const creator = { ...noAccess, can_create_project: true }
+
+    expect(canVisit(noAccess, '/projects/new')).toBe(false)
+    expect(canVisit(creator, '/projects/new')).toBe(true)
+    expect(canVisit({ ...noAccess, is_admin: true }, '/projects/new')).toBe(
+      true,
+    )
+    expect(canVisit(creator, '/projects')).toBe(true)
   })
 })

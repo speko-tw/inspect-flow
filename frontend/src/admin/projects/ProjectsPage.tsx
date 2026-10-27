@@ -5,7 +5,7 @@ import {
   type FormEvent,
   type MouseEvent,
 } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import { RequiredMark } from '../../ui/Form'
@@ -29,6 +29,7 @@ import {
   type Project,
   type ProjectInput,
 } from './api'
+import { ROUTES } from '../../routes'
 import MyProjectsPage from './MyProjectsPage'
 import { ProjectCreationForm } from './ProjectCreationForm'
 
@@ -128,8 +129,18 @@ export default function ProjectsPage() {
 
 /** Admin 專案清單與編輯畫面（ADM-R23、ADM-R32）。 */
 function AdminProjectsPage() {
+  const location = useLocation()
   const navigate = useNavigate()
-  const projectList = useCursorList(listProjectsPage, managementErrorMessage)
+  const [initialQuery] = useState(() => {
+    const state = location.state as { projectQuery?: unknown } | null
+    return typeof state?.projectQuery === 'string' ? state.projectQuery : ''
+  })
+  const pageHeadingRef = useRef<HTMLHeadingElement>(null)
+  const projectList = useCursorList(
+    listProjectsPage,
+    managementErrorMessage,
+    initialQuery,
+  )
   const {
     items: projects,
     query,
@@ -145,7 +156,16 @@ function AdminProjectsPage() {
     loadMore,
   } = projectList
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState(() => {
+    const state = location.state as { projectNotice?: unknown } | null
+    return typeof state?.projectNotice === 'string' ? state.projectNotice : ''
+  })
+  const [duplicateProjectCode] = useState(() => {
+    const state = location.state as { duplicateProjectCode?: unknown } | null
+    return typeof state?.duplicateProjectCode === 'string'
+      ? state.duplicateProjectCode
+      : ''
+  })
   const [createdProjectLink, setCreatedProjectLink] = useState<string | null>(
     null,
   )
@@ -181,6 +201,10 @@ function AdminProjectsPage() {
   const formSessionRef = useRef(0)
   const previousFormModeRef = useRef<FormMode>(null)
   const focusAfterCloseRef = useRef<FormMode>(null)
+
+  useEffect(() => {
+    pageHeadingRef.current?.focus({ preventScroll: true })
+  }, [])
 
   // 每次開啟、關閉或切換表單都遞增；請求回來時與送出當時比對，
   // 舊請求的結果不得改動後來開啟的表單或草稿（ADM-R15）。
@@ -264,6 +288,30 @@ function AdminProjectsPage() {
     if (!notice) return
     noticeRef.current?.scrollIntoView?.({ block: 'nearest' })
   }, [notice])
+
+  useEffect(() => {
+    const state = location.state as {
+      duplicateProjectCode?: unknown
+      projectNotice?: unknown
+    } | null
+    const projectNotice =
+      typeof state?.projectNotice === 'string' ? state.projectNotice : ''
+    const duplicateCode =
+      typeof state?.duplicateProjectCode === 'string'
+        ? state.duplicateProjectCode
+        : ''
+    if (!projectNotice && !duplicateCode) return
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      replace: true,
+      state: null,
+    })
+  }, [
+    location.hash,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+  ])
 
   useEffect(() => {
     // ADM-R40：角色選項取自後端登記表，不在畫面寫死。
@@ -373,10 +421,6 @@ function AdminProjectsPage() {
       return
     }
     applyTransition(next)
-  }
-
-  function startEdit(project: Project) {
-    requestTransition({ kind: 'edit', project })
   }
 
   function guardProjectLink(event: MouseEvent<HTMLAnchorElement>, to: string) {
@@ -538,7 +582,9 @@ function AdminProjectsPage() {
 
   return (
     <section aria-labelledby="projects-heading">
-      <h1 id="projects-heading">專案</h1>
+      <h1 id="projects-heading" ref={pageHeadingRef} tabIndex={-1}>
+        專案
+      </h1>
       <UnsavedLeaveBox guard={leaveGuard} />
       {notice && (
         <p className="notice-success" ref={noticeRef} role="status">
@@ -557,6 +603,11 @@ function AdminProjectsPage() {
               </Link>
             </>
           )}
+        </p>
+      )}
+      {duplicateProjectCode && (
+        <p role="alert">
+          警告：專案代號「{duplicateProjectCode}」與其他專案重複，仍已儲存。
         </p>
       )}
       {transition && (
@@ -581,14 +632,9 @@ function AdminProjectsPage() {
         </ConfirmBox>
       )}
       {formMode === null && (
-        <button
-          className="btn-primary"
-          onClick={() => requestTransition({ kind: 'new' })}
-          ref={newProjectButtonRef}
-          type="button"
-        >
+        <Link className="btn btn-primary" to={ROUTES.projectNew.path}>
           新增專案
-        </button>
+        </Link>
       )}
       {formMode?.kind === 'new' && (
         <ProjectCreationForm
@@ -891,14 +937,20 @@ function AdminProjectsPage() {
                         >
                           成員
                         </Link>
-                        <button
+                        <Link
                           aria-label={`編輯專案「${project.name}」`}
-                          className="btn"
-                          onClick={() => startEdit(project)}
-                          type="button"
+                          className="btn btn-emphasis"
+                          state={{
+                            returnTo: '/projects',
+                            returnQuery: appliedQuery,
+                          }}
+                          to={ROUTES.projectEdit.path.replace(
+                            ':projectId',
+                            project.id,
+                          )}
                         >
                           編輯
-                        </button>
+                        </Link>
                       </div>
                     </article>
                   )

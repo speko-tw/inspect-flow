@@ -71,16 +71,22 @@ export function ProjectCreationForm({
   const [people, setPeople] = useState<User[]>([])
   const [loadError, setLoadError] = useState('')
   const [optionsLoading, setOptionsLoading] = useState(true)
+  const [optionsRetry, setOptionsRetry] = useState(0)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const headingRef = useRef<HTMLHeadingElement | null>(null)
   const requestErrorRef = useRef<HTMLParagraphElement | null>(null)
   const dirty = Object.keys(EMPTY_DRAFT).some(
     (field) =>
       draft[field as keyof ProjectDraft] !==
       EMPTY_DRAFT[field as keyof ProjectDraft],
   )
+
+  useEffect(() => {
+    headingRef.current?.focus({ preventScroll: true })
+  }, [])
 
   useEffect(() => {
     onDirtyChange?.(dirty)
@@ -129,7 +135,7 @@ export function ProjectCreationForm({
     return () => {
       active = false
     }
-  }, [isAdmin])
+  }, [isAdmin, optionsRetry])
 
   function change(field: keyof ProjectDraft, value: string) {
     setDraft((current) => ({ ...current, [field]: value }))
@@ -208,8 +214,25 @@ export function ProjectCreationForm({
       onKeyDown={blockImeEnter}
       onSubmit={submit}
     >
-      <h2>新增專案</h2>
-      {loadError && <p role="alert">無法載入選項：{loadError}</p>}
+      <h2 ref={headingRef} tabIndex={-1}>
+        新增專案
+      </h2>
+      {loadError && (
+        <div>
+          <p role="alert">無法載入選項：{loadError}</p>
+          <button
+            disabled={optionsLoading}
+            onClick={() => {
+              setOptionsLoading(true)
+              setLoadError('')
+              setOptionsRetry((value) => value + 1)
+            }}
+            type="button"
+          >
+            重新載入選項
+          </button>
+        </div>
+      )}
       <FormErrorSummary
         errors={[
           ['project_code', 'project-code', '專案代號'],
@@ -366,7 +389,7 @@ export function ProjectCreationForm({
       )}
       <div className="card-actions">
         {onCancel && (
-          <button onClick={cancel} type="button">
+          <button disabled={saving} onClick={cancel} type="button">
             取消
           </button>
         )}

@@ -33,6 +33,8 @@ export const PAGE_TITLES = {
   records: '操作紀錄',
   personalSettings: '個人設定',
   projectHome: '專案首頁',
+  projectNew: '新增專案',
+  projectEdit: '修改專案',
   projectMembers: '成員',
   projectMemberNew: '加入成員',
   projectMemberEdit: '修改成員角色',
