@@ -89,6 +89,8 @@
 
 ### `Company`（凍結）
 
+管理 UI 依 ADM-R55：清單、詳情與新增各有網址；公司仍只有名稱可編輯，於詳情原地改名，啟用／停用先確認。既有 DOM-R32／R33、DOM-AC23 與 API 契約不變。
+
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
 | DOM-R15 | `Company` **必須**沿用 `User`、`Project` 的共通結構：UUID 主鍵，以及 `created_at`、`updated_at`、`created_by`、`updated_by`（不可空值、外鍵指向 `User`）。`Role`、`ProjectMember` 同樣適用 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-08](../../intents/02-principles.md#pr-08)；做法同 DBF-R11、DBF-R14；[#54](https://github.com/speko-tw/inspect-flow/issues/54) 補充裁定（所有資料的 `created_by` 都有值） | DOM-AC36、DOM-AC14、DOM-AC18 |
@@ -102,6 +104,8 @@
 | DOM-R49 | `Company.name` 最多 128 個字元，不限格式；存放前**必須**去除前後空白，去除後不得為空字串。名稱在所有 `Company`（含已停用）之間**必須**唯一，比對不分大小寫：已有 `Demo Co` 時，新增或改名為 `demo co` 會被擋下。`name` **必須**保留輸入的原樣（去除前後空白之後）存放，只在比對與唯一約束時轉成小寫；寫法比照 DOM-R34，由計畫選擇。長度的算法與檢查方式見 DOM-R31 | 必須 | 負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：名稱去前後空白、不分大小寫比對、含已停用公司；長度上限 128 沿用原 DOM-R29 | DOM-AC36、DOM-AC37 |
 
 ### `Role`（凍結）
+
+管理 UI 依 ADM-R55：清單、唯讀詳情、新增與修改各有網址，修改／刪除前重新查詢影響範圍；建立者角色與指派／外部可用限制維持既有領域規則，不新增資料欄位或 API。
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
@@ -593,3 +597,5 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 規格澄清（#735、PR #740 審查）：補齊角色 API 欄位與 DOM-AC47；停用持有人採共用有效啟用條件的否定，包含到期但尚未寫回的外部帳號，總人數口徑不變。
 
 - 範圍變更（負責人指示，#717）：新增來源項目 `is_active` 欄位 DOM-R79、DOM-AC78；細節為規格設計（非負責人裁定）。來源：[負責人指示（#717）](https://github.com/speko-tw/inspect-flow/issues/717)；[實作細節](https://github.com/speko-tw/inspect-flow/issues/717#issuecomment-6397735011)，細節為規格設計（非負責人裁定）。
+
+- 範圍變更（負責人裁定，#534，2026-10-26）：#635 第 5 批的角色／公司管理路徑與確認依 ADM-R55／ADM-AC55；沿用 DOM-R32／R33／R55 及既有角色保護，不新增 DOM 編號 — [負責人裁定](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)。

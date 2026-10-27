@@ -287,6 +287,11 @@ export async function listCompanies(): Promise<Company[]> {
   return listAllPages('/companies')
 }
 
+/** DOM-R32：以公司自己的網址讀取詳情，不受清單搜尋或分頁範圍影響。 */
+export function getCompany(id: string): Promise<Company> {
+  return request(`/companies/${encodeURIComponent(id)}`)
+}
+
 export function createCompany(name: string): Promise<Company> {
   return request('/companies', {
     method: 'POST',
@@ -332,6 +337,13 @@ export function listActiveCompanyUsers(
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
+  'role.external_in_use':
+    '目前有外部協作人員持有這個角色，不能取消「外部協作帳號可用」。請先移除他們的這個角色。',
+  'role.external_allowed_invalid':
+    '這個角色含有外部協作人員不能使用的權限，或它是新專案預設角色，不能設成「外部協作帳號可用」。',
+  'role.creator_role_requires_permissions':
+    '這是新專案預設角色，必須保留「檢視專案」「調整專案」「管理專案成員與其角色」三項權限。',
+
   'request.validation_failed': '資料格式不正確，請檢查輸入內容。',
   'resource.not_found': '找不到這筆資料，請重新整理後再試。',
   'user.builtin_protected': '內建 admin 帳號不可修改或停用。',

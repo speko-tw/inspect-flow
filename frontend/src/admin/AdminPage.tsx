@@ -501,6 +501,34 @@ function AdminPageContent() {
               element={<RolesPage />}
             />
             <Route
+              path={nestedRoutePath(ROUTES.adminCompanyNew, ROUTES.adminShell)}
+              element={<CompaniesPage />}
+            />
+            <Route
+              path={nestedRoutePath(ROUTES.adminRoleNew, ROUTES.adminShell)}
+              element={<RolesPage />}
+            />
+            <Route element={<RequireValidRouteIds />}>
+              <Route
+                path={nestedRoutePath(
+                  ROUTES.adminCompanyDetail,
+                  ROUTES.adminShell,
+                )}
+                element={<CompaniesPage />}
+              />
+              <Route
+                path={nestedRoutePath(
+                  ROUTES.adminRoleDetail,
+                  ROUTES.adminShell,
+                )}
+                element={<RolesPage />}
+              />
+              <Route
+                path={nestedRoutePath(ROUTES.adminRoleEdit, ROUTES.adminShell)}
+                element={<RolesPage />}
+              />
+            </Route>
+            <Route
               path={nestedRoutePath(ROUTES.adminProjects, ROUTES.adminShell)}
               element={<ProjectsPage />}
             />

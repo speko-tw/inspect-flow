@@ -384,6 +384,11 @@ function managementFetch({
         return Response.json(created, { status: 201 })
       }
       const companyMatch = /\/companies\/([^/]+)$/.exec(parsed.pathname)
+      if (companyMatch && method === 'GET') {
+        return Response.json(
+          companies.find((row) => row.id === companyMatch[1]),
+        )
+      }
       if (companyMatch && method === 'PATCH') {
         const row = companies.find((item) => item.id === companyMatch[1])
         if (row) {
@@ -582,8 +587,8 @@ describe('管理表單未儲存導覽防護', () => {
     },
     {
       label: '公司',
-      path: '/companies',
-      entries: ['/accounts', '/companies', '/roles'],
+      path: '/companies/new',
+      entries: ['/accounts', '/companies/new', '/roles'],
       input: '公司名稱',
       value: '未儲存公司',
     },
@@ -597,7 +602,7 @@ describe('管理表單未儲存導覽防護', () => {
       index: 1,
     })
     await screen.findByRole('heading', {
-      name: item.label === '帳號' ? '帳號' : '公司管理',
+      name: item.label === '帳號' ? '帳號' : '新增公司',
     })
     if (item.label === '帳號') {
       fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
@@ -634,7 +639,7 @@ describe('管理表單未儲存導覽防護', () => {
     managementFetch()
     renderAdmin(item.path)
     await screen.findByRole('heading', {
-      name: item.label === '帳號' ? '帳號' : '公司管理',
+      name: item.label === '帳號' ? '帳號' : '新增公司',
     })
     if (item.label === '帳號') {
       fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
@@ -724,8 +729,10 @@ describe('admin user and company pages', () => {
   it('guards edited company names after actual input', async () => {
     managementFetch()
     renderAdmin('/companies')
-    const companyRow = await screen.findByRole('row', { name: /示範公司/ })
-    fireEvent.click(within(companyRow).getByRole('button', { name: '改名稱' }))
+    fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改公司名稱' }),
+    )
     fireEvent.change(screen.getByLabelText('公司名稱'), {
       target: { value: '更新公司' },
     })
@@ -969,8 +976,10 @@ describe('admin user and company pages', () => {
 
       fireEvent.click(search)
       await waitFor(() => expect(requestCount()).toBe(1))
-      await waitFor(() => expect(search).toBeEnabled())
-      fireEvent.click(search)
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: '搜尋' })).toBeEnabled(),
+      )
+      fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
       await waitFor(() => expect(requestCount()).toBe(2))
     },
   )
@@ -2470,6 +2479,10 @@ describe('admin user and company pages', () => {
           })
           return Response.json(rows.at(-1), { status: 201 })
         }
+        const detail = /^\/api\/v1\/companies\/([^/]+)$/.exec(parsed.pathname)
+        if (detail && method === 'GET') {
+          return Response.json(rows.find((row) => row.id === detail[1]))
+        }
         if (url.includes('/companies/company-1') && init?.method === 'PATCH') {
           const body = JSON.parse(String(init.body)) as { name: string }
           rows[0].name = body.name
@@ -2496,28 +2509,43 @@ describe('admin user and company pages', () => {
     renderAdmin('/companies')
 
     expect(await screen.findByText('示範公司')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('公司名稱'), {
+    fireEvent.click(screen.getByRole('link', { name: '新增公司' }))
+    fireEvent.change(await screen.findByLabelText('公司名稱'), {
       target: { value: '第二家公司' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增公司' }))
-    expect(await screen.findByText('第二家公司')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: '第二家公司' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: '返回公司清單' }))
+    fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
 
-    fireEvent.click(screen.getAllByRole('button', { name: '改名稱' })[0])
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改公司名稱' }),
+    )
     fireEvent.change(screen.getByLabelText('公司名稱'), {
       target: { value: '更新後公司' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '儲存名稱' }))
-    expect(await screen.findByText('更新後公司')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '儲存公司名稱' }))
+    expect(
+      await screen.findByRole('heading', { name: '更新後公司' }),
+    ).toBeInTheDocument()
 
     const deactivate = screen.getAllByRole('button', { name: '停用公司' })[0]
     // 停用的觸發鈕用外框紅，實心紅只留給確認框內的確認鈕。
     expect(deactivate).toHaveClass('btn-danger-outline')
     fireEvent.click(deactivate)
     expect(
-      await screen.findByText('還有 1 個啟用中的帳號'),
+      await screen.findByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(screen.queryByText('還有 1 個啟用中的帳號')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
+    ).not.toBeInTheDocument()
     expect(
       fetchMock.mock.calls.some(
         ([url, init]) =>
@@ -2528,7 +2556,9 @@ describe('admin user and company pages', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: '停用公司' })[0])
     expect(
-      await screen.findByText('還有 1 個啟用中的帳號'),
+      await screen.findByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
     ).toBeInTheDocument()
     await waitFor(() => {
       expect(
@@ -2564,6 +2594,9 @@ describe('admin user and company pages', () => {
         if (parsed.pathname === '/api/v1/companies' && !init?.method) {
           return Response.json({ items: [company], next_cursor: null })
         }
+        if (parsed.pathname === '/api/v1/companies/company-1') {
+          return Response.json(company)
+        }
         if (url.endsWith('/companies/company-1/active-users')) {
           return Response.json({
             count: 1,
@@ -2577,10 +2610,12 @@ describe('admin user and company pages', () => {
         return Response.json({}, { status: 204 })
       }),
     )
-    renderAdmin('/companies')
+    renderAdmin('/companies/company-1')
     fireEvent.click(await screen.findByRole('button', { name: '停用公司' }))
     expect(
-      await screen.findByText('還有 1 個啟用中的帳號'),
+      await screen.findByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '確認停用公司' }))
     await waitFor(() => {
