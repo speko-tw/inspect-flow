@@ -144,7 +144,7 @@ export default function MyProjectsPage({
                   <p>我的角色：{project.role_names.join('、')}</p>
                 )}
                 <Link
-                  className="btn btn-primary"
+                  className="btn btn-emphasis"
                   to={`/projects/${project.id}`}
                 >
                   開啟專案

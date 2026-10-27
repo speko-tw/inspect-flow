@@ -122,7 +122,16 @@ export default function ProjectSectionShell({
       <header className="project-home-header">
         <BackLink to={ROUTES.adminProjects.path}>返回專案清單</BackLink>
         <h1>
-          {project ? `${project.project_code}｜${project.name}` : '專案'}
+          {project ? (
+            <>
+              <span className="project-title-code">
+                {`${project.project_code}｜`}
+              </span>
+              <span className="project-title-name">{project.name}</span>
+            </>
+          ) : (
+            '專案'
+          )}
         </h1>
       </header>
       <button

@@ -2330,7 +2330,7 @@ function PlanningContent({
                               {task.status === 'DRAFT' && canDeleteTask && (
                                 <div className="planning-task-delete">
                                   <button
-                                    className="btn-danger"
+                                    className="btn-danger-outline"
                                     disabled={busy}
                                     onClick={() =>
                                       confirm(

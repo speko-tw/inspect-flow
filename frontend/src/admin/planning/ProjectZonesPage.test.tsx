@@ -367,7 +367,9 @@ describe('project zones section', () => {
       expect(
         within(row).getByRole('button', { name: '重新命名' }),
       ).toHaveFocus()
-      expect(within(row).getByRole('button', { name: '刪除' })).toBeVisible()
+      const remove = within(row).getByRole('button', { name: '刪除' })
+      expect(remove).toBeVisible()
+      expect(remove).toHaveClass('btn-danger-outline')
     })
   })
 

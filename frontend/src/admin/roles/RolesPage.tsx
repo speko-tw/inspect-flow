@@ -449,6 +449,7 @@ export default function RolesPage() {
                     </button>
                     <button
                       aria-label={`刪除角色 ${role.name}`}
+                      className="btn-danger-outline"
                       disabled={saving}
                       onClick={() => void startDelete(role)}
                       type="button"
@@ -530,6 +531,7 @@ export default function RolesPage() {
         <button
           aria-controls="role-editor-panel"
           aria-expanded={roleFormOpen}
+          className={roleFormOpen ? undefined : 'btn-primary'}
           onClick={startCreatingRole}
           type="button"
         >

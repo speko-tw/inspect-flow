@@ -306,10 +306,11 @@ describe('我的專案頁', () => {
     expect(
       await screen.findByRole('heading', { name: '示範工程甲' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: '開啟專案' })).toHaveAttribute(
-      'href',
-      '/projects/project-1',
-    )
+    const open = screen.getByRole('link', { name: '開啟專案' })
+    expect(open).toHaveAttribute('href', '/projects/project-1')
+    // 卡片內的開啟用外框強調，實心主要按鈕留給頁級的新增專案。
+    expect(open).toHaveClass('btn-emphasis')
+    expect(open).not.toHaveClass('btn-primary')
     expect(screen.queryByRole('link', { name: '套用範本' })).toBeNull()
   })
 })

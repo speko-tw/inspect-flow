@@ -368,6 +368,9 @@ export default function CompaniesPage() {
                     改名稱
                   </button>
                   <button
+                    className={
+                      company.is_active ? 'btn-danger-outline' : undefined
+                    }
                     disabled={saving}
                     onClick={() => void toggleActive(company)}
                     type="button"
@@ -459,6 +462,7 @@ export default function CompaniesPage() {
                 {batchBusy ? '正在更新公司…' : '批次啟用公司'}
               </button>
               <button
+                className="btn-danger-outline"
                 disabled={
                   selectedCompanyIds.length === 0 ||
                   companies

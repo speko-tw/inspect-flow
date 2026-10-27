@@ -46,6 +46,22 @@ describe('ListDetailLayout', () => {
       'list',
     )
     expect(screen.queryByRole('region', { name: '任務詳情' })).toBeNull()
+    // 沒有詳情窗格時清單占滿整列，不留 1/2.65 寬加空白（#738 設計審查）。
+    expect(container.firstElementChild).toHaveClass('layout-list-only')
+  })
+
+  it('drops the list-only layout once a detail pane exists', () => {
+    const { container } = render(
+      <ListDetailLayout
+        listTitle="任務清單"
+        detailTitle="任務詳情"
+        list={<p>待辦任務</p>}
+        detail={<p>內容</p>}
+        onBack={vi.fn()}
+      />,
+    )
+
+    expect(container.firstElementChild).not.toHaveClass('layout-list-only')
   })
 })
 

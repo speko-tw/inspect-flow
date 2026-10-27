@@ -9,6 +9,7 @@ import {
 import { Link } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import buttonStyles from '../../components/components.module.css'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import ModulePermissionsPage from './ModulePermissionsPage'
 
@@ -768,7 +769,14 @@ describe('ModulePermissionsPage', () => {
     )
 
     await fillIdentity('lazy.options')
+    // 精靈每一步只有「下一步」是主要按鈕，「上一步」維持次要。
+    expect(screen.getByRole('button', { name: '下一步' })).toHaveClass(
+      buttonStyles.primary,
+    )
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.getByRole('button', { name: '上一步' })).not.toHaveClass(
+      buttonStyles.primary,
+    )
     fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
     await waitFor(() =>

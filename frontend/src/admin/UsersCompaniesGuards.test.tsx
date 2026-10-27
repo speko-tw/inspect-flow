@@ -349,9 +349,10 @@ describe('UsersPage 帳號詳情', () => {
       '停用帳號',
       '重設臨時密碼',
     ])
-    expect(
-      within(actions).getByRole('button', { name: '停用帳號' }),
-    ).toHaveClass('btn-danger')
+    // 觸發鈕只用外框紅，實心紅留給確認框裡的最終確認鈕。
+    const trigger = within(actions).getByRole('button', { name: '停用帳號' })
+    expect(trigger).toHaveClass('btn-danger-outline')
+    expect(trigger).not.toHaveClass('btn-danger')
   })
 
   it('deactivation uses the name and shows a success notice', async () => {
@@ -544,7 +545,9 @@ describe('UsersPage 批次停用帳號（#414）', () => {
     renderUsers({ onSelectUser: vi.fn() })
     await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
-    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    const batchTrigger = screen.getByRole('button', { name: '批次停用帳號' })
+    expect(batchTrigger).toHaveClass('btn-danger-outline')
+    fireEvent.click(batchTrigger)
     fireEvent.click(
       await screen.findByRole('button', { name: '確認停用帳號' }),
     )
@@ -1109,7 +1112,9 @@ describe('UsersPage 操作確認框（#507）', () => {
     const backend = stubBackend()
     renderUsers()
     const row = await screen.findByRole('row', { name: /anna\.deng/ })
-    fireEvent.click(within(row).getByRole('button', { name: '停用' }))
+    const rowTrigger = within(row).getByRole('button', { name: '停用' })
+    expect(rowTrigger).toHaveClass('btn-danger-outline')
+    fireEvent.click(rowTrigger)
     const box = await screen.findByRole('region', { name: '操作確認' })
     expect(within(box).getAllByRole('listitem')).toHaveLength(4)
     const confirm = within(box).getByRole('button', {

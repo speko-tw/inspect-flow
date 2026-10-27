@@ -1057,6 +1057,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
                   重新命名
                 </button>
                 <button
+                  className="btn-danger-outline"
                   onClick={() => {
                     setNotice('')
                     setActionError(
@@ -1147,6 +1148,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
                   重新命名
                 </button>
                 <button
+                  className="btn-danger-outline"
                   onClick={() => {
                     setNotice('')
                     setActionError(
@@ -1233,6 +1235,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
                   編輯查核項目
                 </button>
                 <button
+                  className="btn-danger-outline"
                   onClick={() => {
                     setActionError('')
                     setMode('delete-item')

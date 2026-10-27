@@ -74,18 +74,18 @@
   gap: var(--space-2);
 }
 
-.member-card-actions button,
-.member-card-actions a,
-.member-actions button,
-.member-add-form button,
-.member-edit-view button {
+/* 主要按鈕（加入成員）的 48px 由 .btn-primary 決定，不被這裡蓋回 44px。 */
+.member-card-actions button:not(.btn-primary),
+.member-card-actions a:not(.btn-primary),
+.member-actions button:not(.btn-primary),
+.member-add-form button:not(.btn-primary),
+.member-edit-view button:not(.btn-primary) {
   min-height: 44px;
 }
 
 .member-card-actions a,
 .member-add-link {
   display: inline-flex;
-  min-height: 44px;
   align-items: center;
 }
 
@@ -124,6 +124,8 @@
 .member-actions {
   display: flex;
   flex-wrap: wrap;
+  /* 取消（44px）在主要按鈕（48px）前，置中而非拉伸，兩者各保持自己的高度。 */
+  align-items: center;
   gap: var(--space-2);
 }
 

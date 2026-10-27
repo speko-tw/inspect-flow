@@ -350,7 +350,7 @@ export default function ProjectItemLinks({
                 {canEdit && (
                   <button
                     aria-label={`刪除「${item.title}」`}
-                    className="btn btn-sm"
+                    className="btn btn-sm btn-danger-outline"
                     disabled={busy}
                     onClick={(event) => {
                       deleteTrigger.current = event.currentTarget
@@ -382,7 +382,7 @@ export default function ProjectItemLinks({
                   </p>
                   <div className="project-item-actions">
                     <button
-                      className="btn btn-sm"
+                      className="btn btn-sm btn-danger-outline"
                       disabled={busy}
                       onClick={() => {
                         setActivation({ item, active: false })

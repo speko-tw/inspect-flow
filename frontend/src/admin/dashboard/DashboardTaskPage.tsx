@@ -208,7 +208,7 @@ export default function DashboardTaskPage() {
   }
 
   return (
-    <main className="dashboard-task-page">
+    <section className="dashboard-task-page">
       <nav aria-label="頁面路徑" className="dashboard-task-crumb">
         <Link to={ROUTES.dashboardIndex.path}>全部專案進度</Link>
         <span aria-hidden="true">／</span>
@@ -253,7 +253,7 @@ export default function DashboardTaskPage() {
         listTitle="任務清單"
         onBack={() => navigate(basePath)}
       />
-    </main>
+    </section>
   )
 }
 

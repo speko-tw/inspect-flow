@@ -862,7 +862,7 @@ function AdminProjectsPage() {
                       ) : null}
                       <div className="card-actions">
                         <Link
-                          className="btn btn-primary"
+                          className="btn btn-emphasis"
                           onClick={(event) =>
                             guardProjectLink(event, `/projects/${project.id}`)
                           }

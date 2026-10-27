@@ -2509,7 +2509,10 @@ describe('admin user and company pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '儲存名稱' }))
     expect(await screen.findByText('更新後公司')).toBeInTheDocument()
 
-    fireEvent.click(screen.getAllByRole('button', { name: '停用公司' })[0])
+    const deactivate = screen.getAllByRole('button', { name: '停用公司' })[0]
+    // 停用的觸發鈕用外框紅，實心紅只留給確認框內的確認鈕。
+    expect(deactivate).toHaveClass('btn-danger-outline')
+    fireEvent.click(deactivate)
     expect(
       await screen.findByText('還有 1 個啟用中的帳號'),
     ).toBeInTheDocument()

@@ -35,6 +35,25 @@ export function TemplateLibraryNav({
   selectSystemOnly?: boolean
   appliedItemIds?: ReadonlySet<string>
 }) {
+  // 提示只在畫面上真的有「開啟詳情」可點的項目列時才顯示；樹還收合時
+  // 提示指向不存在的按鈕（360px 範本頁的設計審查發現）。
+  const hasOpenableItemRow =
+    !selectSystemOnly &&
+    categories.some(
+      (category) =>
+        expanded.has(category.id) &&
+        systems.some(
+          (system) =>
+            system.category_id === category.id &&
+            expanded.has(system.id) &&
+            items.some(
+              (item) =>
+                item.system_id === system.id &&
+                Boolean(item.id) &&
+                !appliedItemIds.has(item.id as string),
+            ),
+        ),
+    )
   return (
     <aside className="tpl-nav" aria-label="範本庫導覽">
       <div className="tpl-nav-heading">
@@ -226,7 +245,7 @@ export function TemplateLibraryNav({
           })}
         </ul>
       )}
-      {mobile && (
+      {mobile && hasOpenableItemRow && (
         <p className="tpl-mobile-hint muted-text">點選「開啟詳情」查看內容</p>
       )}
     </aside>
