@@ -84,7 +84,9 @@ describe('trial feedback card actions', () => {
       'flex-wrap': 'wrap',
       gap: 'var(--space-2)',
     })
-    expect(css).toContain('.card-actions > button,')
+    expect(css).toContain('.card-actions > button:not(.btn-primary),')
+    expect(css).toContain('.card-actions > .btn:not(.btn-primary) {')
+    expect(css).not.toContain('.card-actions > button,')
     expect(css).toContain('flex: 0 0 auto;')
     expect(css).toContain('min-height: 44px;')
     expect(declarationsOf('.card-action').width).toBe('fit-content')

@@ -9,6 +9,7 @@ export type RoutePermission =
   | 'admin-or-account-delegate'
   | 'project-list-access'
   | 'dashboard-access'
+  | 'project-create-access'
   | 'template-library-access'
   | 'project-access'
   | 'project-template-access'
@@ -98,6 +99,11 @@ export const ROUTES = {
     title: PAGE_TITLES.projects,
     permission: 'project-list-access',
   },
+  projectNew: {
+    path: '/projects/new',
+    title: PAGE_TITLES.projectNew,
+    permission: 'project-create-access',
+  },
   dashboard: {
     path: '/overview/*',
     title: PAGE_TITLES.overview,
@@ -136,6 +142,11 @@ export const ROUTES = {
   projectHome: {
     path: '/projects/:projectId',
     title: PAGE_TITLES.projectHome,
+    permission: 'project-access',
+  },
+  projectEdit: {
+    path: '/projects/:projectId/edit',
+    title: PAGE_TITLES.projectEdit,
     permission: 'project-access',
   },
   // ADM-R52：成員新增、角色修改與分區新增都有直接網址。
@@ -267,6 +278,8 @@ export function canAccessRoute(
       return Boolean(
         user.is_admin || user.has_project_access || user.can_create_project,
       )
+    case 'project-create-access':
+      return Boolean(user.is_admin || user.can_create_project)
     case 'dashboard-access':
       return user.is_admin || modules.includes('all_project_progress.read')
     case 'template-library-access':
@@ -322,10 +335,12 @@ const ACCESS_ROUTES: Array<{ route: ProductRoute; end: boolean }> = [
   { route: ROUTES.projectItemChange, end: true },
   { route: ROUTES.projectItems, end: true },
   { route: ROUTES.projectMemberEdit, end: true },
+  { route: ROUTES.projectEdit, end: true },
   { route: ROUTES.projectMemberNew, end: true },
   { route: ROUTES.projectZones, end: true },
   { route: ROUTES.projectZoneNew, end: true },
   { route: ROUTES.projectMembers, end: true },
+  { route: ROUTES.projectNew, end: true },
   { route: ROUTES.projectHome, end: true },
   { route: ROUTES.adminProjects, end: true },
   { route: ROUTES.templateSaveFromProject, end: true },
