@@ -56,7 +56,7 @@
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
-| ALG-R01 | `AuditLog`（資料表 `audit_logs`）**必須**具備：`id`（UUID 主鍵）、`created_at`（事件時間，含時區的 UTC）、`created_by`（操作者，外鍵指向 `User`）、`event_type`（事件代碼）、`entity_type`（被記錄的資料種類，例如 `role`）、`entity_id`（被記錄那一筆的 UUID）、`before`、`after`（改前、改後的內容，JSON），以及可空值、有索引的 `project_id`（事件所屬專案 UUID，不設外鍵）。`before`、`after`、`project_id` 允許空值，其餘不可空值，由資料庫約束保證；新增 `project_id` 以後續 migration 落地，既有紀錄不回填 | 必須；應（欄位名） | [04-glossary](../../intents/04-glossary.md)「稽核紀錄」（誰、何時、哪個 entity、做了什麼、前後內容，架構基準 §19）；[KD-07](../../intents/03-decisions-and-stack.md#kd-07)；[PR-08](../../intents/02-principles.md#pr-08)；做法同 DBF-R08、DBF-R11、DBF-R14；`project_id` 為規格設計（非負責人裁定），依 [ALG-Q2](#alg-q2) 專案篩選需求保留事件當下脈絡 | ALG-AC01、ALG-AC18 |
+| ALG-R01 | `AuditLog`（資料表 `audit_logs`）**必須**具備：`id`（UUID 主鍵）、`created_at`（事件時間，含時區的 UTC）、`created_by`（操作者，外鍵指向 `User`）、`event_type`（事件代碼）、`entity_type`（被記錄的資料種類，例如 `role`）、`entity_id`（被記錄那一筆的 UUID）、`before`、`after`（改前、改後的內容，JSON），以及可空值、有索引的 `project_id`（事件所屬專案 UUID，不設外鍵）。`before`、`after`、`project_id` 允許空值，其餘不可空值，由資料庫約束保證；新增 `project_id` 以後續 migration 落地，既有紀錄不回填 | 必須；應（欄位名） | [04-glossary](../../intents/04-glossary.md)「稽核紀錄」（誰、何時、哪個 entity、做了什麼、前後內容，架構基準 §19）；[KD-07](../../intents/03-decisions-and-stack.md#kd-07)；[PR-08](../../intents/02-principles.md#pr-08)；UUID 與時間依 DBF-R08、DBF-R14；稽核事件識別依 KD-07；`project_id` 為規格設計（非負責人裁定），依 [ALG-Q2](#alg-q2) 專案篩選需求保留事件當下脈絡 | ALG-AC01、ALG-AC18 |
 | ALG-R02 | `AuditLog` **不得**有 `updated_at`、`updated_by` | 必須 | 本規格推導：紀錄不會被修改（ALG-R04），PR-08 的「最後修改」不適用，留著欄位會讓人以為可以改 | ALG-AC01 |
 | ALG-R03 | `entity_id` **不得**是外鍵；被記錄的資料刪除後，紀錄**必須**保留 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126)（只能新增、不能刪除）；`Role` 可刪除（DOM-R21），外鍵會擋下刪除或連帶刪掉紀錄 | ALG-AC02 |
 | ALG-R04 | 稽核紀錄只能新增：Service 層只提供新增入口；後端經 SQLAlchemy 對 `audit_logs` 執行的任何修改或刪除（ORM flush、ORM 批次 `update`／`delete`、Core 語句、`text()` 原始 SQL）**必須**被拒絕，資料不變。後端以外直接連資料庫不在本條範圍：後端程式不得直接用資料庫驅動（DBF-R01），資料庫層保護見[計畫](plan.md#考慮過但沒採用的做法) | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定（依 OWASP：只能新增，不能修改或刪除）；不要求資料庫層保護，理由：要寫資料庫專用 SQL（[PR-03](../../intents/02-principles.md#pr-03)） | ALG-AC03 |
@@ -273,7 +273,7 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 
 | 實體 | 共通結構（`database-foundation`） | 本規格定義 | 狀態 |
 |---|---|---|---|
-| `AuditLog` | UUID 主鍵、`created_at`、`created_by`（做法同 DBF-R11、DBF-R14）；不含 `updated_at`、`updated_by` | `event_type`、`entity_type`、`entity_id`、`before`、`after`；新增可空值且有索引的 `project_id`（ALG-R01、ALG-R24），既有資料不回填 | 已凍結；`project_id` 待 #412 migration |
+| `AuditLog` | UUID 主鍵、`created_at`、`created_by`（依 DBF-R14；稽核事件 ID 使用 uuid4，見 KD-07）；不含 `updated_at`、`updated_by` | `event_type`、`entity_type`、`entity_id`、`before`、`after`；新增可空值且有索引的 `project_id`（ALG-R01、ALG-R24），既有資料不回填 | 已凍結；`project_id` 待 #412 migration |
 
 關聯：`User` 1—多 `AuditLog`（`created_by`）。`entity_id` 只存 UUID，不是外鍵（ALG-R03）。
 

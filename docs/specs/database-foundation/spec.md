@@ -168,7 +168,7 @@
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
 
-- 規格澄清（#760）：DBF-R11 固定採用 UUIDv7，與已實作的主要實體 ID 產生方式一致。
+- DBF-R11：UUID 主鍵固定採 UUIDv7，與主要實體 ID 產生方式一致 — [#760](https://github.com/speko-tw/inspect-flow/issues/760)
 
 - DBF-R14、DBF-AC11：依 DBF-Q2 裁定，`created_by`、`updated_by` 改為不得為空值、外鍵指向 `User`，並補上對應的驗收條件 — [#65](https://github.com/speko-tw/inspect-flow/issues/65)
 - DBF-R10、DBF-AC08：依 DBF-Q1 裁定，PostgreSQL 相容性測試的範圍從只跑 migration 擴大為加上 `backend/tests/db/` 的測試，並定下每個 PR 執行、經由 `make check` 在設定 PostgreSQL 連線時執行、版本固定寫在 CI 設定 — [#53](https://github.com/speko-tw/inspect-flow/issues/53)

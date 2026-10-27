@@ -53,7 +53,7 @@
 | FUI-R11 | 現場首頁**必須**呈現今日任務；範本瀏覽與專案套用範本為內業功能，依 `admin-dashboard` ADM-R50 提供。舊 UI 網址不轉址，依 FUI-R14 回 404。個人資料與密碼變更入口由「設定」頁提供，Field 保留登出入口；公司資訊、專案清單及專案管理細節不得留在現場工作台，相關管理入口由 `admin-dashboard` 負責。任務本身所需的專案名稱及地點仍顯示於任務清單與詳情。 | 必須 | [PR-10](../../intents/02-principles.md#pr-10)、[KD-12](../../intents/03-decisions-and-stack.md#kd-12)；路由依 FUI-R14；管理頁整合依賴 `admin-dashboard` |
 | FUI-R12 | 現場任務頁內容**不得**提供範本瀏覽、套用或存為範本入口；全域導覽的「範本」項目依 `admin-dashboard` ADM-R50，只對 Admin 或具 `template.manage` 者顯示。舊 UI 網址不轉址並回 404，API 路徑不變。 | 不得／必須 | 負責人直接指示（#429，原型核可 2026-10-05）；任務頁內容與全域導覽的範本權限依 ADM-R50；舊網址行為依 #705、FUI-R14。 |
 | FUI-R13 | Field 沿用 `admin-dashboard` 的 UI 共通規則（ADM-R37～ADM-R39），不另寫一份：開始查核的確認為一般主色（一般確認）、按鈕為［取消］［確認］、開啟時焦點在「取消」、Esc 等同取消、在原地展開（不使用蓋住整頁的 modal）；Field 清單與詳情的狀態標籤（待開始黃、進行中藍、已完成綠、已取消灰）與管理頁使用同一份對照，同一個狀態詞在兩邊同色 | 必須 | v0.3.1 修正（[#510](https://github.com/speko-tw/inspect-flow/pull/510)、[#511](https://github.com/speko-tw/inspect-flow/pull/511)）已實作並定案的畫面規則，規格同步（[#533](https://github.com/speko-tw/inspect-flow/issues/533)）；規則內容見 ADM-R37～ADM-R39；套用方式為規格設計（非負責人裁定） |
-| FUI-R14 | 本需求**取代** FUI-R01、FUI-R09、FUI-R11、FUI-R12 中與 UI 路徑、PWA 起始網址及舊路徑轉址有關的部分。現場任務路由為 `/tasks` 與 `/tasks/:id`，管理介面路由依 `admin-dashboard` ADM-R50；單一 React application 依路由群組拆包，Field 任務路由不得載入管理模組。Manifest `start_url` 為 `/tasks/`。舊 `/field/...`、`/admin/...` 與 `/change-password` UI 網址一律回 404，不轉址；API 路徑不變。 | 必須 | #705 路由規則；路由群組拆包依待確認的意圖變更 [KD-12](../../intents/03-decisions-and-stack.md#kd-12)；PWA 其餘規則依 FUI-R09 |
+| FUI-R14 | 本需求**取代** FUI-R01、FUI-R09、FUI-R11、FUI-R12 中與 UI 路徑、PWA 起始網址及舊路徑轉址有關的部分。現場任務路由為 `/tasks` 與 `/tasks/:id`，管理介面路由依 `admin-dashboard` ADM-R50；單一 React application 依路由群組拆包，Field 任務路由不得載入管理模組。Manifest `start_url` 為 `/tasks/`。舊 `/field/...`、`/admin/...` 與 `/change-password` UI 網址一律回 404，不轉址；API 路徑不變。 | 必須 | #705 路由規則；路由清單以 ADM-R50 為唯一權威；KD-12 已決定（#760），本需求規定依路由群組拆包；PWA 其餘規則依 FUI-R09 |
 
 ## 資料
 
@@ -113,6 +113,7 @@
 
 ## 變更紀錄
 
+- 規格澄清（#760）：路由清單以 ADM-R50 為唯一權威；[KD-12](../../intents/03-decisions-and-stack.md#kd-12) 已決定，拆包依 FUI-R14。
 - 規格澄清（#705）：FUI-R14 更新 Field 路徑、Manifest `start_url` 及舊 UI 網址 404；撤回 FUI-AC10、AC12、AC13 並保留編號，新增 FUI-AC16。API 路徑不變。
 - 規格澄清（#705）：FUI-R12 明定範本操作不屬於現場任務頁內容；全域導覽的範本項目只對 Admin 或具 `template.manage` 者顯示，單有 `template.use` 不足。
 

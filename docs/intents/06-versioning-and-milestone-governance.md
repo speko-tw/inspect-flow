@@ -86,7 +86,6 @@ Phase N 對應 Milestone 0.N.x；Phase 與能力的對應以本文件路線圖�
 | 0.9.x | Pilot Deployment（試營運部署） | 能在真實試營運環境上線、重啟、備份與還原 | Linux 伺服器、Docker Engine、Docker Compose、反向代理、HTTPS、持久化儲存、資料庫遷移的部署流程、備份、還原、健康檢查、上線驗證測試（Smoke Test）、伺服器規格評估、磁碟監控、部署文件 | — | Phase 9 |
 | 0.10.x | Pilot Hardening & Release Readiness（試營運強化與發布整備） | 把「做完功能」變成「真的能交付」 | 試營運回饋、修 bug、效能調校、資安強化、維運強化、瀏覽器／手機相容性、備份／還原驗證、Report 正確性驗證、部署穩定性、PostgreSQL 查詢次數驗證（#322）、UX 修正、文件補齊、發布整備 | MVP 與試營運採 SQLite（[KD-08](03-decisions-and-stack.md#kd-08)）；PostgreSQL 查詢次數驗證屬試營運強化（#322；維護者依負責人授權決定（2026-10-04，#388），負責人可推翻）；**不應**刻意新增大型產品能力 | Phase 10 |
 
-
 架構基準 §30 的 Phase 編號與本路線圖不同（例如架構基準的 Phase 9 報告交付，在本路線圖是 Phase 8）；引用架構基準章節時以架構基準為準，Phase 與 Milestone 的對應一律以本表為準。
 
 <a id="vg-06"></a>

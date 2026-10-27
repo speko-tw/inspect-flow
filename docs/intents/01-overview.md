@@ -45,7 +45,7 @@ MVP 核心是本公司人員自己的查核流程（內業派工、現場查核�
 |---|---|
 | 系統管理者（Admin，人員身上的開關，不是角色） | 管理系統設定、人員、公司、角色定義、模組權限與委派；可直接查看、修改所有專案（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-24](03-decisions-and-stack.md#kd-24)）。 |
 | 專案角色（可自訂，掛在專案成員上） | 依指派的角色決定在該專案能做什麼，例如建立計畫與任務、派出任務、指派現場工程師、監看進度，或唯讀存取；一個人在同一專案可同時擁有多個角色，權限加總（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-26](03-decisions-and-stack.md#kd-26)、[KD-27](03-decisions-and-stack.md#kd-27)）。 |
-| 範本模組管理權限（模組權限「管理範本庫」） | 範本模組的模組權限，逐人勾選，由 Admin 或被委派管理範本模組的人授予；具此權限的人可維護範本庫，包含跨專案瀏覽查核項目並存成範本，但不因此取得任何專案內的查核權限；Admin 擁有全部權限。範本建議加入與審核流程排入 0.6.x（#314）（依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），沿用 #313 的範本管理行為；見 [KD-49](03-decisions-and-stack.md#kd-49)、[KD-69](03-decisions-and-stack.md#kd-69)、[權限表](07-permission-model.md#permission-table)）。 |
+| 範本模組管理權限（模組權限「管理範本庫」） | 範本模組的模組權限，逐人勾選，由 Admin 或被委派管理範本模組的人授予；具此權限的人可維護範本庫，包含跨專案瀏覽查核項目並存成範本，但不因此取得任何專案內的查核權限；Admin 擁有全部權限。範本建議與審核流程排入 0.6.x（#314）（依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），沿用 #313 的範本管理行為；見 [KD-49](03-decisions-and-stack.md#kd-49)、[KD-69](03-decisions-and-stack.md#kd-69)、[權限表](07-permission-model.md#permission-table)）。 |
 | 現場工程師（Inspector / Field Engineer） | 查看今日指派任務，依要求拍照、填寫必要說明，並將任務標記完成；屬於現場查核這類專案角色的典型職責（依據：架構基準 §6.1）。 |
 
 系統採兩層權限模型：第 1 層是人員模組的逐人模組權限（專案、查核、範本等模組各自的「可使用」與管理類權限，範圍是全公司），第 2 層是專案角色（只存在專案內，指派給某人在某專案，是專案內動作權限的套餐）；系統不設全公司角色。專案外的事只看模組權限，專案內的事兩層都要通過，Admin 兩層都放行；模組權限不會自動給專案內的查核權限，人員必須先是專案成員並被指派專案角色。模組權限可由 Admin 或被委派管理該模組的人授予。模組邊界單向：專案模組做權限判斷時只向人員模組問「他是誰、帳號有效嗎、是不是系統管理者、有沒有模組權限 X」。完整權限表見 [07-permission-model.md](07-permission-model.md#permission-table)，決策與裁定見 [KD-69](03-decisions-and-stack.md#kd-69)。
@@ -255,13 +255,13 @@ flowchart TB
   Item --> Point["查核項次"]
   Point --> Requirement["Evidence Requirement（證據需求）"]
   Template -.->|套用即複製，記錄來源名稱與時間| Project
-  Requirement -.->|任務派出時固定為| Snapshot
+  ProjectRequirement -.->|建立任務時產生；派出後固定| Snapshot
 ```
 
-依據：架構基準 §12；範本不版本化、套用即複製依負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02），見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)
+依據：架構基準 §12；任務快照時間點依負責人裁定（#760，2026-10-28）；範本不版本化、套用即複製依負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02），見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)
 
 - 範本庫獨立於專案；範本修改時直接覆蓋，沒有 `Template Version`。專案套用範本時複製成自己的查核項目，並記錄來源範本名稱與套用時間，之後範本改動不影響已套用的專案。
-- `Inspection Task` 建立時把當時的 `Evidence Requirement` 複製成自己的 `Task Requirement Snapshot`（見 [PR-04](02-principles.md#pr-04)）；專案查核項目修改後，內業選擇是否讓現場重新查核，選「要」則只作廢被修改的查核項目、舊紀錄整份保留，同一任務其他項目保留、任務退回進行中補查（見 [KD-55](03-decisions-and-stack.md#kd-55)）。
+- 建立 `Inspection Task` 時依專案查核項目產生自己的 `Task Requirement Snapshot`；草稿任務可隨來源項目同步或重建，派出後固定（見 [PR-04](02-principles.md#pr-04)）；專案查核項目修改後，內業選擇是否讓現場重新查核，選「要」則只作廢被修改的查核項目、舊紀錄整份保留，同一任務其他項目保留、任務退回進行中補查（見 [KD-55](03-decisions-and-stack.md#kd-55)）。
 - 完成度檢查與報告都應讀 `Task` 自己的 Snapshot，不直接查目前的 `Template Item` / `Evidence Requirement`。
 - `Evidence` 隸屬於某個 `Task` 與其 `Task Requirement Snapshot`，可再往上追溯到 `Plan` 與 `Project`（見 [PR-07](02-principles.md#pr-07)）。
 
