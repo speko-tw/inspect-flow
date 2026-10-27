@@ -730,7 +730,9 @@ describe('admin user and company pages', () => {
     managementFetch()
     renderAdmin('/companies')
     fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
-    fireEvent.click(await screen.findByRole('button', { name: '改名稱' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改公司名稱' }),
+    )
     fireEvent.change(screen.getByLabelText('公司名稱'), {
       target: { value: '更新公司' },
     })
@@ -2518,11 +2520,13 @@ describe('admin user and company pages', () => {
     fireEvent.click(screen.getByRole('link', { name: '返回公司清單' }))
     fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
 
-    fireEvent.click(await screen.findByRole('button', { name: '改名稱' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改公司名稱' }),
+    )
     fireEvent.change(screen.getByLabelText('公司名稱'), {
       target: { value: '更新後公司' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '儲存名稱' }))
+    fireEvent.click(screen.getByRole('button', { name: '儲存公司名稱' }))
     expect(
       await screen.findByRole('heading', { name: '更新後公司' }),
     ).toBeInTheDocument()
@@ -2532,10 +2536,16 @@ describe('admin user and company pages', () => {
     expect(deactivate).toHaveClass('btn-danger-outline')
     fireEvent.click(deactivate)
     expect(
-      await screen.findByText('還有 1 個啟用中的帳號'),
+      await screen.findByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(screen.queryByText('還有 1 個啟用中的帳號')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
+    ).not.toBeInTheDocument()
     expect(
       fetchMock.mock.calls.some(
         ([url, init]) =>
@@ -2546,7 +2556,9 @@ describe('admin user and company pages', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: '停用公司' })[0])
     expect(
-      await screen.findByText('還有 1 個啟用中的帳號'),
+      await screen.findByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
     ).toBeInTheDocument()
     await waitFor(() => {
       expect(
@@ -2601,7 +2613,9 @@ describe('admin user and company pages', () => {
     renderAdmin('/companies/company-1')
     fireEvent.click(await screen.findByRole('button', { name: '停用公司' }))
     expect(
-      await screen.findByText('還有 1 個啟用中的帳號'),
+      await screen.findByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '確認停用公司' }))
     await waitFor(() => {

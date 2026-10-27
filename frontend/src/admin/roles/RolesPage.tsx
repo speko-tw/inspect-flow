@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useMatch, useNavigate } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
+import { InfoRow } from '../../components/InfoRow'
 import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { isForbidden, isNotFound } from '../../http'
 import { isResourceId } from '../../resourceId'
@@ -60,10 +61,15 @@ function sameCodes(left: string[], right: string[]): boolean {
 
 type RoleMode = 'list' | 'detail' | 'new' | 'edit'
 
-/** ADM-R55：角色清單、唯讀詳情與表單各有網址，無效路徑不打 API。 */
+/**
+ * 專案角色管理：角色清單、新增與修改、刪除，以及新專案預設角色
+ * （ADM-R46、ADM-R55；後端規則見 DOM-R55、DOM-R64）。
+ *
+ * 修改與刪除前都會向後端重新取得影響範圍，確認框顯示的數字不採用
+ * 清單上可能已過時的值（PR-18）。
+ */
 export default function RolesPage() {
   const { user } = useCurrentUser()
-  const location = useLocation()
   const list = useMatch('/roles')
   const creating = useMatch('/roles/new')
   const detail = useMatch('/roles/:roleId')
@@ -79,37 +85,34 @@ export default function RolesPage() {
     mode === 'new' || mode === 'list'
       ? ''
       : ((edit ?? detail)?.params.roleId ?? '')
+  // 保留字與 API 靜態端點同形，不能當作角色 ID（ADM-R55）。
   if (
     (!list && !creating && !detail && !edit) ||
     (roleId &&
       (!isResourceId(roleId) ||
-        ['new', 'creator-role', 'permission-codes'].includes(roleId)))
+        ['new', 'creator-role', 'permission-codes'].includes(
+          roleId.toLowerCase(),
+        )))
   ) {
     return <RouteNotFound />
   }
   if (!user.is_admin) return <AccessDeniedPage />
   // 換資源或表單就重建草稿；flash state 的 replace 不會重建同一頁。
-  return (
-    <RoleScreen
-      key={`${mode}:${roleId}:${location.search}`}
-      mode={mode}
-      roleId={roleId}
-    />
-  )
+  return <RoleScreen key={`${mode}:${roleId}`} mode={mode} roleId={roleId} />
 }
 
 function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const listPath = `/roles${location.search}`
+  const listPath = '/roles'
   const rolePath = `/roles/${encodeURIComponent(roleId)}`
-  const editPath = `${rolePath}/edit${location.search}`
-  const detailPath = (id: string) =>
-    `/roles/${encodeURIComponent(id)}${location.search}`
+  const editPath = `${rolePath}/edit`
+  const detailPath = (id: string) => `/roles/${encodeURIComponent(id)}`
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<PermissionCode[]>([])
   const [name, setName] = useState('')
   const [selected, setSelected] = useState<string[]>([])
+  // DOM-R70、DOM-R72：兩個旗標只有 Admin 能改；後端仍覆核角色資格。
   const [isAssignable, setIsAssignable] = useState(false)
   const [isExternalAllowed, setIsExternalAllowed] = useState(false)
   const [creatorRoleId, setCreatorRoleId] = useState('')
@@ -148,8 +151,10 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
   const assignableRef = useRef<HTMLInputElement>(null)
   const externalRef = useRef<HTMLInputElement>(null)
   const guard = useSubmitGuard()
-  const role = roles.find((item) => item.id === roleId) ?? null
+  // 單筆 API 已解析 ID；UUID 大小寫不影響回應的角色身分。
+  const role = mode === 'list' ? null : (roles[0] ?? null)
   const editing = mode === 'edit' ? role : null
+  // 等待確認修改時鎖住表單，避免草稿與待送出的內容不同。
   const locked = pending !== null
   const descriptions = new Map(permissions.map((p) => [p.code, p.description]))
   const otherPermissions = permissions.filter(
@@ -158,6 +163,7 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
         group.prefixes.some((prefix) => item.code.startsWith(prefix)),
       ),
   )
+  // 已不在登記表的代碼仍列出，讓管理者能明確移除。
   const unregistered = (editing?.permission_codes ?? []).filter(
     (code) => !descriptions.has(code),
   )
@@ -172,9 +178,13 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
     Boolean(dirty && !forbidden && !notFound),
   )
 
+  const consumedNoticeKey = useRef<string | null>(null)
   useEffect(() => {
     const state = location.state as Record<string, unknown> | null
     if (!state || !Object.hasOwn(state, 'managementNotice')) return
+    // 同一歷史紀錄只清理一次，避免重繪時的 replace 蓋掉使用者返回清單。
+    if (consumedNoticeKey.current === location.key) return
+    consumedNoticeKey.current = location.key
     const rest = { ...state }
     delete rest.managementNotice
     leaveGuard.allowNavigation(() =>
@@ -184,6 +194,7 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
       }),
     )
   }, [
+    location.key,
     location.state,
     location.pathname,
     location.search,
@@ -194,37 +205,45 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
 
   useEffect(() => {
     let active = true
-    const rows =
-      mode === 'list'
-        ? listRoles()
-        : roleId
-          ? getRole(roleId).then((item) => [item])
-          : Promise.resolve<Role[]>([])
-    void Promise.all([rows, listPermissionCodes(), getCreatorRole()])
-      .then(
-        ([items, codes, creator]) => {
-          if (!active) return
-          setRoles(items)
-          setPermissions(codes)
-          setCreatorRoleId(creator.role_id)
-          if (mode === 'edit' && !initialized.current && items[0]) {
-            initialized.current = true
-            setName(items[0].name)
-            setSelected(items[0].permission_codes)
-            setIsAssignable(Boolean(items[0].is_assignable))
-            setIsExternalAllowed(Boolean(items[0].is_external_allowed))
-          }
-        },
-        (caught: unknown) => {
-          if (!active) return
-          setForbidden(isForbidden(caught))
-          setNotFound(Boolean(roleId && isNotFound(caught)))
-          setError(roleErrorMessage(caught))
-        },
-      )
-      .finally(() => {
+    // 只有角色本身的 404／422 代表角色不存在；輔助 API 失敗可重試。
+    const load = async () => {
+      const rows =
+        mode === 'list'
+          ? listRoles()
+          : roleId
+            ? getRole(roleId)
+                .then((item) => [item])
+                .catch((caught: unknown) => {
+                  if (active) setNotFound(isNotFound(caught))
+                  throw caught
+                })
+            : Promise.resolve<Role[]>([])
+      try {
+        const [items, codes, creator] = await Promise.all([
+          rows,
+          listPermissionCodes(),
+          mode === 'new' ? Promise.resolve(null) : getCreatorRole(),
+        ])
+        if (!active) return
+        setRoles(items)
+        setPermissions(codes)
+        setCreatorRoleId(creator?.role_id ?? '')
+        if (mode === 'edit' && !initialized.current && items[0]) {
+          initialized.current = true
+          setName(items[0].name)
+          setSelected(items[0].permission_codes)
+          setIsAssignable(Boolean(items[0].is_assignable))
+          setIsExternalAllowed(Boolean(items[0].is_external_allowed))
+        }
+      } catch (caught) {
+        if (!active) return
+        setForbidden(isForbidden(caught))
+        setError(roleErrorMessage(caught))
+      } finally {
         if (active) setLoading(false)
-      })
+      }
+    }
+    void load()
     return () => {
       active = false
     }
@@ -268,6 +287,7 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
         ? (caught.fields ?? []).map((field) => field.path)
         : []
     const code = caught instanceof ManagementApiError ? caught.code : ''
+    // DOM-R64、DOM-R70、DOM-R72：領域錯誤即使無 fields 也定位欄位。
     const field =
       code === 'role.name_conflict' || paths.includes('/name')
         ? 'name'
@@ -315,6 +335,7 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
         saved(created.id, `已建立角色「${created.name}」。`)
         return
       }
+      // 後端拒絕沒有實際變更的更新，所以只送有變的欄位。
       const changes: RoleInput = {}
       if (name.trim() !== editing.name) changes.name = name.trim()
       if (!sameCodes(selected, editing.permission_codes)) {
@@ -362,6 +383,7 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
   }
 
   async function startDelete() {
+    // DOM-R64：目前的新專案預設角色不可刪，須先改設另一個。
     if (!role || role.id === creatorRoleId || !guard.enter()) return
     setSaving(true)
     setActionError('')
@@ -384,6 +406,7 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
     setActionError('')
     try {
       await deleteRole(deleting.id)
+      setDeleting(null)
       leaveGuard.allowNavigation(() =>
         navigate(listPath, {
           replace: true,
@@ -395,7 +418,6 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
       else setActionError(roleErrorMessage(caught))
     } finally {
       guard.leave()
-      setDeleting(null)
       setSaving(false)
     }
   }
@@ -435,9 +457,7 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
   if (notFound)
     return (
       <section>
-        <BackLink replace to={listPath}>
-          返回角色清單
-        </BackLink>
+        <BackLink to={listPath}>返回角色清單</BackLink>
         <h1>找不到這個角色</h1>
       </section>
     )
@@ -445,7 +465,10 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
     <section aria-labelledby="roles-heading" className="roles-page">
       <UnsavedLeaveBox guard={leaveGuard} />
       {mode !== 'list' && (
-        <BackLink replace to={mode === 'edit' ? detailPath(roleId) : listPath}>
+        <BackLink
+          replace={mode === 'edit' || mode === 'new'}
+          to={mode === 'edit' ? detailPath(roleId) : listPath}
+        >
           {mode === 'edit' ? '返回角色詳情' : '返回角色清單'}
         </BackLink>
       )}
@@ -455,8 +478,14 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
           : mode === 'new'
             ? '新增角色'
             : mode === 'edit'
-              ? `修改角色｜${role?.name ?? '載入中…'}`
-              : (role?.name ?? '載入中…')}
+              ? loading
+                ? '載入中…'
+                : role
+                  ? `修改角色「${role.name}」`
+                  : '修改角色'
+              : loading
+                ? '載入中…'
+                : (role?.name ?? '角色詳情')}
       </h1>
       {!loading && notice && <Notice>{notice}</Notice>}
       {loading && <p>載入中…</p>}
@@ -479,11 +508,7 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
       )}
       {mode === 'list' && (
         <>
-          <Link
-            replace
-            className="btn btn-primary"
-            to={`/roles/new${location.search}`}
-          >
+          <Link className="btn btn-primary" to="/roles/new">
             新增角色
           </Link>
           {!loading && !error && !roles.length && <p>目前沒有角色。</p>}
@@ -502,9 +527,7 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
                   {roles.map((item) => (
                     <tr key={item.id}>
                       <th scope="row">
-                        <Link replace to={detailPath(item.id)}>
-                          {item.name}
-                        </Link>
+                        <Link to={detailPath(item.id)}>{item.name}</Link>
                       </th>
                       <td data-label="持有人數">
                         {item.user_count} 個帳號
@@ -513,16 +536,14 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
                       </td>
                       <td data-label="權限">
                         <RolePermissionSummary
-                          buttonClassName="btn btn-emphasis"
+                          buttonClassName="btn"
                           codes={item.permission_codes}
                           descriptions={descriptions}
-                          emptyText="（無）"
                           name={item.name}
                         />
                       </td>
                       <td data-label="操作">
                         <Link
-                          replace
                           className="btn btn-emphasis"
                           aria-label={`查看角色 ${item.name}`}
                           to={detailPath(item.id)}
@@ -587,33 +608,55 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
       )}
       {mode === 'detail' && !loading && role && (
         <>
-          <dl>
-            <dt>持有人數</dt>
-            <dd>
-              {role.user_count} 個帳號
-              {role.inactive_user_count > 0 &&
-                `（含 ${role.inactive_user_count} 個已停用）`}
-            </dd>
-            <dt>涉及專案</dt>
-            <dd>{role.project_count} 個專案</dd>
-            <dt>非管理者可指派</dt>
-            <dd>{role.is_assignable ? '是' : '否'}</dd>
-            <dt>外部協作帳號可用</dt>
-            <dd>{role.is_external_allowed ? '是' : '否'}</dd>
-          </dl>
-          <RolePermissionSummary
-            buttonClassName="btn btn-emphasis"
-            codes={role.permission_codes}
-            descriptions={descriptions}
-            emptyText="（無）"
-            name={role.name}
+          <InfoRow
+            label="持有人數"
+            value={
+              `${role.user_count} 個帳號` +
+              (role.inactive_user_count > 0
+                ? `（含 ${role.inactive_user_count} 個已停用）`
+                : '')
+            }
           />
+          <InfoRow label="涉及專案" value={`${role.project_count} 個專案`} />
+          <InfoRow
+            label="非管理者可指派"
+            value={role.is_assignable ? '是' : '否'}
+          />
+          <InfoRow
+            label="外部協作帳號可用"
+            value={role.is_external_allowed ? '是' : '否'}
+          />
+          <h2>權限（共 {role.permission_codes.length} 項）</h2>
+          {role.permission_codes.length === 0 && <p>尚未設定任何權限</p>}
+          {[...PERMISSION_GROUPS, { title: '其他', prefixes: [] }].map(
+            (group) => {
+              const codes = role.permission_codes.filter((code) =>
+                group.prefixes.length
+                  ? group.prefixes.some((prefix) => code.startsWith(prefix))
+                  : !PERMISSION_GROUPS.some((known) =>
+                      known.prefixes.some((prefix) => code.startsWith(prefix)),
+                    ),
+              )
+              return (
+                codes.length > 0 && (
+                  <section key={group.title} aria-label={group.title}>
+                    <h3>{group.title}</h3>
+                    <ul>
+                      {codes.map((code) => (
+                        <li key={code}>{descriptions.get(code) ?? code}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )
+              )
+            },
+          )}
           <section aria-label="角色操作">
             <div className="named-row-actions">
-              <Link replace className="btn btn-primary" to={editPath}>
+              <Link className="btn btn-primary" to={editPath}>
                 修改角色
               </Link>
-              {roleId !== creatorRoleId && (
+              {role.id !== creatorRoleId && (
                 <button
                   className="btn-danger-outline"
                   disabled={saving}
@@ -624,8 +667,12 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
                 </button>
               )}
             </div>
-            {roleId === creatorRoleId && (
-              <p>這是建立者角色，請先改設另一個建立者角色。</p>
+            {role.id === creatorRoleId && (
+              <p>
+                這個角色是「新專案預設角色」，不能刪除。要刪除，請先回
+                <Link to={listPath}>角色清單</Link>
+                ，用「設定新專案預設角色」改選別的角色。
+              </p>
             )}
             {actionError && <Notice variant="error">{actionError}</Notice>}
             {deleting && (
@@ -659,7 +706,9 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
             aria-labelledby="roles-heading"
           >
             <label>
-              角色名稱 <RequiredMark />
+              <span className="required-label">
+                角色名稱 <RequiredMark />
+              </span>
               <input
                 ref={nameRef}
                 disabled={locked}
@@ -685,7 +734,6 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
               className="roles-permissions"
               ref={permissionsRef}
               tabIndex={-1}
-              aria-invalid={fieldError?.field === 'permissions'}
               aria-describedby={
                 fieldError?.field === 'permissions'
                   ? 'role-permissions-error'
@@ -693,6 +741,14 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
               }
             >
               <legend>權限</legend>
+              {editing?.id === creatorRoleId && (
+                <p className="field-hint">
+                  這是新專案預設角色，必須保留「檢視專案」「調整專案」「管理專案成員與其角色」三項權限。
+                </p>
+              )}
+              <p className="field-hint">
+                勾選的功能，持有這個角色的人才能使用；儲存後，現有持有人的權限會立即改變。
+              </p>
               {permissions.length === 0 && unregistered.length === 0 ? (
                 <p>{loading ? '載入中…' : NO_PERMISSIONS_TEXT}</p>
               ) : (
@@ -798,6 +854,9 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
                   />
                   非管理者可指派
                 </label>
+                <p className="field-hint">
+                  勾選後，具「管理專案成員與其角色」權限的專案成員也能把這個角色指派給別人；不勾選就只有系統管理者能指派。
+                </p>
                 <label>
                   <input
                     ref={externalRef}
@@ -815,7 +874,15 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
                   />
                   外部協作帳號可用
                 </label>
+                <p className="field-hint">
+                  勾選後，外部協作人員（業主代表、監造等）可以被指派這個角色；角色內的權限必須全部開放給外部人員。
+                </p>
               </fieldset>
+            )}
+            {mode === 'new' && (
+              <p className="field-hint">
+                建立後，可以在「修改角色」設定指派範圍。
+              </p>
             )}
             {(fieldError?.field === 'assignable' ||
               fieldError?.field === 'external') && (

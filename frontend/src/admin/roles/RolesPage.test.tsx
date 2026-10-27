@@ -374,7 +374,7 @@ describe('角色表單未儲存導覽防護', () => {
     fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText('角色名稱')).toHaveValue('修改中的檢視者')
     expect(
-      screen.getByRole('heading', { name: '修改角色｜檢視者' }),
+      screen.getByRole('heading', { name: '修改角色「檢視者」' }),
     ).toBeVisible()
   })
 

@@ -180,6 +180,8 @@ function backend() {
   vi.stubGlobal('fetch', fetcher)
   return {
     fetcher,
+    roles,
+    companies,
     fail: (value: typeof failure) => {
       failure = value
     },
@@ -200,6 +202,8 @@ describe('ADM-AC55 角色與公司網址', () => {
   })
   it.each([
     '/roles/a%2Fb',
+    '/roles/NEW/edit',
+    '/roles/new/edit',
     '/roles/creator-role',
     '/roles/permission-codes',
     '/roles/r1/unknown',
@@ -221,7 +225,7 @@ describe('ADM-AC55 角色與公司網址', () => {
       path === '/roles/new'
         ? '新增角色'
         : path.endsWith('/edit')
-          ? '修改角色｜角色1'
+          ? '修改角色「角色1」'
           : path === '/roles/r1'
             ? '角色1'
             : path === '/companies/new'
@@ -443,17 +447,38 @@ describe('ADM-AC55 表單狀態隔離', () => {
     )
     const field = screen.getByRole(role, { name })
     await waitFor(() => expect(field).toHaveFocus())
-    expect(field).toHaveAttribute('aria-invalid', 'true')
+    if (role === 'group') {
+      expect(field).toHaveAttribute(
+        'aria-describedby',
+        'role-permissions-error',
+      )
+      expect(field).not.toHaveAttribute('aria-invalid')
+    } else expect(field).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByLabelText('角色名稱')).toHaveValue('保留名稱')
   })
 })
 
 describe('ADM-AC55 領域保護與批次確認', () => {
   it.each([
-    ['role.creator_role_requires_permissions', '權限', 'group'],
-    ['role.external_allowed_invalid', '外部協作帳號可用', 'checkbox'],
-    ['role.external_in_use', '外部協作帳號可用', 'checkbox'],
-  ])('%s 無 fields 時仍定位到對應欄位', async (code, name, role) => {
+    [
+      'role.creator_role_requires_permissions',
+      '權限',
+      'group',
+      '這是新專案預設角色，必須保留「檢視專案」「調整專案」「管理專案成員與其角色」三項權限。',
+    ],
+    [
+      'role.external_allowed_invalid',
+      '外部協作帳號可用',
+      'checkbox',
+      '這個角色含有外部協作人員不能使用的權限，或它是新專案預設角色，不能設成「外部協作帳號可用」。',
+    ],
+    [
+      'role.external_in_use',
+      '外部協作帳號可用',
+      'checkbox',
+      '目前有外部協作人員持有這個角色，不能取消「外部協作帳號可用」。請先移除他們的這個角色。',
+    ],
+  ])('%s 無 fields 時仍定位到對應欄位', async (code, name, role, message) => {
     const api = backend()
     api.fail({ path: '/roles/r1', method: 'PATCH', status: 422, code })
     mount('/roles/r1/edit')
@@ -467,6 +492,7 @@ describe('ADM-AC55 領域保護與批次確認', () => {
       }),
     )
     await waitFor(() => expect(screen.getByRole(role, { name })).toHaveFocus())
+    expect(screen.getByRole('alert')).toHaveTextContent(message)
     expect(screen.getByLabelText('角色名稱')).toHaveValue('保留草稿')
   })
   it('批次啟用公司須確認，取消不送出，確認只送一次', async () => {
@@ -478,7 +504,8 @@ describe('ADM-AC55 領域保護與批次確認', () => {
       }),
     )
     const activate = screen.getByRole('button', { name: '批次啟用公司' })
-    expect(activate).toHaveClass('btn-danger-outline')
+    expect(activate).toHaveClass('btn')
+    expect(activate).not.toHaveClass('btn-danger-outline')
     fireEvent.click(activate)
     const confirm = await screen.findByRole('button', {
       name: '確認批次啟用公司',
@@ -517,7 +544,9 @@ describe('ADM-AC55 返回與資源消失', () => {
   it('公司改名切換資源不帶出草稿', async () => {
     backend()
     mount('/companies/c1?q=甲')
-    fireEvent.click(await screen.findByRole('button', { name: '改名稱' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改公司名稱' }),
+    )
     fireEvent.change(screen.getByRole('textbox', { name: '公司名稱' }), {
       target: { value: '尚未儲存' },
     })
@@ -543,3 +572,146 @@ it('新增公司取消後返回保留搜尋的清單', async () => {
     screen.queryByRole('textbox', { name: '公司名稱' }),
   ).not.toBeInTheDocument()
 })
+
+it.each(['roles', 'companies'])('清單到 %s 詳情保留瀏覽歷史', async (kind) => {
+  backend()
+  mount(`/${kind}`)
+  fireEvent.click(
+    await screen.findByRole('link', {
+      name: kind === 'roles' ? '查看角色 角色1' : '查看公司 甲公司',
+    }),
+  )
+  await screen.findByRole('heading', {
+    name: kind === 'roles' ? '角色1' : '甲公司',
+    level: 1,
+  })
+  fireEvent.click(screen.getByRole('button', { name: '測試上一頁' }))
+  await waitFor(() =>
+    expect(screen.getByLabelText('目前網址').textContent).toBe(`/${kind}`),
+  )
+})
+
+it('角色清單強調查看，完整權限使用一般次按鈕', async () => {
+  backend()
+  mount('/roles')
+  expect(
+    await screen.findByRole('link', { name: '查看角色 角色1' }),
+  ).toHaveClass('btn-emphasis')
+  const summary = screen.getByRole('button', { name: '「角色1」完整權限' })
+  expect(summary).toHaveClass('btn')
+  expect(summary).not.toHaveClass('btn-emphasis')
+})
+
+it('大寫 UUID 單筆回應可以正常顯示', async () => {
+  const api = backend()
+  const id = 'abcdefab-1234-4234-8234-abcdefabcdef'
+  api.roles[0].id = id
+  const original = api.fetcher.getMockImplementation()!
+  api.fetcher.mockImplementation((input, init) =>
+    original(String(input).replace(id.toUpperCase(), id), init),
+  )
+  mount(`/roles/${id.toUpperCase()}`)
+  expect(
+    await screen.findByRole('heading', { name: '角色1', level: 1 }),
+  ).toBeVisible()
+})
+
+it.each(['/roles/permission-codes', '/roles/creator-role'])(
+  '輔助 API %s 失敗不誤判角色不存在',
+  async (path) => {
+    const api = backend()
+    api.fail({ path, method: 'GET', status: 404 })
+    mount('/roles/r1/edit')
+    expect(
+      await screen.findByRole('button', { name: '重新載入' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: '修改角色', level: 1 }),
+    ).toBeVisible()
+    expect(screen.queryByText('找不到這個角色')).not.toBeInTheDocument()
+  },
+)
+
+it('新增角色只讀權限登記表，不讀預設角色', async () => {
+  const api = backend()
+  mount('/roles/new')
+  await screen.findByLabelText('角色名稱')
+  expect(api.fetcher.mock.calls.map(([input]) => String(input))).toEqual([
+    '/api/v1/roles/permission-codes',
+  ])
+})
+
+it('公司改名鎖住狀態按鈕，取消與儲存都回復焦點', async () => {
+  backend()
+  mount('/companies/c1')
+  const rename = await screen.findByRole('button', { name: '修改公司名稱' })
+  fireEvent.click(rename)
+  expect(screen.getByRole('button', { name: '停用公司' })).toBeDisabled()
+  expect(rename).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: '取消' }))
+  await waitFor(() => expect(rename).toHaveFocus())
+  fireEvent.click(rename)
+  fireEvent.change(screen.getByLabelText('公司名稱'), {
+    target: { value: '新公司' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '儲存公司名稱' }))
+  await screen.findByText('已將公司名稱更新為「新公司」。')
+  await waitFor(() => expect(rename).toHaveFocus())
+})
+
+it('公司狀態以操作時最新回應決定，避免舊畫面反向操作', async () => {
+  const api = backend()
+  mount('/companies/c1')
+  const deactivate = await screen.findByRole('button', { name: '停用公司' })
+  api.companies[0].is_active = false
+  fireEvent.click(deactivate)
+  expect(
+    await screen.findByRole('button', { name: '確認啟用公司' }),
+  ).toBeVisible()
+  expect(
+    api.fetcher.mock.calls.some(([url]) =>
+      String(url).endsWith('/active-users'),
+    ),
+  ).toBe(false)
+})
+
+it('刪除失敗保留確認框及錯誤，可以重試', async () => {
+  const api = backend()
+  api.fail({ path: '/roles/r1', method: 'DELETE', status: 500 })
+  mount('/roles/r1')
+  fireEvent.click(await screen.findByRole('button', { name: '刪除角色' }))
+  fireEvent.click(await screen.findByRole('button', { name: '確認刪除角色' }))
+  await screen.findByRole('alert')
+  expect(screen.getByRole('button', { name: '確認刪除角色' })).toBeVisible()
+})
+
+it.each(['roles', 'companies'])(
+  '%s 建立成功後立即返回清單，不被訊息清理拉回詳情',
+  async (kind) => {
+    backend()
+    mount(`/${kind}/new`)
+    fireEvent.change(
+      await screen.findByLabelText(kind === 'roles' ? '角色名稱' : '公司名稱'),
+      { target: { value: '立即返回驗收' } },
+    )
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: kind === 'roles' ? '建立角色' : '新增公司',
+      }),
+    )
+    await screen.findByRole('heading', { name: '立即返回驗收', level: 1 })
+    // 不等路由 state 清空；使用者看到完成頁就可以直接返回。
+    fireEvent.click(
+      screen.getByRole('link', {
+        name: kind === 'roles' ? '返回角色清單' : '返回公司清單',
+      }),
+    )
+    expect(
+      await screen.findByRole('heading', {
+        name: kind === 'roles' ? '專案角色' : '公司管理',
+        level: 1,
+      }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('目前網址').textContent).toBe(`/${kind}`)
+  },
+)

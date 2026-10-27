@@ -598,4 +598,4 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 
 - 範圍變更（負責人指示，#717）：新增來源項目 `is_active` 欄位 DOM-R79、DOM-AC78；細節為規格設計（非負責人裁定）。來源：[負責人指示（#717）](https://github.com/speko-tw/inspect-flow/issues/717)；[實作細節](https://github.com/speko-tw/inspect-flow/issues/717#issuecomment-6397735011)，細節為規格設計（非負責人裁定）。
 
-- UI 範圍變更（負責人裁定（#534，2026-10-26））：#635 第 5 批的角色／公司管理路徑與確認依 ADM-R55／ADM-AC55；沿用 DOM-R32／R33／R55 及既有角色保護，不新增 DOM 編號。
+- 範圍變更（負責人裁定，#534，2026-10-26）：#635 第 5 批的角色／公司管理路徑與確認依 ADM-R55／ADM-AC55；沿用 DOM-R32／R33／R55 及既有角色保護，不新增 DOM 編號 — [負責人裁定](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)。

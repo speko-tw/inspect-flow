@@ -18,7 +18,7 @@ import { ConfirmBox } from '../ui/ConfirmBox'
 import { BatchActionBar } from '../ui/BatchActionBar'
 import { Notice } from '../ui/Notice'
 import { revealElement } from '../ui/reveal'
-import { Form, FormError, FormSubmitButton } from '../ui/Form'
+import { Form, FormError, FormSubmitButton, RequiredMark } from '../ui/Form'
 import { activeStatus } from '../ui/statusBadge'
 import { useSubmitGuard } from '../ui/submitGuard'
 import { UnsavedLeaveBox } from '../ui/navigation'
@@ -163,7 +163,6 @@ function CompanyScreen({
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [error, setError] = useState('')
-  const [operationCompanyId, setOperationCompanyId] = useState('')
   const [operationNotice, setOperationNotice] = useState('')
   const [formNotice, setFormNotice] = useState(() => {
     const text = (location.state as { managementNotice?: unknown } | null)
@@ -172,6 +171,15 @@ function CompanyScreen({
   })
   const formRef = useRef<HTMLFormElement>(null)
   const nameRef = useRef<HTMLInputElement>(null)
+  const renameButtonRef = useRef<HTMLButtonElement>(null)
+  const wasRenaming = useRef(false)
+
+  useEffect(() => {
+    if (wasRenaming.current && !renamingId) {
+      renameButtonRef.current?.focus({ preventScroll: true })
+    }
+    wasRenaming.current = Boolean(renamingId)
+  }, [renamingId])
 
   useEffect(() => {
     if (!renamingId && mode !== 'new') return
@@ -212,9 +220,13 @@ function CompanyScreen({
     targetActive: boolean
   } | null>(null)
 
+  const consumedNoticeKey = useRef<string | null>(null)
   useEffect(() => {
     const state = location.state as Record<string, unknown> | null
     if (!state || !Object.hasOwn(state, 'managementNotice')) return
+    // 同一歷史紀錄只清理一次，避免重繪時的 replace 蓋掉使用者返回清單。
+    if (consumedNoticeKey.current === location.key) return
+    consumedNoticeKey.current = location.key
     const rest = { ...state }
     delete rest.managementNotice
     leaveGuard.allowNavigation(() =>
@@ -224,6 +236,7 @@ function CompanyScreen({
       }),
     )
   }, [
+    location.key,
     location.state,
     location.pathname,
     location.search,
@@ -303,15 +316,15 @@ function CompanyScreen({
   }
 
   async function toggleActive(item: Company) {
-    setOperationCompanyId(item.id)
     setOperationNotice('')
     setFormNotice('')
     if (!saveGuard.enter()) return
     setError('')
     setSaving(true)
     try {
+      // 公司可能已被其他管理者變更，以最新狀態決定目標及受影響帳號。
       const fresh = await getCompany(item.id)
-      const targetActive = !item.is_active
+      const targetActive = !fresh.is_active
       const activeUsers = targetActive
         ? { users: [], count: 0 }
         : await listActiveCompanyUsers(item.id)
@@ -454,7 +467,7 @@ function CompanyScreen({
   if (notFound)
     return (
       <section>
-        <BackLink replace to={listPath}>
+        <BackLink replace={mode === 'new'} to={listPath}>
           返回公司清單
         </BackLink>
         <h1>找不到這家公司</h1>
@@ -464,7 +477,7 @@ function CompanyScreen({
     <section aria-labelledby="companies-heading">
       <UnsavedLeaveBox guard={leaveGuard} />
       {mode !== 'list' && (
-        <BackLink replace to={listPath}>
+        <BackLink replace={mode === 'new'} to={listPath}>
           返回公司清單
         </BackLink>
       )}
@@ -472,10 +485,14 @@ function CompanyScreen({
         {mode === 'new'
           ? '新增公司'
           : mode === 'detail'
-            ? (company?.name ?? '載入中…')
+            ? loading
+              ? '載入中…'
+              : (company?.name ?? '公司詳情')
             : '公司管理'}
       </h1>
-      {!loading && formNotice && <Notice>{formNotice}</Notice>}
+      {mode !== 'detail' && !loading && formNotice && (
+        <Notice>{formNotice}</Notice>
+      )}
       {detailError && (
         <>
           <Notice variant="error" autoReveal={false}>
@@ -495,11 +512,7 @@ function CompanyScreen({
       )}
       {mode === 'list' && (
         <>
-          <Link
-            replace
-            className="btn btn-primary"
-            to={`/companies/new${suffix}`}
-          >
+          <Link className="btn btn-primary" to={`/companies/new${suffix}`}>
             新增公司
           </Link>
           {loading ? <p>載入中…</p> : null}
@@ -567,16 +580,13 @@ function CompanyScreen({
                       />
                     </td>
                     <th scope="row">
-                      <Link replace to={detailPath(company.id)}>
-                        {company.name}
-                      </Link>
+                      <Link to={detailPath(company.id)}>{company.name}</Link>
                     </th>
                     <td data-label="狀態">
                       <StatusBadge status={activeStatus(company.is_active)} />
                     </td>
                     <td data-label="操作">
                       <Link
-                        replace
                         className="btn btn-emphasis"
                         aria-label={`查看公司 ${company.name}`}
                         to={detailPath(company.id)}
@@ -605,7 +615,7 @@ function CompanyScreen({
                 <>
                   <p>已選取 {selectedCompanyIds.length} 間公司。</p>
                   <button
-                    className="btn-danger-outline"
+                    className="btn"
                     disabled={
                       selectedCompanyIds.length === 0 ||
                       companies
@@ -725,8 +735,13 @@ function CompanyScreen({
             狀態：
             <StatusBadge status={activeStatus(company.is_active)} />
           </p>
+          <p className="field-hint">
+            停用後，不能再把帳號連結到這家公司；已連結的帳號維持啟用，不受影響。
+          </p>
           <div className="named-row-actions">
             <button
+              ref={renameButtonRef}
+              disabled={saving || Boolean(renamingId) || Boolean(deactivating)}
               onClick={() => {
                 setFormError(null)
                 setFormNotice('')
@@ -738,24 +753,20 @@ function CompanyScreen({
               }}
               type="button"
             >
-              改名稱
+              修改公司名稱
             </button>
             <button
-              className="btn-danger-outline"
-              disabled={saving}
+              className={company.is_active ? 'btn-danger-outline' : 'btn'}
+              disabled={saving || Boolean(renamingId)}
               onClick={() => void toggleActive(company)}
               type="button"
             >
               {company.is_active ? '停用公司' : '啟用公司'}
             </button>
           </div>
-          {company.is_active && <p>停用公司不會自動停用帳號。</p>}
-          {operationCompanyId === company.id && error && (
-            <Notice variant="error">{error}</Notice>
-          )}
-          {operationCompanyId === company.id && operationNotice && (
-            <Notice>{operationNotice}</Notice>
-          )}
+          {formNotice && <Notice>{formNotice}</Notice>}
+          {error && <Notice variant="error">{error}</Notice>}
+          {operationNotice && <Notice>{operationNotice}</Notice>}
           {deactivating?.company.id === company.id && (
             <ConfirmBox
               busy={saving}
@@ -772,7 +783,10 @@ function CompanyScreen({
               {deactivating.targetActive ? (
                 <p>啟用公司不會變更任何帳號的啟用狀態。</p>
               ) : (
-                <p>還有 {deactivating.count} 個啟用中的帳號</p>
+                <p>
+                  這家公司還有 {deactivating.count}{' '}
+                  個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。
+                </p>
               )}
               {!deactivating.targetActive && (
                 <p>只有勾選的帳號會一併停用；未選取的帳號會維持啟用。</p>
@@ -819,7 +833,9 @@ function CompanyScreen({
         >
           {renamingId && <h2 id="company-editor-heading">修改公司名稱</h2>}
           <label>
-            公司名稱
+            <span className="required-label">
+              公司名稱 <RequiredMark />
+            </span>
             <input
               ref={nameRef}
               onChange={(event) =>
@@ -858,7 +874,7 @@ function CompanyScreen({
               </Link>
             )}
             <FormSubmitButton className="btn-primary" disabled={saving}>
-              {renamingId ? '儲存名稱' : '新增公司'}
+              {renamingId ? '儲存公司名稱' : '新增公司'}
             </FormSubmitButton>
           </div>
           <FormError focusRequest={formError?.request} tabIndex={-1}>

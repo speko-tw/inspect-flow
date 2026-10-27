@@ -1104,11 +1104,15 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
       screen.getByRole('button', { name: formCase.button }),
     ).toBeDisabled()
     const expected = test.baseline + 1
-    await waitFor(() =>
-      expect(test.backend.count(formCase.method, formCase.path)).toBe(
-        expected,
-      ),
-    )
+    if (formCase.method === 'POST') {
+      expect(test.backend.count(formCase.method, formCase.path)).toBe(expected)
+    } else {
+      await waitFor(() =>
+        expect(test.backend.count(formCase.method, formCase.path)).toBe(
+          expected,
+        ),
+      )
+    }
     test.gate.resolve()
     if (formCase.method === 'POST') {
       expect(
@@ -1139,11 +1143,15 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
     const expected = test.baseline + 1
     test.fail(true)
     fireEvent.click(test.button)
-    await waitFor(() =>
-      expect(test.backend.count(formCase.method, formCase.path)).toBe(
-        expected,
-      ),
-    )
+    if (formCase.method === 'POST') {
+      expect(test.backend.count(formCase.method, formCase.path)).toBe(expected)
+    } else {
+      await waitFor(() =>
+        expect(test.backend.count(formCase.method, formCase.path)).toBe(
+          expected,
+        ),
+      )
+    }
     await screen.findByRole('alert')
     test.fail(false)
     fireEvent.click(screen.getByRole('button', { name: formCase.button }))
@@ -1489,13 +1497,19 @@ describe('CompaniesPage 停用公司（#507）', () => {
     )
     await screen.findByText('示範公司')
     const button = screen.getByRole('button', { name: '停用公司' })
-    expect(screen.getByText('停用公司不會自動停用帳號。')).toBeVisible()
+    expect(
+      screen.getByText(
+        '停用後，不能再把帳號連結到這家公司；已連結的帳號維持啟用，不受影響。',
+      ),
+    ).toBeVisible()
 
     fireEvent.click(button)
     fireEvent.click(button)
     gate.resolve()
 
-    await screen.findByText('還有 1 個啟用中的帳號')
+    await screen.findByText(
+      '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+    )
     expect(
       screen.getByText('只有勾選的帳號會一併停用；未選取的帳號會維持啟用。'),
     ).toBeVisible()
@@ -1525,7 +1539,11 @@ describe('CompaniesPage 停用公司（#507）', () => {
     gate.resolve()
 
     await waitFor(() =>
-      expect(screen.queryByText('還有 1 個啟用中的帳號')).toBeNull(),
+      expect(
+        screen.queryByText(
+          '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+        ),
+      ).toBeNull(),
     )
     expect(backend.count('PUT', '/api/v1/companies/company-1/active')).toBe(1)
   })
@@ -1584,6 +1602,7 @@ describe('CompaniesPage 批次狀態（#414）', () => {
     fireEvent.click(confirm)
 
     await waitFor(() => expect(confirm).toBeDisabled())
+    expect(confirm).toHaveTextContent('正在更新公司…')
     expect(backend.count('POST', '/api/v1/companies:batch-status')).toBe(1)
     expect(
       backend.calls.find((call) => call.path.endsWith(':batch-status'))?.body,
@@ -2017,12 +2036,14 @@ describe('#734 T7 公司操作回饋位置', () => {
     stubBackend()
     renderCompanies()
     fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
-    fireEvent.click(await screen.findByRole('button', { name: '改名稱' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改公司名稱' }),
+    )
     const input = screen.getByLabelText('公司名稱')
     await waitFor(() => expect(input).toHaveFocus())
     const form = input.closest('form') as HTMLElement
     fireEvent.change(input, { target: { value: '新公司名稱' } })
-    fireEvent.click(within(form).getByRole('button', { name: '儲存名稱' }))
+    fireEvent.click(within(form).getByRole('button', { name: '儲存公司名稱' }))
     expect(await screen.findByRole('status')).toHaveTextContent(
       '已將公司名稱更新為「新公司名稱」。',
     )

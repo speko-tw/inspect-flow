@@ -99,9 +99,6 @@ function stubBackend(conflictCode: string) {
       if (pathname.endsWith('/companies')) {
         return Response.json({ items: [company], next_cursor: null })
       }
-      if (pathname.endsWith('/roles/creator-role')) {
-        return Response.json({ role_id: 'role-1' })
-      }
       if (pathname.endsWith('/roles/permission-codes')) {
         return Response.json({ items: [] })
       }
