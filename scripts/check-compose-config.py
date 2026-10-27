@@ -46,14 +46,15 @@ def volume_targets(service: dict[str, Any]) -> set[tuple[str, str, str]]:
 
 
 def main() -> int:
-    """檢查預設具名 volume 與選用的主機資料夾 overlay。"""
+    """檢查預設具名 volume 與選用的主機資料夾 設定。"""
     env = os.environ.copy()
     env.update(
         {
-            "INSPECTFLOW_VERSION": "compose-config-check",
-            "INSPECTFLOW_HOST_PORT": "18700",
-            "INSPECTFLOW_BIND_ADDRESS": "0.0.0.0",
-            "INSPECTFLOW_COOKIE_SECURE": "true",
+            "INSPECTFLOW_IMAGE_TAG": "compose-config-check",
+            "INSPECTFLOW_HOST_PORT": "8080",
+            "INSPECTFLOW_BIND_ADDRESS": "127.0.0.1",
+            "INSPECTFLOW_DATA_DIR": "",
+            "INSPECTFLOW_UPLOADS_DIR": "",
         }
     )
     default = render_config(("compose.yaml",), env)
@@ -102,10 +103,10 @@ def main() -> int:
     )
     port = services["app"]["ports"][0]
     require(
-        port["published"] == "18700"
+        port["published"] == "8080"
         and port["target"] == 8000
-        and port["host_ip"] == "0.0.0.0",
-        "預設 port/address 必須是 0.0.0.0:18700->8000。",
+        and port["host_ip"] == "127.0.0.1",
+        "預設 port/address 必須是 127.0.0.1:8080->8000。",
     )
 
     bind_env = env.copy()
@@ -119,7 +120,7 @@ def main() -> int:
             "INSPECTFLOW_BIND_ADDRESS": "127.0.0.1",
         }
     )
-    bind = render_config(("compose.yaml", "compose.bind.yaml"), bind_env)
+    bind = render_config(("compose.yaml",), bind_env)
     bind_services = bind["services"]
     for service_name in ("migrate", "initialize", "app"):
         require(
@@ -141,7 +142,27 @@ def main() -> int:
         bind_port["published"] == "18707"
         and bind_port["target"] == 8000
         and bind_port["host_ip"] == "127.0.0.1",
-        "bind overlay 必須保留可設定的 host address 與 port。",
+        "bind 設定 必須保留可設定的 host address 與 port。",
+    )
+    require(default["name"] == "inspectflow", "專案名稱必須固定。")
+    for name in ("inspectflow-data", "inspectflow-uploads"):
+        require(
+            default["volumes"][name]["name"] == name, "volume 名稱須固定。"
+        )
+    require(
+        "INSPECTFLOW_COOKIE_SECURE" not in services["app"]["environment"],
+        "不得提供關閉 Secure cookie 的設定。",
+    )
+    require(
+        all(
+            s["logging"]["options"]["max-size"] == "10m"
+            for s in services.values()
+        ),
+        "全部服務必須限制 log 大小。",
+    )
+    require(
+        "env_file" not in services["app"],
+        "不得把整份 .env 轉送容器。",
     )
     print("Compose config checks passed (no Docker daemon contacted).")
     return 0

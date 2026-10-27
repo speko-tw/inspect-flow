@@ -8,9 +8,7 @@
 **/__pycache__
 **/.mypy_cache
 **/.ruff_cache
-.env
-.env.*
-!.env.example
-.w758-bind-test
+**/.env*
 backend/data
 backend/uploads
+**/.pilot-test

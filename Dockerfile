@@ -6,7 +6,9 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
 COPY backend/app/permission_codes.json /src/backend/app/permission_codes.json
-RUN npm run build
+ARG INSPECTFLOW_COMMIT
+ENV INSPECTFLOW_COMMIT=$INSPECTFLOW_COMMIT
+RUN npm run build && rm -rf dist/.vite
 
 FROM ghcr.io/astral-sh/uv:0.11.23 AS uv
 
@@ -25,9 +27,11 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     INSPECTFLOW_DATABASE_URL=sqlite:////data/inspectflow.db \
     INSPECTFLOW_STATIC_DIR=/app/static
+ARG INSPECTFLOW_COMMIT
+ENV INSPECTFLOW_COMMIT=$INSPECTFLOW_COMMIT
 WORKDIR /app
-RUN groupadd --system inspectflow \
-    && useradd --system --gid inspectflow --home-dir /app inspectflow \
+RUN groupadd --system --gid 999 inspectflow \
+    && useradd --system --uid 999 --gid 999 --home-dir /app inspectflow \
     && mkdir -p /data /uploads /app/static \
     && chown -R inspectflow:inspectflow /data /uploads /app
 COPY --from=backend-build --chown=inspectflow:inspectflow /opt/venv /opt/venv

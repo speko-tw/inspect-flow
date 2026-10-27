@@ -38,7 +38,6 @@ from app.auth.sessions import (
     hash_token,
     set_session_cookie,
 )
-from app.auth.settings import get_cookie_secure
 from app.models import AuthSession, Company, User, UserPassword
 from app.services.access_summary import summarize_access
 
@@ -181,7 +180,7 @@ def _clear_session_cookie(response: Response) -> None:
         key=get_session_cookie_name(),
         path="/",
         httponly=True,
-        secure=get_cookie_secure(),
+        secure=True,
         samesite="strict",
     )
 

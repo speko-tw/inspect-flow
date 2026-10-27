@@ -9,7 +9,7 @@ from app.models import SetupCode, User, UserPassword
 
 
 def main() -> int:
-    """一般重啟時保留尚有效的設定碼。"""
+    """DPL-R03：避免每次重啟廢止有效碼，已完成設定時不再簽發。"""
     factory = get_session_factory()
     with factory() as session:
         admin = session.scalars(

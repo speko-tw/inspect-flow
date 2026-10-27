@@ -1,3 +1,5 @@
+import { withBasePath } from '../basePath'
+
 // 認證相關 API 的 fetch 包裝（AUT-R05、AUT-R07、AUT-R08）。
 //
 // AUT-R30：前端不得讀取、儲存或自行傳送登入 token，Cookie 由瀏覽
@@ -87,7 +89,7 @@ export async function readErrorCode(
  * 拋出 `ApiError`，呼叫端不應把這種情況當成「未登入」處理。
  */
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
-  const response = await fetch(`${AUTH_BASE}/me`, {
+  const response = await fetch(withBasePath(`${AUTH_BASE}/me`), {
     credentials: 'same-origin',
   })
 
@@ -114,7 +116,7 @@ export async function login(
   login: string,
   password: string,
 ): Promise<CurrentUser> {
-  const response = await fetch(`${AUTH_BASE}/login`, {
+  const response = await fetch(withBasePath(`${AUTH_BASE}/login`), {
     method: 'POST',
     credentials: 'same-origin',
     headers: {
@@ -140,7 +142,7 @@ export async function login(
  * 效，使用者卻誤以為已經登出。
  */
 export async function logout(): Promise<void> {
-  const response = await fetch(`${AUTH_BASE}/logout`, {
+  const response = await fetch(withBasePath(`${AUTH_BASE}/logout`), {
     method: 'POST',
     credentials: 'same-origin',
   })
@@ -164,7 +166,7 @@ export async function changePassword(
   currentPassword: string,
   newPassword: string,
 ): Promise<void> {
-  const response = await fetch(`${AUTH_BASE}/password`, {
+  const response = await fetch(withBasePath(`${AUTH_BASE}/password`), {
     method: 'POST',
     credentials: 'same-origin',
     headers: {
@@ -185,7 +187,7 @@ export async function changePassword(
 export async function saveAppearance(
   appearance: Appearance,
 ): Promise<{ appearance: Appearance }> {
-  const response = await fetch(`${AUTH_BASE}/me`, {
+  const response = await fetch(withBasePath(`${AUTH_BASE}/me`), {
     method: 'PATCH',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },

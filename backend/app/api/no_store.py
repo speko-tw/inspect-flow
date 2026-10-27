@@ -26,6 +26,7 @@ class NoStoreMiddleware:
             await self.app(scope, receive, send)
             return
         is_api = scope["path"].startswith(_API_PREFIX)
+        # DPL-R06：即使 worker 不存在，也不讓代理快取舊的回應。
         is_pwa_worker = scope["path"] == "/sw.js"
         if not is_api and not is_pwa_worker:
             await self.app(scope, receive, send)

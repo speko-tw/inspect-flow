@@ -33,7 +33,6 @@ FAILURE_THRESHOLD_ENV_VAR = "INSPECTFLOW_LOGIN_FAILURE_THRESHOLD"
 FAILURE_WINDOW_ENV_VAR = "INSPECTFLOW_LOGIN_FAILURE_WINDOW_MINUTES"
 LOCKOUT_DURATION_ENV_VAR = "INSPECTFLOW_LOGIN_LOCKOUT_MINUTES"
 SQLITE_BUSY_TIMEOUT_ENV_VAR = "INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS"
-COOKIE_SECURE_ENV_VAR = "INSPECTFLOW_COOKIE_SECURE"
 
 SETUP_FAILURE_THRESHOLD_ENV_VAR = "INSPECTFLOW_SETUP_FAILURE_THRESHOLD"
 SETUP_FAILURE_WINDOW_ENV_VAR = "INSPECTFLOW_SETUP_FAILURE_WINDOW_MINUTES"
@@ -180,19 +179,3 @@ def validate_auth_settings() -> None:
     get_session_timeouts()
     get_lockout_settings()
     get_setup_lockout_settings()
-    get_cookie_secure()
-
-
-def get_cookie_secure() -> bool:
-    """依環境變數決定登入 Cookie 是否必須使用 HTTPS。
-
-    預設維持 KD-30 的安全設定；僅隔離的試用內網可明確停用。
-    """
-    raw = os.environ.get(COOKIE_SECURE_ENV_VAR, "true").strip().lower()
-    if raw in {"1", "true", "yes", "on"}:
-        return True
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    raise InvalidAuthSettingError(
-        f"{COOKIE_SECURE_ENV_VAR} must be a boolean, got {raw!r}"
-    )

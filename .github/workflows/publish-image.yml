@@ -37,14 +37,19 @@ jobs:
               value = os.environ["REF_NAME"]
               if not value.startswith("v"):
                   raise SystemExit("tag pushes must start with v")
+              stable = bool(re.fullmatch(r"v\d+\.\d+\.\d+", value))
               value = value[1:]
           else:
               value = os.environ["INPUT_TAG"]
+              stable = False
+              if value == "latest" or re.match(r"\d+\.\d+\.\d+", value):
+                  raise SystemExit("manual tag cannot replace release tags")
 
           if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", value):
               raise SystemExit("invalid Docker image tag")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               output.write(f"value={value}\n")
+              output.write(f"stable={str(stable).lower()}\n")
           PY
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -61,12 +66,13 @@ jobs:
           images: ghcr.io/speko-tw/inspect-flow
           tags: |
             type=raw,value=${{ steps.tag.outputs.value }}
-            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
+            type=raw,value=latest,enable=${{ steps.tag.outputs.stable == 'true' }}
 
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           platforms: linux/amd64
+          build-args: INSPECTFLOW_COMMIT=${{ github.sha }}
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}

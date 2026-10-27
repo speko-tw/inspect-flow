@@ -1,12 +1,6 @@
-"""Server-side login state: issuing, checking and counting
-``AuthSession`` rows (AUT-R09, AUT-R11~AUT-R17, AUT-R25, AUT-R27).
+"""登入狀態的簽發、驗證與計數（AUT-R09、R11～R17、R25、R27）。
 
-Deliberately split from ``app.auth.login`` (AUT-R27): nothing in
-here ever looks at a password. This is what lets an external
-identity source (a future ``external-identity-sync``) call
-``create_session`` after its own, different verification succeeds,
-reusing the same login state mechanism.
-"""
+與密碼驗證分離，未來外部身分來源也能沿用相同登入狀態機制。"""
 
 import hashlib
 import secrets
@@ -17,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.responses import Response
 
-from app.auth.settings import get_cookie_secure, get_session_timeouts
+from app.auth.settings import get_session_timeouts
 from app.db import clock
 from app.models import AuthSession, User
 
@@ -28,19 +22,17 @@ SESSION_COOKIE_NAME = "__Host-inspectflow_session"
 
 
 def get_session_cookie_name() -> str:
-    """Use the browser-enforced cookie prefix only with Secure."""
-    if get_cookie_secure():
-        return SESSION_COOKIE_NAME
-    return "inspectflow_session"
+    """依 AUT-R12 固定使用瀏覽器強制驗證的安全前綴。"""
+    return SESSION_COOKIE_NAME
 
 
 def set_session_cookie(response: Response, token: str) -> None:
-    """Set the AUT-R12 session cookie shared by every login flow."""
+    """依 AUT-R12 統一簽發安全登入 Cookie，避免各入口屬性不一致。"""
     response.set_cookie(
         key=get_session_cookie_name(),
         value=token,
         httponly=True,
-        secure=get_cookie_secure(),
+        secure=True,
         samesite="strict",
         path="/",
     )
@@ -53,37 +45,19 @@ _TOKEN_BYTES = 32
 
 
 def generate_token() -> str:
-    """Return a new random session token (AUT-R11, AUT-R13)."""
+    """依 AUT-R11、AUT-R13 產生至少 256 bits 的隨機登入代碼。"""
     return secrets.token_urlsafe(_TOKEN_BYTES)
 
 
 def hash_token(token: str) -> str:
-    """Hash a session token for storage (AUT-R11): the database
-    keeps only this SHA-256 hex digest, never the token itself.
-    """
+    """依 AUT-R11 只保存 SHA-256 摘要，避免資料庫洩漏明文代碼。"""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def create_session(db: Session, user: User) -> tuple[AuthSession, str]:
-    """Issue a new login state for ``user``, returning the created
-    row together with the plaintext token to send back as a Cookie.
+    """建立登入狀態並回傳明文代碼；不驗證密碼（AUT-R27）。
 
-    Deliberately takes no password parameter: "驗證身分" and "建立
-    登入狀態" are two separate steps (AUT-R27), so this function
-    works the same whether the caller just verified a local
-    password (``app.auth.login.authenticate``) or, in the future,
-    an external identity source. AUT-AC26 asserts this signature
-    has no password parameter via ``inspect.signature``.
-
-    ``created_by``/``updated_by`` are the user themself (the
-    spec's "資料" section: the operator of an ``AuthSession`` is
-    always the person who is logging in, not whatever the
-    request-wide "目前操作者" entry point would otherwise report).
-
-    Flushes but does not commit -- the caller (a FastAPI dependency
-    using ``app.db.unit_of_work``) commits once its request
-    finishes handling successfully.
-    """
+    僅 flush，由請求交易提交；操作者記為登入者本人。"""
     token = generate_token()
     now = clock.utc_now()
     timeouts = get_session_timeouts()
@@ -103,38 +77,16 @@ def create_session(db: Session, user: User) -> tuple[AuthSession, str]:
 def _is_expired(
     row: AuthSession, now: datetime, idle_timeout: timedelta
 ) -> bool:
-    """AUT-R15's two deadlines. Absolute: expired once the elapsed
-    time reaches (not merely exceeds) the absolute timeout. Idle:
-    expired only once the idle time exceeds (strictly more than)
-    the idle timeout -- exactly equal is still valid.
-    """
+    """依 AUT-R15 判斷絕對期限及閒置期限。"""
     if now >= row.expires_at:
         return True
     return (now - row.last_seen_at) > idle_timeout
 
 
 def validate_and_touch_session(db: Session, token: str) -> User | None:
-    """The per-request check AUT-R14 requires: resolve ``token`` to
-    its ``User`` when the login state is valid, or delete the row
-    and return ``None`` when it is not (unknown token, past either
-    deadline, or the user is no longer active).
+    """驗證登入狀態並更新最後使用時間（AUT-R14、AUT-R15）。
 
-    ``User.is_active`` is read fresh from the database on every
-    call (never cached on ``AuthSession``), so deactivating someone
-    takes effect on their very next request, per AUT-R14. On
-    success, advances ``last_seen_at`` to now (AUT-R15) and flushes
-    (but does not commit): the caller (``require_login``) returns
-    normally afterwards, so the request's own unit of work commits
-    it.
-
-    A rejection, in contrast, *commits* the deletion immediately
-    instead of merely flushing it. ``require_login`` always raises
-    an ``APIError`` right after getting ``None`` back from this
-    function, and that request's unit of work rolls everything
-    back on any raised exception -- without an explicit commit
-    here, the very deletion AUT-R14 requires would be undone by
-    the same request that was supposed to perform it.
-    """
+    拒絕時立即提交刪除，避免上層拋出未登入錯誤後交易回滾而復原。"""
     token_hash = hash_token(token)
     row = db.scalar(
         select(AuthSession).where(AuthSession.token_hash == token_hash)
@@ -171,10 +123,7 @@ def validate_and_touch_session(db: Session, token: str) -> User | None:
 
 
 def delete_session_by_token(db: Session, token: str) -> None:
-    """Delete the ``AuthSession`` matching ``token`` (AUT-R07's
-    logout). Idempotent: does nothing when no row matches an
-    unknown or already-removed token.
-    """
+    """依 AUT-R07 刪除對應登入狀態；未知代碼不產生副作用。"""
     token_hash = hash_token(token)
     row = db.scalar(
         select(AuthSession).where(AuthSession.token_hash == token_hash)
@@ -185,27 +134,14 @@ def delete_session_by_token(db: Session, token: str) -> None:
 
 
 def delete_all_sessions_for_user(db: Session, user_id: uuid.UUID) -> None:
-    """Delete every ``AuthSession`` belonging to ``user_id``
-    (AUT-R25, AUT-R35): used by the set-password command/Service
-    entry point (T6/T11) and by change-password (T11), both outside
-    this task -- kept here since it is plain login-state
-    bookkeeping, the same category as the functions above.
-    """
+    """依 AUT-R25、AUT-R35 撤銷使用者全部登入狀態。"""
     db.query(AuthSession).filter(AuthSession.user_id == user_id).delete(
         synchronize_session=False
     )
 
 
 def count_valid_sessions(db: Session, user_id: uuid.UUID) -> int:
-    """AUT-R16: how many of ``user_id``'s ``AuthSession`` rows are
-    currently valid (neither past the absolute deadline nor idle
-    beyond the idle timeout), for a future deactivation screen's
-    "N active logins" figure.
-
-    Read-only: unlike ``validate_and_touch_session``, this never
-    deletes the invalid rows it counts past -- a display-only
-    calculation should not have the side effect of pruning data.
-    """
+    """依 AUT-R16 唯讀計算有效登入數，不清除過期資料。"""
     now = clock.utc_now()
     timeouts = get_session_timeouts()
     rows = db.scalars(

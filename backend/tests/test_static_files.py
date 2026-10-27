@@ -26,6 +26,11 @@ def test_spa_routes_and_pwa_cache_headers(tmp_path, monkeypatch) -> None:
     assert "immutable" in asset.headers["cache-control"]
     assert client.get("/api/unknown").status_code == 404
     assert client.get("/missing.js").status_code == 404
+    assert client.get("/..%2fsecret").status_code == 404
+    assert client.post("/api/unknown").status_code == 404
+    assert client.post("/api/v1/health").status_code == 405
+    assert client.post("/projects/new").status_code == 404
+    assert client.head("/projects/new").content == b""
 
 
 def test_missing_service_worker_is_not_cacheable(
@@ -38,3 +43,32 @@ def test_missing_service_worker_is_not_cacheable(
 
     assert response.status_code == 404
     assert "no-store" in response.headers["cache-control"]
+
+
+def test_runtime_base_path_rewrites_entry_and_manifest(tmp_path, monkeypatch):
+    (tmp_path / "index.html").write_text(
+        '<head><script src="/assets/app.js"></script></head>'
+        '<link href="/manifest.webmanifest">'
+    )
+    (tmp_path / "manifest.webmanifest").write_text(
+        '{"icons": [{"src": "/icons/icon.png"}]}'
+    )
+    monkeypatch.setenv("INSPECTFLOW_STATIC_DIR", str(tmp_path))
+    monkeypatch.setenv("INSPECTFLOW_BASE_PATH", "/inspectflow")
+    client = TestClient(create_app())
+    entry = client.get("/projects/new")
+    assert 'src="/inspectflow/assets/app.js"' in entry.text
+    assert 'href="/inspectflow/manifest.webmanifest"' in entry.text
+    assert 'content="/inspectflow"' in entry.text
+    manifest = client.get("/manifest.webmanifest").json()
+    assert manifest["start_url"] == "/inspectflow/tasks/"
+    assert manifest["scope"] == "/inspectflow/"
+    assert manifest["icons"][0]["src"] == "/inspectflow/icons/icon.png"
+
+
+def test_reject_invalid_base_path(monkeypatch):
+    import pytest
+
+    monkeypatch.setenv("INSPECTFLOW_BASE_PATH", '/bad"><script>')
+    with pytest.raises(ValueError, match="INSPECTFLOW_BASE_PATH"):
+        create_app()

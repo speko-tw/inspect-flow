@@ -1,35 +1,76 @@
+name: inspectflow
+
 services:
   migrate:
-    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_VERSION:-latest}
+    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_IMAGE_TAG:-pilot-test}
     command: ["alembic", "upgrade", "head"]
     environment:
       INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
     volumes:
-      - inspectflow-data:/data
+      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data:z
     restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   initialize:
-    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_VERSION:-latest}
+    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_IMAGE_TAG:-pilot-test}
     command: ["python", "-m", "app.cli.ensure_initial_setup"]
     environment:
       INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
     volumes:
-      - inspectflow-data:/data
+      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data:z
     depends_on:
       migrate:
         condition: service_completed_successfully
     restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   app:
-    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_VERSION:-latest}
+    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_IMAGE_TAG:-pilot-test}
+    command:
+      - /bin/sh
+      - -ec
+      - >-
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+        --proxy-headers
+        --forwarded-allow-ips "$${INSPECTFLOW_FORWARDED_ALLOW_IPS}"
     ports:
-      - "${INSPECTFLOW_BIND_ADDRESS:-0.0.0.0}:${INSPECTFLOW_HOST_PORT:-18700}:8000"
+      - target: 8000
+        published: "${INSPECTFLOW_HOST_PORT:-8080}"
+        host_ip: "${INSPECTFLOW_BIND_ADDRESS:-127.0.0.1}"
     environment:
       INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
-      INSPECTFLOW_COOKIE_SECURE: ${INSPECTFLOW_COOKIE_SECURE:-true}
+      INSPECTFLOW_BASE_PATH: ${INSPECTFLOW_BASE_PATH:-}
+      INSPECTFLOW_FORWARDED_ALLOW_IPS: >-
+        ${INSPECTFLOW_FORWARDED_ALLOW_IPS:-127.0.0.1}
+      INSPECTFLOW_SESSION_IDLE_TIMEOUT_MINUTES: >-
+        ${INSPECTFLOW_SESSION_IDLE_TIMEOUT_MINUTES:-60}
+      INSPECTFLOW_SESSION_ABSOLUTE_TIMEOUT_HOURS: >-
+        ${INSPECTFLOW_SESSION_ABSOLUTE_TIMEOUT_HOURS:-8}
+      INSPECTFLOW_LOGIN_FAILURE_THRESHOLD: >-
+        ${INSPECTFLOW_LOGIN_FAILURE_THRESHOLD:-10}
+      INSPECTFLOW_LOGIN_FAILURE_WINDOW_MINUTES: >-
+        ${INSPECTFLOW_LOGIN_FAILURE_WINDOW_MINUTES:-15}
+      INSPECTFLOW_LOGIN_LOCKOUT_MINUTES: >-
+        ${INSPECTFLOW_LOGIN_LOCKOUT_MINUTES:-15}
+      INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS: >-
+        ${INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS:-5000}
+      INSPECTFLOW_SETUP_FAILURE_THRESHOLD: >-
+        ${INSPECTFLOW_SETUP_FAILURE_THRESHOLD:-10}
+      INSPECTFLOW_SETUP_FAILURE_WINDOW_MINUTES: >-
+        ${INSPECTFLOW_SETUP_FAILURE_WINDOW_MINUTES:-15}
+      INSPECTFLOW_SETUP_LOCKOUT_MINUTES: >-
+        ${INSPECTFLOW_SETUP_LOCKOUT_MINUTES:-15}
     volumes:
-      - inspectflow-data:/data
-      - inspectflow-uploads:/uploads
+      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data:z
+      - ${INSPECTFLOW_UPLOADS_DIR:-inspectflow-uploads}:/uploads:z
     depends_on:
       initialize:
         condition: service_completed_successfully
@@ -47,7 +88,14 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   inspectflow-data:
+    name: inspectflow-data
   inspectflow-uploads:
+    name: inspectflow-uploads

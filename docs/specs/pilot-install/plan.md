@@ -7,7 +7,7 @@
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
 | T1 | 打包靜態服務與 login cookie 設定 | `backend/app/main.py`、`backend/app/static_files.py`、`backend/app/api/no_store.py`、`backend/app/auth/`、`backend/app/api/v1/auth.py`、`backend/tests/` | — | DPL-AC04、DPL-AC05 | #758 |
-| T2 | 建立 image、Compose storage overlay、首次設定流程、發布 workflow 與不啟動 daemon 的 Compose config 檢查 | `Dockerfile`、`.dockerignore`、`compose.yaml`、`compose.bind.yaml`、`.env.example`、`backend/app/cli/ensure_initial_setup.py`、`.github/workflows/publish-image.yml`、`scripts/check-compose-config.py` | T1 | DPL-AC01～DPL-AC03、DPL-AC07、DPL-AC09 | #758 |
+| T2 | 建立 image、Compose storage、首次設定流程、發布 workflow 與不啟動 daemon 的 Compose config 檢查 | `Dockerfile`、`.dockerignore`、`compose.yaml`、`deploy/.env.example`、`backend/app/cli/ensure_initial_setup.py`、`.github/workflows/publish-image.yml`、`scripts/check-compose-config.py` | T1 | DPL-AC01～DPL-AC03、DPL-AC07、DPL-AC09 | #758 |
 | T3 | 撰寫安裝手冊、精簡規格與版本治理同步 | `docs/deployment/pilot-install.md`、`docs/specs/pilot-install/`、`docs/specs/README.md`、`docs/intents/06-versioning-and-milestone-governance.md`、`README.md`、`README.zh-TW.md` | T1、T2 | DPL-AC06～DPL-AC09 | #758 |
 
 ## 並行分組
@@ -30,10 +30,9 @@
 | DPL-AC02 | `docker compose up -d`、migration/init/app logs、healthcheck 狀態。 |
 | DPL-AC03 | 檢查首次設定碼、重啟確認碼未替換、設定 admin 密碼及登入。 |
 | DPL-AC04 | curl 首頁、SPA 深路由、未知 API、`sw.js`；檢查 Cache-Control。 |
-| DPL-AC05 | `backend/tests/auth/test_cookie_secure.py` 與完整後端測試。 |
+| DPL-AC05 | 既有 `backend/tests/auth/test_setup_api.py` 的 AUT-R12 安全屬性測試、完整後端測試與兩種 HTTPS 模式的 cookie 驗收。 |
 | DPL-AC06 | 建立專案、公司，確認資料在 down/up 及換 image tag 後仍可讀。 |
-| DPL-AC07 | bind overlay 對 `/private/tmp/w758-*`，用 `127.0.0.1` 非預設 port 驗證寫入、權限與重啟讀回。 |
-| DPL-AC08 | Field UI 與 API 原始碼盤點；照片上傳個別 deferred/NOT_RUN。 |
+| DPL-AC07 | bind 模式對指定 worktree 的 `.pilot-test/bind/`，用 `127.0.0.1` 非預設 port 驗證寫入、權限與重啟讀回。 |
 | DPL-AC09 | `actionlint`（若可用）或 workflow 靜態設定檢查；不觸發 workflow。 |
 | Compose config | `python3 scripts/check-compose-config.py` 驗證 default/bind render JSON；不需要 Docker daemon。 |
 
@@ -44,3 +43,14 @@
 ## 考慮過但沒採用的做法
 
 - 單一 image 由 FastAPI 提供前端，避免另維護 proxy 服務與跨服務 `/api` 路由設定；正式 HTTPS 維運仍由 0.9.x 處理。
+
+## 第 2 輪補強（負責人 2026-10-28 指示）
+
+- 靜態掛載集中於 static_files.py，GET／HEAD fallback 避開 API，保留 405。
+- Runtime base path 注入 HTML meta 及資源網址；Router basename、三個 API 入口與 manifest 共用部署前綴。cookie Path=/ 遵守 AUT-R12；service worker 維持停用。
+- 單一 compose.yaml 切換 storage；預設固定具名 volume；bind 先建目錄；停機 tar 備份及還原同時涵蓋 /data、/uploads。
+- 新增根目錄／子路徑 Nginx 範例與 `scripts/check-pilot-browser.mjs` HTTPS 瀏覽器驗收。
+- DPL-AC10：同 image 的兩種 Nginx HTTPS 模式，含 UI 與資源狀態。
+- DPL-AC11：備份前資料、變更後資料、還原後資料三階段實測。
+- 首次設定補四分支單元測試；CI 驗 Compose 並 build image、health smoke，不 push。
+- 完整驗收及實際證據路徑：`/Users/kavy/.local/state/inspect-flow-handoff/codex-reports/w-758-r2.md`；原始 log 放同目錄的 `w-758-r2-evidence/`。
