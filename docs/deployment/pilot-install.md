@@ -23,6 +23,12 @@
 )
 ```
 
+下載區塊在子 shell 執行；接著切換目前終端的工作目錄：
+
+```sh
+cd inspectflow
+```
+
 後續指令均在 `inspectflow` 目錄執行。編輯 `.env`：
 
 - `INSPECTFLOW_IMAGE_TAG=pilot-test`：映像標籤，不使用開發用的 `INSPECTFLOW_VERSION`。
@@ -100,12 +106,24 @@ docker compose run --rm --no-deps app python -m app.cli.reset_admin_password
 
 ## 5. 更新與失敗還原
 
-依上一節完成備份 → `down` → 改 `.env` 中 `INSPECTFLOW_IMAGE_TAG` → `pull` → `up -d` → 確認 healthy。先停舊版，避免 migration 期間舊 API 持續寫入（PR-13）。同時從新 image 的來源 tag/SHA 取得同版設定，保留自己的 `.env` 值。
+更新專用的備份流程如下；完成後維持停機，避免備份後又產生未納入備份的寫入（PR-13）。
 
 ```sh
 ( set -eu
   docker compose down
-  # 此處先將 .env 的 INSPECTFLOW_IMAGE_TAG 改為目標版本。
+  mkdir -p backups
+  BACKUP="backups/inspectflow-$(date +%Y%m%d-%H%M%S).tar.gz"
+  docker compose run --rm --no-deps -T --entrypoint tar app \
+    -czf - /data /uploads > "$BACKUP"
+  test -s "$BACKUP"
+)
+```
+
+接著依備份 → `down` → 改 tag → `pull` → `up -d` → healthy 的順序，將 `.env` 中 `INSPECTFLOW_IMAGE_TAG` 改為目標版本，並從新 image 的來源 tag/SHA 取得同版設定，保留自己的 `.env` 值。再執行：
+
+```sh
+( set -eu
+  docker compose down
   docker compose pull
   docker compose up -d --wait --wait-timeout 120
   docker compose ps -a
