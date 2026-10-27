@@ -542,7 +542,7 @@ async function createAccountThroughWizard(
   expectSuccess = true,
 ) {
   fireEvent.click(await screen.findByRole('link', { name: '新增帳號' }))
-  await screen.findByRole('heading', { name: '設定帳號', level: 2 })
+  await screen.findByRole('heading', { name: '帳號資料', level: 2 })
   fireEvent.change(screen.getByLabelText('帳號名稱'), {
     target: { value: username },
   })
@@ -605,7 +605,7 @@ describe('管理表單未儲存導覽防護', () => {
     })
     if (item.label === '帳號') {
       fireEvent.click(screen.getByRole('link', { name: '新增帳號' }))
-      await screen.findByRole('heading', { name: '設定帳號', level: 2 })
+      await screen.findByRole('heading', { name: '帳號資料', level: 2 })
     }
     fireEvent.change(screen.getByLabelText(item.input), {
       target: { value: item.value },
@@ -627,10 +627,13 @@ describe('管理表單未儲存導覽防護', () => {
     )
 
     confirm.mockReturnValue(true)
-    fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器下一頁' }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: item.label === '帳號' ? '測試瀏覽器上一頁' : '測試瀏覽器下一頁',
+      }),
+    )
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2))
-    const nextHeading =
-      item.entries[2] === '/companies' ? '公司管理' : '專案角色'
+    const nextHeading = item.label === '帳號' ? '帳號' : '專案角色'
     expect(
       await screen.findByRole('heading', { name: nextHeading }),
     ).toBeInTheDocument()
@@ -644,7 +647,7 @@ describe('管理表單未儲存導覽防護', () => {
     })
     if (item.label === '帳號') {
       fireEvent.click(screen.getByRole('link', { name: '新增帳號' }))
-      await screen.findByRole('heading', { name: '設定帳號', level: 2 })
+      await screen.findByRole('heading', { name: '帳號資料', level: 2 })
     }
     fireEvent.change(screen.getByLabelText(item.input), {
       target: { value: item.value },
@@ -1073,6 +1076,7 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByRole('heading', { name: '已重設鄧安娜的臨時密碼' }),
     ).toBeVisible()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
       'reset-once-123',
     )
@@ -1141,7 +1145,9 @@ describe('admin user and company pages', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     await waitFor(() =>
-      expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？'),
+      expect(confirm).toHaveBeenCalledWith(
+        '臨時密碼抄下了嗎？離開後就無法再查看。',
+      ),
     )
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
       'reset-once-123',
@@ -1293,13 +1299,15 @@ describe('admin user and company pages', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     await waitFor(() =>
-      expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？'),
+      expect(confirm).toHaveBeenCalledWith(
+        '臨時密碼抄下了嗎？離開後就無法再查看。',
+      ),
     )
     expect(screen.getByLabelText('臨時密碼')).toBeInTheDocument()
     confirm.mockReturnValue(true)
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     expect(
-      await screen.findByRole('heading', { name: '公司管理' }),
+      await screen.findByRole('heading', { name: '帳號' }),
     ).toBeInTheDocument()
     expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
     expectNoPasswordPersistence('back-navigation-password')
@@ -1462,7 +1470,7 @@ describe('admin user and company pages', () => {
     )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Email 已被使用。',
+      '電子郵件已被使用。',
     )
   })
 
@@ -2631,7 +2639,7 @@ describe('management error messages', () => {
     ['user.external_managed', '此帳號的基本資料由外部來源管理。'],
     ['company.inactive', '不能把帳號連結到已停用的公司。'],
     ['user.username_conflict', '帳號名稱已被使用。'],
-    ['user.email_conflict', 'Email 已被使用。'],
+    ['user.email_conflict', '電子郵件已被使用。'],
     ['user.employee_no_conflict', '這家公司已有相同工號。'],
     ['company.name_conflict', '公司名稱已被使用。'],
     ['auth.password_invalid', '密碼長度不符合要求。'],
@@ -2711,7 +2719,7 @@ it('建立完成有臨時密碼時標題帶姓名，頂端取消隱藏', async (
     within(done).getByRole('heading').closest('[role="status"]')!
       .nextElementSibling,
   ).toHaveTextContent('帳號：trial.new')
-  expect(done).toHaveTextContent('他第一次登入必須先改成自己的密碼')
+  expect(done).toHaveTextContent('對方第一次登入時必須改成自己的密碼')
   expect(done.textContent).not.toContain('王新進 的')
   await waitFor(() =>
     expect(
@@ -2745,7 +2753,11 @@ it('ADM-AC56：直接開新增帳號有單一 h1，重新進頁回到第一步',
   view.unmount()
   renderAdmin('/accounts/new?q=anna')
   expect(await screen.findByLabelText('帳號名稱')).toHaveValue('')
-  expect(screen.getByText('步驟 1／4：帳號資料')).toBeVisible()
+  expect(
+    screen
+      .getByRole('navigation', { name: '新增帳號步驟' })
+      .querySelector('[aria-current="step"]'),
+  ).toBeVisible()
   expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
 })
 
@@ -2758,6 +2770,13 @@ it.each([{ delegated_modules: [] }, { delegated_modules: ['project'] }])(
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
     expect(screen.queryByLabelText('帳號名稱')).toBeNull()
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        /\/(companies|roles|permission-bundles|projects)(?:[/?]|$)/.test(
+          String(url),
+        ),
+      ),
+    ).toBe(false)
     expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
     expect(
       fetchMock.mock.calls.some(([url]) =>
@@ -2807,4 +2826,111 @@ it('ADM-AC56：新增頁選項失敗就近提示並可重試', async () => {
   ).toBeInTheDocument()
   expect(screen.queryByRole('alert')).toBeNull()
   expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
+})
+
+it.each(['/accounts/NEW', '/accounts/new/'])(
+  '新增保留字 %s 不查帳號且只有一個 h1',
+  async (path) => {
+    const fetchMock = managementFetch()
+    renderAdmin(path)
+    await screen.findByLabelText('帳號名稱')
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(
+      fetchMock.mock.calls.some(([url]) => /\/users\//i.test(String(url))),
+    ).toBe(false)
+  },
+)
+
+it.each([false, true])('詳情載入／失敗有唯一 h1，failure=%s', async (fail) => {
+  const fetchMock = managementFetch()
+  const original = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (url, init) => {
+    if (String(url).endsWith('/users/unlisted-id')) {
+      if (fail)
+        return Response.json(
+          { error: { code: 'server.error' } },
+          { status: 500 },
+        )
+      return new Promise<Response>(() => {})
+    }
+    return original(url, init)
+  })
+  renderAdmin('/accounts/unlisted-id')
+  if (fail) await screen.findAllByRole('alert')
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+    '帳號詳情',
+  )
+})
+
+it('不存在的帳號顯示 RouteNotFound 與唯一 h1', async () => {
+  const fetchMock = managementFetch()
+  const original = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (url, init) =>
+    String(url).endsWith('/users/unlisted-id')
+      ? Response.json(
+          { error: { code: 'resource.not_found' } },
+          { status: 404 },
+        )
+      : original(url, init),
+  )
+  renderAdmin('/accounts/unlisted-id')
+  await screen.findByRole('heading', { name: '找不到這個帳號' })
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  expect(screen.queryByRole('heading', { name: '能做什麼' })).toBeNull()
+})
+
+it('授權 403 後重試成功導到詳情，保留同一密碼且只建立一次', async () => {
+  const fetchMock = managementFetch({
+    onCreate: (body) => ({
+      ...regularUser,
+      id: 'retry-person',
+      username: String(body.username),
+      email: String(body.email),
+      name_zh: String(body.name_zh),
+      temporary_password: 'retry-once-password',
+    }),
+  })
+  const original = fetchMock.getMockImplementation()!
+  let attempts = 0
+  fetchMock.mockImplementation(async (url, init) => {
+    if (String(url).endsWith('/permission-bundles/office-bundle:apply')) {
+      attempts += 1
+      return attempts === 1
+        ? Response.json(
+            { error: { code: 'permission.denied' } },
+            { status: 403 },
+          )
+        : Response.json({ user_id: 'retry-person', granted_codes: [] })
+    }
+    return original(url, init)
+  })
+  renderAdmin('/accounts')
+  await createAccountThroughWizard(
+    'retry.account',
+    'retry@example.test',
+    '重試帳號',
+    false,
+  )
+  await screen.findByRole('button', { name: '重試未完成的步驟' })
+  expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
+  expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
+    'retry-once-password',
+  )
+  expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '重試未完成的步驟' }))
+  await screen.findByRole('heading', { level: 1, name: '重試帳號' })
+  expect(screen.getByTestId('pathname')).toHaveTextContent(
+    '/accounts/retry-person',
+  )
+  expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
+    'retry-once-password',
+  )
+  expect(attempts).toBe(2)
+  expect(
+    fetchMock.mock.calls.filter(
+      ([url, init]) =>
+        String(url).endsWith('/api/v1/users') && init?.method === 'POST',
+    ),
+  ).toHaveLength(1)
 })

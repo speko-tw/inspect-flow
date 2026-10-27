@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { useLocation, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
-import PeoplePage, { AccountCreationProvider } from './PeoplePage'
+import RealPeoplePage, { AccountCreationProvider } from './PeoplePage'
 
 const peopleApiMock = vi.hoisted(() => ({
   request: vi.fn(),
@@ -24,20 +24,28 @@ vi.mock('../../auth/useCurrentUser', () => ({
   }),
 }))
 
+function PeoplePage(props: Parameters<typeof RealPeoplePage>[0]) {
+  return (
+    <AccountCreationProvider>
+      <RealPeoplePage {...props} />
+    </AccountCreationProvider>
+  )
+}
+
 vi.mock('../UsersPage', () => ({
   default: ({
-    onSelectUser,
     initialQuery,
     detailUserId,
   }: {
-    onSelectUser: (id: string) => void
     initialQuery: string
     detailUserId?: string | null
   }) => (
     <section>
       <span>搜尋：{initialQuery}</span>
       {detailUserId && <span>詳情：{detailUserId}</span>}
-      <button onClick={() => onSelectUser('person-1')}>開啟林沐青</button>
+      <Link to={`/accounts/person-1?q=${encodeURIComponent(initialQuery)}`}>
+        開啟林沐青
+      </Link>
     </section>
   ),
 }))
@@ -235,7 +243,7 @@ describe('PeoplePage', () => {
   })
 
   it.each(['返回帳號清單', '取消'])(
-    'ADM-AC56：%s 保留搜尋並以 replace 返回',
+    'ADM-AC56：%s 保留搜尋且遵守各自歷史行為',
     async (action) => {
       render(
         <DataMemoryRouter
@@ -256,7 +264,9 @@ describe('PeoplePage', () => {
       expect(screen.getByTestId('route')).toHaveTextContent('/accounts?q=anna')
       fireEvent.click(screen.getByRole('button', { name: '測試上一頁' }))
       await waitFor(() =>
-        expect(screen.getByTestId('route')).toHaveTextContent('/companies'),
+        expect(screen.getByTestId('route')).toHaveTextContent(
+          action === '取消' ? '/companies' : '/accounts/new?q=anna',
+        ),
       )
     },
   )
@@ -291,6 +301,39 @@ describe('PeoplePage', () => {
     )
     expect(screen.queryByLabelText('臨時密碼')).toBeNull()
     confirm.mockRestore()
+  })
+
+  it.each(['新增帳號', '開啟林沐青'])(
+    '清單到 %s 使用一般導頁，上一頁回清單',
+    async (label) => {
+      render(
+        <DataMemoryRouter initialEntries={['/accounts?q=anna']}>
+          <PeoplePage onTemporaryPassword={vi.fn()} />
+          <RouteProbe />
+        </DataMemoryRouter>,
+      )
+      fireEvent.click(screen.getByRole('link', { name: label }))
+      expect(screen.getByTestId('route')).not.toHaveTextContent(
+        '/accounts?q=anna',
+      )
+      fireEvent.click(screen.getByRole('button', { name: '測試上一頁' }))
+      await waitFor(() =>
+        expect(screen.getByTestId('route')).toHaveTextContent(
+          '/accounts?q=anna',
+        ),
+      )
+    },
+  )
+
+  it('缺少 provider 立即報錯，不能靜默丟失密碼', () => {
+    render(
+      <DataMemoryRouter>
+        <RealPeoplePage onTemporaryPassword={vi.fn()} />
+      </DataMemoryRouter>,
+    )
+    expect(
+      screen.getByText('PeoplePage requires AccountCreationProvider'),
+    ).toBeVisible()
   })
 
   it('shows not-found for a malformed account id without any request', () => {
@@ -341,7 +384,7 @@ describe('PeoplePage', () => {
 
     expect(screen.getByRole('heading', { name: '帳號' })).toBeInTheDocument()
     expect(screen.getByText('搜尋：林沐')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '開啟林沐青' }))
+    fireEvent.click(screen.getByRole('link', { name: '開啟林沐青' }))
 
     expect(screen.getByRole('link', { name: '返回帳號清單' })).toHaveAttribute(
       'href',

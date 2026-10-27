@@ -6,6 +6,7 @@ import { useState } from 'react'
 
 // 以密碼當 key：換成新的一組密碼時重新掛載，複製狀態自然歸零，
 // 不會把上一組的「已複製」沿用到新密碼。
+/** ADM-R15、AUT-R36：顯示一次性臨時密碼並提供複製。 */
 export default function TemporaryPassword({ password }: { password: string }) {
   return <CopyablePassword key={password} password={password} />
 }
@@ -24,6 +25,7 @@ function CopyablePassword({ password }: { password: string }) {
 
   return (
     <>
+      <p>臨時密碼（只顯示這一次）</p>
       {/* inline 群組只加視覺間距，原生選取才不會插入空白或換行。 */}
       <output aria-label="臨時密碼" className="temporary-password">
         {password.match(/.{1,5}/g)?.map((group, index) => (

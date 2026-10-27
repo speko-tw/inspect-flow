@@ -319,7 +319,10 @@ function TemporaryPasswordResult({
   children: ReactNode
   onDone: () => void
 }) {
-  const guard = useUnsavedNavigationGuard(true, '臨時密碼抄下了嗎？')
+  const guard = useUnsavedNavigationGuard(
+    true,
+    '臨時密碼抄下了嗎？離開後就無法再查看。',
+  )
   return (
     <>
       {guard.pending && (
@@ -331,6 +334,7 @@ function TemporaryPasswordResult({
           title="臨時密碼抄下了嗎？"
         >
           <p>離開後就無法再次查看臨時密碼。</p>
+          <p>忘了抄也沒關係，可以在帳號頁按「重設臨時密碼」重新產生。</p>
         </ConfirmBox>
       )}
       <section
@@ -395,7 +399,7 @@ function AdminPageContent() {
       <AppHeader
         badge={
           isProjectSectionRoute ||
-          location.pathname.startsWith('/accounts') ? (
+          location.pathname.toLowerCase().startsWith('/accounts') ? (
             <p className="topbar-badge">Admin</p>
           ) : (
             <h1 className="topbar-badge">Admin</h1>
@@ -422,7 +426,7 @@ function AdminPageContent() {
               })
             }}
           >
-            <h2
+            <h1
               id="temporary-password-heading"
               ref={resultHeadingRef}
               tabIndex={-1}
@@ -430,7 +434,7 @@ function AdminPageContent() {
               {temporaryPassword.source === 'created'
                 ? `已新增${passwordRecipient}的帳號`
                 : `已重設${passwordRecipient}的臨時密碼`}
-            </h2>
+            </h1>
             <p>帳號：{temporaryPassword.username}</p>
             <p>
               {temporaryPassword.source === 'created'
@@ -602,7 +606,7 @@ function MemberAdminShell({
           />
           <Route
             path={nestedRoutePath(ROUTES.adminAccountNew, ROUTES.adminShell)}
-            element={<AccessDeniedPage />}
+            element={<PeoplePage onTemporaryPassword={() => undefined} />}
           />
           {canManageAccounts && (
             <Route

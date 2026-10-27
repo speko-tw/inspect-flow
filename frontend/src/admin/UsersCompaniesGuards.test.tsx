@@ -253,7 +253,6 @@ function renderUsers(
     detailUserId?: string | null
     initialQuery?: string
     onQueryApplied?: (query: string) => void
-    onSelectUser?: (id: string) => void
     onTemporaryPassword?: (
       username: string,
       password: string,
@@ -503,7 +502,7 @@ describe('UsersPage 帳號詳情', () => {
 describe('UsersPage 帳號清單導覽', () => {
   it('renders the account name as an unbordered detail link', async () => {
     stubBackend()
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
 
     const accountLink = await screen.findByRole('link', { name: '鄧安娜' })
     expect(accountLink).toHaveAttribute('href', '/accounts/user-1')
@@ -544,7 +543,7 @@ describe('UsersPage 批次停用帳號（#414）', () => {
       hold: (call) =>
         call.path.endsWith(':batch-active-status') ? gate : undefined,
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     const batchTrigger = screen.getByRole('button', { name: '批次停用帳號' })
@@ -575,7 +574,7 @@ describe('UsersPage 批次停用帳號（#414）', () => {
     const backend = stubBackend({
       fail: (call) => call.path.endsWith(':batch-active-status'),
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     const row = await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
@@ -614,7 +613,7 @@ describe('UsersPage 批次停用帳號（#414）', () => {
         ],
       },
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
@@ -660,7 +659,7 @@ describe('UsersPage 批次停用帳號（#414）', () => {
       users: [{ ...regularUser, is_active: false }],
       fail: (call) => call.path.endsWith(':batch-active-status'),
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     const row = await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
@@ -695,7 +694,7 @@ describe('UsersPage 批次停用帳號（#414）', () => {
         ],
       },
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 bob.lin' }))
@@ -750,7 +749,7 @@ describe('UsersPage 批次停用帳號（#414）', () => {
       ],
       preview: { account_expired: true },
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
@@ -1615,7 +1614,7 @@ describe('#727 帳號操作保護', () => {
 
   it('批次停用後準備啟用及取消，清除兩種舊訊息', async () => {
     stubBackend()
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     fireEvent.click(
       await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
     )
@@ -1658,11 +1657,7 @@ describe('#727 恢復項目的共用白話內容', () => {
           ],
         },
       })
-      renderUsers(
-        mode === 'batch'
-          ? { onSelectUser: vi.fn() }
-          : { detailUserId: 'user-1' },
-      )
+      renderUsers(mode === 'batch' ? {} : { detailUserId: 'user-1' })
       let box: HTMLElement
       if (mode === 'batch') {
         fireEvent.click(
@@ -1707,7 +1702,7 @@ describe('#727 批次錯誤清除', () => {
         users: [{ ...regularUser, is_active: active }],
         fail: (call) => call.path.endsWith(':batch-active-status'),
       })
-      renderUsers({ onSelectUser: vi.fn() })
+      renderUsers({})
       const select = await screen.findByRole('checkbox', {
         name: '選取 anna.deng',
       })
@@ -1759,7 +1754,7 @@ describe('#727c 反向批次訊息清除', () => {
     const backend = stubBackend({
       users: [{ ...regularUser, is_active: false }],
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     fireEvent.click(
       await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
     )
@@ -1785,7 +1780,7 @@ describe('#734 T1/T2/T3 帳號批次回饋', () => {
     '啟用狀態 %s 的確認與結果在觸發處同一容器',
     async (active) => {
       stubBackend({ users: [{ ...regularUser, is_active: active }] })
-      renderUsers({ onSelectUser: vi.fn() })
+      renderUsers({})
       fireEvent.click(
         await screen.findByRole('checkbox', {
           name: '選取 anna.deng',
@@ -2042,7 +2037,7 @@ it('批次啟用排除到期者，警示附編輯連結且只送出其餘帳號'
     ],
     previews: { 'user-1': { account_expired: true } },
   })
-  renderUsers({ onSelectUser: vi.fn() })
+  renderUsers({})
   fireEvent.click(
     await screen.findByRole('checkbox', {
       name: '選取 anna.deng',
@@ -2658,7 +2653,7 @@ describe('#732 批次預覽的並行請求上限', () => {
   }
 
   async function selectAllUsers() {
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     await screen.findByRole('checkbox', { name: '選取 batch.user1' })
     checkAll('選取 batch.user')
   }
@@ -2688,7 +2683,7 @@ describe('#732 批次預覽的並行請求上限', () => {
           ? gates[Number(call.path.split('/')[4].split('-')[1]) - 1]
           : undefined,
     })
-    const view = renderUsers({ onSelectUser: vi.fn() })
+    const view = renderUsers({})
     await screen.findByRole('checkbox', { name: '選取 batch.user1' })
     checkAll('選取 batch.user')
 
@@ -2727,4 +2722,39 @@ describe('#732 批次預覽的並行請求上限', () => {
     expect(backend.count('GET', /\/active-users$/)).toBe(SELECTED)
     expect(state.peak).toBeLessThanOrEqual(LIMIT)
   })
+})
+
+it('帳號詳情：資料寫入中互鎖停用、重設及儲存，完成後恢復（#507）', async () => {
+  const gate = deferred()
+  stubBackend({
+    hold: (call) =>
+      call.method === 'PUT' && call.path === '/api/v1/users/user-1/admin'
+        ? gate
+        : undefined,
+  })
+  renderUsers({ detailUserId: 'user-1' })
+  fireEvent.click(await screen.findByRole('button', { name: '修改資料' }))
+  fireEvent.change(screen.getByLabelText('中文姓名'), {
+    target: { value: '鄧安娜更新' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
+  fireEvent.click(
+    within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      'button',
+      { name: '確認' },
+    ),
+  )
+  expect(screen.getByRole('button', { name: '停用帳號' })).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: '正在重設臨時密碼…' }),
+  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: '儲存資料' })).toBeDisabled()
+  gate.resolve()
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: '儲存資料' })).toBeNull(),
+  )
+  expect(screen.getByRole('button', { name: '停用帳號' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '重設臨時密碼' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: '修改資料' }))
+  expect(screen.getByRole('button', { name: '儲存資料' })).toBeEnabled()
 })

@@ -296,7 +296,12 @@ try {
   // #713：第一步缺欄位時停在原地並在欄位旁說明。
   await page.getByRole('button', { name: '下一步' }).click()
   await page.getByText('請填寫帳號名稱。').first().waitFor()
-  assert.ok(await page.getByText('步驟 1／4：帳號資料').isVisible())
+  assert.ok(
+    await page
+      .getByRole('navigation', { name: '新增帳號步驟' })
+      .locator('[aria-current="step"]')
+      .isVisible(),
+  )
   await page.getByLabel('帳號名稱', { exact: true }).fill(
     'demo-role-check',
   )

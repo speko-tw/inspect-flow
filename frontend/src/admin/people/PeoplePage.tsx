@@ -61,7 +61,7 @@ const CreationContext = createContext<{
   setCreated: (result: CreationResult | null) => void
 } | null>(null)
 
-/** 跨新增與詳情路由保存一次性結果；離開目標頁即清除。 */
+/** ADM-R56、ADM-R15、AUT-R36：一次性密碼只存記憶體，離頁清除。 */
 export function AccountCreationProvider({
   children,
 }: {
@@ -88,7 +88,7 @@ export function AccountCreationProvider({
   )
 }
 
-/** 帳號路由入口；草稿在路由切換時重置，密碼不進入歷史或儲存。 */
+/** ADM-R56：帳號路由重置草稿；一次性密碼不進入歷史或儲存。 */
 export function PeoplePage(props: {
   onTemporaryPassword: (
     username: string,
@@ -99,18 +99,19 @@ export function PeoplePage(props: {
 }) {
   const location = useLocation()
   const result = useContext(CreationContext)
+  if (!result) throw new Error('PeoplePage requires AccountCreationProvider')
   return (
     <PeopleRoute
       key={location.pathname}
       {...props}
       created={
-        result?.created &&
+        result.created &&
         location.pathname.replace(/\/$/, '') ===
           routePath(ROUTES.adminPeople, { personId: result.created.id })
           ? result.created
           : null
       }
-      onCreated={(created) => result?.setCreated(created)}
+      onCreated={(created) => result.setCreated(created)}
     />
   )
 }
@@ -142,13 +143,14 @@ function PeopleRoute({
   >(null)
   const [userFormsDirty, setUserFormsDirty] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
+  const [accountMissing, setAccountMissing] = useState(false)
   const pageGuard = useUnsavedNavigationGuard(
     wizardDirty ||
       userFormsDirty ||
       wizardHasTemporaryPassword ||
       Boolean(created),
     wizardHasTemporaryPassword || created
-      ? '臨時密碼抄下了嗎？'
+      ? '臨時密碼抄下了嗎？離開後就無法再查看。'
       : '有尚未儲存的變更。確定要離開嗎？',
   )
   const pathname = location.pathname.replace(/\/$/, '')
@@ -157,7 +159,7 @@ function PeopleRoute({
       `^${ROUTES.adminPeople.path.replace('/:personId?', '')}/([^/]+)$`,
     ),
   )
-  const isCreateRoute = pathname === ROUTES.adminAccountNew.path
+  const isCreateRoute = pathname.toLowerCase() === ROUTES.adminAccountNew.path
   const personId =
     !isCreateRoute && detailMatch ? decodePersonId(detailMatch[1]) : null
   const createWizardOpen = user.is_admin && isCreateRoute
@@ -185,13 +187,21 @@ function PeopleRoute({
     if (action) pageGuard.allowNavigation(action)
   }
 
-  // 帳號編號會原樣拼進 API 路徑；特製網址（含 `/`、`?`）解碼後不得
-  // 送出請求，直接顯示找不到（ADM-R25，#711）。
-  if (accessDenied || (isCreateRoute && !user.is_admin)) {
-    return <AccessDeniedPage />
+  // ADM-R56：委派不包含建立帳號，直接開網址也不能載入精靈選項。
+  if (isCreateRoute && !user.is_admin) {
+    return (
+      <section>
+        <h1>無權限</h1>
+        <p>新增帳號只有系統管理者能操作。</p>
+        <Link to={listPath}>回到帳號清單</Link>
+      </section>
+    )
   }
+  // ADM-R56：只有載入遭拒才整頁提示；寫入失敗保留密碼與重試流程。
+  if (accessDenied) return <AccessDeniedPage />
 
-  if (personId && !isResourceId(personId)) {
+  // ADM-R25：解碼後的特製編號不得直接拼入 API 路徑。
+  if (accountMissing || (personId && !isResourceId(personId))) {
     return (
       <section className="admin-page">
         <RouteNotFound
@@ -222,6 +232,7 @@ function PeopleRoute({
           title="臨時密碼抄下了嗎？"
         >
           <p>離開後就無法再次查看臨時密碼。</p>
+          <p>忘了抄也沒關係，可以在帳號頁按「重設臨時密碼」重新產生。</p>
         </ConfirmBox>
       ) : (wizardHasTemporaryPassword || created) && pageGuard.pending ? (
         <ConfirmBox
@@ -232,6 +243,7 @@ function PeopleRoute({
           title="臨時密碼抄下了嗎？"
         >
           <p>離開後就無法再次查看臨時密碼。</p>
+          <p>忘了抄也沒關係，可以在帳號頁按「重設臨時密碼」重新產生。</p>
         </ConfirmBox>
       ) : (
         <UnsavedLeaveBox guard={pageGuard} />
@@ -242,13 +254,10 @@ function PeopleRoute({
         </h1>
       )}
       {personId || createWizardOpen ? (
-        <BackLink replace to={listPath}>
-          返回帳號清單
-        </BackLink>
+        <BackLink to={listPath}>返回帳號清單</BackLink>
       ) : user.is_admin ? (
         <Link
           className="btn btn-primary"
-          replace
           to={{
             pathname: ROUTES.adminAccountNew.path,
             search: location.search,
@@ -263,8 +272,14 @@ function PeopleRoute({
             <h2>已新增{created.name_zh || created.username}的帳號</h2>
           </Notice>
           <p>帳號：{created.username}</p>
-          <p>他第一次登入必須先改成自己的密碼。離開此頁後就看不到這組密碼。</p>
+          <div className="notice notice-warning" role="status">
+            請複製這組密碼交給{created.name_zh || created.username}。
+            對方第一次登入時必須改成自己的密碼。這組密碼只顯示這一次，離開這頁後就無法再查看。
+          </div>
           <TemporaryPassword password={created.temporary_password} />
+          <p>
+            <Link to={ROUTES.adminAccountNew.path}>再新增一個帳號</Link>
+          </p>
         </section>
       )}
       {!user.is_admin && personId && (
@@ -276,18 +291,8 @@ function PeopleRoute({
           initialQuery={query}
           externalNavigationGuard
           onDirtyChange={setUserFormsDirty}
+          onNotFound={setAccountMissing}
           onQueryApplied={updateQuery}
-          onSelectUser={(id) => {
-            const next = new URLSearchParams(searchParams)
-            if (query) next.set('q', query)
-            navigate(
-              {
-                pathname: routePath(ROUTES.adminPeople, { personId: id }),
-                search: next.toString(),
-              },
-              { replace: true },
-            )
-          }}
           onTemporaryPassword={onTemporaryPassword}
         />
       ) : !user.is_admin ? (
@@ -329,11 +334,9 @@ function PeopleRoute({
           onDirtyChange={setWizardDirty}
           onTemporaryPasswordVisible={setWizardHasTemporaryPassword}
           onRequestTemporaryPasswordLeave={requestPasswordLeave}
-          onWizardBackToList={() => navigate(listPath, { replace: true })}
+          onWizardBackToList={() => navigate(listPath)}
           onWizardViewUser={(id) => {
-            navigate(routePath(ROUTES.adminPeople, { personId: id }), {
-              replace: true,
-            })
+            navigate(routePath(ROUTES.adminPeople, { personId: id }))
           }}
           selectedUserId={personId ?? undefined}
         />
@@ -367,9 +370,20 @@ function DelegatedPersonHeading({ userId }: { userId: string }) {
   }, [userId])
 
   if (currentResult?.error) {
-    return <p role="alert">{currentResult.error}</p>
+    return (
+      <>
+        <h1 id="delegated-person-heading">帳號詳情</h1>
+        <p role="alert">{currentResult.error}</p>
+      </>
+    )
   }
-  if (!currentResult?.person) return <p role="status">載入帳號…</p>
+  if (!currentResult?.person)
+    return (
+      <>
+        <h1 id="delegated-person-heading">帳號詳情</h1>
+        <p role="status">載入帳號…</p>
+      </>
+    )
   const person = currentResult.person
   return (
     <header>

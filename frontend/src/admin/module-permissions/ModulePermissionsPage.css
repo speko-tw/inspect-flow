@@ -48,9 +48,14 @@
   align-items: center;
   gap: var(--space-3);
   margin-block-start: var(--space-5);
+  margin-block-end: var(--space-3);
 }
 
 /* 「檢查」緊接在下拉選單後面，補上與欄位的間距。 */
 .permission-check-button {
   margin-block-start: var(--space-4);
+}
+
+.wizard-steps [aria-current='step'] {
+  font-weight: 700;
 }

@@ -2,7 +2,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -15,12 +14,10 @@ import permissionCodeContract from '../../permissionCodeContract'
 import {
   Button,
   Card,
-  Field,
   FormErrorSummary,
   FormField,
   FormGroup,
   Input,
-  SectionHeader,
 } from '../../components'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { Notice } from '../../ui/Notice'
@@ -45,13 +42,7 @@ import {
   setProjectMemberRoles,
   type Project,
 } from '../projects/api'
-import {
-  getCreatorRole,
-  listRoles,
-  setCreatorRole,
-  updateRole,
-  type Role,
-} from '../roles/api'
+import { getCreatorRole, listRoles, type Role } from '../roles/api'
 import {
   applyPermissionBundle,
   getRevokeImpact,
@@ -79,7 +70,15 @@ type DiagnosticResult = {
   nonmember: boolean
 }
 
-type IdentityField = 'username' | 'name' | 'email'
+type IdentityField =
+  | 'username'
+  | 'name'
+  | 'email'
+  | 'employee_no'
+  | 'name_en'
+  | 'department'
+  | 'location'
+  | 'company_id'
 type IdentityErrors = Partial<Record<IdentityField, string>>
 
 // 第一步三個必填欄位的標籤與欄位 id；id 固定，錯誤摘要才能跳到欄位。
@@ -87,6 +86,11 @@ const IDENTITY_FIELDS: Record<IdentityField, { label: string; id: string }> = {
   username: { label: '帳號名稱', id: 'wizard-username' },
   name: { label: '姓名', id: 'wizard-name' },
   email: { label: '電子郵件', id: 'wizard-email' },
+  employee_no: { label: '工號', id: 'wizard-employee-no' },
+  name_en: { label: '英文姓名', id: 'wizard-name-en' },
+  department: { label: '部門', id: 'wizard-department' },
+  location: { label: '地點', id: 'wizard-location' },
+  company_id: { label: '公司', id: 'wizard-company' },
 }
 
 type Profile = 'system' | 'manager' | 'office' | 'field' | 'external'
@@ -142,7 +146,7 @@ const PROFILE_ACCESS: Record<
 > = {
   system: {
     can: ['管理帳號與權限', '查看全部專案進度', '管理專案成員'],
-    cannot: ['外部協作人員不能設為系統管理者', '不能替自己建立額外權限'],
+    cannot: ['不能替自己建立額外權限'],
     projectRole: '專案工程師',
   },
   manager: {
@@ -296,7 +300,7 @@ type ModulePermissionsPageProps = {
   onCreationComplete?: (created: CreatedUser) => void
 }
 
-/** 保留帳號授權與職務精靈；新增成功由路由入口承接一次性結果。 */
+/** ADM-R47、ADM-R56：保留就地授權，新增由詳情承接一次性結果。 */
 export default function ModulePermissionsPage(
   props: ModulePermissionsPageProps = {},
 ) {
@@ -306,7 +310,7 @@ export default function ModulePermissionsPage(
 }
 
 function ModulePermissionsPageContent({
-  embedded = false,
+  embedded = true,
   openWizardRequest = 0,
   selectedUserId,
   onTemporaryPassword,
@@ -470,6 +474,16 @@ function ModulePermissionsPageContent({
   )
   const [existingAccount, setExistingAccount] = useState(false)
   const [error, setError] = useState('')
+  const [optionsError, setOptionsError] = useState('')
+  const [profileError, setProfileError] = useState('')
+  const [moreOpen, setMoreOpen] = useState(false)
+  const active = useRef(true)
+  useEffect(() => {
+    active.current = true
+    return () => {
+      active.current = false
+    }
+  }, [])
   const [forbidden, setForbidden] = useState(false)
   useEffect(() => {
     if (forbidden) onForbidden?.()
@@ -547,7 +561,6 @@ function ModulePermissionsPageContent({
   const [createdName, setCreatedName] = useState('')
   const [provisioning, setProvisioning] = useState<Provisioning | null>(null)
   const [partial, setPartial] = useState('')
-  const [query, setQuery] = useState('')
   const [diagnosticProject, setDiagnosticProject] = useState('')
   const [diagnosticAction, setDiagnosticAction] = useState('task-list')
   const diagnosticRequest = useRef(0)
@@ -630,13 +643,17 @@ function ModulePermissionsPageContent({
   }, [revoke, busy])
   const wizardHeadingRef = useRef<HTMLHeadingElement>(null)
 
-  useEffect(() => {
-    if (wizardOpen) wizardHeadingRef.current?.focus()
-  }, [wizardOpen])
+  const wizardStepsRef = useRef<HTMLElement>(null)
+  // ADM-R56：步驟標題先聚焦，欄位摘要的被動 effect 才能接手錯誤焦點。
+  useLayoutEffect(() => {
+    if (!wizardOpen) return
+    wizardStepsRef.current?.scrollIntoView?.({ block: 'start' })
+    wizardHeadingRef.current?.focus({ preventScroll: true })
+  }, [wizardOpen, step])
 
   function missingIdentityFields(): IdentityField[] {
-    const values: Record<IdentityField, string> = { username, name, email }
-    return (Object.keys(values) as IdentityField[]).filter(
+    const values = { username, name, email }
+    return (Object.keys(values) as Array<keyof typeof values>).filter(
       (field) => !values[field].trim(),
     )
   }
@@ -682,7 +699,7 @@ function ModulePermissionsPageContent({
         setProjectOptionsStatus('ready')
       })
       .catch((caught: unknown) => {
-        if (isForbidden(caught)) setForbidden(true)
+        if (active.current && isForbidden(caught)) setForbidden(true)
         setProjectOptionsStatus('error')
         setProjectOptionsError(message(caught))
         throw caught
@@ -712,7 +729,7 @@ function ModulePermissionsPageContent({
         try {
           await pending
         } catch (caught) {
-          if (isForbidden(caught)) setForbidden(true)
+          if (active.current && isForbidden(caught)) setForbidden(true)
           throw caught
         } finally {
           if (wizardOptionsRequests.current[key] === pending)
@@ -760,28 +777,39 @@ function ModulePermissionsPageContent({
   function goToStep(nextStep: number) {
     // 第一步先擋缺漏，不然要到最後一步才發現建立不了。
     if (step === 0 && nextStep > 0 && !existingAccount) {
-      const missing = missingIdentityFields()
-      if (missing.length > 0) {
-        setIdentityErrors(
-          Object.fromEntries(
-            missing.map((field) => [
-              field,
-              `請填寫${IDENTITY_FIELDS[field].label}。`,
-            ]),
-          ),
-        )
+      const errors: IdentityErrors = Object.fromEntries(
+        missingIdentityFields().map((field) => [
+          field,
+          `請填寫${IDENTITY_FIELDS[field].label}。`,
+        ]),
+      )
+      // DOM-R28：與後端帳號識別規則一致，離開第一步前就近指出欄位。
+      if (
+        username.trim() &&
+        !/^[A-Za-z][A-Za-z0-9._-]{2,31}$/.test(username.trim())
+      )
+        errors.username =
+          '帳號名稱須為 3–32 字，英文字母開頭，可用英文、數字、. _ -。'
+      if (
+        email.trim() &&
+        (!email.trim().includes('@') || /\s/u.test(email.trim()))
+      )
+        errors.email = '電子郵件必須含 @，且不能有空白。'
+      if (Object.keys(errors).length > 0) {
+        setIdentityErrors(errors)
         setIdentityFocusRequest((value) => value + 1)
         return
       }
     }
-    if (nextStep >= 3 && profile === null) {
-      setError('請先選擇職務，再繼續設定。')
+    if (nextStep >= 2 && profile === null) {
+      setProfileError('請先選一個職務，系統才知道要開通哪些功能。')
       return
     }
+    setProfileError('')
     setError('')
     setStep(nextStep)
     void loadWizardOptions(nextStep).catch((caught: unknown) =>
-      setError(message(caught)),
+      setOptionsError(message(caught)),
     )
   }
 
@@ -798,6 +826,9 @@ function ModulePermissionsPageContent({
     setProfile(null)
     setStep(0)
     setIdentityErrors({})
+    setOptionsError('')
+    setProfileError('')
+    setMoreOpen(false)
     setExistingAccount(false)
     setCreatedId('')
     setCreatedUsername('')
@@ -845,8 +876,8 @@ function ModulePermissionsPageContent({
         setUsersCatalogState({ status: 'ready', error: '' })
       })
       .catch((caught: unknown) => {
-        if (isForbidden(caught)) setForbidden(true)
         if (!active) return
+        if (active && isForbidden(caught)) setForbidden(true)
         setUsersCatalogState({ status: 'error', error: message(caught) })
       })
     return () => {
@@ -870,8 +901,8 @@ function ModulePermissionsPageContent({
         setPermissionsCatalogState({ status: 'ready', error: '' })
       })
       .catch((caught: unknown) => {
-        if (isForbidden(caught)) setForbidden(true)
         if (!active) return
+        if (active && isForbidden(caught)) setForbidden(true)
         setPermissionsCatalogState({ status: 'error', error: message(caught) })
       })
     return () => {
@@ -903,7 +934,7 @@ function ModulePermissionsPageContent({
       setAdvancedStatus('ready')
     })()
       .catch((caught: unknown) => {
-        if (isForbidden(caught)) setForbidden(true)
+        if (active.current && isForbidden(caught)) setForbidden(true)
         setAdvancedStatus('error')
         setAdvancedError(message(caught))
         throw caught
@@ -935,8 +966,8 @@ function ModulePermissionsPageContent({
         if (embedded && currentUser.is_admin && selectedUserId) return
         await refresh().catch(() => undefined)
       } catch (caught) {
-        if (isForbidden(caught)) setForbidden(true)
-        if (active) setError(message(caught))
+        if (active && isForbidden(caught)) setForbidden(true)
+        if (active) setOptionsError(message(caught))
       }
     }
     void load()
@@ -968,7 +999,7 @@ function ModulePermissionsPageContent({
         }
       })
       .catch((caught: unknown) => {
-        if (isForbidden(caught)) setForbidden(true)
+        if (active && isForbidden(caught)) setForbidden(true)
         // 載入失敗時不標成已載入：否則開通控制項會以空的權限
         // 草稿啟用，使用者可能在不知道現況下送出覆寫（#711）。
         if (active) {
@@ -1023,17 +1054,6 @@ function ModulePermissionsPageContent({
     return access
   }
 
-  const visibleUsers = useMemo(() => {
-    const term = query.trim().toLocaleLowerCase()
-    return users.filter(
-      (user) =>
-        (currentUser?.is_admin || user.id !== currentUser?.id) &&
-        `${user.name_zh ?? ''} ${user.username}`
-          .toLocaleLowerCase()
-          .includes(term),
-    )
-  }, [currentUser?.id, currentUser?.is_admin, query, users])
-
   async function submitAccessDraft(scope: 'access' | 'diagnostic' = 'access') {
     if (!selectedUser) return
     const granted = accessDraft.filter((code) => !userAccess.includes(code))
@@ -1046,7 +1066,6 @@ function ModulePermissionsPageContent({
         const impact = await getRevokeImpact(selectedUser, revoked[0])
         setRevoke({ code: revoked[0], impact, scope })
       } catch (caught) {
-        if (isForbidden(caught)) setForbidden(true)
         setOperationError(scope, message(caught))
       } finally {
         setBusy(false)
@@ -1078,7 +1097,6 @@ function ModulePermissionsPageContent({
         `已為${targetName}開通${grantedNames.join('、')}。`,
       )
     } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
       setOperationError(scope, message(caught))
       const access = await getUserModulePermissions(selectedUser)
       if (diagnosticSelection.current.selectedUser !== selectedUser) return
@@ -1105,7 +1123,6 @@ function ModulePermissionsPageContent({
       setOperationNotice(revoke.scope, '權限已收回。')
       await diagnose()
     } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
       setOperationError('revoke', message(caught))
     } finally {
       setBusy(false)
@@ -1120,8 +1137,7 @@ function ModulePermissionsPageContent({
     try {
       await loadWizardOptions(3)
     } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
-      setError(message(caught))
+      setOptionsError(message(caught))
       return
     }
     const bundleName = PROFILE_BUNDLES[profile]
@@ -1218,12 +1234,39 @@ function ModulePermissionsPageContent({
         )
       }
     } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
-      const errorMessage = managementErrorMessage(caught).replace(
-        /[。.!?]+$/,
-        '',
-      )
-      setError(`${errorMessage}。請檢查資料後再試一次。`)
+      const errorMessage = managementErrorMessage(caught)
+      const fields: IdentityErrors = {}
+      if (caught instanceof ManagementApiError) {
+        const conflictField: Record<string, IdentityField> = {
+          'user.username_conflict': 'username',
+          'user.email_conflict': 'email',
+          'user.employee_no_conflict': 'employee_no',
+        }
+        const field = conflictField[caught.code ?? '']
+        if (field) fields[field] = errorMessage
+        if (caught.code === 'request.validation_failed') {
+          for (const item of caught.fields ?? []) {
+            const apiField = item.path.replace(/^\/(?:body\/)?/, '')
+            const field = apiField === 'name_zh' ? 'name' : apiField
+            if (field in IDENTITY_FIELDS)
+              fields[field as IdentityField] = errorMessage
+          }
+          // 舊後端若沒有欄位路徑，仍回到第一步提供可聚焦的修正入口。
+          if (Object.keys(fields).length === 0) fields.username = errorMessage
+        }
+      }
+      if (Object.keys(fields).length > 0) {
+        setIdentityErrors(fields)
+        if (
+          fields.employee_no ||
+          fields.name_en ||
+          fields.department ||
+          fields.location
+        )
+          setMoreOpen(true)
+        setStep(0)
+        setIdentityFocusRequest((value) => value + 1)
+      } else setError(errorMessage)
     } finally {
       setBusy(false)
     }
@@ -1260,7 +1303,6 @@ function ModulePermissionsPageContent({
           try {
             await addProjectMember(next.projectId, next.userId, [next.roleId])
           } catch (caught) {
-            if (isForbidden(caught)) setForbidden(true)
             const isConflict =
               caught instanceof ManagementApiError &&
               caught.status === 409 &&
@@ -1300,7 +1342,6 @@ function ModulePermissionsPageContent({
       }
       return true
     } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
       setError(message(caught))
       setPartial(
         next.mergeExistingRoles
@@ -1504,7 +1545,6 @@ function ModulePermissionsPageContent({
         project_role: roleMissing,
       })
     } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
       if (!active()) return
       if (isNotFound(caught) && needsProject && diagnosticProject) {
         setNonmemberProject(diagnosticProject)
@@ -1569,7 +1609,6 @@ function ModulePermissionsPageContent({
       ])
       await diagnose({ layer: 'module', label: '功能權限' })
     } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
       if (stillCurrent()) setDiagnosticError(message(caught))
     } finally {
       setBusy(false)
@@ -1616,7 +1655,6 @@ function ModulePermissionsPageContent({
         label: `「${candidate.name}」角色`,
       })
     } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
       setOperationError('diagnostic', message(caught))
     } finally {
       setBusy(false)
@@ -1637,7 +1675,6 @@ function ModulePermissionsPageContent({
       if (diagnosticResult || notice) await diagnose()
       setOperationNotice(scope, '權限組合已完整套用。')
     } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
       setOperationError(scope, message(caught))
     } finally {
       setBusy(false)
@@ -1659,39 +1696,7 @@ function ModulePermissionsPageContent({
         enabled ? '已委派權限管理。' : '已收回權限委派。',
       )
     } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
       setOperationError(scope, message(caught))
-    }
-  }
-
-  async function changeRoleScope(
-    role: Role,
-    changes: {
-      is_assignable?: boolean
-      is_external_allowed?: boolean
-    },
-  ) {
-    const scope = `role:${role.id}`
-    setOperationError(scope, '')
-    try {
-      await updateRole(role.id, changes)
-      setRoles(await listRoles())
-      setOperationNotice(scope, `已更新角色「${role.name}」的指派範圍。`)
-    } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
-      setOperationError(scope, message(caught))
-    }
-  }
-
-  async function changeCreatorRole(value: string) {
-    setOperationError('creator', '')
-    try {
-      const result = await setCreatorRole(value)
-      setCreatorRoleId(result.role_id)
-      setOperationNotice('creator', '新專案預設角色已更新。')
-    } catch (caught) {
-      if (isForbidden(caught)) setForbidden(true)
-      setOperationError('creator', message(caught))
     }
   }
 
@@ -1781,55 +1786,9 @@ function ModulePermissionsPageContent({
       {!externalNavigationGuard && (
         <ModulePermissionsNavigationGuard hasUnsavedChanges={wizardHasDraft} />
       )}
-      {!embedded && !wizardOpen && (
-        <SectionHeader
-          title="帳號權限"
-          description="先選職務，再確認帳號實際可使用的功能。"
-        />
-      )}
+
       {!wizardOpen && error && <Notice variant="error">{error}</Notice>}
-      {!embedded && !wizardOpen && (
-        <Card>
-          <h2>帳號清單</h2>
-          <p>選取帳號查看目前能力，或新增帳號並依職務完成設定。</p>
-          <Button onClick={() => setWizardOpen(true)}>新增帳號</Button>
-          <Field id="people-search" label="搜尋帳號">
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </Field>
-          <ul aria-label="帳號清單">
-            {visibleUsers.map((user) => (
-              <li key={user.id}>
-                <Button
-                  variant="tertiary"
-                  onClick={() => {
-                    selectUser(user.id)
-                    setWizardOpen(false)
-                    setTemporaryPassword('')
-                    if (step === 4) resetWizard()
-                  }}
-                >
-                  {user.name_zh || user.username}
-                </Button>
-                {' · '}
-                {user.is_external_collaborator
-                  ? '外部協作人員'
-                  : user.is_admin
-                    ? '系統管理者'
-                    : '內部帳號'}
-                {' · '}
-                {user.is_admin
-                  ? '系統管理'
-                  : user.is_external_collaborator
-                    ? '外部協作'
-                    : '依權限與專案角色'}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+
       {embedded && !currentUser.is_admin && selectedUser && (
         <Card aria-label="權限開通" role="region">
           <h2 ref={accessHeadingRef} tabIndex={-1}>
@@ -1951,15 +1910,23 @@ function ModulePermissionsPageContent({
               <h2 ref={wizardHeadingRef} tabIndex={-1}>
                 {existingAccount
                   ? '重新套用職務'
-                  : embedded
-                    ? '設定帳號'
-                    : '新增帳號'}
+                  : ['帳號資料', '職務', '專案', '確認'][step]}
               </h2>
-              <p>建立後可以再調整。</p>
-              <p role="status">
-                步驟 {step + 1}／4：
-                {['帳號資料', '職務', '專案', '確認'][step]}
-              </p>
+              <p>帳號資料與職務，建立後都能在帳號頁修改。</p>
+              <nav
+                ref={wizardStepsRef}
+                aria-label="新增帳號步驟"
+                className="wizard-steps"
+              >
+                {['帳號資料', '職務', '專案', '確認'].map((label, index) => (
+                  <span key={label}>
+                    {index > 0 && <span aria-hidden="true"> › </span>}
+                    <span aria-current={step === index ? 'step' : undefined}>
+                      {label}
+                    </span>
+                  </span>
+                ))}
+              </nav>
               {step === 0 && !existingAccount && (
                 <>
                   <FormErrorSummary
@@ -1985,6 +1952,12 @@ function ModulePermissionsPageContent({
                       {(control) => (
                         <Input
                           {...control}
+                          aria-describedby={[
+                            control['aria-describedby'],
+                            'wizard-username-hint',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
                           value={username}
                           disabled={Boolean(createdId)}
                           onChange={(event) =>
@@ -1997,6 +1970,10 @@ function ModulePermissionsPageContent({
                         />
                       )}
                     </FormField>
+                    <p className="field-hint" id="wizard-username-hint">
+                      3–32 字，英文字母開頭，可用英文、數字、. _
+                      -；不分大小寫。
+                    </p>
                     <FormField
                       error={identityErrors.name}
                       id={IDENTITY_FIELDS.name.id}
@@ -2036,63 +2013,110 @@ function ModulePermissionsPageContent({
                         />
                       )}
                     </FormField>
-                    <details>
+                    <details
+                      open={moreOpen}
+                      onToggle={(event) =>
+                        setMoreOpen(event.currentTarget.open)
+                      }
+                    >
                       <summary>更多資料（選填）</summary>
-                      <FormField label="英文姓名">
+                      <FormField
+                        label="英文姓名"
+                        id={IDENTITY_FIELDS.name_en.id}
+                        error={identityErrors.name_en}
+                      >
                         {(control) => (
                           <Input
                             {...control}
                             value={nameEn}
                             disabled={Boolean(createdId)}
-                            onChange={(event) => setNameEn(event.target.value)}
+                            onChange={(event) =>
+                              updateIdentity(
+                                'name_en',
+                                event.target.value,
+                                setNameEn,
+                              )
+                            }
                           />
                         )}
                       </FormField>
-                      <FormField label="部門">
+                      <FormField
+                        label="部門"
+                        id={IDENTITY_FIELDS.department.id}
+                        error={identityErrors.department}
+                      >
                         {(control) => (
                           <Input
                             {...control}
                             value={department}
                             disabled={Boolean(createdId)}
                             onChange={(event) =>
-                              setDepartment(event.target.value)
+                              updateIdentity(
+                                'department',
+                                event.target.value,
+                                setDepartment,
+                              )
                             }
                           />
                         )}
                       </FormField>
-                      <FormField label="地點">
+                      <FormField
+                        label="地點"
+                        id={IDENTITY_FIELDS.location.id}
+                        error={identityErrors.location}
+                      >
                         {(control) => (
                           <Input
                             {...control}
                             value={location}
                             disabled={Boolean(createdId)}
                             onChange={(event) =>
-                              setLocation(event.target.value)
+                              updateIdentity(
+                                'location',
+                                event.target.value,
+                                setLocation,
+                              )
                             }
                           />
                         )}
                       </FormField>
-                      <FormField label="工號">
+                      <FormField
+                        label="工號"
+                        id={IDENTITY_FIELDS.employee_no.id}
+                        error={identityErrors.employee_no}
+                      >
                         {(control) => (
                           <Input
                             {...control}
                             value={employeeNo}
                             disabled={Boolean(createdId)}
                             onChange={(event) =>
-                              setEmployeeNo(event.target.value)
+                              updateIdentity(
+                                'employee_no',
+                                event.target.value,
+                                setEmployeeNo,
+                              )
                             }
                           />
                         )}
                       </FormField>
                     </details>
-                    <FormField label="公司">
+                    <FormField
+                      label="公司"
+                      id={IDENTITY_FIELDS.company_id.id}
+                      error={identityErrors.company_id}
+                    >
                       {(control) => (
                         <select
                           {...control}
                           disabled={Boolean(createdId)}
                           value={companyId}
                           onChange={(event) =>
-                            setCompanyId(event.target.value)
+                            updateIdentity(
+                              'company_id',
+                              event.target.value,
+                              setCompanyId,
+                            )
                           }
                         >
                           <option value="">未連結公司</option>
@@ -2108,8 +2132,17 @@ function ModulePermissionsPageContent({
                 </>
               )}
               {step === 1 && (
-                <fieldset>
+                <fieldset
+                  aria-describedby={
+                    profileError ? 'wizard-profile-error' : undefined
+                  }
+                >
                   <legend>選擇職務</legend>
+                  {profileError && (
+                    <Notice variant="error" id="wizard-profile-error">
+                      {profileError}
+                    </Notice>
+                  )}
                   {PROFILE_OPTIONS.map((option) => (
                     <label
                       key={option.id}
@@ -2127,7 +2160,11 @@ function ModulePermissionsPageContent({
                         disabled={Boolean(createdId)}
                         name="profile"
                         type="radio"
-                        onChange={() => setProfile(option.id)}
+                        onChange={() => {
+                          setProfile(option.id)
+                          setProfileError('')
+                          if (option.id === 'manager') setProjectId('')
+                        }}
                       />
                       <span>
                         <strong>{option.label}</strong>
@@ -2146,17 +2183,31 @@ function ModulePermissionsPageContent({
                 <label>
                   加入專案（可略過）
                   <select
-                    disabled={Boolean(createdId)}
+                    aria-label="加入專案（可略過）"
+                    disabled={
+                      Boolean(createdId) ||
+                      profile === 'manager' ||
+                      projectOptionsStatus === 'loading'
+                    }
                     value={projectId}
                     onChange={(event) => setProjectId(event.target.value)}
                   >
-                    <option value="">稍後再加入</option>
+                    <option value="">
+                      {projectOptionsStatus === 'loading'
+                        ? '載入專案中…'
+                        : '稍後再加入'}
+                    </option>
                     {projects.map((project) => (
                       <option key={project.id} value={project.id}>
                         {project.name}
                       </option>
                     ))}
                   </select>
+                  <span className="field-hint">
+                    {profile === 'manager'
+                      ? '主管只看全公司進度，不需要加入專案。'
+                      : '現場查核與外部協作人員要先加入專案，才看得到任務。'}
+                  </span>
                 </label>
               )}
               {step === 3 && profile && (
@@ -2166,13 +2217,39 @@ function ModulePermissionsPageContent({
                     {(existingAccount
                       ? users.find((user) => user.id === selectedUser)?.name_zh
                       : name) || '新同仁'}
-                    將以「
+                    將建立為「
                     {
                       PROFILE_OPTIONS.find((item) => item.id === profile)
                         ?.label
                     }
-                    」加入。
+                    」帳號。
                   </p>
+                  {!existingAccount && (
+                    <div className="wizard-confirmation">
+                      <p>帳號名稱：{username}</p>
+                      <p>姓名：{name}</p>
+                      <p>電子郵件：{email}</p>
+                      <p>
+                        公司：
+                        {companies.find((item) => item.id === companyId)
+                          ?.name || '未連結公司'}
+                      </p>
+                      <p>
+                        職務：
+                        {
+                          PROFILE_OPTIONS.find((item) => item.id === profile)
+                            ?.label
+                        }
+                      </p>
+                      {profile !== 'manager' && (
+                        <p>
+                          加入專案：
+                          {projects.find((item) => item.id === projectId)
+                            ?.name || '稍後再加入'}
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <section aria-label="可以做">
                     <h4>可以做</h4>
                     <ul>
@@ -2205,38 +2282,13 @@ function ModulePermissionsPageContent({
                     (profile === 'field' || profile === 'external') && (
                       <p role="note">加入專案前看不到任何任務。</p>
                     )}
-                  <p className="field-hint">
-                    預設專案角色「
-                    {profileRoleLabel(roles, profile, creatorRoleId)}」。
-                  </p>
-                  {!createdId ? (
-                    <>
-                      <div className="wizard-actions">
-                        {onWizardCancel && (
-                          <Button disabled={busy} onClick={onWizardCancel}>
-                            取消
-                          </Button>
-                        )}
-                        <Button
-                          aria-describedby={
-                            createBlockReason
-                              ? 'wizard-create-block-reason'
-                              : undefined
-                          }
-                          disabled={Boolean(createBlockReason)}
-                          onClick={() => void createStaff()}
-                          variant="primary"
-                        >
-                          {existingAccount ? '套用職務' : '建立帳號'}
-                        </Button>
-                      </div>
-                      {createBlockReason && (
-                        <p id="wizard-create-block-reason" role="status">
-                          {createBlockReason}
-                        </p>
-                      )}
-                    </>
-                  ) : (
+                  {projectId && profile !== 'manager' && (
+                    <p className="field-hint">
+                      預設專案角色「
+                      {profileRoleLabel(roles, profile, creatorRoleId)}」。
+                    </p>
+                  )}
+                  {createdId && (
                     <>
                       {busy ? (
                         <p role="status">正在完成…</p>
@@ -2263,24 +2315,43 @@ function ModulePermissionsPageContent({
                   )}
                 </div>
               )}
+              {step === 3 && !existingAccount && !createdId && (
+                <p>
+                  按下後會產生一組臨時密碼，只顯示這一次。請先準備好複製或抄寫。
+                </p>
+              )}
               {step <= 3 && (
                 <div className="wizard-actions">
-                  {onWizardCancel && step < 3 && (
+                  {onWizardCancel && !createdId && (
                     <Button disabled={busy} onClick={onWizardCancel}>
                       取消
                     </Button>
                   )}
                   {step > 0 && (
                     <Button
-                      disabled={Boolean(createdId)}
+                      disabled={busy || Boolean(createdId)}
                       onClick={() => goToStep(step - 1)}
                     >
                       上一步
                     </Button>
                   )}
+                  {step === 3 && !createdId && (
+                    <Button
+                      disabled={Boolean(createBlockReason)}
+                      aria-describedby={
+                        createBlockReason
+                          ? 'wizard-create-block-reason'
+                          : undefined
+                      }
+                      onClick={() => void createStaff()}
+                      variant="primary"
+                    >
+                      {existingAccount ? '套用職務' : '建立帳號'}
+                    </Button>
+                  )}
                   {step < 3 && (
                     <Button
-                      disabled={Boolean(createdId)}
+                      disabled={busy || Boolean(createdId)}
                       onClick={() => goToStep(step + 1)}
                       variant="primary"
                     >
@@ -2289,21 +2360,25 @@ function ModulePermissionsPageContent({
                   )}
                 </div>
               )}
-              {error && (
+              {step === 3 && createBlockReason && (
+                <p id="wizard-create-block-reason" role="status">
+                  {createBlockReason}
+                </p>
+              )}
+              {error && <Notice variant="error">{error}</Notice>}
+              {optionsError && (
                 <div>
-                  <Notice variant="error">{error}</Notice>
-                  {onWizardCancel && (
-                    <Button
-                      onClick={() => {
-                        setError('')
-                        void loadWizardOptions(step).catch((caught: unknown) =>
-                          setError(message(caught)),
-                        )
-                      }}
-                    >
-                      重新載入選項
-                    </Button>
-                  )}
+                  <Notice variant="error">{optionsError}</Notice>
+                  <Button
+                    onClick={() => {
+                      setOptionsError('')
+                      void loadWizardOptions(step).catch((caught: unknown) =>
+                        setOptionsError(message(caught)),
+                      )
+                    }}
+                  >
+                    重新載入選項
+                  </Button>
                 </div>
               )}
               {partial && step !== 3 && (
@@ -2313,211 +2388,130 @@ function ModulePermissionsPageContent({
           )}
         </Card>
       )}
-      {(!embedded || currentUser.is_admin) && !(wizardOpen && step === 4) && (
-        <details
-          className="permission-advanced-settings"
-          onToggle={(event) => {
-            // #712：展開進階設定時才載入組合、角色與其他管理選項。
-            // 原生 toggle 可能早於 React 提交 ready，成功快取以 ref 同步判斷。
-            if (!event.currentTarget.open || advancedLoaded.current) return
-            void refresh().catch(() => undefined)
-          }}
-        >
-          <summary>進階設定</summary>
-          {advancedStatus === 'loading' && <p role="status">載入中…</p>}
-          {advancedStatus === 'error' && (
-            <div>
-              <p role="alert">進階設定載入失敗：{advancedError}</p>
-              <Button onClick={() => void refresh().catch(() => undefined)}>
-                重新載入進階設定
-              </Button>
-            </div>
-          )}
-          <Card aria-label="已設定的權限" role="region">
-            <h2 ref={accessHeadingRef} tabIndex={-1}>
-              已設定的權限
-            </h2>
-            <p>
-              這裡顯示帳號已開通的權限；專案內能力請查看「參與專案與角色」。
-            </p>
-            {selectedUser && (
-              <>
-                <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
-                  <legend>
-                    {'權限（已選取 '}
-                    {userAccess.length}
-                    {' 項）'}
-                  </legend>
-                  {visiblePermissions.map((item) => (
-                    <label key={item.code}>
-                      <input
-                        checked={accessDraft.includes(item.code)}
-                        type="checkbox"
-                        onChange={(event) => {
-                          setAccessDraft((current) =>
-                            event.target.checked
-                              ? [...new Set([...current, item.code])]
-                              : current.filter((code) => code !== item.code),
-                          )
-                        }}
-                      />{' '}
-                      {item.description.replace('模組', '功能')}
-                    </label>
-                  ))}
-                </fieldset>
-                {JSON.stringify([...accessDraft].sort()) !==
-                  JSON.stringify([...userAccess].sort()) && (
-                  <Button
-                    disabled={busy}
-                    onClick={(event) => {
-                      revokeTrigger.current = event.currentTarget
-                      void submitAccessDraft()
-                    }}
-                  >
-                    開通
-                  </Button>
-                )}
-              </>
+      {selectedUserId &&
+        currentUser.is_admin &&
+        !(wizardOpen && step === 4) && (
+          <details
+            className="permission-advanced-settings"
+            onToggle={(event) => {
+              // #712：展開進階設定時才載入組合、角色與其他管理選項。
+              // 原生 toggle 可能早於 React 提交 ready，成功快取以 ref 同步判斷。
+              if (!event.currentTarget.open || advancedLoaded.current) return
+              void refresh().catch(() => undefined)
+            }}
+          >
+            <summary>進階設定</summary>
+            {advancedStatus === 'loading' && <p role="status">載入中…</p>}
+            {advancedStatus === 'error' && (
+              <div>
+                <p role="alert">進階設定載入失敗：{advancedError}</p>
+                <Button onClick={() => void refresh().catch(() => undefined)}>
+                  重新載入進階設定
+                </Button>
+              </div>
             )}
-            {operationFeedback('access')}
-            {revoke?.scope === 'access' && revokePanel}
-          </Card>
-          {embedded && currentUser.is_admin && (
-            <Card>
-              <h2>套用權限組合</h2>
-              <ul>
-                {bundles.map((bundle) => (
-                  <li className="permission-bundle-row" key={bundle.id}>
-                    <span>{bundle.name}</span>{' '}
-                    <Button
-                      disabled={!selectedUser || busy}
-                      onClick={() => void applyBundle(bundle)}
-                    >
-                      套用
-                    </Button>
-                    {operationFeedback(`bundle:${bundle.id}`)}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-          {currentUser.is_admin && (
-            <Card>
-              <h2>委派管理</h2>
-              <p>收回委派不會移除對方已授予帳號的權限。</p>
-              {selectedUser &&
-                ['project', 'inspection', 'template'].map((module) => (
-                  <div key={module}>
-                    <label>
-                      <input
-                        disabled={accessLoadedFor !== selectedUser}
-                        checked={delegatedModules.includes(module)}
-                        type="checkbox"
-                        onChange={(event) => {
-                          const enabled = event.target.checked
-                          void changeDelegation(module, enabled)
-                        }}
-                      />
-                      可管理
-                      {{
-                        project: '專案',
-                        inspection: '查核',
-                        template: '範本',
-                      }[module] ?? module}
-                      權限
-                    </label>
-                    {operationFeedback(`delegation:${module}`)}
-                  </div>
-                ))}
-            </Card>
-          )}
-          {!embedded && (
-            <Card>
-              <h2>快速診斷</h2>
-              <p>建立專案、管理成員與管理範本庫，分別需要對應的權限。</p>
-              <p>收回權限前會先重新讀取影響範圍；取消不會送出收回請求。</p>
-            </Card>
-          )}
-          {!embedded && currentUser.is_admin && (
-            <Card>
-              <h2>角色治理</h2>
+            <Card aria-label="已設定的權限" role="region">
+              <h2 ref={accessHeadingRef} tabIndex={-1}>
+                已設定的權限
+              </h2>
               <p>
-                可指派角色會出現在專案成員選單；外部可用角色僅供外部協作者。
+                這裡顯示帳號已開通的權限；專案內能力請查看「參與專案與角色」。
               </p>
-              <ul aria-label="角色治理清單">
-                {roles.map((role) => (
-                  <li
-                    key={role.id}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'minmax(0, 1fr) auto auto',
-                      alignItems: 'center',
-                      gap: 'var(--space-2)',
-                      paddingBlock: 'var(--space-2)',
-                      borderBlockEnd: '1px solid var(--color-border)',
-                    }}
+              {selectedUser && (
+                <>
+                  <fieldset
+                    disabled={busy || accessLoadedFor !== selectedUser}
                   >
-                    <strong>{role.name}</strong>
-                    <label>
-                      <input
-                        checked={role.is_assignable ?? true}
-                        type="checkbox"
-                        onChange={(event) =>
-                          void changeRoleScope(role, {
-                            is_assignable: event.target.checked,
-                          })
-                        }
-                      />
-                      可指派
-                    </label>
-                    <label>
-                      <input
-                        checked={role.is_external_allowed ?? false}
-                        type="checkbox"
-                        onChange={(event) =>
-                          void changeRoleScope(role, {
-                            is_external_allowed: event.target.checked,
-                          })
-                        }
-                      />
-                      外部可用
-                    </label>
-                    {operationFeedback(`role:${role.id}`)}
-                  </li>
-                ))}
-              </ul>
-              <label>
-                專案建立者角色
-                <select
-                  value={creatorRoleId}
-                  onFocus={() =>
-                    getCreatorRole().then((item) =>
-                      setCreatorRoleId(item.role_id),
-                    )
-                  }
-                  onChange={(event) => {
-                    const value = event.target.value
-                    void changeCreatorRole(value)
-                  }}
-                >
-                  <option value="">選擇角色</option>
-                  {roles
-                    .filter(
-                      (role) =>
-                        role.is_assignable && !role.is_external_allowed,
-                    )
-                    .map((role) => (
-                      <option key={role.id} value={role.id}>
-                        {role.name}
-                      </option>
+                    <legend>
+                      {'權限（已選取 '}
+                      {userAccess.length}
+                      {' 項）'}
+                    </legend>
+                    {visiblePermissions.map((item) => (
+                      <label key={item.code}>
+                        <input
+                          checked={accessDraft.includes(item.code)}
+                          type="checkbox"
+                          onChange={(event) => {
+                            setAccessDraft((current) =>
+                              event.target.checked
+                                ? [...new Set([...current, item.code])]
+                                : current.filter((code) => code !== item.code),
+                            )
+                          }}
+                        />{' '}
+                        {item.description.replace('模組', '功能')}
+                      </label>
                     ))}
-                </select>
-              </label>
-              {operationFeedback('creator')}
+                  </fieldset>
+                  {JSON.stringify([...accessDraft].sort()) !==
+                    JSON.stringify([...userAccess].sort()) && (
+                    <Button
+                      disabled={busy}
+                      onClick={(event) => {
+                        revokeTrigger.current = event.currentTarget
+                        void submitAccessDraft()
+                      }}
+                    >
+                      開通
+                    </Button>
+                  )}
+                </>
+              )}
+              {operationFeedback('access')}
+              {revoke?.scope === 'access' && revokePanel}
             </Card>
-          )}
-        </details>
-      )}
+            {embedded && currentUser.is_admin && (
+              <Card>
+                <h2>套用權限組合</h2>
+                <ul>
+                  {bundles.map((bundle) => (
+                    <li className="permission-bundle-row" key={bundle.id}>
+                      <span>{bundle.name}</span>{' '}
+                      <Button
+                        disabled={!selectedUser || busy}
+                        onClick={() => void applyBundle(bundle)}
+                      >
+                        套用
+                      </Button>
+                      {operationFeedback(`bundle:${bundle.id}`)}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+            {currentUser.is_admin && (
+              <Card>
+                <h2>委派管理</h2>
+                <p>收回委派不會移除對方已授予帳號的權限。</p>
+                {selectedUser &&
+                  ['project', 'inspection', 'template'].map((module) => (
+                    <div key={module}>
+                      <label>
+                        <input
+                          disabled={accessLoadedFor !== selectedUser}
+                          checked={delegatedModules.includes(module)}
+                          type="checkbox"
+                          onChange={(event) => {
+                            const enabled = event.target.checked
+                            void changeDelegation(module, enabled)
+                          }}
+                        />
+                        可管理
+                        {{
+                          project: '專案',
+                          inspection: '查核',
+                          template: '範本',
+                        }[module] ?? module}
+                        權限
+                      </label>
+                      {operationFeedback(`delegation:${module}`)}
+                    </div>
+                  ))}
+              </Card>
+            )}
+          </details>
+        )}
       {/* 完成頁只放臨時密碼與下一步；剛建好的帳號沒有可看的能力。 */}
       {selectedUser && currentUser.is_admin && !(wizardOpen && step === 4) && (
         <Card className="permission-capabilities">

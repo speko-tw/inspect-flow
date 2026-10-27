@@ -143,7 +143,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
     fireEvent.click(within(form).getByRole('button', { name: save }))
 
     const alert = await within(form).findByRole('alert')
-    expect(alert).toHaveTextContent('Email 已被使用。')
+    expect(alert).toHaveTextContent('電子郵件已被使用。')
     // 錯誤先呈現，焦點再由 effect 移入；等待兩個狀態同步完成。
     await waitFor(() => expect(alert).toHaveFocus())
     // 頁頂沒有另一份錯誤（也就沒有重複朗讀）。
@@ -179,7 +179,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
     )
 
     const alert = await within(companyForm).findByRole('alert')
-    expect(alert).toHaveTextContent('Email 已被使用。')
+    expect(alert).toHaveTextContent('電子郵件已被使用。')
     await waitFor(() => expect(alert).toHaveFocus())
     expect(within(detailsForm).queryByRole('alert')).toBeNull()
     expect(screen.getAllByRole('alert')).toHaveLength(1)

@@ -7,6 +7,8 @@ import {
   type FormEvent,
 } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import { isNotFound } from '../http'
+import RouteNotFound from '../RouteNotFound'
 
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { FormErrorSummary, FormField, FormGroup } from '../components'
@@ -192,6 +194,7 @@ export default function UsersPage({
   externalNavigationGuard = false,
   onQueryApplied,
   onDirtyChange,
+  onNotFound,
 }: {
   onTemporaryPassword: (
     username: string,
@@ -204,7 +207,7 @@ export default function UsersPage({
   externalNavigationGuard?: boolean
   onQueryApplied?: (query: string) => void
   onDirtyChange?: (dirty: boolean) => void
-  onSelectUser?: (id: string) => void
+  onNotFound?: (missing: boolean) => void
 }) {
   // 網址 UUID 可為大寫；統一請求鍵與比對，避免重載或漏掉到期捷徑。
   const detailUserId = rawDetailUserId?.toLowerCase()
@@ -235,6 +238,7 @@ export default function UsersPage({
   const companyListRequest = useRef<Promise<void> | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
   const [detailError, setDetailError] = useState('')
+  const [detailNotFound, setDetailNotFound] = useState(false)
   // 詳情更新只同步快照；若把 detailUser 放入載入依賴，儲存與重查
   // 會再次載入並重掛表單，清掉使用者正在編輯的內容。
   const detailSnapshot = useRef<User | null>(null)
@@ -360,6 +364,7 @@ export default function UsersPage({
     // 路由替換仍指向同一帳號時沿用快照，避免重複 GET 與表單重掛。
     if (detailSnapshot.current?.id === detailUserId) return
     let active = true
+    setDetailNotFound(false)
     setDetailUser((current) => (current?.id === detailUserId ? current : null))
     setDetailError('')
     // 清單初次清空亦會更新 users；同一筆在途詳情可由新 effect 接手。
@@ -373,7 +378,10 @@ export default function UsersPage({
     void pending.promise
       .then((user) => active && setDetailUser(user))
       .catch((caught: unknown) => {
-        if (active) setDetailError(managementErrorMessage(caught))
+        if (!active) return
+        setDetailNotFound(isNotFound(caught))
+        if (isNotFound(caught)) onNotFound?.(true)
+        setDetailError(managementErrorMessage(caught))
       })
       .finally(() => {
         if (detailRequest.current === pending) detailRequest.current = null
@@ -381,7 +389,7 @@ export default function UsersPage({
     return () => {
       active = false
     }
-  }, [detailUserId, users])
+  }, [detailUserId, onNotFound, users])
 
   useEffect(() => {
     // 到期日捷徑只消費網址；replace 不得重載詳情或重掛表單（#741）。
@@ -855,8 +863,14 @@ export default function UsersPage({
 
   const detail = detailUserId ? detailUser : null
 
-  // 在「帳號」頁（有 onSelectUser）裡，頁面標題已是「帳號」，清單不再
-  // 重複標題；連結到詳情的列也沒有操作欄，只有四欄（#713）。
+  if (detailNotFound) {
+    return (
+      <RouteNotFound
+        title="找不到這個帳號"
+        message="網址可能輸入錯誤，或這個帳號已不存在。"
+      />
+    )
+  }
 
   return (
     <section
@@ -868,6 +882,7 @@ export default function UsersPage({
       )}
       {detailUserId ? (
         <section aria-labelledby="person-basic-heading">
+          {!detail && <h1 id="person-basic-heading">帳號詳情</h1>}
           {detailError && <p role="alert">{detailError}</p>}
           {!detail && !detailError && <p role="status">載入中…</p>}
           {detail && (
@@ -1237,7 +1252,6 @@ export default function UsersPage({
                           <th scope="row">
                             <Link
                               className="users-account-name-link"
-                              replace
                               to={
                                 '/accounts/' +
                                 encodeURIComponent(user.id) +
