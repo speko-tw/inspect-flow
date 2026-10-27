@@ -43,9 +43,9 @@ MVP 核心是本公司人員自己的查核流程（內業派工、現場查核�
 
 | 角色 | 職責 |
 |---|---|
-| 系統管理者（Admin，人員身上的開關，不是角色） | 管理系統設定、人員、公司、角色定義；可直接查看、修改所有專案（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-24](03-decisions-and-stack.md#kd-24)）。 |
-| 專案角色（可自訂，掛在專案成員上） | 依指派的角色決定在該專案能做什麼，例如建立查核計畫、指派工程師、批次產生任務、監看完成度、審閱照片並產生報告，或唯讀存取；一個人在同一專案可同時擁有多個角色，權限加總（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-26](03-decisions-and-stack.md#kd-26)、[KD-27](03-decisions-and-stack.md#kd-27)）。 |
-| 範本模組管理權限（模組權限「管理範本庫」） | 範本模組的模組權限，逐人勾選，由 Admin 或被委派管理範本模組的人授予；具此權限的人可維護範本庫，包含跨專案瀏覽查核項目並存成範本，但不因此取得任何專案內的查核權限；Admin 擁有全部權限。範本建議加入與審核流程留待之後版本（依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），沿用 #313 的範本管理行為；見 [KD-49](03-decisions-and-stack.md#kd-49)、[KD-69](03-decisions-and-stack.md#kd-69)、[權限表](07-permission-model.md#permission-table)）。 |
+| 系統管理者（Admin，人員身上的開關，不是角色） | 管理系統設定、人員、公司、角色定義、模組權限與委派；可直接查看、修改所有專案（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-24](03-decisions-and-stack.md#kd-24)）。 |
+| 專案角色（可自訂，掛在專案成員上） | 依指派的角色決定在該專案能做什麼，例如建立計畫與任務、派出任務、指派現場工程師、監看進度，或唯讀存取；一個人在同一專案可同時擁有多個角色，權限加總（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-26](03-decisions-and-stack.md#kd-26)、[KD-27](03-decisions-and-stack.md#kd-27)）。 |
+| 範本模組管理權限（模組權限「管理範本庫」） | 範本模組的模組權限，逐人勾選，由 Admin 或被委派管理範本模組的人授予；具此權限的人可維護範本庫，包含跨專案瀏覽查核項目並存成範本，但不因此取得任何專案內的查核權限；Admin 擁有全部權限。範本建議加入與審核流程排入 0.6.x（#314）（依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），沿用 #313 的範本管理行為；見 [KD-49](03-decisions-and-stack.md#kd-49)、[KD-69](03-decisions-and-stack.md#kd-69)、[權限表](07-permission-model.md#permission-table)）。 |
 | 現場工程師（Inspector / Field Engineer） | 查看今日指派任務，依要求拍照、填寫必要說明，並將任務標記完成；屬於現場查核這類專案角色的典型職責（依據：架構基準 §6.1）。 |
 
 系統採兩層權限模型：第 1 層是人員模組的逐人模組權限（專案、查核、範本等模組各自的「可使用」與管理類權限，範圍是全公司），第 2 層是專案角色（只存在專案內，指派給某人在某專案，是專案內動作權限的套餐）；系統不設全公司角色。專案外的事只看模組權限，專案內的事兩層都要通過，Admin 兩層都放行；模組權限不會自動給專案內的查核權限，人員必須先是專案成員並被指派專案角色。模組權限可由 Admin 或被委派管理該模組的人授予。模組邊界單向：專案模組做權限判斷時只向人員模組問「他是誰、帳號有效嗎、是不是系統管理者、有沒有模組權限 X」。完整權限表見 [07-permission-model.md](07-permission-model.md#permission-table)，決策與裁定見 [KD-69](03-decisions-and-stack.md#kd-69)。
@@ -70,7 +70,7 @@ flowchart LR
 
 除了系統內部角色之外，正式報告（DOCX／PDF）另有一群**文件收受方**：業主、監造單位、品管、政府標案審查方，以及文件歸檔／管理系統，他們不一定是系統的登入使用者，而是報告的閱讀與簽核對象 （依據：架構基準 §20.1、§20.12–20.13）。設計現場與後台流程時，需要區分「誰是系統使用者」與「誰只是最終文件的收受者」。
 
-InspectFlow 的管理介面與現場介面共用單一 React application，依路由群組拆分程式碼，且入口與登入落點依帳號有效權限決定；使用者畫面不以 `/admin/*` 或 `/field/*` 網址前綴區分（路由方向見 [KD-12](03-decisions-and-stack.md#kd-12)，待 #705 負責人確認）。
+InspectFlow 的管理介面與現場介面共用單一 React application，依路由群組拆分程式碼，且入口與登入落點依帳號有效權限決定；使用者畫面不以 `/admin/*` 或 `/field/*` 網址前綴區分（路由方向見 [KD-12](03-decisions-and-stack.md#kd-12) 與 [ADM-R50](../specs/admin-dashboard/spec.md#adm-r50)）。
 
 ## 查核生命週期
 
@@ -110,7 +110,7 @@ flowchart LR
 
 各 Phase 對應哪份規格、目前狀態與被擋議題，見 [docs/specs/README.md 規格索引](../specs/README.md#index)。
 
-Phase N 對應哪個 Milestone、各 Phase 的能力範圍，以[版本路線圖](06-versioning-and-milestone-governance.md#roadmap)為準（含 0.5.x 與 0.4.x 可並行的安排）。
+Phase N 對應哪個 Milestone、各 Phase 的能力範圍，以[版本路線圖](06-versioning-and-milestone-governance.md#roadmap)為準。
 
 一個版本要視為「可部署」，**必須**滿足 §22A.20 的完整 Deployment Definition of Done，包括 DOCX／PDF 可產出、重啟後資料不消失等條件（依據：架構基準 §22A.20）。
 
@@ -174,7 +174,7 @@ Corporate SSO                            檢查時機／停留點
 
 ```mermaid
 flowchart TB
-  AdminUI["Admin Dashboard（後台）"] -->|HTTPS/REST| API["Backend API"]
+  AdminUI["Admin UI（管理介面）"] -->|HTTPS/REST| API["Backend API"]
   FieldUI["Field Web/PWA（現場）"] -->|HTTPS/REST| API
   API --> DB[("SQLite")]
   API --> Storage["Photo Storage（本機資料夾）"]
@@ -246,11 +246,16 @@ flowchart TB
   Project["Project（專案）"] --> Plan["Inspection Plan（查核計畫）"]
   Plan --> Task["Inspection Task（查核任務）"]
   Task --> Snapshot["Task Requirement Snapshot（需求快照）"]
-  Snapshot --> Evidence["Evidence（證據）"]
+  Snapshot --> SnapshotPoint["查核項次快照"]
+  SnapshotPoint --> Evidence["Evidence（證據）"]
+  Project --> ProjectItem["專案查核項目"]
+  ProjectItem --> ProjectPoint["查核項次"]
+  ProjectPoint --> ProjectRequirement["Evidence Requirement（證據需求）"]
   Template["Inspection Template（範本庫的範本）"] --> Item["Template Item（範本項目）"]
-  Item --> Requirement["Evidence Requirement（證據需求）"]
+  Item --> Point["查核項次"]
+  Point --> Requirement["Evidence Requirement（證據需求）"]
   Template -.->|套用即複製，記錄來源名稱與時間| Project
-  Requirement -.->|建立任務時複製為| Snapshot
+  Requirement -.->|任務派出時固定為| Snapshot
 ```
 
 依據：架構基準 §12；範本不版本化、套用即複製依負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02），見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)
