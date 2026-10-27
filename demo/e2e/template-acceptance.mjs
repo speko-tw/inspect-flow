@@ -12,6 +12,9 @@ const work = process.env.DEMO_WORK_DIR ?? '/private/tmp/inspectflow-demo-e2e'
 const result = JSON.parse(
   await readFile(path.join(work, 'seed-result.json'), 'utf8'),
 )
+const planningMeasurements = []
+const planningButtonStates = []
+
 const browser = await chromium.launch({
   channel: 'chrome',
   headless: true,
@@ -377,15 +380,146 @@ try {
       await page.getByText('載入中…', { exact: true }).waitFor({
         state: 'hidden',
       })
-      assert.equal(
+      const itemEdit = page.getByRole('button', {
+        name: '修改查核項目',
+        exact: true,
+      })
+      const buttonState = () =>
+        itemEdit.evaluate((el) => ({
+          classes: el.className,
+          hovered: el.matches(':hover'),
+          focused: el === document.activeElement,
+          focusVisible: el.matches(':focus-visible'),
+          background: getComputedStyle(el).backgroundColor,
+          outline: getComputedStyle(el).outlineStyle,
+        }))
+      const before = name === 'task-detail' ? await buttonState() : null
+      // 中性截圖移開指標並清掉按鈕焦點，避免把互動態誤當一般樣式。
+      const neutralize = async () => {
+        await page.mouse.move(0, 0)
+        await page.evaluate(() => {
+          const active = document.activeElement
+          if (active instanceof HTMLElement && active.matches('button,.btn')) {
+            active.blur()
+          }
+        })
+      }
+      await neutralize()
+      // 沿用主題驗收的字型與兩個 frame 等待，不在字型或版面更新中拍照。
+      const settled = async () => {
+        await page.evaluate(() => document.fonts.ready)
         await page.evaluate(
-          () => document.documentElement.scrollWidth <= window.innerWidth,
-        ),
-        true,
-      )
+          () =>
+            new Promise((resolve) => {
+              requestAnimationFrame(() => requestAnimationFrame(resolve))
+            }),
+        )
+      }
+      await settled()
+      if (before) {
+        const settleButton = async () =>
+          page.waitForFunction(
+            (element) => element.getAnimations().length === 0,
+            await itemEdit.elementHandle(),
+          )
+        await settleButton()
+        const neutral = await buttonState()
+        await itemEdit.hover()
+        await settleButton()
+        const hover = await buttonState()
+        assert.notEqual(hover.background, neutral.background)
+        await neutralize()
+        await settleButton()
+        await itemEdit.focus()
+        const focus = await buttonState()
+        assert.equal(focus.background, neutral.background)
+        await neutralize()
+        await settled()
+        planningButtonStates.push({
+          width,
+          scheme,
+          before,
+          neutral,
+          hover,
+          focus,
+          screenshot: await buttonState(),
+        })
+      }
+      const root = page
+        .locator(
+          'section[aria-labelledby="planning-heading"], ' +
+            'section[aria-labelledby^="task-"]',
+        )
+        .first()
+      const measurement = await root.evaluate((root) => {
+        const visible = (el) =>
+          el.getClientRects().length > 0 &&
+          getComputedStyle(el).visibility !== 'hidden'
+        const controls = [...root.querySelectorAll('button,.btn')]
+          .filter(visible)
+          .filter((el) => !el.closest('[role="dialog"]'))
+          .map((el) => ({
+            text: el.textContent.trim(),
+            classes: el.className,
+            height: el.getBoundingClientRect().height,
+            fontWeight: Number(getComputedStyle(el).fontWeight),
+            kind: el.classList.contains('planning-plan-link')
+              ? 'row-link'
+              : el.classList.contains('btn-primary')
+                ? 'primary'
+                : el.classList.contains('btn-danger-outline')
+                  ? 'danger-outline'
+                  : el.classList.contains('btn-emphasis')
+                    ? 'emphasis'
+                    : el.classList.contains('btn-danger')
+                      ? 'danger'
+                      : 'secondary',
+          }))
+        return {
+          primaryCount: controls.filter((el) => el.kind === 'primary').length,
+          solidDangerCount: controls.filter((el) => el.kind === 'danger')
+            .length,
+          horizontalOverflow:
+            document.documentElement.scrollWidth > innerWidth,
+          controls,
+        }
+      })
+      assert.ok(measurement.primaryCount <= 1)
+      assert.equal(measurement.solidDangerCount, 0)
+      assert.equal(measurement.horizontalOverflow, false)
+      for (const control of measurement.controls) {
+        if (control.kind === 'primary') {
+          assert.ok(control.height >= 48, JSON.stringify(control))
+          assert.equal(control.fontWeight, 700)
+        } else {
+          if (control.kind === 'secondary') {
+            assert.equal(
+              Math.round(control.height),
+              44,
+              JSON.stringify(control),
+            )
+            assert.equal(control.fontWeight, 500)
+          } else {
+            // main 的 2px 外框變體字重 600，自然高度可大於 44px。
+            assert.ok(control.height >= 44, JSON.stringify(control))
+            if (control.kind !== 'row-link') {
+              assert.equal(control.fontWeight, 600)
+            }
+          }
+        }
+      }
+      planningMeasurements.push({
+        width,
+        scheme,
+        page: name,
+        url: page.url(),
+        ...measurement,
+      })
+      await page.evaluate(() => scrollTo(0, 0))
       await page.screenshot({
         path: path.join(planningShots, `${width}-${scheme}-${name}.png`),
         fullPage: true,
+        animations: 'disabled',
       })
     }
     await planningShot('plan-list')
@@ -550,6 +684,11 @@ try {
       .status,
     200,
   )
+
+  await writeFile(path.join(work, 'planning-theme-measurements.json'),
+    JSON.stringify(planningMeasurements, null, 2) + '\n')
+  await writeFile(path.join(work, 'planning-button-states.json'),
+    JSON.stringify(planningButtonStates, null, 2) + '\n')
 
   process.stdout.write(JSON.stringify({
     result: 'PASS',

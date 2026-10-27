@@ -171,7 +171,7 @@ describe('planning management page', () => {
       const taskArticle = taskHeading.closest('article')
       expect(taskArticle).not.toBeNull()
       expect(
-        (taskArticle as HTMLElement).querySelector('.card-actions'),
+        (taskArticle as HTMLElement).querySelector('.named-row-actions'),
       ).not.toBeNull()
       expect(
         within(taskArticle as HTMLElement).getAllByRole('button'),

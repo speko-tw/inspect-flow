@@ -751,8 +751,65 @@ describe('動作與表單一致性', () => {
         '刪除草稿',
       ])
       expect(buttons[0]).toHaveClass('btn-primary')
-      expect(buttons[5]).toHaveClass('btn-danger')
+      expect(buttons[5]).toHaveClass('btn-danger-outline')
+      expect(buttons[5]).not.toHaveClass('btn-danger')
       expect(buttons[5].parentElement).toHaveClass('planning-task-delete')
+    },
+  )
+
+  it(
+    'uses outline danger triggers ' + 'and solid delete confirmation',
+    async () => {
+      const { client, plan, task } = await seeded()
+      open(client, `${base}/${plan.id}/tasks/${task.id}`)
+      const trigger = await screen.findByRole('button', {
+        name: '刪除草稿',
+      })
+      expect(trigger).toHaveClass('btn-danger-outline')
+      expect(trigger).not.toHaveClass('btn-danger')
+      await click(trigger)
+      expect(
+        within(screen.getByRole('dialog')).getByRole('button', {
+          name: '刪除',
+        }),
+      ).toHaveClass('btn-danger')
+    },
+  )
+
+  it(
+    'uses an outline archive trigger ' + 'and solid archive confirmation',
+    async () => {
+      const { client, plan } = await seeded()
+      open(client, `${base}/${plan.id}`)
+      const trigger = await screen.findByRole('button', {
+        name: '封存計畫',
+      })
+      expect(trigger).toHaveClass('btn-danger-outline')
+      await click(trigger)
+      expect(
+        within(screen.getByRole('dialog')).getByRole('button', {
+          name: '確認',
+        }),
+      ).toHaveClass('btn-danger')
+    },
+  )
+
+  it(
+    'uses an outline cancel trigger ' + 'and solid task confirmation',
+    async () => {
+      const { client, plan, task } = await seeded(true)
+      await client.dispatchTask(task.id)
+      open(client, `${base}/${plan.id}/tasks/${task.id}`)
+      const trigger = await screen.findByRole('button', {
+        name: '取消任務',
+      })
+      expect(trigger).toHaveClass('btn-danger-outline')
+      await click(trigger)
+      expect(
+        within(screen.getByRole('dialog')).getByRole('button', {
+          name: '取消任務',
+        }),
+      ).toHaveClass('btn-danger')
     },
   )
 

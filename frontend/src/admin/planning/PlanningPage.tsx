@@ -1931,6 +1931,11 @@ function PlanningContent({
                       )}{' '}
                       {canToggleArchive && (
                         <button
+                          className={
+                            selectedPlan.status !== 'ARCHIVED'
+                              ? 'btn-danger-outline'
+                              : undefined
+                          }
                           disabled={busy}
                           onClick={() =>
                             confirm(
@@ -1948,6 +1953,9 @@ function PlanningContent({
                                     ? '已取消封存計畫。'
                                     : '已封存計畫。',
                               },
+                              selectedPlan.status === 'ARCHIVED'
+                                ? undefined
+                                : { label: '確認' },
                             )
                           }
                           type="button"
@@ -2189,7 +2197,7 @@ function PlanningContent({
                           )}
                           {view === 'task' && canModify && (
                             <div className="planning-task-actions">
-                              <div className="card-actions">
+                              <div className="named-row-actions">
                                 {task.status === 'DRAFT' &&
                                   canDispatchTask && (
                                     <button
@@ -2295,6 +2303,7 @@ function PlanningContent({
                                 ) &&
                                   canCancelTask && (
                                     <button
+                                      className="btn-danger-outline"
                                       disabled={busy}
                                       onClick={(event) => {
                                         setNotice(null)
