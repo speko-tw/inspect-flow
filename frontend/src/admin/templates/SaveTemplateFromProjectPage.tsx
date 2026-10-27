@@ -109,6 +109,7 @@ export default function SaveTemplateFromProjectPage() {
 
   async function chooseProject(next: ProjectSummary) {
     if (busy) return
+    // 切換專案或離頁會使舊回應失效，避免把前一專案項目當成目前來源。
     const requestId = ++projectItemsRequest.current
     setProject(next)
     setProjectItems([])
@@ -167,6 +168,7 @@ export default function SaveTemplateFromProjectPage() {
       )
       const system = systems.find((row) => row.id === selected.id)
       const category = categories.find((row) => row.id === system?.category_id)
+      // 將目的地與新範本身分交給管理頁，儲存後能定位剛建立的項目。
       navigate('/templates', {
         state: {
           savedTemplateId: saved.id,

@@ -101,6 +101,7 @@ def _copy_template_item(
     applied_at: datetime,
     operator_id: UUID,
 ) -> ProjectInspectionItem:
+    # TPL-R08：建立獨立子結構，來源日後覆蓋或刪除不能影響專案副本。
     copy = ProjectInspectionItem(
         project_id=project_id,
         sequence=template.sequence,
@@ -154,6 +155,7 @@ def _copy_template_item(
         db.add(point)
         db.flush()
 
+        # TPL-R11：標準必須指向副本的欄位，不能沿用範本欄位 UUID。
         field_id_map: dict[UUID, UUID] = {}
         for template_field in template_fields.get(template_point.id, ()):
             field_id = uuid7()
@@ -299,6 +301,7 @@ def apply_template(
         .where(TemplateItem.system_id == system_id)
         .order_by(TemplateItem.sequence, TemplateItem.id)
     ).all()
+    # TPL-R14：先檢查整組名稱；任何衝突都不能留下部分套用結果。
     _reject_duplicate_names(db, project_id, templates)
     copies = [
         _copy_template_item(
@@ -398,6 +401,7 @@ def create_template_from_project_item(
     )
     for point in points:
         fields = project_fields.get(point.id, [])
+        # 經共用建立入口重新配發持久 ID；暫時 ID 只串接標準與欄位。
         client_ids = {field.id: uuid7() for field in fields}
         text = next(iter(project_texts.get(point.id, ())), None)
         numeric = next(iter(project_numerics.get(point.id, ())), None)
@@ -427,6 +431,7 @@ def create_template_from_project_item(
                         "client_id": client_ids[field.id],
                         "name": field.name,
                         "field_type": field.field_type,
+                        # TPL-R11：綁定欄位的單位由標準帶入，請求不得另設。
                         "unit": (
                             None
                             if numeric is not None

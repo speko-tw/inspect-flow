@@ -129,6 +129,7 @@ def apply_template_to_project(
         ) from exc
     if result is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    # 空系統沒有建立資源，回 200 空清單，讓前端可區分套用成功與無項目。
     if system_id is not None and not result:
         response.status_code = 200
     return [

@@ -33,6 +33,8 @@ TaskStatus = Literal[
 
 
 class TaskCounts(TypedDict):
+    """提供固定狀態欄位，讓零筆狀態也有可預期的摘要格式。"""
+
     DRAFT: int
     PENDING: int
     IN_PROGRESS: int
@@ -41,12 +43,16 @@ class TaskCounts(TypedDict):
 
 
 class WorkflowStep(TypedDict):
+    """攜帶下一步的數量及待辦判斷，避免前端各自推算。"""
+
     code: str
     count: int
     pending: bool
 
 
 class WorkflowProjectIdentity(TypedDict):
+    """讓只有摘要讀取權限的成員仍可辨認目前專案。"""
+
     id: UUID
     project_code: str
     name: str
@@ -54,6 +60,8 @@ class WorkflowProjectIdentity(TypedDict):
 
 
 class ProjectWorkflowSummary(TypedDict):
+    """提供專案首頁所需的可見計數、有效權限與流程建議。"""
+
     project: WorkflowProjectIdentity
     viewer_permission_codes: list[str]
     can_apply_templates: bool
@@ -74,7 +82,7 @@ def get_project_workflow_summary(
     *,
     project_id: UUID,
 ) -> ProjectWorkflowSummary:
-    """Return visible project counts using SQL aggregates."""
+    """依 IP-R11 聚合可見資料，避免首頁載入完整任務集合。"""
     operator = get_current_operator(session)
     access = calculate_effective_access(
         session, user_id=operator.id, project_id=project_id
@@ -166,6 +174,7 @@ def get_project_workflow_summary(
     )
     pending_reinspection_count = 0
     draft_tasks_missing_assignee = 0
+    # IP-R11：不可由零筆推斷是否有權；可見性另回旗標，查詢沿用清單規則。
     if task_counts_visible:
         visible_filters = inspection_task_visibility_filters(
             session, project_id=project_id
@@ -178,6 +187,7 @@ def get_project_workflow_summary(
         for status, count in rows:
             task_counts[cast(TaskStatus, status)] = count
 
+        # IP-R11：封存計畫仍列入狀態數，但不能成為待派出的下一步。
         available_drafts = (
             select(InspectionTask.id)
             .join(
@@ -213,6 +223,7 @@ def get_project_workflow_summary(
             or 0
         )
 
+        # IP-R11：同任務可能有多個待重查項目，只計一次任務。
         pending_reinspection_count = (
             session.scalar(
                 select(func.count(func.distinct(TaskInspectionItem.task_id)))
@@ -236,6 +247,7 @@ def get_project_workflow_summary(
     else:
         draft_count = 0
 
+    # IP-R11：準備工作以缺少資料為待辦，派出／重查則以尚有工作為待辦。
     step_data = (
         ("add_members", member_count, member_count == 0),
         ("add_inspection_items", item_count, item_count == 0),
