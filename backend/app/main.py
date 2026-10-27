@@ -1,9 +1,11 @@
 """FastAPI application factory."""
 
 import logging
+import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI
 
@@ -44,6 +46,7 @@ from app.api.v1.users import (
 from app.api.v1.version import router as version_router
 from app.auth.dependencies import bind_request_scope
 from app.auth.settings import validate_auth_settings
+from app.static_files import SPAStaticFiles
 from app.version import release_identity
 
 logger = logging.getLogger(__name__)
@@ -99,6 +102,13 @@ def create_app() -> FastAPI:
     app.include_router(category_router, prefix="/api/v1")
     app.include_router(system_router, prefix="/api/v1")
     app.include_router(template_router, prefix="/api/v1")
+    static_dir = Path(os.environ.get("INSPECTFLOW_STATIC_DIR", "/app/static"))
+    if static_dir.is_dir():
+        app.mount(
+            "/",
+            SPAStaticFiles(directory=static_dir, html=True),
+            name="frontend",
+        )
     return app
 
 

@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+**/.venv
+**/node_modules
+**/dist
+**/.pytest_cache
+**/__pycache__
+**/.mypy_cache
+**/.ruff_cache
+.env
+.env.*
+!.env.example
+.w758-bind-test
+backend/data
+backend/uploads

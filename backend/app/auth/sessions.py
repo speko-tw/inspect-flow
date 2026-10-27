@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.responses import Response
 
-from app.auth.settings import get_session_timeouts
+from app.auth.settings import get_cookie_secure, get_session_timeouts
 from app.db import clock
 from app.models import AuthSession, User
 
@@ -27,13 +27,20 @@ from app.models import AuthSession, User
 SESSION_COOKIE_NAME = "__Host-inspectflow_session"
 
 
+def get_session_cookie_name() -> str:
+    """Use the browser-enforced cookie prefix only with Secure."""
+    if get_cookie_secure():
+        return SESSION_COOKIE_NAME
+    return "inspectflow_session"
+
+
 def set_session_cookie(response: Response, token: str) -> None:
     """Set the AUT-R12 session cookie shared by every login flow."""
     response.set_cookie(
-        key=SESSION_COOKIE_NAME,
+        key=get_session_cookie_name(),
         value=token,
         httponly=True,
-        secure=True,
+        secure=get_cookie_secure(),
         samesite="strict",
         path="/",
     )

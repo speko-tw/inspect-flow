@@ -22,16 +22,23 @@ class NoStoreMiddleware:
     async def __call__(
         self, scope: Scope, receive: Receive, send: Send
     ) -> None:
-        if scope["type"] != "http" or not scope["path"].startswith(
-            _API_PREFIX
-        ):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        is_api = scope["path"].startswith(_API_PREFIX)
+        is_pwa_worker = scope["path"] == "/sw.js"
+        if not is_api and not is_pwa_worker:
             await self.app(scope, receive, send)
             return
 
         async def send_with_header(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
-                if "cache-control" not in headers:
+                if is_pwa_worker:
+                    headers["Cache-Control"] = (
+                        "no-cache, no-store, must-revalidate"
+                    )
+                elif "cache-control" not in headers:
                     headers["Cache-Control"] = "no-store"
             await send(message)
 

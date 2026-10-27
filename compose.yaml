@@ -1,0 +1,53 @@
+services:
+  migrate:
+    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_VERSION:-latest}
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
+    volumes:
+      - inspectflow-data:/data
+    restart: "no"
+
+  initialize:
+    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_VERSION:-latest}
+    command: ["python", "-m", "app.cli.ensure_initial_setup"]
+    environment:
+      INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
+    volumes:
+      - inspectflow-data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  app:
+    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_VERSION:-latest}
+    ports:
+      - "${INSPECTFLOW_BIND_ADDRESS:-0.0.0.0}:${INSPECTFLOW_HOST_PORT:-18700}:8000"
+    environment:
+      INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
+      INSPECTFLOW_COOKIE_SECURE: ${INSPECTFLOW_COOKIE_SECURE:-true}
+    volumes:
+      - inspectflow-data:/data
+      - inspectflow-uploads:/uploads
+    depends_on:
+      initialize:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health',
+          timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  inspectflow-data:
+  inspectflow-uploads:
