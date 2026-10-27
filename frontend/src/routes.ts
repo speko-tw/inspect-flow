@@ -67,6 +67,32 @@ export const ROUTES = {
     title: PAGE_TITLES.projectRoles,
     permission: 'admin-only',
   },
+  // ADM-R55：公司單欄改名留詳情，角色使用獨立新增與修改頁。
+  adminCompanyNew: {
+    path: '/companies/new',
+    title: '新增公司',
+    permission: 'admin-only',
+  },
+  adminCompanyDetail: {
+    path: '/companies/:companyId',
+    title: '公司詳情',
+    permission: 'admin-only',
+  },
+  adminRoleNew: {
+    path: '/roles/new',
+    title: '新增角色',
+    permission: 'admin-only',
+  },
+  adminRoleDetail: {
+    path: '/roles/:roleId',
+    title: '角色詳情',
+    permission: 'admin-only',
+  },
+  adminRoleEdit: {
+    path: '/roles/:roleId/edit',
+    title: '修改角色',
+    permission: 'admin-only',
+  },
   adminProjects: {
     path: '/projects',
     title: PAGE_TITLES.projects,
@@ -251,6 +277,11 @@ const ACCESS_ROUTES: Array<{ route: ProductRoute; end: boolean }> = [
   { route: ROUTES.dashboardIndex, end: true },
   { route: ROUTES.dashboard, end: false },
   { route: ROUTES.adminPeople, end: false },
+  { route: ROUTES.adminCompanyNew, end: true },
+  { route: ROUTES.adminCompanyDetail, end: true },
+  { route: ROUTES.adminRoleNew, end: true },
+  { route: ROUTES.adminRoleDetail, end: true },
+  { route: ROUTES.adminRoleEdit, end: true },
   { route: ROUTES.adminCompanies, end: false },
   { route: ROUTES.adminRoles, end: false },
   { route: ROUTES.adminAuditLogs, end: false },

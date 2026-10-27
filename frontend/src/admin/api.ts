@@ -287,6 +287,11 @@ export async function listCompanies(): Promise<Company[]> {
   return listAllPages('/companies')
 }
 
+/** DOM-R32：以公司自己的網址讀取詳情，不受清單搜尋或分頁範圍影響。 */
+export function getCompany(id: string): Promise<Company> {
+  return request(`/companies/${encodeURIComponent(id)}`)
+}
+
 export function createCompany(name: string): Promise<Company> {
   return request('/companies', {
     method: 'POST',

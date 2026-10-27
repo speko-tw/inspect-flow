@@ -222,6 +222,12 @@ describe('product route metadata', () => {
       [ROUTES.settings, '/settings/profile'],
       [ROUTES.adminPeople, '/accounts/person-1'],
       [ROUTES.adminCompanies, '/companies'],
+      [ROUTES.adminCompanyNew, '/companies/new'],
+      [ROUTES.adminCompanyDetail, '/companies/c1'],
+      [ROUTES.adminRoleNew, '/roles/new'],
+      [ROUTES.adminRoleDetail, '/roles/r1'],
+      [ROUTES.adminRoleEdit, '/roles/r1/edit'],
+
       [ROUTES.adminRoles, '/roles'],
       [ROUTES.adminAuditLogs, '/logs'],
       [ROUTES.adminProjects, '/projects'],

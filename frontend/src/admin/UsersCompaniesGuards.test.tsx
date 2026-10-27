@@ -206,6 +206,30 @@ function stubBackend(
           items: users.filter((user) => body.user_ids.includes(user.id)),
         })
       }
+      if (call.path === '/api/v1/companies' && call.method === 'POST') {
+        const created = {
+          id: `company-new-${companies.length}`,
+          name: JSON.parse(call.body).name as string,
+          is_active: true,
+        }
+        companies.push(created)
+        return Response.json(created, { status: 201 })
+      }
+      const companyMatch = /^\/api\/v1\/companies\/([^/]+)(?:\/active)?$/.exec(
+        call.path,
+      )
+      if (companyMatch) {
+        const target = companies.find((item) => item.id === companyMatch[1])
+        if (!target)
+          return Response.json(
+            { error: { code: 'resource.not_found' } },
+            { status: 404 },
+          )
+        if (call.method === 'PATCH') target.name = JSON.parse(call.body).name
+        if (call.method === 'PUT')
+          target.is_active = JSON.parse(call.body).is_active
+        return Response.json(target)
+      }
       if (call.path.startsWith('/api/v1/users/')) {
         const id = call.path.split('/')[4]
         const target = users.find((user) => user.id === id)
@@ -1036,13 +1060,17 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
         fail && call.method === formCase.method && call.path === formCase.path,
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter
+        initialEntries={[
+          formCase.method === 'POST' ? '/companies/new' : '/companies',
+        ]}
+      >
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
       </DataMemoryRouter>,
     )
-    await screen.findByText('示範公司')
+    if (formCase.method === 'GET') await screen.findByText('示範公司')
     const button = screen.getByRole('button', { name: formCase.button })
     const form = button.closest('form')!
     const field = within(form).getByLabelText(formCase.field)
@@ -1072,11 +1100,30 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
     test.hold()
     fireEvent.click(test.button)
     fireEvent.submit(test.form)
-    expect(test.button).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: formCase.button }),
+    ).toBeDisabled()
     const expected = test.baseline + 1
-    expect(test.backend.count(formCase.method, formCase.path)).toBe(expected)
+    await waitFor(() =>
+      expect(test.backend.count(formCase.method, formCase.path)).toBe(
+        expected,
+      ),
+    )
     test.gate.resolve()
-    await waitFor(() => expect(test.button).toBeEnabled())
+    if (formCase.method === 'POST') {
+      expect(
+        await screen.findByRole('heading', { name: '第二示範公司' }),
+      ).toBeVisible()
+      expect(
+        screen.queryByRole('button', { name: formCase.button }),
+      ).not.toBeInTheDocument()
+    } else {
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: formCase.button }),
+        ).toBeEnabled(),
+      )
+    }
   })
 
   it('IME Enter 不送出真實 API', async () => {
@@ -1097,8 +1144,9 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
         expected,
       ),
     )
+    await screen.findByRole('alert')
     test.fail(false)
-    fireEvent.click(test.button)
+    fireEvent.click(screen.getByRole('button', { name: formCase.button }))
     await waitFor(() =>
       expect(test.backend.count(formCase.method, formCase.path)).toBe(
         expected + 1,
@@ -1433,7 +1481,7 @@ describe('CompaniesPage 停用公司（#507）', () => {
       hold: (call) => (call.path.endsWith('/active-users') ? gate : undefined),
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies/company-1']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1460,7 +1508,7 @@ describe('CompaniesPage 停用公司（#507）', () => {
       hold: (call) => (call.method === 'PUT' ? gate : undefined),
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies/company-1']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1493,7 +1541,7 @@ describe('CompaniesPage 批次狀態（#414）', () => {
       },
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1516,7 +1564,7 @@ describe('CompaniesPage 批次狀態（#414）', () => {
       hold: (call) => (call.path.endsWith(':batch-status') ? gate : undefined),
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1535,11 +1583,7 @@ describe('CompaniesPage 批次狀態（#414）', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /鄧安娜/ }))
     fireEvent.click(confirm)
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: '正在停用公司…' }),
-      ).toBeDisabled(),
-    )
+    await waitFor(() => expect(confirm).toBeDisabled())
     expect(backend.count('POST', '/api/v1/companies:batch-status')).toBe(1)
     expect(
       backend.calls.find((call) => call.path.endsWith(':batch-status'))?.body,
@@ -1565,7 +1609,7 @@ describe('CompaniesPage 批次狀態（#414）', () => {
       fail: (call) => call.path.endsWith(':batch-status'),
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1946,7 +1990,7 @@ describe('#734 T1/T2/T3 帳號批次回饋', () => {
 describe('#734 T7 公司操作回饋位置', () => {
   function renderCompanies() {
     return render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1957,7 +2001,8 @@ describe('#734 T7 公司操作回饋位置', () => {
   it('公司停用確認與結果留在該公司的操作列', async () => {
     stubBackend({ activeCompanyUsers: { 'company-1': [regularUser] } })
     renderCompanies()
-    const row = await screen.findByRole('row', { name: /示範公司/ })
+    fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
+    const row = await screen.findByRole('region', { name: '公司詳情' })
     fireEvent.click(within(row).getByRole('button', { name: '停用公司' }))
     const box = await within(row).findByRole('region', {
       name: '停用「示範公司」',
@@ -1971,13 +2016,14 @@ describe('#734 T7 公司操作回饋位置', () => {
   it('改名會聚焦表單，成功提示留在送出處', async () => {
     stubBackend()
     renderCompanies()
+    fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
     fireEvent.click(await screen.findByRole('button', { name: '改名稱' }))
     const input = screen.getByLabelText('公司名稱')
     await waitFor(() => expect(input).toHaveFocus())
     const form = input.closest('form') as HTMLElement
     fireEvent.change(input, { target: { value: '新公司名稱' } })
     fireEvent.click(within(form).getByRole('button', { name: '儲存名稱' }))
-    expect(await within(form).findByRole('status')).toHaveTextContent(
+    expect(await screen.findByRole('status')).toHaveTextContent(
       '已將公司名稱更新為「新公司名稱」。',
     )
   })
@@ -2786,7 +2832,7 @@ describe('#732 批次預覽的並行請求上限', () => {
     }))
     const backend = stubBackend({ companies, hold })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
