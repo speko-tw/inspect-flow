@@ -44,6 +44,7 @@ from app.api.v1.users import (
 from app.api.v1.version import router as version_router
 from app.auth.dependencies import bind_request_scope
 from app.auth.settings import validate_auth_settings
+from app.static_files import mount_frontend
 from app.version import release_identity
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,7 @@ def create_app() -> FastAPI:
     app.include_router(category_router, prefix="/api/v1")
     app.include_router(system_router, prefix="/api/v1")
     app.include_router(template_router, prefix="/api/v1")
+    mount_frontend(app)
     return app
 
 
