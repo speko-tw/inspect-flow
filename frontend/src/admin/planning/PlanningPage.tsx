@@ -238,7 +238,7 @@ function draftTaskSummary(task: InspectionTask): string {
 
 /**
  * 依 ADM-R17、IP-R02、IP-R10 呈現專案計畫與任務管理。
- * #727：依 ADM-R17、ADM-R28、IP-R01 與 viewer 權限隱藏入口；後端仍覆核寫入。
+ * #727：依 ADM-R17、IP-R01 與 viewer 權限隱藏入口；後端仍覆核寫入。
  */
 type PlanningPageProps = {
   client?: PlanningPageClient
@@ -1764,7 +1764,7 @@ function PlanningContent({
         (view === 'list' || view === 'plan' || view === 'task') && (
           <p>專案：{projects[0].name}</p>
         )}
-      {readOnly && (
+      {readOnly && !(view === 'plan' && selectedPlanDetail) && (
         <p className="notice-info" role="status">
           {READ_ONLY_NOTICE}
         </p>
@@ -1904,25 +1904,28 @@ function PlanningContent({
                     <StatusBadge status={selectedPlanDetail.status} />
                   </p>
                 )}
-                {selectedPlanDetail.status === 'ARCHIVED' && (
-                  <p className="notice notice-info">
-                    計畫已封存。取消封存後才能新增、修改或派出任務。
+                {/* IP-R01：封存時只有取消封存可用；未封存時排除建立別的
+                    計畫與取消封存，避免把不適用的權限當成此計畫可用操作。
+                    合併封存與權限說明，避免兩個提示框上下重複。 */}
+                {selectedPlanDetail.status === 'ARCHIVED' ? (
+                  <p className="notice notice-info" role="status">
+                    {view === 'plan' && !canToggleArchive
+                      ? '這個計畫已封存。你沒有取消封存的權限，如需取消封存，請洽有權限的專案管理者。'
+                      : '計畫已封存。取消封存後才能新增、修改或派出任務。'}
                   </p>
-                )}
-                {view === 'plan' &&
-                  !canToggleArchive &&
-                  writeCodes.filter(canWrite).length === 1 &&
-                  viewerPermissions?.includes(
-                    selectedPlanDetail.status === 'ARCHIVED'
-                      ? 'inspection_plan.archive'
-                      : 'inspection_plan.unarchive',
+                ) : (
+                  view === 'plan' &&
+                  !writeCodes.some(
+                    (code) =>
+                      code !== 'inspection_plan.create' &&
+                      code !== 'inspection_plan.unarchive' &&
+                      canWrite(code),
                   ) && (
-                    <p className="notice notice-info">
-                      {selectedPlanDetail.status === 'ARCHIVED'
-                        ? '你只有封存權限；計畫已封存，沒有取消封存權限。'
-                        : '你只有取消封存權限；計畫尚未封存，沒有封存權限。'}
+                    <p className="notice notice-info" role="status">
+                      你目前沒有可以對這個計畫執行的操作。
                     </p>
-                  )}
+                  )
+                )}
                 {noticeFor('plan-detail')}
                 {view === 'plan' &&
                   !readOnly &&

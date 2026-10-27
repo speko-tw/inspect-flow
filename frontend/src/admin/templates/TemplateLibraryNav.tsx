@@ -1,7 +1,9 @@
 import type { TemplateCategory, TemplateItem, TemplateSystem } from './api'
+import './TemplateLibraryNav.css'
 
 type Selection = { type: 'category' | 'system' | 'item'; id: string }
 
+/** 呈現範本庫階層與選取入口，操作授權由呼叫頁面決定。 */
 export function TemplateLibraryNav({
   categories,
   systems,
@@ -17,6 +19,7 @@ export function TemplateLibraryNav({
   mobile,
   mode,
   selectSystemOnly = false,
+  showSelectedMarker = false,
   appliedItemIds = new Set(),
 }: {
   categories: TemplateCategory[]
@@ -33,6 +36,8 @@ export function TemplateLibraryNav({
   mobile: boolean
   mode: 'manage' | 'select'
   selectSystemOnly?: boolean
+  /** 存為範本時補上非顏色選取線索，其他用途預設隱藏。 */
+  showSelectedMarker?: boolean
   appliedItemIds?: ReadonlySet<string>
 }) {
   // 提示只在畫面上真的有「開啟詳情」可點的項目列時才顯示；樹還收合時
@@ -144,7 +149,8 @@ export function TemplateLibraryNav({
                               {selectSystemOnly ? '•' : systemOpen ? '▾' : '▸'}
                             </span>
                             <span>{system.name}</span>
-                            {mode === 'select' &&
+                            {showSelectedMarker &&
+                              mode === 'select' &&
                               selected?.type === 'system' &&
                               selected.id === system.id && (
                                 <span className="tpl-selected-marker">

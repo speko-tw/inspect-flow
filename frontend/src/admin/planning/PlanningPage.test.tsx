@@ -2583,7 +2583,9 @@ describe('planning forms guard (#507)', () => {
       )
 
       await waitFor(() => expect(formByContext('plan-rename')).toBeNull())
-      expect(screen.getByRole('status')).toHaveTextContent(READ_ONLY_NOTICE)
+      expect(screen.getByRole('status')).toHaveTextContent(
+        '你目前沒有可以對這個計畫執行的操作。',
+      )
       expect(screen.queryByLabelText(/計畫名稱/)).toBeNull()
       const unload = new Event('beforeunload', {
         cancelable: true,
@@ -2983,7 +2985,7 @@ describe('#727 唯讀身分', () => {
       await click(await screen.findByRole('link', { name: /既有計畫/ }))
       await screen.findByRole('heading', { name: plan.name })
       expect(screen.getByRole('status')).toHaveTextContent(
-        '你在這個專案只能查看計畫與任務，不能新增、修改或派出。需要調整請找有管理權限的專案成員或管理者。',
+        '你目前沒有可以對這個計畫執行的操作。',
       )
       expect(screen.queryByRole('button', { name: '建立計畫' })).toBeNull()
       expect(screen.queryByRole('button', { name: '＋ 新增任務' })).toBeNull()
@@ -3146,13 +3148,19 @@ describe('#727c 各動作依實際權限', () => {
       '取消封存',
       '＋ 新增任務',
       '修改查核項目',
+      '修改名稱',
+      '修改地點',
       '修改建議指派',
       '派出任務',
       '刪除草稿',
       '取消任務',
     ]
     for (const name of entryNames) {
-      if (name !== button) {
+      const permitted =
+        name === button ||
+        (code === 'inspection_task.manage' &&
+          ['修改名稱', '修改地點'].includes(name))
+      if (!permitted) {
         expect(screen.queryByRole('button', { name })).toBeNull()
       }
     }
@@ -3170,13 +3178,13 @@ describe('#727c 各動作依實際權限', () => {
     [
       '封存中',
       'inspection_plan.archive',
-      '計畫已封存，沒有取消封存權限。',
+      '這個計畫已封存。你沒有取消封存的權限，如需取消封存，請洽有權限的專案管理者。',
       true,
     ],
     [
       '尚未封存',
       'inspection_plan.unarchive',
-      '計畫尚未封存，沒有封存權限。',
+      '你目前沒有可以對這個計畫執行的操作。',
       false,
     ],
   ])(
@@ -3205,7 +3213,7 @@ describe('#727c 各動作依實際權限', () => {
 
   it('有其他計畫寫入權限時不顯示單一封存權限的唯讀說明', async () => {
     const client = createMockPlanningClient()
-    const plan = await client.createPlan('project-demo-1', {
+    await client.createPlan('project-demo-1', {
       name: '混合封存權限計畫',
     })
     render(
@@ -3221,10 +3229,74 @@ describe('#727c 各動作依實際權限', () => {
     await click(await screen.findByRole('link', { name: /混合封存權限計畫/ }))
 
     expect(screen.getByRole('button', { name: '修改計畫名稱' })).toBeVisible()
-    expect(screen.queryByText(/你只有取消封存權限/)).toBeNull()
-    expect(screen.queryByText(/沒有任何可用的操作/)).toBeNull()
-    expect(plan.status).toBe('DRAFT')
+    expect(
+      screen.queryByText('你目前沒有可以對這個計畫執行的操作。'),
+    ).toBeNull()
   })
+
+  it('只持取消封存權限時，已封存計畫僅開放取消封存', async () => {
+    const client = createMockPlanningClient()
+    const plan = await client.createPlan('project-demo-1', {
+      name: '僅取消封存計畫',
+    })
+    await client.archivePlan(plan.id)
+    render(
+      <PlanningPage
+        client={client}
+        initialProjectId="project-demo-1"
+        viewerPermissions={['inspection_plan.unarchive']}
+      />,
+    )
+    await click(await screen.findByRole('link', { name: /僅取消封存計畫/ }))
+    expect(screen.getByRole('button', { name: '取消封存' })).toBeVisible()
+    for (const name of [
+      '建立計畫',
+      '修改計畫名稱',
+      '封存計畫',
+      '＋ 新增任務',
+      '修改查核項目',
+      '修改名稱',
+      '修改地點',
+      '修改建議指派',
+      '派出任務',
+      '刪除草稿',
+      '取消任務',
+    ]) {
+      expect(screen.queryByRole('button', { name })).toBeNull()
+    }
+    expect(screen.queryByText(/你沒有取消封存的權限/)).toBeNull()
+  })
+
+  it.each([
+    [true, ['inspection_plan.manage', 'inspection_task.create']],
+    [false, ['inspection_plan.create']],
+    [false, []],
+  ])(
+    '已封存 %s、權限 %j 時顯示單一無可用操作提示',
+    async (archived, codes) => {
+      const client = createMockPlanningClient()
+      const plan = await client.createPlan('project-demo-1', {
+        name: '無可用操作計畫',
+      })
+      if (archived) await client.archivePlan(plan.id)
+      render(
+        <PlanningPage
+          client={client}
+          initialProjectId="project-demo-1"
+          viewerPermissions={codes}
+        />,
+      )
+      await click(await screen.findByRole('link', { name: /無可用操作計畫/ }))
+      const message = archived
+        ? '這個計畫已封存。你沒有取消封存的權限，如需取消封存，請洽有權限的專案管理者。'
+        : '你目前沒有可以對這個計畫執行的操作。'
+      expect(screen.getByText(message)).toBeVisible()
+      expect(
+        screen.queryByText('計畫已封存。取消封存後才能新增、修改或派出任務。'),
+      ).toBeNull()
+      expect(screen.queryByText(/你在這個專案只能查看計畫與任務/)).toBeNull()
+    },
+  )
 })
 
 it('IP-AC24：新增不選停用項目，草稿只保留原有停用項目', async () => {

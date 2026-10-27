@@ -776,6 +776,9 @@ it('有指派的人維持預設我的任務，明確切換不被自動覆蓋', a
   vi.stubGlobal('fetch', fetcher)
   renderPage()
   await screen.findByText(TASK.name)
+  expect(
+    screen.getByRole('heading', { level: 1, name: '我的任務' }),
+  ).toBeVisible()
   const scope = screen.getByLabelText('任務範圍')
   expect(
     within(scope).getByRole('button', { name: '我的任務' }),

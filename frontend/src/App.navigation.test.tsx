@@ -859,7 +859,12 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()
     expect(screen.getByText('已收回你的管理者權限。')).toBeVisible()
-    expect(screen.queryByRole('heading', { name: '我的任務' })).toBeNull()
+    expect(
+      screen.queryByRole('heading', {
+        level: 1,
+        name: /^(我的|全部)?任務$/,
+      }),
+    ).toBeNull()
   })
 
   it('收回自己失敗時留在管理頁並顯示錯誤', async () => {
@@ -1013,7 +1018,12 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     expect(
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()
-    expect(screen.queryByRole('heading', { name: '我的任務' })).toBeNull()
+    expect(
+      screen.queryByRole('heading', {
+        level: 1,
+        name: /^(我的|全部)?任務$/,
+      }),
+    ).toBeNull()
   })
 
   it('內業帳號登出後換現場帳號登入，落在今日任務', async () => {

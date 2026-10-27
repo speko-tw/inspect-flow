@@ -23,6 +23,7 @@
 .save-template-steps ul {
   display: grid;
   gap: 0.5rem;
+  /* 巢狀 ul 預設的空心圓像不能點的單選鈕。 */
   list-style: none;
   padding-inline-start: 1rem;
 }
@@ -53,9 +54,20 @@
   font-weight: 700;
 }
 
-.save-template-selected-marker,
-.tpl-selected-marker {
+.save-template-selected-marker {
   flex: 0 0 auto;
-  margin-inline-start: auto;
+  margin-inline-start: var(--space-2);
+  white-space: nowrap;
   font-weight: 700;
+}
+
+.save-template-page > .back-link {
+  justify-self: start;
+}
+
+.save-template-steps ul button {
+  justify-content: flex-start;
+  text-align: start;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
 }

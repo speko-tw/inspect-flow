@@ -163,6 +163,8 @@ function TaskList({
   const [loading, setLoading] = useState(() => !restore || !memory.has(key))
   const [error, setError] = useState<'forbidden' | 'other' | null>(null)
   const [retry, setRetry] = useState(0)
+  // FUI-R02：預設範圍要等指派查詢完成才知道；決定前標題中性為「任務」，
+  // 避免先出現「我的任務」再改成「全部任務」。
   const pendingDefaultScope = allowAutoScope && !state
 
   useEffect(() => {
@@ -270,6 +272,7 @@ function TaskList({
   return (
     <>
       <h1 className="field-heading">
+        {/* FUI-R02：查詢未決時沿用中性標題，範圍確定後才顯示對應標題。 */}
         {pendingDefaultScope
           ? '任務'
           : scope === 'all'
