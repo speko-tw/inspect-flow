@@ -355,6 +355,13 @@ describe('second design review layout rules', () => {
       ],
     ).toBe('center')
     expect(declarationsOf('.card-actions')['align-items']).toBe('center')
+    expect(declarationsOf('.named-row-actions')['align-items']).toBe('center')
+    expect(
+      declarationsOf(
+        '.member-actions',
+        read('src/admin/projects/ProjectMembers.css'),
+      )['align-items'],
+    ).toBe('center')
     expect(
       declarationsOf(
         '.wizard-actions',

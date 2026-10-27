@@ -1093,6 +1093,8 @@ td .btn {
 .named-row-actions {
   display: flex;
   flex-wrap: wrap;
+  /* 同 .member-actions：取消維持 44px，不被 48px 的主要按鈕拉高。 */
+  align-items: center;
   gap: var(--space-2);
 }
 

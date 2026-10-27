@@ -86,7 +86,6 @@
 .member-card-actions a,
 .member-add-link {
   display: inline-flex;
-  min-height: 44px;
   align-items: center;
 }
 
@@ -125,6 +124,8 @@
 .member-actions {
   display: flex;
   flex-wrap: wrap;
+  /* 取消（44px）在主要按鈕（48px）前，置中而非拉伸，兩者各保持自己的高度。 */
+  align-items: center;
   gap: var(--space-2);
 }
 

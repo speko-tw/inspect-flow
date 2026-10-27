@@ -2856,7 +2856,15 @@ describe('admin project members', () => {
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    fireEvent.click(screen.getByRole('button', { name: /移出專案/ }))
+    // 每張成員卡的動作：修改角色為外框強調，移出專案為外框紅；
+    // 實心紅只留給確認框。
+    expect(screen.getByRole('link', { name: /修改「.*」的角色/ })).toHaveClass(
+      'btn-emphasis',
+    )
+    const removeTrigger = screen.getByRole('button', { name: /移出專案/ })
+    expect(removeTrigger).toHaveClass('btn-danger-outline')
+    expect(removeTrigger).not.toHaveClass('btn-danger')
+    fireEvent.click(removeTrigger)
     expect(calls(fetchMock, 'DELETE', /members/)).toHaveLength(0)
     const confirm = screen.getByRole('group', { name: '移出確認' })
     expectCancelThenDanger(confirm, ['取消', '確認移出'])

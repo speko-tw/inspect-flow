@@ -1101,7 +1101,13 @@ function ProjectMembersSection({
                   ) : (
                     <div className="member-card-actions">
                       <Link
-                        className="btn btn-sm"
+                        className={
+                          busy ||
+                          !rolesReady ||
+                          member.user_id === currentUser.id
+                            ? 'btn btn-sm'
+                            : 'btn btn-sm btn-emphasis'
+                        }
                         aria-label={memberEditLabel(member)}
                         aria-describedby={
                           member.user_id === currentUser.id
@@ -1147,6 +1153,7 @@ function ProjectMembersSection({
                       )}
                       <button
                         aria-label={memberRemoveLabel(member)}
+                        className="btn-danger-outline"
                         disabled={busy}
                         onClick={() => {
                           clearMessages()
