@@ -70,9 +70,9 @@
 | DPL-AC05 | 根目錄及子路徑 HTTPS 設定 | 分別登入與登出 | cookie 固定為 Secure、HttpOnly、SameSite Strict、__Host-、Path=/，登出可清除 | DPL-R04 |
 | DPL-AC06 | 已建立專案等資料 | `down`/`up` 並更換 image tag | migration 自動執行，API 可讀回原資料，具名 volume 持續存在 | DPL-R02、DPL-R08 |
 | DPL-AC07 | 主機資料夾已設為容器 UID/GID 可寫 | 以 bind 模式在非預設 port 啟動、寫入資料，再 `down`/`up` | 服務健康、資料仍可讀，容器仍以非 root 身份執行 | DPL-R05、DPL-R08 |
-| DPL-AC09 | workflow 定義完成 | 靜態檢查 workflow | v-tag/manual tag 驗證正確，只有完整穩定版 v-tag 更新 `latest`，平台限定 amd64；不觸發發布 | DPL-R07 |
-| DPL-AC10 | 同一 image | 以 Nginx HTTPS 分別代理根目錄及 `/inspectflow/` | 首頁、深層網址、設定、登入、登出、建立專案及資源載入成功；cookie Secure；manifest 前綴一致 | DPL-R04、DPL-R09 |
-| DPL-AC11 | 已建資料 | 停機備份、變更資料、再還原 | 還原後可讀回原資料，更新先停舊版，migration 成功才啟動 | DPL-R02、DPL-R08 |
+| DPL-AC08 | workflow 定義完成 | 靜態檢查 workflow | v-tag/manual tag 驗證正確，只有完整穩定版 v-tag 更新 `latest`，平台限定 amd64；不觸發發布 | DPL-R07 |
+| DPL-AC09 | 同一 image | 以 Nginx HTTPS 分別代理根目錄及 `/inspectflow/` | 首頁、深層網址、設定、登入、登出、建立專案及資源載入成功；cookie Secure；manifest 前綴一致 | DPL-R04、DPL-R09 |
+| DPL-AC10 | 已建資料 | 停機備份、變更資料、再還原 | 備份經 gzip 驗證後原子改名；還原前 gzip 與 tar 檢查均通過才刪除舊資料，壞備份須保留現有資料；還原後可讀回原資料，更新先停舊版，migration 成功才啟動 | DPL-R02、DPL-R08 |
 
 目前不註冊 service worker；沿用既有停用策略，不宣稱離線可用。cookie 維持 Path=/ 以符合 __Host- 限制；同一網域僅部署一份。完整 `pilot-deployment` 仍在 0.9.x，本規格僅為精簡子集。
 

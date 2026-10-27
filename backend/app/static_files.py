@@ -102,6 +102,7 @@ def mount_frontend(app: FastAPI) -> None:
     """DPL-R09：集中靜態掛載，入口只負責接線（RG-M07）。"""
     base_path = get_base_path()
     static_dir = Path(os.environ.get("INSPECTFLOW_STATIC_DIR", "/app/static"))
+    # DPL-R06：開發與純 API 測試沒有前端產物，仍須能啟動 API。
     if static_dir.is_dir():
         app.router.routes.append(
             FrontendMount(

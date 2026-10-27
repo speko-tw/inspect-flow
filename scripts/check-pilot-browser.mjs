@@ -1,4 +1,4 @@
-// DPL-AC10：僅對本機測試部署做 HTTPS、子路徑與登入流程驗收。
+// DPL-AC09：僅對本機測試部署做 HTTPS、子路徑與登入流程驗收。
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { readFile } from 'node:fs/promises'

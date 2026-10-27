@@ -17,10 +17,7 @@ from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
-from app.auth.sessions import (
-    get_session_cookie_name,
-    validate_and_touch_session,
-)
+from app.auth.sessions import SESSION_COOKIE_NAME, validate_and_touch_session
 from app.db.unit_of_work import unit_of_work
 from app.models import User, UserPassword
 
@@ -166,7 +163,7 @@ def _check_login(
     back in the coroutine that dispatches the route handler; see
     ``require_login``.
     """
-    token = request.cookies.get(get_session_cookie_name())
+    token = request.cookies.get(SESSION_COOKIE_NAME)
     if token is None:
         raise APIError(ErrorCode.AUTH_NOT_AUTHENTICATED, 401)
 

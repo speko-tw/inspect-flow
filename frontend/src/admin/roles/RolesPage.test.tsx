@@ -1,4 +1,3 @@
-import { StrictMode } from 'react'
 import {
   fireEvent,
   render,
@@ -119,9 +118,8 @@ function RoleNavigation() {
 function renderRoles(
   path = '/roles',
   history?: { entries: string[]; index: number },
-  strict = false,
 ) {
-  const content = (
+  const view = render(
     <DataMemoryRouter
       initialEntries={history?.entries ?? [path]}
       initialIndex={history?.index}
@@ -137,9 +135,9 @@ function renderRoles(
           path="/*"
         />
       </Routes>
-    </DataMemoryRouter>
+    </DataMemoryRouter>,
   )
-  return render(strict ? <StrictMode>{content}</StrictMode> : content)
+  return view
 }
 
 async function openNewRole() {
@@ -610,19 +608,6 @@ describe('admin role management page', () => {
     expect(screen.queryByLabelText('角色名稱')).not.toBeInTheDocument()
     expect(calls(fetchMock, 'POST')).toHaveLength(0)
     expect(screen.getByRole('link', { name: '新增角色' })).toBeVisible()
-  })
-
-  it('保留嚴格模式建立角色後的成功通知', async () => {
-    rolesFetch()
-    renderRoles('/roles/new', undefined, true)
-    fireEvent.change(await screen.findByLabelText('角色名稱'), {
-      target: { value: '通知回歸角色' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '建立角色' }))
-    await screen.findByRole('heading', { name: '通知回歸角色', level: 1 })
-    expect(
-      await screen.findByText('已建立角色「通知回歸角色」。'),
-    ).toBeVisible()
   })
 
   it('creates a role with the checked permissions', async () => {

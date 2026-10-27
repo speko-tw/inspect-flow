@@ -21,15 +21,10 @@ from app.models import AuthSession, User
 SESSION_COOKIE_NAME = "__Host-inspectflow_session"
 
 
-def get_session_cookie_name() -> str:
-    """依 AUT-R12 固定使用瀏覽器強制驗證的安全前綴。"""
-    return SESSION_COOKIE_NAME
-
-
 def set_session_cookie(response: Response, token: str) -> None:
     """依 AUT-R12 統一簽發安全登入 Cookie，避免各入口屬性不一致。"""
     response.set_cookie(
-        key=get_session_cookie_name(),
+        key=SESSION_COOKIE_NAME,
         value=token,
         httponly=True,
         secure=True,
@@ -77,7 +72,10 @@ def create_session(db: Session, user: User) -> tuple[AuthSession, str]:
 def _is_expired(
     row: AuthSession, now: datetime, idle_timeout: timedelta
 ) -> bool:
-    """依 AUT-R15 判斷絕對期限及閒置期限。"""
+    """依 AUT-R15 判斷兩種期限：絕對期限到達即失效；
+
+    閒置時間超過期限才失效，剛好等於期限仍有效。
+    """
     if now >= row.expires_at:
         return True
     return (now - row.last_seen_at) > idle_timeout

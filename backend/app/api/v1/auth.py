@@ -32,9 +32,9 @@ from app.auth.login import authenticate
 from app.auth.password_service import set_password
 from app.auth.passwords import check_password_length, verify_password
 from app.auth.sessions import (
+    SESSION_COOKIE_NAME,
     create_session,
     delete_session_by_token,
-    get_session_cookie_name,
     hash_token,
     set_session_cookie,
 )
@@ -177,7 +177,7 @@ def _me_response(db: Session, user: User) -> MeResponse:
 
 def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(
-        key=get_session_cookie_name(),
+        key=SESSION_COOKIE_NAME,
         path="/",
         httponly=True,
         secure=True,
@@ -232,7 +232,7 @@ def logout(
     recorded) disappears afterwards; the token itself is never
     logged (AUT-R41).
     """
-    token = request.cookies.get(get_session_cookie_name())
+    token = request.cookies.get(SESSION_COOKIE_NAME)
     user_id: UUID | None = None
     if token is not None:
         user_id = db.scalar(

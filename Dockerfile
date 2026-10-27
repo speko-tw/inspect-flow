@@ -8,6 +8,7 @@ COPY frontend/ ./
 COPY backend/app/permission_codes.json /src/backend/app/permission_codes.json
 ARG INSPECTFLOW_COMMIT
 ENV INSPECTFLOW_COMMIT=$INSPECTFLOW_COMMIT
+# .vite 只供建置分析，不應將內部 chunk 對照表發布給用戶端。
 RUN npm run build && rm -rf dist/.vite
 
 FROM ghcr.io/astral-sh/uv:0.11.23 AS uv
@@ -30,6 +31,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 ARG INSPECTFLOW_COMMIT
 ENV INSPECTFLOW_COMMIT=$INSPECTFLOW_COMMIT
 WORKDIR /app
+# 固定 UID/GID 讓 bind mount 搬機後仍能預先配置最小寫入權限。
 RUN groupadd --system --gid 999 inspectflow \
     && useradd --system --uid 999 --gid 999 --home-dir /app inspectflow \
     && mkdir -p /data /uploads /app/static \

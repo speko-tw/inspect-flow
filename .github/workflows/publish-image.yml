@@ -48,6 +48,7 @@ jobs:
           if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", value):
               raise SystemExit("invalid Docker image tag")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"commit={os.environ['GITHUB_SHA'][:7]}\n")
               output.write(f"value={value}\n")
               output.write(f"stable={str(stable).lower()}\n")
           PY
@@ -72,7 +73,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
-          build-args: INSPECTFLOW_COMMIT=${{ github.sha }}
+          build-args: INSPECTFLOW_COMMIT=${{ steps.tag.outputs.commit }}
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}

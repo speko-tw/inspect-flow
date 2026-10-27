@@ -1,4 +1,4 @@
-"""為所有 `/api/` 回應加上 `Cache-Control: no-store`（#711）。
+"""為所有 `/api/` 與 `/sw.js` 回應加上 `Cache-Control: no-store`（#711）。
 
 為什麼：`/auth/me`、有效權限與任務資料都依登入者而異，共用電腦或
 中間 proxy 若快取，下一位使用者可能看到上一位的內容。逐路由設定
@@ -14,7 +14,7 @@ _API_PREFIX = "/api/"
 
 
 class NoStoreMiddleware:
-    """對 `/api/` 路徑補上 `Cache-Control: no-store`，不覆蓋既有值。"""
+    """對 `/api/` 補 no-store；`/sw.js` 一律禁止儲存，避免舊 worker。"""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app

@@ -7,7 +7,7 @@ services:
     environment:
       INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
     volumes:
-      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data:z
+      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data${INSPECTFLOW_SELINUX:-}
     restart: "no"
     logging:
       driver: json-file
@@ -21,7 +21,7 @@ services:
     environment:
       INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
     volumes:
-      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data:z
+      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data${INSPECTFLOW_SELINUX:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -34,6 +34,7 @@ services:
 
   app:
     image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_IMAGE_TAG:-pilot-test}
+    # $$ 延至容器內展開；只接受可信代理標頭，避免偽造來源 IP。
     command:
       - /bin/sh
       - -ec
@@ -48,8 +49,10 @@ services:
     environment:
       INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
       INSPECTFLOW_BASE_PATH: ${INSPECTFLOW_BASE_PATH:-}
-      INSPECTFLOW_FORWARDED_ALLOW_IPS: >-
-        ${INSPECTFLOW_FORWARDED_ALLOW_IPS:-127.0.0.1}
+      # YAML 續行不插入空白，讓巢狀插值保持完整並符合行寬限制。
+      INSPECTFLOW_FORWARDED_ALLOW_IPS: "\
+        ${INSPECTFLOW_FORWARDED_ALLOW_IPS:-127.0.0.1,\
+        ${INSPECTFLOW_NETWORK_SUBNET:-172.31.250.0/24}}"
       INSPECTFLOW_SESSION_IDLE_TIMEOUT_MINUTES: >-
         ${INSPECTFLOW_SESSION_IDLE_TIMEOUT_MINUTES:-60}
       INSPECTFLOW_SESSION_ABSOLUTE_TIMEOUT_HOURS: >-
@@ -69,8 +72,9 @@ services:
       INSPECTFLOW_SETUP_LOCKOUT_MINUTES: >-
         ${INSPECTFLOW_SETUP_LOCKOUT_MINUTES:-15}
     volumes:
-      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data:z
-      - ${INSPECTFLOW_UPLOADS_DIR:-inspectflow-uploads}:/uploads:z
+      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data${INSPECTFLOW_SELINUX:-}
+      - "${INSPECTFLOW_UPLOADS_DIR:-inspectflow-uploads}:\
+        /uploads${INSPECTFLOW_SELINUX:-}"
     depends_on:
       initialize:
         condition: service_completed_successfully
@@ -93,6 +97,14 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+# 固定子網讓同機 Nginx 經 gateway 轉送的標頭開箱即可被信任。
+# 只綁 loopback；改為其他位址時須改成只信任 Nginx 的精確 IP。
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${INSPECTFLOW_NETWORK_SUBNET:-172.31.250.0/24}
 
 volumes:
   inspectflow-data:

@@ -71,15 +71,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - run: python3 scripts/check-compose-config.py
       - name: Build without publishing
-        run: >-
-          docker build --build-arg INSPECTFLOW_COMMIT=${{ github.sha }}
-          -t ghcr.io/speko-tw/inspect-flow:ci-test .
+        run: |
+          docker build --build-arg INSPECTFLOW_COMMIT="${GITHUB_SHA:0:7}" \
+            -t ghcr.io/speko-tw/inspect-flow:ci-test .
       - name: Smoke test
         env:
           INSPECTFLOW_IMAGE_TAG: ci-test
         run: |
           docker compose up -d --wait --wait-timeout 120
           curl --fail http://127.0.0.1:8080/api/v1/health
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
       - name: Clean up
         if: always()
         run: docker compose down -v
