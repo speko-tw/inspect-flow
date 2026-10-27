@@ -92,8 +92,7 @@ const TEMPLATE: TemplateItem = {
   ],
 }
 
-// 這組範本管理情境以 canSave 模擬存為範本與跨專案清單的存取；
-// 主管也可讀專案清單，但不因此取得存為範本的權限。
+// mock 以 canSave 決定是否回傳跨專案清單，並模擬是否顯示存為範本。
 let managerMock = false
 
 function mockApi(

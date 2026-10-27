@@ -43,7 +43,6 @@ from app.services.module_permissions import (
     RoleNotAssignableError,
     SelfRoleChangeError,
     query_people_access,
-    query_person_access,
 )
 from app.services.permissions import calculate_effective_access
 from app.services.project_members import (
@@ -492,9 +491,10 @@ def list_projects(
     ``member_count``（ADM-R12）。專案代號不要求唯一，重複的代號在該筆
     ``warnings`` 標 ``project_code.duplicate``，不拒絕。
     """
-    # DOM-R60：透過人員模組查詢權限；委派與專案成員身分不放行。
-    access = query_person_access(db, user_id=user.id)
-    if access is None or not (
+    # DOM-R61：委派不放行。依 07-permission-model，跨專案清單只
+    # 檢查第 1 層專用權限，無須 project.use。
+    access = calculate_effective_access(db, user_id=user.id)
+    if not (
         access.is_admin
         or access.module_permissions
         & {"all_project_progress.read", "template.manage"}

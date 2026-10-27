@@ -26,6 +26,7 @@ from app.models import (
     ProjectMemberRole,
     Role,
     User,
+    UserModuleDelegation,
     UserModulePermission,
 )
 from app.services import projects as project_service
@@ -1264,7 +1265,20 @@ def test_cross_project_list_permission_is_read_only(
         assert client.get(url).status_code == 403
         assert client.patch(url, json={"name": "不得修改"}).status_code == 403
         assert client.get(f"{url}/members").status_code == 403
+        assert client.get(f"{url}/workflow-summary").status_code == 403
     assert client.get("/api/v1/me/projects").json() == []
+
+
+@pytest.mark.parametrize("module", ["project", "template"])
+def test_module_delegation_does_not_grant_cross_project_listing(
+    project_api, db_session: Session, make_client, module: str
+):
+    user = project_api["target"]
+    db_session.add(UserModuleDelegation(user_id=user.id, module=module))
+    db_session.commit()
+    client = _make_user_client(db_session, make_client, user)
+
+    assert client.get("/api/v1/projects").status_code == 403
 
 
 def test_project_list_denies_members_and_unprivileged_users(
