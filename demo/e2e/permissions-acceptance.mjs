@@ -196,7 +196,7 @@ try {
   assert.equal((await api('/users')).status, 403)
 
   await signIn('demo-template-delegate', 'DemoDelegate2026', '/accounts')
-  await page.getByRole('button', { name: '新增帳號' }).waitFor({
+  await page.getByRole('link', { name: '新增帳號' }).waitFor({
     state: 'detached',
   })
   assert.equal(
@@ -209,7 +209,7 @@ try {
     await page.getByRole('link', { name: '範本', exact: true }).count(),
     0,
   )
-  assert.equal(await page.getByRole('button', { name: '新增帳號' }).count(), 0)
+  assert.equal(await page.getByRole('link', { name: '新增帳號' }).count(), 0)
   await assertDenied('/templates')
   await assertAllDenied(['/companies', '/roles', '/logs'])
   assert.equal((await api('/template-categories')).status, 403)
@@ -289,11 +289,19 @@ try {
   await signIn('admin', 'DemoAdmin2026', '/overview')
   await page.getByRole('button', { name: '管理 ▾' }).click()
   await page.getByRole('link', { name: '帳號', exact: true }).click()
-  await page.getByRole('button', { name: '新增帳號' }).click()
+  await page.getByRole('link', { name: '新增帳號' }).click()
+  await page.waitForURL((url) => url.pathname === '/accounts/new')
+  await page.reload()
+  await page.getByRole('heading', { level: 1, name: '新增帳號' }).waitFor()
   // #713：第一步缺欄位時停在原地並在欄位旁說明。
   await page.getByRole('button', { name: '下一步' }).click()
   await page.getByText('請填寫帳號名稱。').first().waitFor()
-  assert.ok(await page.getByText('步驟 1／4：帳號資料').isVisible())
+  assert.ok(
+    await page
+      .getByRole('navigation', { name: '新增帳號步驟' })
+      .locator('[aria-current="step"]')
+      .isVisible(),
+  )
   await page.getByLabel('帳號名稱', { exact: true }).fill(
     'demo-role-check',
   )
@@ -309,13 +317,13 @@ try {
   })
   await page.getByRole('button', { name: '下一步' }).click()
   await page.getByRole('button', { name: '建立帳號' }).click()
-  await page.getByRole('heading', { name: '已新增林以安的帳號' }).waitFor()
-  // #713：完成頁只放臨時密碼與下一步，不出現「能做什麼」。
-  assert.equal(
-    await page.getByRole('heading', { name: '能做什麼' }).count(),
-    0,
-  )
-  const temporaryPassword = await page.getByLabel('臨時密碼').textContent()
+  await page.getByRole('heading', {
+    name: '林以安', level: 1, exact: true,
+  }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已新增林以安的帳號' }).waitFor()
+  assert.match(new URL(page.url()).pathname, /^\/accounts\/[0-9a-f-]+$/)
+  const temporaryPassword = await page
+    .getByLabel('臨時密碼', { exact: true }).textContent()
   assert.match(temporaryPassword, /^[0-9]{20}$/)
   assert.ok(temporaryPassword.length >= 12)
   const restrictedRole = await api('/roles', 'POST', {
@@ -357,16 +365,21 @@ try {
     ],
   })
   assert.equal(manageableRole.status, 201)
-  await page.getByRole('button', {
-    name: '查看這個帳號的能力',
-  }).click()
+  await page.getByRole('link', { name: '返回帳號清單' }).click()
   await page.getByRole('heading', {
     name: '臨時密碼抄下了嗎？',
   }).waitFor()
-  const temporaryPasswordOutputs = page.getByLabel('臨時密碼')
-  assert.ok((await temporaryPasswordOutputs.count()) > 0)
+  const temporaryPasswordOutputs = page.getByLabel('臨時密碼', { exact: true })
+  assert.equal(await temporaryPasswordOutputs.count(), 1)
   await page.getByRole('button', { name: '留在此頁' }).click()
-  await page.getByRole('heading', { name: '已新增林以安的帳號' }).waitFor()
+  await page.getByRole('heading', {
+    name: '臨時密碼抄下了嗎？', exact: true,
+  }).waitFor({ state: 'hidden' })
+  await page.getByRole('heading', {
+    name: '林以安', level: 1, exact: true,
+  }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已新增林以安的帳號' }).waitFor()
+  assert.match(new URL(page.url()).pathname, /^\/accounts\/[0-9a-f-]+$/)
   assert.ok(
     await temporaryPasswordOutputs.evaluateAll(
       (elements, expectedPassword) =>
@@ -381,13 +394,12 @@ try {
     (await page.locator('body').textContent()).includes(temporaryPassword),
     '離頁前同一查法確實找得到連續密碼',
   )
-  await page.getByRole('button', {
-    name: '查看這個帳號的能力',
-  }).click()
+  await page.getByRole('link', { name: '返回帳號清單' }).click()
   await page.getByRole('heading', {
     name: '臨時密碼抄下了嗎？',
   }).waitFor()
   await page.getByRole('button', { name: '離開此頁' }).click()
+  await page.getByRole('link', { name: '林以安', exact: true }).click()
   await page.getByRole('heading', {
     name: '能做什麼',
   }).waitFor()
