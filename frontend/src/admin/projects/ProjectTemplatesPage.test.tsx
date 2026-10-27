@@ -92,8 +92,8 @@ const TEMPLATE: TemplateItem = {
   ],
 }
 
-// The server decides `has_template_access` and `GET /projects` access
-// from the same rule, so the mock keeps them in step via `canSave`.
+// 這組範本管理情境以 canSave 模擬存為範本與跨專案清單的存取；
+// 主管也可讀專案清單，但不因此取得存為範本的權限。
 let managerMock = false
 
 function mockApi(

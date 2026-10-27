@@ -1218,6 +1218,90 @@ def test_template_manager_can_list_projects_but_project_members_cannot(
     assert plain_client.get("/api/v1/projects").status_code == 403
 
 
+@pytest.mark.parametrize(
+    "permission_code", ["all_project_progress.read", "template.manage"]
+)
+def test_cross_project_list_permission_is_read_only(
+    project_api, db_session: Session, make_client, permission_code
+):
+    """#728：跨專案清單只開放基本欄位，不附帶專案讀寫權。"""
+    user = project_api["target"]
+    db_session.add(
+        UserModulePermission(
+            user_id=user.id,
+            permission_code=permission_code,
+            source="manual",
+        )
+    )
+    db_session.commit()
+    client = _make_user_client(db_session, make_client, user)
+    response = client.get("/api/v1/projects")
+    assert response.status_code == 200
+    assert (
+        response.json()
+        == project_api["admin_client"].get("/api/v1/projects").json()
+    )
+    rows = response.json()["items"]
+    assert {row["id"] for row in rows} == {
+        str(project_api["project"].id),
+        str(project_api["other_project"].id),
+    }
+    expected_fields = {
+        "id",
+        "project_code",
+        "name",
+        "client_name",
+        "site_location",
+        "company_role",
+        "planned_start_date",
+        "planned_completion_date",
+        "warnings",
+        "member_count",
+    }
+    assert all(set(row) == expected_fields for row in rows)
+    for project in (project_api["project"], project_api["other_project"]):
+        url = f"/api/v1/projects/{project.id}"
+        assert client.get(url).status_code == 403
+        assert client.patch(url, json={"name": "不得修改"}).status_code == 403
+        assert client.get(f"{url}/members").status_code == 403
+    assert client.get("/api/v1/me/projects").json() == []
+
+
+def test_project_list_denies_members_and_unprivileged_users(
+    project_api, db_session: Session
+):
+    """#728：成員走自己的清單；未授權者不得列出跨專案資料。"""
+    # 我的專案依有效讀取權限列出，不能只給成員管理權限。
+    read_role = create_role(
+        db_session, name="清單讀取者", permission_codes=["project.read"]
+    )
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project_api["project"].id,
+            ProjectMember.user_id == project_api["actor"].id,
+        )
+    )
+    assert member is not None
+    db_session.add(
+        ProjectMemberRole(project_member_id=member.id, role_id=read_role.id)
+    )
+    db_session.commit()
+    actor = project_api["actor_client"]
+    assert actor.get("/api/v1/projects").status_code == 403
+    own = actor.get("/api/v1/me/projects")
+    assert own.status_code == 200
+    assert {row["id"] for row in own.json()} == {
+        str(project_api["project"].id)
+    }
+    plain = project_api["plain_client"]
+    assert plain.get("/api/v1/projects").status_code == 403
+    assert plain.get("/api/v1/me/projects").json() == []
+    assert (
+        project_api["anonymous_client"].get("/api/v1/projects").status_code
+        == 401
+    )
+
+
 def test_system_role_assignment_routes_are_removed(project_api):
     target = project_api["target"]
     assert isinstance(target, User)
