@@ -7,6 +7,7 @@ import { Link } from 'react-router'
 import { managementErrorMessage } from '../api'
 import { ROUTES } from '../../routes'
 import { listMyProjects, type MyProject } from './api'
+import './ProjectCards.css'
 
 type State =
   | { kind: 'loading' }
@@ -56,11 +57,7 @@ export default function MyProjectsPage({
       <h1 id="my-projects-heading">我的專案</h1>
       <p>你參與的專案會列在這裡。</p>
       {canCreateProject && (
-        <Link
-          className="btn btn-primary"
-          state={{ returnTo: '/projects' }}
-          to={ROUTES.projectNew.path}
-        >
+        <Link className="btn btn-primary" to={ROUTES.projectNew.path}>
           新增專案
         </Link>
       )}
@@ -98,17 +95,20 @@ export default function MyProjectsPage({
                 {project.role_names.length > 0 && (
                   <p>我的角色：{project.role_names.join('、')}</p>
                 )}
-                <Link
-                  className="btn btn-emphasis"
-                  to={`/projects/${project.id}`}
-                >
-                  開啟專案
-                </Link>
-                {project.has_office_access && project.can_apply_templates && (
-                  <Link className="btn" to={templatePath}>
-                    套用範本
+                <div className="card-actions project-card-actions">
+                  <Link
+                    className="btn btn-emphasis"
+                    to={`/projects/${project.id}`}
+                  >
+                    開啟專案
                   </Link>
-                )}
+                  {project.has_office_access &&
+                    project.can_apply_templates && (
+                      <Link className="btn" to={templatePath}>
+                        套用範本
+                      </Link>
+                    )}
+                </div>
               </article>
             )
           })}

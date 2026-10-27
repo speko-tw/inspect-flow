@@ -14,6 +14,7 @@ type ErrorMessage = (error: unknown) => string
  *
  * @param fetchPage 取得一頁資料；`cursor` 為空代表第一頁。
  * @param getErrorMessage 把請求失敗轉成給使用者看的訊息。
+ * @param initialQueryValue 只在第一次 render 初始化搜尋字串。
  */
 export function useCursorList<T>(
   fetchPage: FetchPage<T>,

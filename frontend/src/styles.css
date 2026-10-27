@@ -2066,8 +2066,8 @@ a.app-header-tab[aria-current='page'] {
   gap: var(--space-2);
 }
 
-.card-actions > button,
-.card-actions > .btn {
+.card-actions > button:not(.btn-primary),
+.card-actions > .btn:not(.btn-primary) {
   flex: 0 0 auto;
   min-height: 44px;
   width: auto;

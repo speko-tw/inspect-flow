@@ -5,6 +5,7 @@ import { useCurrentUser } from '../../auth/useCurrentUser'
 import { BackLink } from '../../layout/BackLink'
 import { ProjectNotFound } from '../../RouteNotFound'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { FormErrorSummary, FormField, FormGroup } from '../../components'
 import { FieldError, FormSubmitButton, RequiredMark } from '../../ui/Form'
 import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
@@ -76,10 +77,16 @@ function toInput(draft: Draft): ProjectInput {
   }
 }
 
+/** ADM-R54：只接受清單或同專案首頁，避免回傳 state 導向其他路由。 */
 function safeReturnTo(value: unknown, projectId: string): string {
   if (value === '/projects') return value
-  const home = `/projects/${projectId}`
-  return home
+  return `/projects/${projectId}`
+}
+
+function safeProjectQuery(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  if (/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(value.trim())) return ''
+  return value
 }
 
 /** ADM-R54：以專案權限守門的獨立專案修改頁。 */
@@ -92,9 +99,7 @@ export default function ProjectEditPage() {
   const routeState = location.state as ReturnState | null
   const returnTo = safeReturnTo(routeState?.returnTo, projectId)
   const returnQuery =
-    returnTo === '/projects' && typeof routeState?.returnQuery === 'string'
-      ? routeState.returnQuery
-      : ''
+    returnTo === '/projects' ? safeProjectQuery(routeState?.returnQuery) : ''
   const returnState = returnQuery ? { projectQuery: returnQuery } : null
   const backLabel = returnTo === '/projects' ? '返回專案清單' : '返回專案首頁'
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'loading' })
@@ -116,6 +121,7 @@ export default function ProjectEditPage() {
   const [confirmRoleChangeOpen, setConfirmRoleChangeOpen] = useState(false)
   const [focusTarget, setFocusTarget] = useState<string | null>(null)
   const [focusRequest, setFocusRequest] = useState(0)
+  const [reasonFocusRequest, setReasonFocusRequest] = useState(0)
   const mounted = useRef(false)
   const currentProjectId = useRef(projectId)
   currentProjectId.current = projectId
@@ -123,7 +129,6 @@ export default function ProjectEditPage() {
   const reasonRef = useRef<HTMLTextAreaElement | null>(null)
   const roleSelectRef = useRef<HTMLSelectElement | null>(null)
   const errorRef = useRef<HTMLParagraphElement | null>(null)
-  const focusReason = useRef(false)
   const returnFocusToRole = useRef(false)
 
   useEffect(() => {
@@ -196,11 +201,10 @@ export default function ProjectEditPage() {
   }, [focusRequest, focusTarget])
 
   useEffect(() => {
-    if (!focusReason || !reasonError) return
-    focusReason.current = false
+    if (reasonFocusRequest === 0 || !reasonError) return
     reasonRef.current?.scrollIntoView?.({ block: 'nearest' })
     reasonRef.current?.focus({ preventScroll: true })
-  }, [reasonError])
+  }, [reasonError, reasonFocusRequest])
 
   useEffect(() => {
     if (!error) return
@@ -245,6 +249,8 @@ export default function ProjectEditPage() {
   const leaveGuard = useUnsavedNavigationGuard(isDirty)
 
   async function retryRoles() {
+    setFieldErrors((current) => ({ ...current, company_role: '' }))
+    setError('')
     setRoleState({ projectId, status: 'loading', roles: [] })
     try {
       const roles = await listCompanyRoles()
@@ -317,7 +323,7 @@ export default function ProjectEditPage() {
         caught instanceof HttpError &&
         caught.code === 'project.company_role_reason_required'
       ) {
-        focusReason.current = true
+        setReasonFocusRequest((value) => value + 1)
         setReasonError('改本公司角色必須填寫變更原因。')
       } else if (caught instanceof HttpError && caught.fields?.length) {
         const mapped = mapFieldErrors(caught.fields, [
@@ -337,7 +343,7 @@ export default function ProjectEditPage() {
           ]),
         )
         if (messages.reason) {
-          focusReason.current = true
+          setReasonFocusRequest((value) => value + 1)
           setReasonError('變更原因最多 256 個字元。')
         } else {
           setConfirmRoleChangeOpen(false)
@@ -373,12 +379,12 @@ export default function ProjectEditPage() {
   async function confirmRoleChange() {
     const trimmed = reason.trim()
     if (!trimmed) {
-      focusReason.current = true
+      setReasonFocusRequest((value) => value + 1)
       setReasonError('請填寫變更原因。')
       return
     }
     if (trimmed.length > REASON_MAX_LENGTH) {
-      focusReason.current = true
+      setReasonFocusRequest((value) => value + 1)
       setReasonError(`變更原因最多 ${REASON_MAX_LENGTH} 個字元。`)
       return
     }
@@ -402,7 +408,17 @@ export default function ProjectEditPage() {
           {backLabel}
         </BackLink>
         <p role="alert">{loadState.message}</p>
-        <button onClick={() => setRetry((value) => value + 1)} type="button">
+        <button
+          onClick={() => {
+            setLoadState({ kind: 'loading' })
+            setError('')
+            setFieldErrors({})
+            setReasonError('')
+            setConfirmRoleChangeOpen(false)
+            setRetry((value) => value + 1)
+          }}
+          type="button"
+        >
           重新載入
         </button>
       </section>
@@ -423,169 +439,170 @@ export default function ProjectEditPage() {
       <section aria-labelledby="project-edit-heading">
         <UnsavedLeaveBox guard={leaveGuard} />
         <h2 id="project-edit-heading" ref={headingRef} tabIndex={-1}>
-          修改專案「{project.name}」
+          修改專案
         </h2>
         <form
           className="project-create-form"
           onKeyDown={blockImeEnter}
           onSubmit={submit}
         >
+          <FormErrorSummary
+            errors={[
+              ['company_role', 'edit-company-role', '本公司在這個案子的角色'],
+              ['project_code', 'edit-project-code', '專案代號'],
+              ['name', 'edit-project-name', '工程名稱'],
+              ['client_name', 'edit-client-name', '業主／委託單位'],
+              ['site_location', 'edit-site-location', '整體工程地點'],
+            ].flatMap(([key, fieldId, fieldLabel]) =>
+              fieldErrors[key]
+                ? [{ fieldId, fieldLabel, message: fieldErrors[key] }]
+                : [],
+            )}
+          />
           <fieldset disabled={saving}>
-            <legend>專案資料</legend>
-            <label htmlFor="edit-company-role">
-              <span className="required-label">
-                本公司在這個案子的角色 <RequiredMark />
-              </span>
-              <select
-                aria-describedby={
-                  fieldErrors.company_role
-                    ? 'edit-company-role-error'
-                    : undefined
-                }
-                aria-invalid={fieldErrors.company_role ? 'true' : undefined}
-                disabled={roleStatus !== 'ready'}
+            <FormGroup title="專案資料">
+              <FormField
+                description="會決定報表種類。同工地的另一種角色請另開專案。"
+                error={fieldErrors.company_role}
                 id="edit-company-role"
-                onChange={(event) =>
-                  change('company_role', event.target.value)
-                }
-                ref={roleSelectRef}
+                label="本公司在這個案子的角色"
                 required
-                value={draft.company_role}
               >
-                {companyRoles.map((role) => (
-                  <option key={role.value} value={role.value}>
-                    {role.label}
-                  </option>
-                ))}
-                {!companyRoles.some(
-                  (role) => role.value === draft.company_role,
-                ) && (
-                  <option value={draft.company_role}>
-                    {draft.company_role}
-                  </option>
+                {(control) => (
+                  <select
+                    {...control}
+                    disabled={roleStatus !== 'ready'}
+                    onChange={(event) =>
+                      change('company_role', event.target.value)
+                    }
+                    ref={roleSelectRef}
+                    required
+                    value={draft.company_role}
+                  >
+                    {companyRoles.map((role) => (
+                      <option key={role.value} value={role.value}>
+                        {role.label}
+                      </option>
+                    ))}
+                    {!companyRoles.some(
+                      (role) => role.value === draft.company_role,
+                    ) && (
+                      <option value={draft.company_role}>
+                        {draft.company_role}
+                      </option>
+                    )}
+                  </select>
                 )}
-              </select>
+              </FormField>
               {roleStatus === 'error' && (
-                <span role="alert">
+                <p role="alert">
                   無法載入角色選項。{' '}
                   <button onClick={() => void retryRoles()} type="button">
                     重試
                   </button>
-                </span>
+                </p>
               )}
-            </label>
-            <FieldError id="edit-company-role-error">
-              {fieldErrors.company_role ?? ''}
-            </FieldError>
-            <label htmlFor="edit-project-code">
-              <span className="required-label">
-                專案代號 <RequiredMark />
-              </span>
-              <Input
-                aria-describedby={
-                  fieldErrors.project_code
-                    ? 'edit-project-code-error'
-                    : undefined
-                }
-                aria-invalid={fieldErrors.project_code ? 'true' : undefined}
+              <FormField
+                error={fieldErrors.project_code}
                 id="edit-project-code"
-                maxLength={32}
-                onChange={(event) =>
-                  change('project_code', event.target.value)
-                }
+                label="專案代號"
                 required
-                value={draft.project_code}
-              />
-            </label>
-            <FieldError id="edit-project-code-error">
-              {fieldErrors.project_code ?? ''}
-            </FieldError>
-            <label htmlFor="edit-project-name">
-              <span className="required-label">
-                工程名稱 <RequiredMark />
-              </span>
-              <Input
-                aria-describedby={
-                  fieldErrors.name ? 'edit-project-name-error' : undefined
-                }
-                aria-invalid={fieldErrors.name ? 'true' : undefined}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    maxLength={32}
+                    onChange={(event) =>
+                      change('project_code', event.target.value)
+                    }
+                    required
+                    value={draft.project_code}
+                  />
+                )}
+              </FormField>
+              <FormField
+                error={fieldErrors.name}
                 id="edit-project-name"
-                maxLength={128}
-                onChange={(event) => change('name', event.target.value)}
+                label="工程名稱"
                 required
-                value={draft.name}
-              />
-            </label>
-            <FieldError id="edit-project-name-error">
-              {fieldErrors.name ?? ''}
-            </FieldError>
-            <label htmlFor="edit-client-name">
-              <span className="required-label">
-                業主／委託單位 <RequiredMark />
-              </span>
-              <Input
-                aria-describedby={
-                  fieldErrors.client_name
-                    ? 'edit-client-name-error'
-                    : undefined
-                }
-                aria-invalid={fieldErrors.client_name ? 'true' : undefined}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    maxLength={128}
+                    onChange={(event) => change('name', event.target.value)}
+                    required
+                    value={draft.name}
+                  />
+                )}
+              </FormField>
+              <FormField
+                error={fieldErrors.client_name}
                 id="edit-client-name"
-                maxLength={128}
-                onChange={(event) => change('client_name', event.target.value)}
+                label="業主／委託單位"
                 required
-                value={draft.client_name}
-              />
-            </label>
-            <FieldError id="edit-client-name-error">
-              {fieldErrors.client_name ?? ''}
-            </FieldError>
-            <label htmlFor="edit-site-location">
-              <span className="required-label">
-                整體工程地點 <RequiredMark />
-              </span>
-              <Input
-                aria-describedby={
-                  fieldErrors.site_location
-                    ? 'edit-site-location-error'
-                    : undefined
-                }
-                aria-invalid={fieldErrors.site_location ? 'true' : undefined}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    maxLength={128}
+                    onChange={(event) =>
+                      change('client_name', event.target.value)
+                    }
+                    required
+                    value={draft.client_name}
+                  />
+                )}
+              </FormField>
+              <FormField
+                error={fieldErrors.site_location}
                 id="edit-site-location"
-                maxLength={256}
-                onChange={(event) =>
-                  change('site_location', event.target.value)
-                }
+                label="整體工程地點"
                 required
-                value={draft.site_location}
-              />
-            </label>
-            <FieldError id="edit-site-location-error">
-              {fieldErrors.site_location ?? ''}
-            </FieldError>
-            <label htmlFor="edit-start-date">
-              預定開工日
-              <Input
-                id="edit-start-date"
-                onChange={(event) =>
-                  change('planned_start_date', event.target.value)
-                }
-                type="date"
-                value={draft.planned_start_date}
-              />
-            </label>
-            <label htmlFor="edit-completion-date">
-              預定完工日
-              <Input
-                id="edit-completion-date"
-                onChange={(event) =>
-                  change('planned_completion_date', event.target.value)
-                }
-                type="date"
-                value={draft.planned_completion_date}
-              />
-            </label>
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    maxLength={256}
+                    onChange={(event) =>
+                      change('site_location', event.target.value)
+                    }
+                    required
+                    value={draft.site_location}
+                  />
+                )}
+              </FormField>
+              <FormField id="edit-start-date" label="預定開工日">
+                {(control) => (
+                  <Input
+                    {...control}
+                    onChange={(event) =>
+                      change('planned_start_date', event.target.value)
+                    }
+                    type="date"
+                    value={draft.planned_start_date}
+                  />
+                )}
+              </FormField>
+              <FormField id="edit-completion-date" label="預定完工日">
+                {(control) => (
+                  <Input
+                    {...control}
+                    onChange={(event) =>
+                      change('planned_completion_date', event.target.value)
+                    }
+                    type="date"
+                    value={draft.planned_completion_date}
+                  />
+                )}
+              </FormField>
+            </FormGroup>
           </fieldset>
+          {error && (
+            <p ref={errorRef} role="alert" tabIndex={-1}>
+              {error}
+            </p>
+          )}
           <div className="card-actions">
             <button
               className="btn"
@@ -595,17 +612,14 @@ export default function ProjectEditPage() {
               取消
             </button>
             <FormSubmitButton
-              className="btn-primary"
-              disabled={saving || roleStatus === 'loading'}
+              className={confirmRoleChangeOpen ? 'btn' : 'btn-primary'}
+              disabled={
+                confirmRoleChangeOpen || saving || roleStatus === 'loading'
+              }
             >
               {saving ? '儲存中…' : '儲存專案'}
             </FormSubmitButton>
           </div>
-          {error && (
-            <p ref={errorRef} role="alert" tabIndex={-1}>
-              {error}
-            </p>
-          )}
         </form>
         {confirmRoleChangeOpen && (
           <ConfirmBox

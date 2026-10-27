@@ -79,6 +79,9 @@ export default function ProjectSectionShell({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
+  const isProjectEditRoute =
+    location.pathname ===
+    ROUTES.projectEdit.path.replace(':projectId', projectId)
   const routeState = location.state as { highlightedItemIds?: unknown } | null
   const highlightedItemIds = Array.isArray(routeState?.highlightedItemIds)
     ? routeState.highlightedItemIds.filter(
@@ -107,7 +110,7 @@ export default function ProjectSectionShell({
       ).map((section) => (
         <NavLink
           aria-current={activeSection === section.id ? 'page' : undefined}
-          end={section.id === 'home'}
+          end={section.id === 'home' && !isProjectEditRoute}
           key={section.id}
           onClick={() => setMenuOpen(false)}
           state={

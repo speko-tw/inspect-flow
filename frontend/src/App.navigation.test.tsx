@@ -889,11 +889,10 @@ describe('登入逾時與未儲存頁面（#623）', () => {
       name: '新增專案',
     })
     fireEvent.click(createProjectLink)
-    await screen.findByRole('heading', {
-      level: 2,
-      name: '新增專案',
-    })
-    const projectName = screen.getByLabelText(/工程名稱/)
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Admin' }),
+    ).toBeVisible()
+    const projectName = await screen.findByLabelText(/工程名稱/)
     fireEvent.change(projectName, {
       target: { value: '逾時前的草稿' },
     })
@@ -944,9 +943,10 @@ describe('登入逾時與未儲存頁面（#623）', () => {
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: '新增專案' }),
+      await screen.findByRole('heading', { level: 1, name: 'Admin' }),
     ).toBeVisible()
-    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('')
+    const resetProjectName = await screen.findByLabelText(/工程名稱/)
+    expect(resetProjectName).toHaveValue('')
     expect(screen.getByRole('button', { name: '新增專案' })).toBeVisible()
   })
 })

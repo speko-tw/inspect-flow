@@ -54,8 +54,6 @@ export default function ProjectCreatePage() {
       <UnsavedLeaveBox guard={guard} />
       <BackLink to={returnTo}>返回專案清單</BackLink>
       <ProjectCreationForm
-        cancelWithParentGuard
-        formSession={0}
         isAdmin={user.is_admin}
         onCancel={cancel}
         onCreated={created}

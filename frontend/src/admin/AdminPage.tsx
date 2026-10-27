@@ -88,6 +88,12 @@ function AdminRouteSuspense({ children }: { children: ReactNode }) {
   return <Suspense fallback={<p>載入中…</p>}>{children}</Suspense>
 }
 
+/** ADM-R54：換專案時重建表單，避免沿用上一筆的錯誤與確認草稿。 */
+function ProjectEditRoute() {
+  const { projectId = '' } = useParams()
+  return <ProjectEditPage key={projectId} />
+}
+
 function ProjectPlanningRoute({
   viewerPermissions,
 }: {
@@ -187,7 +193,7 @@ const PROJECT_ROUTES = (
       path={nestedRoutePath(ROUTES.projectHome, ROUTES.adminShell)}
     />
     <Route
-      element={<ProjectEditPage />}
+      element={<ProjectEditRoute />}
       path={nestedRoutePath(ROUTES.projectEdit, ROUTES.adminShell)}
     />
     <Route
@@ -387,9 +393,11 @@ function AdminPageContent() {
   // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
 
-  const isProjectSectionRoute = PROJECT_PAGE_ROUTES.some((route) =>
-    matchPath({ path: route.path, end: true }, location.pathname),
-  )
+  const isProjectSectionRoute =
+    location.pathname !== ROUTES.projectNew.path &&
+    PROJECT_PAGE_ROUTES.some((route) =>
+      matchPath({ path: route.path, end: true }, location.pathname),
+    )
 
   if (!user.is_admin) {
     return <MemberAdminShell dashboardAccess={dashboardAccess} user={user} />
