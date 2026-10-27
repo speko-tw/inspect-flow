@@ -36,6 +36,8 @@ import CompaniesPage from './CompaniesPage'
 import PeoplePage, { AccountCreationProvider } from './people/PeoplePage'
 import RolesPage from './roles/RolesPage'
 import ProjectHomePage from './projectHome/ProjectHomePage'
+import ProjectEditPage from './projects/ProjectEditPage'
+import ProjectCreatePage from './projects/ProjectCreatePage'
 import ProjectSectionPage from './projectHome/ProjectSectionPage'
 import { WorkflowSummaryProvider } from './projectHome/WorkflowSummaryProvider'
 import ProjectsPage from './projects/ProjectsPage'
@@ -61,6 +63,7 @@ const DashboardTaskPage = lazy(() => import('./dashboard/DashboardTaskPage'))
 
 const PROJECT_PAGE_ROUTES = [
   ROUTES.projectHome,
+  ROUTES.projectEdit,
   ROUTES.projectMembers,
   ROUTES.projectMemberNew,
   ROUTES.projectMemberEdit,
@@ -83,6 +86,12 @@ type DashboardAccessState = { kind: 'allowed' } | { kind: 'denied' }
 
 function AdminRouteSuspense({ children }: { children: ReactNode }) {
   return <Suspense fallback={<p>載入中…</p>}>{children}</Suspense>
+}
+
+/** ADM-R54：換專案時重建表單，避免沿用上一筆的錯誤與確認草稿。 */
+function ProjectEditRoute() {
+  const { projectId = '' } = useParams()
+  return <ProjectEditPage key={projectId} />
 }
 
 function ProjectPlanningRoute({
@@ -182,6 +191,10 @@ const PROJECT_ROUTES = (
     <Route
       element={<ProjectHomePage />}
       path={nestedRoutePath(ROUTES.projectHome, ROUTES.adminShell)}
+    />
+    <Route
+      element={<ProjectEditRoute />}
+      path={nestedRoutePath(ROUTES.projectEdit, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectSectionPage section="members" />}
@@ -386,9 +399,11 @@ function AdminPageContent() {
   // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
 
-  const isProjectSectionRoute = PROJECT_PAGE_ROUTES.some((route) =>
-    matchPath({ path: route.path, end: true }, location.pathname),
-  )
+  const isProjectSectionRoute =
+    location.pathname !== ROUTES.projectNew.path &&
+    PROJECT_PAGE_ROUTES.some((route) =>
+      matchPath({ path: route.path, end: true }, location.pathname),
+    )
 
   if (!user.is_admin) {
     return <MemberAdminShell dashboardAccess={dashboardAccess} user={user} />
@@ -497,8 +512,40 @@ function AdminPageContent() {
               element={<RolesPage />}
             />
             <Route
+              path={nestedRoutePath(ROUTES.adminCompanyNew, ROUTES.adminShell)}
+              element={<CompaniesPage />}
+            />
+            <Route
+              path={nestedRoutePath(ROUTES.adminRoleNew, ROUTES.adminShell)}
+              element={<RolesPage />}
+            />
+            <Route element={<RequireValidRouteIds />}>
+              <Route
+                path={nestedRoutePath(
+                  ROUTES.adminCompanyDetail,
+                  ROUTES.adminShell,
+                )}
+                element={<CompaniesPage />}
+              />
+              <Route
+                path={nestedRoutePath(
+                  ROUTES.adminRoleDetail,
+                  ROUTES.adminShell,
+                )}
+                element={<RolesPage />}
+              />
+              <Route
+                path={nestedRoutePath(ROUTES.adminRoleEdit, ROUTES.adminShell)}
+                element={<RolesPage />}
+              />
+            </Route>
+            <Route
               path={nestedRoutePath(ROUTES.adminProjects, ROUTES.adminShell)}
               element={<ProjectsPage />}
+            />
+            <Route
+              element={<ProjectCreatePage />}
+              path={nestedRoutePath(ROUTES.projectNew, ROUTES.adminShell)}
             />
             <Route
               path={nestedRoutePath(ROUTES.dashboard, ROUTES.adminShell)}
@@ -607,6 +654,10 @@ function MemberAdminShell({
           <Route
             path={nestedRoutePath(ROUTES.adminAccountNew, ROUTES.adminShell)}
             element={<PeoplePage onTemporaryPassword={() => undefined} />}
+          />
+          <Route
+            element={<ProjectCreatePage />}
+            path={nestedRoutePath(ROUTES.projectNew, ROUTES.adminShell)}
           />
           {canManageAccounts && (
             <Route
