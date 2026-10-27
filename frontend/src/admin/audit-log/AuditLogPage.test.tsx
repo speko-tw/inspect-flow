@@ -31,6 +31,25 @@ function mockFetch(
       items: [{ id: 'field-role', name: '現場工程師' }],
       next_cursor: null,
     }),
+  usersResponse = (url: URL) =>
+    Response.json(
+      url.searchParams.get('cursor')
+        ? {
+            items: [{ id: 'user-2', username: 'ben', name_zh: '班' }],
+            next_cursor: null,
+          }
+        : {
+            items: [
+              {
+                id: actorId,
+                username: 'anna',
+                name_zh: '安娜新名',
+                company_name: '乙公司',
+              },
+            ],
+            next_cursor: 'users-page-2',
+          },
+    ),
 ) {
   const fetcher = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -42,19 +61,7 @@ function mockFetch(
           next_cursor: null,
         })
       }
-      if (url.pathname.endsWith('/users')) {
-        return Response.json(
-          url.searchParams.get('cursor')
-            ? {
-                items: [{ id: 'user-2', username: 'ben', name_zh: '班' }],
-                next_cursor: null,
-              }
-            : {
-                items: [{ id: actorId, username: 'anna', name_zh: '安娜' }],
-                next_cursor: 'users-page-2',
-              },
-        )
-      }
+      if (url.pathname.endsWith('/users')) return usersResponse(url)
       if (url.pathname.endsWith('/audit-logs')) {
         if (init?.method && init.method !== 'GET') {
           return Response.json({}, { status: 405 })
@@ -73,6 +80,15 @@ afterEach(() => {
 })
 
 describe('稽核查詢頁', () => {
+  it('人員清單失敗時仍以操作者快照顯示舊姓名與單位', async () => {
+    mockFetch(undefined, undefined, () => Response.json({}, { status: 500 }))
+    render(<AuditLogPage />)
+    expect(await screen.findByText('安娜．內部．甲公司')).toBeVisible()
+    expect(screen.getByRole('alert')).toHaveTextContent('篩選選項載入失敗')
+    expect(screen.queryByText('未知帳號')).toBeNull()
+    expect(screen.queryByText('帳號：anna')).toBeNull()
+  })
+
   it('套用四類篩選、翻頁與返回，僅送 GET 查詢', async () => {
     const fetcher = mockFetch()
     render(<AuditLogPage />)
@@ -83,7 +99,10 @@ describe('稽核查詢頁', () => {
       await screen.findByRole('option', { name: '班 (ben)' }),
     ).toBeInTheDocument()
     expect(screen.getAllByText('甲專案 (P-1)')).toHaveLength(2)
-    expect(screen.getAllByText('安娜 (anna)')).toHaveLength(2)
+    expect(screen.getByText('安娜．內部．甲公司')).toBeVisible()
+    expect(screen.getByText('帳號：anna')).toBeVisible()
+    expect(screen.getByText('安娜新名 (anna)')).toBeVisible()
+    expect(screen.getByText('帳號：anna')).toBeVisible()
     const userRequests = fetcher.mock.calls
       .map(([input]) => new URL(String(input), 'http://localhost'))
       .filter((url) => url.pathname.endsWith('/users'))
@@ -196,7 +215,7 @@ describe('稽核查詢頁', () => {
     expect(screen.getByText('建立角色', { selector: 'h2' })).toBeVisible()
     expect(screen.getByText('其他操作')).toBeVisible()
     await waitFor(() =>
-      expect(screen.getAllByText('帳號：安娜 (anna)')).toHaveLength(2),
+      expect(screen.getAllByText('帳號：anna')).toHaveLength(4),
     )
     expect(screen.getByText('角色：現場工程師')).toBeVisible()
     expect(screen.getByText('對象', { selector: 'dd' })).toBeVisible()

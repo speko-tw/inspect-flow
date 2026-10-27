@@ -98,6 +98,18 @@ function stubBackend(
       name: string
     }>
     temporaryPassword?: string
+    externalNoProject?: Array<{
+      id: string
+      username: string
+      name_zh: string | null
+      account_expires_on: string | null
+    }>
+    unmanagedProjects?: Array<{
+      id: string
+      project_code: string
+      name: string
+      member_count: number
+    }>
   } = {},
 ) {
   const users = (options.users ?? [regularUser]).map((user) => ({ ...user }))
@@ -159,10 +171,16 @@ function stubBackend(
           })
         }
         if (call.path.includes('/external-without-project')) {
-          return Response.json({ items: [], next_cursor: null })
+          return Response.json({
+            items: options.externalNoProject ?? [],
+            next_cursor: null,
+          })
         }
         if (call.path.includes('/projects/unmanaged')) {
-          return Response.json({ items: [], next_cursor: null })
+          return Response.json({
+            items: options.unmanagedProjects ?? [],
+            next_cursor: null,
+          })
         }
         if (call.path.endsWith('/active-users')) {
           const companyId = call.path.split('/')[4]
@@ -328,6 +346,32 @@ describe('UsersPage 帳號詳情', () => {
         screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
       ).findByRole('option', { name: '示範公司' }),
     ).toBeVisible()
+  })
+
+  it('有提醒時進入清單便直接顯示，不需手動展開', async () => {
+    stubBackend({
+      externalNoProject: [
+        {
+          id: 'external-1',
+          username: 'outside',
+          name_zh: '外部人員',
+          account_expires_on: null,
+        },
+      ],
+      unmanagedProjects: [
+        {
+          id: 'project-1',
+          project_code: 'P-1',
+          name: '未管理專案',
+          member_count: 2,
+        },
+      ],
+    })
+    renderUsers()
+    expect(await screen.findByText(/提醒：/)).toBeVisible()
+    expect(screen.getByText('外部人員（outside）')).toBeVisible()
+    expect(screen.getByRole('link', { name: /P-1／未管理專案/ })).toBeVisible()
+    expect(screen.queryByRole('group')).toBeNull()
   })
 
   it('進入清單自動載入提醒，沒有提醒時整塊隱藏', async () => {
@@ -833,6 +877,32 @@ describe.each(userFormCases)('$name 共用表單', (formCase) => {
       input: within(button.closest('form')!).getByLabelText(formCase.input),
     }
   }
+
+  it('存檔失敗後取消再開表單會清除舊錯誤', async () => {
+    const backend = stubBackend({
+      fail: (call) =>
+        call.method === formCase.method && call.path === formCase.path,
+    })
+    renderUsers({ detailUserId: 'user-1' })
+    const section = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
+    fireEvent.click(
+      within(section).getByRole('button', { name: formCase.open }),
+    )
+    const button = await screen.findByRole('button', { name: formCase.button })
+    const form = button.closest('form')!
+    formCase.prepare(within(form).getByLabelText(formCase.input))
+    fireEvent.click(button)
+    await screen.findByRole('alert')
+    fireEvent.click(within(form).getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(section).getByRole('button', { name: formCase.open }),
+    )
+    await screen.findByRole('button', { name: formCase.button })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(backend.count(formCase.method, formCase.path)).toBe(1)
+  })
 
   it('實際修改欄位會攔截 beforeunload', async () => {
     const { form, input } = await openForm()

@@ -44,6 +44,18 @@ describe('稽核事件白話對照', () => {
     )
   })
 
+  it('對象優先顯示事件快照名稱，不使用目前人員清單名稱', () => {
+    expect(
+      entityLabel(
+        auditLogEntryFixture({
+          entity_type: 'project_member',
+          after: { user_id: 'user-id', user_name: '當時姓名' },
+        }),
+        { userName: () => '目前姓名', projectName: () => null },
+      ),
+    ).toBe('成員：當時姓名')
+  })
+
   it('對象沒有名稱時只顯示類型，不顯示編號', () => {
     const label = entityLabel(
       auditLogEntryFixture({

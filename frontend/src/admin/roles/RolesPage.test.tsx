@@ -1123,5 +1123,7 @@ it('持有人數保留總數並標出其中停用者，確認影響範圍仍用�
   const box = await screen.findByRole('region', {
     name: '刪除「含停用者角色」',
   })
-  expect(box).toHaveTextContent('會影響 2 個專案中的 5 個帳號')
+  expect(box).toHaveTextContent(
+    '會影響 2 個專案中的 5 個帳號（含 1 個已停用）',
+  )
 })

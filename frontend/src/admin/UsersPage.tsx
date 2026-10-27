@@ -1042,6 +1042,7 @@ export default function UsersPage({
                   onCancel={() => {
                     setExpiryEditorUser(null)
                     setEditingUser(null)
+                    setSaveError(null)
                     reportDirty(`details:${detail.id}`, false)
                   }}
                   onDirtyChange={(dirty) =>
@@ -1075,6 +1076,7 @@ export default function UsersPage({
                     errorFocusRequest={saveError?.request}
                     onCancel={() => {
                       setEditingCompany(null)
+                      setSaveError(null)
                       reportDirty(`company:${detail.id}`, false)
                     }}
                     onDirtyChange={(dirty) =>
@@ -1098,8 +1100,8 @@ export default function UsersPage({
       {!detailUserId && (
         <>
           {(externalNoProject.length > 0 || unmanagedProjects.length > 0) && (
-            <details>
-              <summary>
+            <section aria-label="提醒">
+              <p>
                 提醒：
                 {externalNoProject.length > 0 &&
                   `無專案外部協作帳號 ${externalNoProject.length} 個`}
@@ -1108,8 +1110,8 @@ export default function UsersPage({
                   : ''}
                 {unmanagedProjects.length > 0 &&
                   `沒有管理成員的專案 ${unmanagedProjects.length} 個`}
-                {'；查看'}
-              </summary>
+                {'；請查看以下項目'}
+              </p>
               {externalNoProject.length > 0 && (
                 <section aria-label="沒有參與專案的外部協作帳號">
                   <ul>
@@ -1138,7 +1140,7 @@ export default function UsersPage({
                   </ul>
                 </section>
               )}
-            </details>
+            </section>
           )}
           {lifecycleError && (
             <div>

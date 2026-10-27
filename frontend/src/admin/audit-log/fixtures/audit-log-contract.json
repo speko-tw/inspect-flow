@@ -10,6 +10,7 @@
     "limit": "50"
   },
   "audit_entry_keys": [
+    "actor_snapshot",
     "after",
     "before",
     "created_at",

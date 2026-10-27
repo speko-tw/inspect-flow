@@ -71,6 +71,7 @@ export function auditLogEntryFixture(
     id: '00000000-0000-0000-0000-000000000002',
     created_at: '2026-10-10T08:30:00Z',
     created_by: '00000000-0000-0000-0000-000000000001',
+    actor_snapshot: '安娜．內部．甲公司',
     project_id: '00000000-0000-0000-0000-000000000412',
     event_type: 'project_zone.created',
     entity_type: 'project_zone',

@@ -1,7 +1,7 @@
 """提供 Plan、Task、分區及專案項目 API，統一權限與錯誤契約。
 
-涵蓋 IP-R01～IP-R10、IP-R11（dispatched_at）、IP-R12～IP-R14，
-以及 IP-R18／IP-R19 的專案進度查詢與詳情。
+涵蓋 IP-R01～IP-R14（含 IP-R11 dispatched_at）、
+IP-R18／IP-R19 的專案進度查詢與詳情，以及 IP-R30 workflow-summary。
 """
 
 from __future__ import annotations
@@ -929,7 +929,7 @@ def project_tasks(
     if status is not None:
         filters.append(InspectionTask.status == status)
     if needs_reinspection:
-        # IP-R11 的待重查數排除封存計畫，且只計至少一項待重查的任務。
+        # IP-R30 的待重查數排除封存計畫，且只計至少一項待重查的任務。
         filters.extend(
             (
                 InspectionTask.status.in_(("PENDING", "IN_PROGRESS")),

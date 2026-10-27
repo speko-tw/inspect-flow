@@ -129,12 +129,18 @@ export function entityLabel(
   },
 ): string {
   const payload = payloadOf(entry)
-  const person =
+  const snapshotPerson =
+    (typeof payload.name_zh === 'string' && payload.name_zh) ||
+    (typeof payload.user_name === 'string' && payload.user_name) ||
+    (typeof payload.username === 'string' && payload.username)
+  const personId =
     entry.entity_type === 'user'
-      ? lookup.userName(entry.entity_id)
+      ? entry.entity_id
       : typeof payload.user_id === 'string'
-        ? lookup.userName(payload.user_id)
+        ? payload.user_id
         : null
+  const person =
+    snapshotPerson || (personId ? lookup.userName(personId) : null)
   if (person) {
     return `${entry.entity_type === 'project_member' ? '成員' : '帳號'}：${person}`
   }
