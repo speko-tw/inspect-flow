@@ -287,3 +287,72 @@ describe('product route metadata', () => {
     expect(canVisit(creator, '/projects')).toBe(true)
   })
 })
+
+it('IP-AC28：planning deep links stay beneath the route-id guard', () => {
+  const text = readFileSync('src/admin/AdminPage.tsx', 'utf8')
+  const source = ts.createSourceFile(
+    'AdminPage.tsx',
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  )
+  const expected = new Set([
+    'projectPlanNew',
+    'projectPlan',
+    'projectTaskNew',
+    'projectTask',
+    'projectTaskEdit',
+  ])
+  const guarded = new Set<string>()
+  function visit(node: ts.Node, underGuard = false) {
+    if (ts.isJsxElement(node)) {
+      const opening = node.openingElement
+      const guard =
+        opening.tagName.getText(source) === 'Route' &&
+        opening.attributes.properties.some(
+          (prop) =>
+            ts.isJsxAttribute(prop) &&
+            prop.name.getText(source) === 'element' &&
+            prop.initializer
+              ?.getText(source)
+              .includes('<RequireValidRouteIds'),
+        )
+      ts.forEachChild(node, (child) => visit(child, underGuard || guard))
+      return
+    }
+    if (
+      ts.isJsxSelfClosingElement(node) &&
+      node.tagName.getText(source) === 'Route'
+    ) {
+      const path = node.attributes.properties.find(
+        (prop) =>
+          ts.isJsxAttribute(prop) && prop.name.getText(source) === 'path',
+      )
+      if (path && ts.isJsxAttribute(path)) {
+        for (const name of expected) {
+          if (path.initializer?.getText(source).includes(`ROUTES.${name},`)) {
+            expect(underGuard, name).toBe(true)
+            guarded.add(name)
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, (child) => visit(child, underGuard))
+  }
+  visit(source)
+  expect(guarded).toEqual(expected)
+  const paths = [
+    [ROUTES.projectPlanNew, '/projects/p1/planning/new'],
+    [ROUTES.projectPlan, '/projects/p1/planning/plan1'],
+    [ROUTES.projectTaskNew, '/projects/p1/planning/plan1/tasks/new'],
+    [ROUTES.projectTask, '/projects/p1/planning/plan1/tasks/task1'],
+    [ROUTES.projectTaskEdit, '/projects/p1/planning/plan1/tasks/task1/edit'],
+  ] as const
+  for (const [route, path] of paths) {
+    expect(routeForPath(path)).toBe(route)
+    expect(
+      canAccessRoute({ is_admin: false, has_project_access: false }, route),
+    ).toBe(false)
+  }
+})

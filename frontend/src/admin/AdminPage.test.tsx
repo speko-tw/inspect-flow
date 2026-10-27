@@ -1814,6 +1814,7 @@ describe('admin user and company pages', () => {
     renderAdmin('/projects/project-demo-1/planning')
 
     await screen.findByRole('heading', { name: '計畫與任務' })
+    fireEvent.click(await screen.findByRole('link', { name: '建立計畫' }))
     const planName = await screen.findByLabelText(/計畫名稱/)
     fireEvent.change(planName, {
       target: { value: '尚未儲存的計畫名稱' },

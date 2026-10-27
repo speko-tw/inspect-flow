@@ -1,6 +1,20 @@
 import { inactiveAssigneeNotice } from '../../ui/SuggestedAssignee'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link } from 'react-router'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+} from 'react-router'
+import { BackLink } from '../../layout/BackLink'
+import RouteNotFound from '../../RouteNotFound'
 
 import { collectPages, HttpError, isForbidden, isNotFound } from '../../http'
 import { RequiredMark } from '../../ui/Form'
@@ -27,7 +41,7 @@ import './PlanningPage.css'
 
 const READ_ONLY_NOTICE =
   '你在這個專案只能查看計畫與任務，不能新增、修改或派出。' +
-  '需要調整請找專案內業或管理者。'
+  '需要調整請找有管理權限的專案成員或管理者。'
 const ASSIGNEE_LIST_UNAVAILABLE_NOTICE =
   '看不到成員名單，這次只能選「不指定」，' + '之後請有權限的人補上。'
 
@@ -195,6 +209,20 @@ function suggestedTaskName(
   return Array.from(result).slice(0, 128).join('')
 }
 
+/** IP-R24：項目文字與停用標記共用容器，窄螢幕不拆成兩個 flex 欄。 */
+function ItemChoiceLabel({ item }: { item: ProjectItemData }) {
+  return (
+    <span className="planning-item-label">
+      {item.instruction
+        ? [item.title, item.instruction].join(' — ')
+        : item.title}
+      {item.is_active === false && (
+        <span className="planning-inactive-label">（已停用）</span>
+      )}
+    </span>
+  )
+}
+
 function taskItemsSummary(task: InspectionTask): string {
   return (
     task.items
@@ -212,23 +240,127 @@ function draftTaskSummary(task: InspectionTask): string {
  * 依 ADM-R17、IP-R02、IP-R10 呈現專案計畫與任務管理。
  * #727：依專案 viewer 權限隱藏修改入口；後端仍覆核實際寫入。
  */
-export default function PlanningPage({
-  client = defaultPlanningPageClient,
-  initialProjectId = '',
-  viewerPermissions,
-}: {
+type PlanningPageProps = {
   client?: PlanningPageClient
   viewerPermissions?: string[]
   initialProjectId?: string
+}
+
+type PlanningView =
+  'list' | 'plan-new' | 'plan' | 'task-new' | 'task' | 'task-edit'
+type EditSection = 'location' | 'assignee' | 'items'
+
+/** IP-R27：每個清單、詳情與表單都有可重新整理的網址。 */
+export default function PlanningPage(props: PlanningPageProps) {
+  const location = useLocation()
+  const projectPart = encodeURIComponent(props.initialProjectId ?? '')
+  const base = `/projects/${projectPart}/planning`
+  const relative = location.pathname.replace(/\/$/, '').slice(base.length)
+  const suffix = relative.split('/').filter(Boolean)
+  const valid =
+    location.pathname.startsWith(base) &&
+    (suffix.length === 0 ||
+      suffix.length === 1 ||
+      (suffix.length === 3 && suffix[0] !== 'new' && suffix[1] === 'tasks') ||
+      (suffix.length === 4 &&
+        suffix[0] !== 'new' &&
+        suffix[1] === 'tasks' &&
+        suffix[2] !== 'new' &&
+        suffix[3] === 'edit'))
+  const planId = suffix[0] === 'new' ? '' : (suffix[0] ?? '')
+  const taskId = suffix[2] === 'new' ? '' : (suffix[2] ?? '')
+  const view: PlanningView =
+    suffix[0] === 'new'
+      ? 'plan-new'
+      : suffix[3] === 'edit'
+        ? 'task-edit'
+        : taskId
+          ? 'task'
+          : suffix[2] === 'new'
+            ? 'task-new'
+            : planId
+              ? 'plan'
+              : 'list'
+  const section = new URLSearchParams(location.search).get('section')
+  const editSection: EditSection =
+    section === 'items' || section === 'assignee' ? section : 'location'
+  // IP-R29：畸形網址不代表有效資源，直接回 404，避免發出無效 API 請求。
+  if (!valid) return <RouteNotFound />
+  return (
+    <PlanningContent
+      key={props.initialProjectId}
+      {...props}
+      base={base}
+      view={view}
+      planId={planId}
+      taskId={taskId}
+      editSection={editSection}
+    />
+  )
+}
+
+function PlanningContent({
+  client = defaultPlanningPageClient,
+  initialProjectId = '',
+  viewerPermissions,
+  base,
+  view,
+  planId,
+  taskId,
+  editSection,
+}: PlanningPageProps & {
+  base: string
+  view: PlanningView
+  planId: string
+  taskId: string
+  editSection: EditSection
 }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const planPath = `${base}/${encodeURIComponent(planId)}`
+  const taskUrl = (id: string) => `${planPath}/tasks/${encodeURIComponent(id)}`
+  const taskPath = taskUrl(taskId)
+  const [editReturnFocus, setEditReturnFocus] = useState(
+    () => (location.state as { returnFocus?: string } | null)?.returnFocus,
+  )
+
+  function editTask(
+    task: InspectionTask,
+    section: EditSection,
+    returnFocus?: string,
+  ) {
+    navigate(`${taskUrl(task.id)}/edit?section=${section}`, {
+      state: {
+        returnFocus:
+          returnFocus ??
+          {
+            location: '修改地點',
+            assignee: '修改建議指派',
+            items: '修改查核項目',
+          }[section],
+      },
+    })
+  }
   const [projects, setProjects] = useState<Pick<Project, 'id' | 'name'>[]>([])
   const [projectId, setProjectId] = useState('')
   const [items, setItems] = useState<ProjectItemData[]>([])
   const [zones, setZones] = useState<ProjectZone[]>([])
   const [members, setMembers] = useState<SuggestedAssignee[]>([])
   const [plans, setPlans] = useState<InspectionPlan[]>([])
-  const [selectedPlanId, setSelectedPlanId] = useState('')
-  const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? null
+  const [selectedPlanData, setSelectedPlanData] = useState<{
+    id: string
+    requestKey: string
+    path: string
+    plan: InspectionPlan
+  } | null>(null)
+  const selectedPlanId = planId
+  const selectedPlan =
+    plans.find((plan) => plan.id === selectedPlanId) ??
+    (selectedPlanData?.id === selectedPlanId &&
+    selectedPlanData.plan.project_id === initialProjectId
+      ? selectedPlanData.plan
+      : null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [writeDenied, setReadOnly] = useState(false)
@@ -301,8 +433,20 @@ export default function PlanningPage({
   const [notice, setNotice] = useState<{
     area: NoticeArea
     text: string
-  } | null>(null)
+  } | null>(
+    () =>
+      (
+        location.state as {
+          planningNotice?: { area: NoticeArea; text: string }
+        } | null
+      )?.planningNotice ?? null,
+  )
+  const [returnFocus, setReturnFocus] = useState<string | undefined>(
+    (location.state as { focusLabel?: string } | null)?.focusLabel,
+  )
   const [reloadKey, setReloadKey] = useState(0)
+  // 專案尚未載入時獨立重試，避免每次寫入後重載都重查專案。
+  const [projectRetryKey, setProjectRetryKey] = useState(0)
   const [planName, setPlanName] = useState('')
   const [editingPlanName, setEditingPlanName] = useState(false)
   const [updatedPlanName, setUpdatedPlanName] = useState('')
@@ -316,13 +460,8 @@ export default function PlanningPage({
   const [taskName, setTaskName] = useState('')
   // 只有使用者碰過名稱欄才採用手動值，避免項目變動覆寫自訂名稱。
   const [taskNameTouched, setTaskNameTouched] = useState(false)
-  const [taskFormOpen, setTaskFormOpen] = useState(false)
-  // 表單展開時要把焦點送到第一個欄位；表單還沒渲染時不能直接聚焦，
-  // 所以先記下來。
-  const taskFormFocus = useRef<'first' | null>(null)
-  // 只靠 ref 不會觸發 effect，所以每次請求都遞增計數讓 effect 再跑一次。
-  const [taskFormFocusTick, setTaskFormFocusTick] = useState(0)
-  const [taskToFocus, setTaskToFocus] = useState('')
+  const [taskFormOpen, setTaskFormOpen] = useState(view === 'task-new')
+  const focusedTaskFormPath = useRef('')
   const [taskZoneId, setTaskZoneId] = useState('')
   const [taskLocation, setTaskLocation] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
@@ -340,30 +479,52 @@ export default function PlanningPage({
     itemIds: string[]
   } | null>(null)
 
-  const [selectedPlanData, setSelectedPlanData] = useState<{
-    id: string
-    plan: InspectionPlan
+  const requestPath = location.pathname + location.search
+  const planRequestKey =
+    `${selectedPlanId}:${reloadKey}:` +
+    `${location.pathname}:${location.search}`
+  const [planFailure, setPlanFailure] = useState<{
+    requestKey: string
+    kind: 'forbidden' | 'not-found' | 'error'
+    message: string
   } | null>(null)
+  const currentPlanFailure =
+    planFailure?.requestKey === planRequestKey ? planFailure : null
+  const planPending = Boolean(
+    selectedPlanId &&
+    selectedPlanData?.requestKey !== planRequestKey &&
+    !currentPlanFailure,
+  )
   useEffect(() => {
     if (!selectedPlanId) return
     let active = true
     void client.getPlan(selectedPlanId).then(
-      (plan) => active && setSelectedPlanData({ id: selectedPlanId, plan }),
+      (plan) => {
+        if (active)
+          setSelectedPlanData({
+            id: selectedPlanId,
+            requestKey: planRequestKey,
+            path: requestPath,
+            plan,
+          })
+      },
       (caught: unknown) => {
-        if (active) {
-          setErrorContext('page')
-          if (isForbidden(caught)) {
-            setAccessDenied(true)
-          } else {
-            setError(planningErrorMessage(caught))
-          }
-        }
+        if (active)
+          setPlanFailure({
+            requestKey: planRequestKey,
+            kind: isForbidden(caught)
+              ? 'forbidden'
+              : isNotFound(caught)
+                ? 'not-found'
+                : 'error',
+            message: planningErrorMessage(caught),
+          })
       },
     )
     return () => {
       active = false
     }
-  }, [client, selectedPlanId, reloadKey])
+  }, [client, selectedPlanId, planRequestKey, requestPath])
   const selectedPlanDetail =
     selectedPlanData?.id === selectedPlanId ? selectedPlanData.plan : null
   // IP-R24：修改草稿時，只保留「伺服器目前仍有的」停用項目，裁掉剛新勾選、
@@ -394,6 +555,34 @@ export default function PlanningPage({
     task: InspectionTask
     assigneeId: string
   } | null>(null)
+  const routeTask = selectedPlanDetail?.tasks?.find(
+    (task) => task.id === taskId,
+  )
+  const [initializedEditor, setInitializedEditor] = useState(false)
+  if (
+    view === 'task-edit' &&
+    routeTask &&
+    !planPending &&
+    !initializedEditor
+  ) {
+    setInitializedEditor(true)
+    if (editSection === 'location')
+      setEditingLocation({
+        task: routeTask,
+        zoneId: routeTask.zone_id ?? '',
+        locationText: routeTask.location_text ?? '',
+      })
+    else if (editSection === 'assignee')
+      setEditingAssignee({
+        task: routeTask,
+        assigneeId: routeTask.assignee_id ?? '',
+      })
+    else
+      setEditingTaskItems({
+        task: routeTask,
+        itemIds: routeTask.items.map((item) => item.id),
+      })
+  }
   const [cancelTask, setCancelTask] = useState<InspectionTask | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [confirmation, setConfirmation] = useState<{
@@ -432,12 +621,71 @@ export default function PlanningPage({
   const previousConfirmation = useRef(false)
   const previousCancelTask = useRef(false)
   const dialogOpen = Boolean(confirmation || cancelTask)
+  const pathKey = `${location.pathname}:${location.search}`
+  const [routeKey, setRouteKey] = useState(location.key)
+  const [previousLocation, setPreviousLocation] = useState({
+    key: location.key,
+    path: pathKey,
+  })
+  if (location.key !== previousLocation.key) {
+    setPreviousLocation({ key: location.key, path: pathKey })
+    const consumesState =
+      navigationType === 'REPLACE' && previousLocation.path === pathKey
+    if (!consumesState) {
+      // IP-R29：確認離頁後才捨棄舊草稿，避免換資源時沿用舊輸入；
+      // 清除 flash state 不應再重設畫面。
+      setRouteKey(location.key)
+      setEditReturnFocus(
+        (location.state as { returnFocus?: string } | null)?.returnFocus,
+      )
+      setReturnFocus(
+        (location.state as { focusLabel?: string } | null)?.focusLabel,
+      )
+      setPlanName('')
+      setEditingPlanName(false)
+      setUpdatedPlanName('')
+      setTaskItems([])
+      setRemovedTaskItems([])
+      setTaskName('')
+      setTaskNameTouched(false)
+      setTaskZoneId('')
+      setTaskLocation('')
+      setAssigneeId('')
+      setDiscardingTaskForm(null)
+      setTaskFormOpen(view === 'task-new')
+      setPlanFailure(null)
+      setInitializedEditor(false)
+      setEditingLocation(null)
+      setEditingName(null)
+      setEditingTaskItems(null)
+      setEditingAssignee(null)
+      setCancelTask(null)
+      setCancelReason('')
+      setConfirmation(null)
+      setError('')
+      setFieldError(null)
+      setServerFieldErrors({})
+      setServerFieldFocus(null)
+      setNotice(
+        (
+          location.state as {
+            planningNotice?: {
+              area: NoticeArea
+              text: string
+            }
+          } | null
+        )?.planningNotice ?? null,
+      )
+    }
+  }
   // 只在表單值偏離原資料或有新輸入時攔截離頁，避免純瀏覽也被詢問。
   // 唯讀、無權限與找不到專案時，表單都已收起或整頁被取代，看不見的內容
   // 不該再攔住離頁（ADM-R28）。
   const hasUnsavedChanges = Boolean(
     !readOnly &&
     !accessDenied &&
+    currentPlanFailure?.kind !== 'forbidden' &&
+    currentPlanFailure?.kind !== 'not-found' &&
     !projectNotFound &&
     (planName ||
       (editingPlanName && updatedPlanName.trim() !== selectedPlan?.name) ||
@@ -470,6 +718,25 @@ export default function PlanningPage({
       (cancelTask && cancelReason)),
   )
   const leaveGuard = useUnsavedNavigationGuard(hasUnsavedChanges)
+  useEffect(() => {
+    if (!location.state) return
+    leaveGuard.allowNavigation(() =>
+      navigate(location.pathname + location.search + location.hash, {
+        replace: true,
+        state: null,
+      }),
+    )
+  }, [
+    location.state,
+    location.pathname,
+    location.search,
+    location.hash,
+    leaveGuard,
+    navigate,
+  ])
+  const revealNotice = useCallback((node: HTMLParagraphElement | null) => {
+    node?.scrollIntoView?.({ block: 'nearest' })
+  }, [])
 
   useEffect(() => {
     if (!error || serverFieldFocus) return
@@ -529,21 +796,21 @@ export default function PlanningPage({
   }, [cancelTask])
 
   useEffect(() => {
-    if (taskFormOpen && taskFormFocus.current) {
-      const form = pageContent.current?.querySelector<HTMLElement>(
-        '#task-creation-form',
-      )
-      const fieldset = form?.querySelector<HTMLElement>(
-        '[data-field="task-items"]',
-      )
-      // 展開後落在第一個欄位；沒有可選項目時退回項目欄本身。
-      const target =
-        form?.querySelector<HTMLElement>('input, select, textarea') ?? fieldset
-      target?.scrollIntoView?.({ block: 'center' })
-      target?.focus()
-      taskFormFocus.current = null
-    }
-  }, [taskFormOpen, taskFormFocusTick])
+    if (
+      !taskFormOpen ||
+      view !== 'task-new' ||
+      focusedTaskFormPath.current === routeKey
+    )
+      return
+    const form = pageContent.current?.querySelector<HTMLElement>(
+      '#task-creation-form',
+    )
+    const target = form?.querySelector<HTMLElement>('input, select, textarea')
+    if (!target) return
+    target.scrollIntoView?.({ block: 'center' })
+    target.focus()
+    focusedTaskFormPath.current = routeKey
+  }, [taskFormOpen, view, routeKey, selectedPlanDetail, selectedPlan])
 
   useEffect(() => {
     // 只有使用者取消或捨棄才把焦點還給「＋ 新增任務」；建立成功時焦點要
@@ -601,7 +868,7 @@ export default function PlanningPage({
 
   useEffect(() => {
     if (previousAssigneeEdit.current && !editingAssignee) {
-      // ADM-R38：取消或儲存指派後回到原按鈕，避免焦點落到文件頂端。
+      // ADM-R38：取消或儲存建議指派後回到原按鈕，避免焦點落到文件頂端。
       if (assigneeTrigger.current?.isConnected) {
         assigneeTrigger.current.focus()
       } else {
@@ -650,7 +917,7 @@ export default function PlanningPage({
     return () => {
       active = false
     }
-  }, [client, initialProjectId])
+  }, [client, initialProjectId, projectRetryKey])
 
   useEffect(() => {
     if (!projectId) return
@@ -800,29 +1067,56 @@ export default function PlanningPage({
         ? '成員名單暫時載入失敗'
         : ''
 
-  // 只在「換了一份計畫」時聚焦；同一份計畫重新載入不應再搶焦點。
+  // IP-R29：每次導頁完成才定位，資料重載不再搶走使用者或錯誤欄焦點。
   const loadedPlanId = selectedPlanDetail?.id
+  const selectedId = selectedPlan?.id
+  const focusedPage = useRef('')
   useEffect(() => {
-    if (!loadedPlanId) return
-    // ADM-R28：明細載入後聚焦標題，避免手機使用者越過表單尋找內容。
-    selectedPlanHeading.current?.scrollIntoView?.({ block: 'start' })
-    selectedPlanHeading.current?.focus()
-  }, [loadedPlanId])
-
-  useEffect(() => {
-    if (!selectedPlanDetail || !taskToFocus) return
-    const heading = pageContent.current?.querySelector<HTMLElement>(
-      `[data-task-heading="${taskToFocus}"]`,
+    if (
+      !loadedPlanId ||
+      !selectedId ||
+      loading ||
+      planPending ||
+      focusedPage.current === routeKey
     )
-    if (!heading) return
-    // ADM-R28：建立成功後把視線帶到新任務，確認資料已進入任務清單。
-    heading.scrollIntoView?.({ block: 'center' })
-    heading.focus()
-    pendingTaskHeading.current = ''
-    setTaskToFocus('')
-  }, [selectedPlanDetail, taskToFocus])
+      return
+    const focusLabel = returnFocus
+    if (view === 'plan') {
+      if (!notice)
+        selectedPlanHeading.current?.scrollIntoView?.({ block: 'start' })
+      if (focusLabel === '＋ 新增任務') addTaskTrigger.current?.focus()
+      else selectedPlanHeading.current?.focus({ preventScroll: true })
+    } else if (view === 'task') {
+      const button = focusLabel
+        ? Array.from(
+            pageContent.current?.querySelectorAll('button') ?? [],
+          ).find((node) => node.textContent?.trim().startsWith(focusLabel))
+        : null
+      const target =
+        button ??
+        pageContent.current?.querySelector<HTMLElement>(
+          `[data-task-heading="${taskId}"]`,
+        )
+      if (!notice) target?.scrollIntoView?.({ block: 'start' })
+      target?.focus({ preventScroll: true })
+    } else return
+    focusedPage.current = routeKey
+  }, [
+    loadedPlanId,
+    selectedId,
+    loading,
+    view,
+    routeKey,
+    taskId,
+    returnFocus,
+    notice,
+    planPending,
+  ])
+
   const canEditPlan = Boolean(
-    selectedPlan && selectedPlan.status !== 'ARCHIVED',
+    selectedPlan &&
+    selectedPlan.status !== 'ARCHIVED' &&
+    !selectedPlanDetail?.archived,
   )
   // 計畫封存或畫面唯讀時，任務上的所有修改入口（含阻擋說明的捷徑與
   // 修改表單）都不顯示；只留說明文字。
@@ -835,23 +1129,8 @@ export default function PlanningPage({
     taskLocation,
   )
 
-  function openTaskItemsEditor(
-    task: InspectionTask,
-    trigger?: HTMLButtonElement,
-  ): void {
-    clearFieldError()
-    setError('')
-    setNotice(null)
-    if (trigger) taskItemsTrigger.current = trigger
-    setEditingTaskItems({
-      task,
-      itemIds: task.items.map((item) => item.id),
-    })
-  }
-
-  function requestTaskFormFocus(target: 'first'): void {
-    taskFormFocus.current = target
-    setTaskFormFocusTick((tick) => tick + 1)
+  function openTaskItemsEditor(task: InspectionTask): void {
+    editTask(task, 'items')
   }
 
   // 沒有任何阻擋原因時不渲染清單，避免空的 <ul> 被報讀成「清單，0 項」。
@@ -874,17 +1153,20 @@ export default function PlanningPage({
             {canModify && canAssignTask
               ? '尚未指派：'
               : '尚未指派建議指派人。'}
+            {canModify && canDispatchTask && !canAssignTask && (
+              <p>請洽有指派權限的專案管理者</p>
+            )}
             {canModify && canAssignTask && (
               <button
                 onClick={(event) => {
                   clearFieldError()
                   setNotice(null)
                   assigneeTrigger.current = event.currentTarget
-                  setEditingAssignee({ task, assigneeId: '' })
+                  editTask(task, 'assignee', '指定建議指派人')
                 }}
                 type="button"
               >
-                前往建議指派欄位
+                指定建議指派人
               </button>
             )}
           </li>
@@ -898,11 +1180,11 @@ export default function PlanningPage({
                   clearFieldError()
                   setNotice(null)
                   locationTrigger.current = event.currentTarget
-                  setEditingLocation({ task, zoneId: '', locationText: '' })
+                  editTask(task, 'location', '填寫地點')
                 }}
                 type="button"
               >
-                前往地點欄位
+                填寫地點
               </button>
             )}
           </li>
@@ -913,13 +1195,8 @@ export default function PlanningPage({
               ? '尚未選擇查核項目：請直接修改這筆草稿的查核項目。'
               : '尚未選擇查核項目。'}
             {canModify && canManageTask && task.status === 'DRAFT' && (
-              <button
-                onClick={(event) =>
-                  openTaskItemsEditor(task, event.currentTarget)
-                }
-                type="button"
-              >
-                前往修改查核項目
+              <button onClick={() => openTaskItemsEditor(task)} type="button">
+                選擇查核項目
               </button>
             )}
           </li>
@@ -983,10 +1260,27 @@ export default function PlanningPage({
       // 成功後各編輯表單都已收起，沒有東西可以再「確認捨棄」。
       setDiscardingTaskForm(null)
       setReloadKey((key) => key + 1)
+      if (view === 'task' && success.text === '已刪除草稿任務。') {
+        leaveGuard.allowNavigation(() =>
+          navigate(planPath, {
+            replace: true,
+            state: { planningNotice: success },
+          }),
+        )
+      }
+      if (view === 'task-edit') {
+        leaveGuard.allowNavigation(() =>
+          navigate(taskPath, {
+            replace: true,
+            state: { planningNotice: success },
+          }),
+        )
+      }
       return true
     } catch (caught) {
       if (isForbidden(caught)) {
         setReadOnly(true)
+        setErrorContext('page')
         // 唯讀後改名表單與取消對話框都不再提供，一併收起；取消對話框裡的
         // 錯誤訊息改顯示在頁面上，避免使用者看不到被拒絕的原因。
         setEditingPlanName(false)
@@ -1086,13 +1380,32 @@ export default function PlanningPage({
   async function createPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (rejectBlank('plan-name', !planName.trim())) return
+    let createdPlan: InspectionPlan | undefined
     const created = await act(
-      () => client.createPlan(projectId, { name: planName }),
-      { area: 'plans', text: `已建立計畫「${planName.trim()}」。` },
+      async () => {
+        createdPlan = await client.createPlan(projectId, {
+          name: planName,
+        })
+      },
+      { area: 'plan-detail', text: '已建立計畫，接著新增任務。' },
       'plan-create',
       PLAN_CREATE_BINDINGS,
     )
-    if (created) setPlanName('')
+    if (created && createdPlan) {
+      setPlanName('')
+      const destination = `${base}/${encodeURIComponent(createdPlan.id)}`
+      leaveGuard.allowNavigation(() =>
+        navigate(destination, {
+          replace: true,
+          state: {
+            planningNotice: {
+              area: 'plan-detail',
+              text: '已建立計畫，接著新增任務。',
+            },
+          },
+        }),
+      )
+    }
   }
 
   async function createTask(event: FormEvent<HTMLFormElement>) {
@@ -1130,8 +1443,18 @@ export default function PlanningPage({
       TASK_CREATE_CODE_FIELDS,
     )
     if (created) {
-      setTaskToFocus(pendingTaskHeading.current)
       resetTaskForm()
+      leaveGuard.allowNavigation(() =>
+        navigate(taskUrl(pendingTaskHeading.current), {
+          replace: true,
+          state: {
+            planningNotice: {
+              area: 'tasks',
+              text: '已建立草稿任務，派出後現場才看得到。',
+            },
+          },
+        }),
+      )
     }
   }
 
@@ -1155,34 +1478,8 @@ export default function PlanningPage({
     )
   }
 
-  // 收起新增任務表單並清空輸入；收起後不應留下任何隱藏的未儲存內容，
-  // 也不應留下等待確認的捨棄提示。
-  function selectPlan(plan: InspectionPlan): void {
-    if (plan.id === selectedPlanId) return
-    const switchPrompt = [
-      '目前的計畫有尚未儲存的內容。',
-      '切換計畫會捨棄變更，確定切換嗎？',
-    ].join('')
-    if (hasUnsavedChanges && !window.confirm(switchPrompt)) {
-      return
-    }
-    // ADM-R28、ADM-R38：確認後才清除上一份計畫的草稿。
-    resetTaskForm()
-    setPlanName('')
-    setEditingPlanName(false)
-    setUpdatedPlanName('')
-    setEditingLocation(null)
-    setEditingName(null)
-    setEditingTaskItems(null)
-    setEditingAssignee(null)
-    setCancelTask(null)
-    setCancelReason('')
-    setSelectedPlanId(plan.id)
-  }
-
   function resetTaskForm(): void {
     setTaskFormOpen(false)
-    taskFormFocus.current = null
     setTaskItems([])
     setRemovedTaskItems([])
     setTaskName('')
@@ -1254,6 +1551,25 @@ export default function PlanningPage({
       resetTaskForm()
     }
     setDiscardingTaskForm(null)
+    if (kind === 'new-task') {
+      leaveGuard.allowNavigation(() =>
+        navigate(planPath, { state: { focusLabel: '＋ 新增任務' } }),
+      )
+    } else if (kind !== 'name') {
+      leaveGuard.allowNavigation(() =>
+        navigate(taskPath, {
+          state: {
+            focusLabel:
+              editReturnFocus ??
+              {
+                location: '修改地點',
+                assignee: '修改建議指派',
+                items: '修改查核項目',
+              }[editSection],
+          },
+        }),
+      )
+    }
   }
 
   // ADM-R38：確認捨棄後才清除編輯狀態，保留編輯則不碰原輸入。
@@ -1284,12 +1600,20 @@ export default function PlanningPage({
 
   const noticeFor = (area: NoticeArea) =>
     notice?.area === area ? (
-      <p className="notice-success" role="status">
+      <p
+        className="notice notice-success"
+        key={notice.text}
+        ref={revealNotice}
+        role="status"
+      >
         {notice.text}
       </p>
     ) : null
 
-  if (accessDenied) {
+  const readDenied = accessDenied || currentPlanFailure?.kind === 'forbidden'
+  const formView =
+    view === 'plan-new' || view === 'task-new' || view === 'task-edit'
+  if (readDenied && !formView) {
     return <AccessDeniedPage headingLevel={2} />
   }
 
@@ -1305,1232 +1629,1561 @@ export default function PlanningPage({
     )
   }
 
+  const formDenied =
+    (view === 'plan-new' && !canCreatePlan) ||
+    (view === 'task-new' && !canCreateTask) ||
+    (view === 'task-edit' &&
+      !(editSection === 'assignee' ? canAssignTask : canManageTask))
+  if ((formDenied && !writeDenied) || (formView && readDenied))
+    return (
+      <section>
+        <h2>無權限</h2>
+        <p className="notice-info" role="status">
+          你沒有使用這個頁面的權限
+        </p>
+        <Link className="btn" to={base}>
+          返回計畫清單
+        </Link>
+      </section>
+    )
+  if (
+    currentPlanFailure?.kind === 'not-found' ||
+    (!planPending &&
+      selectedPlanDetail &&
+      selectedPlanDetail.project_id !== initialProjectId)
+  ) {
+    return (
+      <section>
+        <h2>找不到計畫</h2>
+        <Link className="btn" to={base}>
+          返回計畫清單
+        </Link>
+      </section>
+    )
+  }
+  if (
+    selectedPlanDetail &&
+    taskId &&
+    !routeTask &&
+    !planPending &&
+    !currentPlanFailure
+  ) {
+    return (
+      <section>
+        <h2>找不到任務</h2>
+        <Link className="btn" to={planPath}>
+          返回計畫詳情
+        </Link>
+      </section>
+    )
+  }
+  if (
+    (view === 'task-edit' || view === 'task-new') &&
+    selectedPlan &&
+    (selectedPlan.status === 'ARCHIVED' ||
+      (routeTask &&
+        (!['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(routeTask.status) ||
+          (editSection === 'items' && routeTask.status !== 'DRAFT'))))
+  ) {
+    return (
+      <section>
+        <h2>目前無法修改</h2>
+        <p>計畫已封存或任務狀態不允許此操作。</p>
+        <Link className="btn" to={taskId ? taskPath : planPath}>
+          返回詳情
+        </Link>
+      </section>
+    )
+  }
+
   return (
-    <section aria-labelledby="planning-heading" ref={pageContent}>
-      <h2 id="planning-heading" ref={pageHeading} tabIndex={-1}>
-        計畫與任務
-      </h2>
-      <p>計畫的狀態會跟著任務自動更新；任務派出後，現場才看得到。</p>
+    <section
+      aria-labelledby={
+        view === 'task' && routeTask
+          ? `task-${routeTask.id}-heading`
+          : 'planning-heading'
+      }
+      ref={pageContent}
+    >
+      {view !== 'list' && (
+        <BackLink
+          to={
+            view === 'plan-new' || view === 'plan'
+              ? base
+              : view === 'task-edit'
+                ? taskPath
+                : planPath
+          }
+        >
+          {view === 'plan-new' || view === 'plan'
+            ? '返回計畫清單'
+            : view === 'task-edit'
+              ? '返回任務詳情'
+              : '返回計畫詳情'}
+        </BackLink>
+      )}
+      {view !== 'task' && (
+        <h2
+          id="planning-heading"
+          ref={(node) => {
+            pageHeading.current = node
+            selectedPlanHeading.current = view === 'plan' ? node : null
+            assigneeFormHeading.current =
+              view === 'task-edit' && editSection === 'assignee' ? node : null
+          }}
+          tabIndex={-1}
+        >
+          {view === 'plan-new'
+            ? '建立計畫'
+            : view === 'task-new'
+              ? '新增任務'
+              : view === 'task-edit'
+                ? `${
+                    {
+                      location: '修改地點',
+                      assignee: '修改建議指派',
+                      items: '修改查核項目',
+                    }[editSection]
+                  }｜${routeTask?.name ?? '載入中…'}`
+                : view === 'plan'
+                  ? (selectedPlanDetail?.name ?? '載入中…')
+                  : '計畫與任務'}
+        </h2>
+      )}
+      {(view === 'list' || view === 'plan' || view === 'task') && (
+        <p>計畫的狀態會跟著任務自動更新；任務派出後，現場才看得到。</p>
+      )}
+      {(view === 'task-new' || view === 'task-edit') && selectedPlan && (
+        <p>
+          {selectedPlan.name}
+          {routeTask ? `／${routeTask.name}` : ''}
+        </p>
+      )}
       <UnsavedLeaveBox guard={leaveGuard} />
-      {projects[0] && <p>專案：{projects[0].name}</p>}
+      {projects[0] &&
+        (view === 'list' || view === 'plan' || view === 'task') && (
+          <p>專案：{projects[0].name}</p>
+        )}
       {readOnly && (
         <p className="notice-info" role="status">
           {READ_ONLY_NOTICE}
         </p>
       )}
-      {error && errorContext === 'page' && (
-        <p ref={errorMessage} role="alert" tabIndex={-1}>
-          {error}
-        </p>
+      {((error && errorContext === 'page') ||
+        currentPlanFailure?.kind === 'error') && (
+        <div>
+          <p ref={errorMessage} role="alert" tabIndex={-1}>
+            {currentPlanFailure?.kind === 'error'
+              ? currentPlanFailure.message
+              : error}
+          </p>
+          <button
+            type="button"
+            disabled={planPending || (loading && !currentPlanFailure)}
+            onClick={() => {
+              if (!projectId) setProjectRetryKey((key) => key + 1)
+              else setReloadKey((key) => key + 1)
+            }}
+          >
+            重新載入
+          </button>
+        </div>
       )}
-      {loading ? <p>載入中…</p> : null}
+      {loading || planPending ? <p>載入中…</p> : null}
 
       {projects.length > 0 && (
         <>
-          <section aria-labelledby="plans-heading">
-            <h2 id="plans-heading">查核計畫</h2>
-            {noticeFor('plans')}
-            {plans.length === 0 ? <p>目前沒有計畫。</p> : null}
-            <ul className="plan-list">
-              {plans.map((plan) => (
-                <li key={plan.id}>
-                  <button
-                    aria-current={selectedPlanId === plan.id}
-                    onClick={() => {
-                      setNotice(null)
-                      clearFieldError()
-                      selectPlan(plan)
-                    }}
-                    type="button"
-                  >
-                    {plan.name}
-                    <StatusBadge parenthesized status={plan.status} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {!readOnly && canCreatePlan && (
-              <form
-                onKeyDown={blockImeEnter}
-                data-error-context="plan-create"
-                noValidate
-                onSubmit={(event) => void createPlan(event)}
-              >
-                <h3>建立計畫</h3>
-                <label>
-                  <span className="required-label">
-                    計畫名稱 <RequiredMark />
-                  </span>
-                  <input
-                    aria-describedby={describedBy(
-                      'plan-name-hint',
-                      hasFieldError('plan-name') && fieldErrorId('plan-name'),
-                    )}
-                    aria-invalid={hasFieldError('plan-name')}
-                    maxLength={128}
-                    onChange={(event) => {
-                      setPlanName(event.target.value)
-                      clearFieldError('plan-name')
-                    }}
-                    data-field="plan-name"
-                    required
-                    value={planName}
-                  />
-                </label>
-                <span className="field-hint" id="plan-name-hint">
-                  必填，最多 128 字。
-                </span>
-                {fieldErrorText('plan-name')}
-                {error && errorContext === 'plan-create' && (
-                  <p
-                    className="field-error"
-                    id="plan-name-error"
-                    ref={errorMessage}
-                    role="alert"
-                    tabIndex={-1}
-                  >
-                    {error}
-                  </p>
-                )}
-                <button className="btn-primary" disabled={busy} type="submit">
-                  建立計畫
-                </button>
-              </form>
-            )}
-          </section>
-
-          {selectedPlan && selectedPlanDetail && (
-            <section aria-labelledby="plan-detail-heading">
-              <h2
-                id="plan-detail-heading"
-                ref={selectedPlanHeading}
-                tabIndex={-1}
-              >
-                {selectedPlanDetail.name}
-              </h2>
-              <p>
-                計畫狀態：
-                <StatusBadge status={selectedPlanDetail.status} />
-              </p>
-              {noticeFor('plan-detail')}
-              {!readOnly && (canManagePlan || canToggleArchive) && (
+          {(view === 'list' || view === 'plan-new') && (
+            <section
+              aria-labelledby={
+                view === 'list' ? 'plans-heading' : 'planning-heading'
+              }
+            >
+              {view === 'list' && <h2 id="plans-heading">查核計畫</h2>}
+              {noticeFor('plans')}
+              {view === 'list' && (
                 <>
-                  {canManagePlan && (
-                    <button
-                      disabled={busy || selectedPlan.status === 'ARCHIVED'}
-                      onClick={() => {
-                        setError('')
-                        setNotice(null)
-                        clearFieldError()
-                        setEditingPlanName(true)
-                        setUpdatedPlanName(selectedPlan.name)
-                      }}
-                      type="button"
-                    >
-                      修改計畫名稱
-                    </button>
-                  )}{' '}
-                  {canToggleArchive && (
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        confirm(
-                          selectedPlan.status === 'ARCHIVED'
-                            ? '取消封存計畫並依目前任務重算狀態？'
-                            : '封存計畫？封存期間任務將唯讀。',
-                          () =>
-                            selectedPlan.status === 'ARCHIVED'
-                              ? client.unarchivePlan(selectedPlan.id)
-                              : client.archivePlan(selectedPlan.id),
-                          {
-                            area: 'plan-detail',
-                            text:
-                              selectedPlan.status === 'ARCHIVED'
-                                ? '已取消封存計畫。'
-                                : '已封存計畫。',
-                          },
-                        )
-                      }
-                      type="button"
-                    >
-                      {selectedPlan.status === 'ARCHIVED'
-                        ? '取消封存'
-                        : '封存計畫'}
-                    </button>
+                  {canCreatePlan && (
+                    <Link className="btn btn-primary" to={`${base}/new`}>
+                      建立計畫
+                    </Link>
                   )}
+                  {plans.length === 0 ? <p>目前沒有計畫。</p> : null}
+                  <ul className="plan-list">
+                    {plans.map((plan) => (
+                      <li key={plan.id}>
+                        <Link
+                          className="btn planning-plan-link"
+                          to={`${base}/${encodeURIComponent(plan.id)}`}
+                        >
+                          {plan.name}
+                          <StatusBadge parenthesized status={plan.status} />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
                 </>
               )}
-              {editingPlanName &&
-                canManagePlan &&
-                !readOnly &&
-                selectedPlan.status !== 'ARCHIVED' && (
-                  <form
-                    onKeyDown={blockImeEnter}
-                    data-error-context="plan-rename"
-                    noValidate
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      if (
-                        rejectBlank('plan-rename', !updatedPlanName.trim())
-                      ) {
-                        return
-                      }
-                      void act(
-                        () =>
-                          client.updatePlan(selectedPlan.id, {
-                            name: updatedPlanName,
-                          }),
-                        { area: 'plan-detail', text: '已更新計畫名稱。' },
-                        'plan-rename',
-                        PLAN_RENAME_BINDINGS,
-                      )
-                    }}
-                  >
-                    <label>
-                      <span className="required-label">
-                        計畫名稱 <RequiredMark />
-                      </span>
-                      <input
-                        aria-describedby={describedBy(
-                          'updated-plan-name-hint',
-                          hasFieldError('plan-rename') &&
-                            fieldErrorId('plan-rename'),
-                        )}
-                        aria-invalid={hasFieldError('plan-rename')}
-                        maxLength={128}
-                        onChange={(event) => {
-                          setUpdatedPlanName(event.target.value)
-                          clearFieldError('plan-rename')
-                        }}
-                        data-field="plan-rename"
-                        required
-                        value={updatedPlanName}
-                      />
-                    </label>
-                    <span className="field-hint" id="updated-plan-name-hint">
-                      必填，最多 128 字。
-                    </span>
-                    {fieldErrorText('plan-rename')}
-                    {error && errorContext === 'plan-rename' && (
-                      <p
-                        className="field-error"
-                        id="updated-plan-name-error"
-                        ref={errorMessage}
-                        role="alert"
-                        tabIndex={-1}
-                      >
-                        {error}
-                      </p>
-                    )}
-                    <button
-                      aria-label="取消編輯"
-                      disabled={busy}
-                      onClick={() => {
-                        setEditingPlanName(false)
-                        clearFieldError('plan-rename')
-                      }}
-                      type="button"
-                    >
-                      取消
-                    </button>
-                    <button
-                      className="btn-primary"
-                      disabled={busy}
-                      type="submit"
-                    >
-                      儲存計畫名稱
-                    </button>
-                  </form>
-                )}
-
-              {/* 按鈕與標題之間只靠標題的上邊距隔開，按鈕維持同一列。 */}
-              <h3 style={{ marginBlockStart: 'var(--space-3)' }}>任務</h3>
-              {noticeFor('tasks')}
-              {(selectedPlanDetail.tasks ?? []).length === 0 ? (
-                <p>尚未建立任務。</p>
-              ) : null}
-              <ul>
-                {(selectedPlanDetail.tasks ?? []).map((task) => (
-                  <li key={task.id}>
-                    <article>
-                      <h4
-                        data-task-heading={task.id}
-                        id={`task-${task.id}-heading`}
-                        tabIndex={-1}
-                      >
-                        {taskTitle(task)}{' '}
-                        <StatusBadge parenthesized status={task.status} />
-                      </h4>
-                      {renderDispatchBlockers(task)}
-                      {task.zone && <p>分區：{task.zone.name}</p>}
-                      {task.location_text && (
-                        <p>補充地點：{task.location_text}</p>
-                      )}
-                      <p>查核項目：{taskItemsSummary(task)}</p>
-                      <p>
-                        建議指派：
-                        {task.assignee?.name_zh ??
-                          task.assignee?.username ??
-                          '未指派'}
-                        {task.assignee?.is_active === false &&
-                          (inactiveAssigneeNotice(
-                            task.status,
-                            selectedPlanDetail.archived,
-                          ).includes('請改派') ? (
-                            <strong className="field-error">
-                              （已停用，請改派）
-                            </strong>
-                          ) : (
-                            <span className="muted-text">（已停用）</span>
-                          ))}
-                      </p>
-                      {task.status === 'CANCELLED' && (
-                        <p>取消原因：{task.cancellation_reason}</p>
-                      )}
-                      {canModify && (
-                        <div className="card-actions">
-                          {task.status === 'DRAFT' && (
-                            <>
-                              {canManageTask && (
-                                <button
-                                  disabled={busy}
-                                  onClick={(event) =>
-                                    openTaskItemsEditor(
-                                      task,
-                                      event.currentTarget,
-                                    )
-                                  }
-                                  ref={taskItemsTrigger}
-                                  type="button"
-                                >
-                                  修改查核項目
-                                </button>
-                              )}
-                              {canDispatchTask && (
-                                <button
-                                  disabled={
-                                    busy ||
-                                    Object.values(dispatchBlockers(task)).some(
-                                      Boolean,
-                                    )
-                                  }
-                                  onClick={() =>
-                                    confirm(
-                                      dispatchConfirmation(task),
-                                      () => client.dispatchTask(task.id),
-                                      {
-                                        area: 'tasks',
-                                        text: '已派出任務，現場可以查看了。',
-                                      },
-                                    )
-                                  }
-                                  type="button"
-                                >
-                                  派出任務
-                                </button>
-                              )}
-                              {canDeleteTask && (
-                                <button
-                                  className="btn-danger-outline"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    confirm(
-                                      [
-                                        `永久刪除草稿任務${draftTaskSummary(task)}？`,
-                                        '刪除後無法復原。',
-                                      ].join(''),
-                                      () => client.deleteDraftTask(task.id),
-                                      {
-                                        area: 'tasks',
-                                        text: '已刪除草稿任務。',
-                                      },
-                                      { label: '刪除' },
-                                    )
-                                  }
-                                  type="button"
-                                >
-                                  刪除草稿
-                                </button>
-                              )}
-                            </>
-                          )}
-                          {['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(
-                            task.status,
-                          ) && (
-                            <>
-                              {canManageTask && (
-                                <button
-                                  disabled={busy}
-                                  onClick={(event) => {
-                                    clearFieldError()
-                                    setNotice(null)
-                                    nameTrigger.current = event.currentTarget
-                                    setEditingName({ task, name: task.name })
-                                  }}
-                                  type="button"
-                                >
-                                  修改名稱
-                                </button>
-                              )}
-                              {canManageTask && (
-                                <button
-                                  disabled={busy}
-                                  onClick={(event) => {
-                                    clearFieldError()
-                                    setNotice(null)
-                                    const trigger = event.currentTarget
-                                    locationTrigger.current = trigger
-                                    setEditingLocation({
-                                      task,
-                                      zoneId: task.zone_id ?? '',
-                                      locationText: task.location_text ?? '',
-                                    })
-                                  }}
-                                  type="button"
-                                >
-                                  修改地點
-                                </button>
-                              )}
-                              {canAssignTask && (
-                                <button
-                                  disabled={busy}
-                                  onClick={(event) => {
-                                    clearFieldError()
-                                    setNotice(null)
-                                    const trigger = event.currentTarget
-                                    assigneeTrigger.current = trigger
-                                    setEditingAssignee({
-                                      task,
-                                      assigneeId: task.assignee_id ?? '',
-                                    })
-                                  }}
-                                  type="button"
-                                >
-                                  修改建議指派
-                                  {task.assignee?.is_active === false
-                                    ? inactiveAssigneeNotice(
-                                        task.status,
-                                        selectedPlanDetail.archived,
-                                      )
-                                    : ''}
-                                </button>
-                              )}
-                            </>
-                          )}
-                          {['PENDING', 'IN_PROGRESS'].includes(task.status) &&
-                            canCancelTask && (
-                              <button
-                                disabled={busy}
-                                onClick={(event) => {
-                                  setNotice(null)
-                                  cancelTrigger.current = event.currentTarget
-                                  setCancelTask(task)
-                                }}
-                                type="button"
-                              >
-                                取消任務
-                              </button>
-                            )}
-                          {task.status === 'CANCELLED' && canCancelTask && (
-                            <button
-                              disabled={busy}
-                              onClick={() =>
-                                confirm(
-                                  '恢復此任務至取消前狀態？',
-                                  () => client.restoreTask(task.id),
-                                  { area: 'tasks', text: '已恢復任務。' },
-                                )
-                              }
-                              type="button"
-                            >
-                              恢復任務
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {canModify &&
-                        canManageTask &&
-                        editingName?.task.id === task.id && (
-                          <form
-                            onKeyDown={blockImeEnter}
-                            data-error-context="task-rename"
-                            noValidate
-                            onSubmit={(event) => {
-                              event.preventDefault()
-                              if (
-                                rejectBlank(
-                                  'task-rename',
-                                  !editingName.name.trim(),
-                                )
-                              ) {
-                                return
-                              }
-                              void act(
-                                () =>
-                                  client.updateTaskName(task.id, {
-                                    name: editingName.name,
-                                  }),
-                                { area: 'tasks', text: '已更新任務名稱。' },
-                                'task-rename',
-                                TASK_RENAME_BINDINGS,
-                                TASK_RENAME_CODE_FIELDS,
-                              )
-                            }}
-                          >
-                            <h5>修改任務名稱</h5>
-                            <label>
-                              <span className="required-label">
-                                任務名稱 <RequiredMark />
-                              </span>
-                              <input
-                                autoFocus
-                                aria-describedby={
-                                  hasFieldError('task-rename')
-                                    ? fieldErrorId('task-rename')
-                                    : undefined
-                                }
-                                aria-invalid={hasFieldError('task-rename')}
-                                data-field="task-rename"
-                                maxLength={128}
-                                onChange={(event) => {
-                                  setEditingName({
-                                    ...editingName,
-                                    name: event.target.value,
-                                  })
-                                  clearFieldError('task-rename')
-                                }}
-                                required
-                                value={editingName.name}
-                              />
-                            </label>
-                            {fieldErrorText('task-rename')}
-                            <button
-                              className="btn-primary"
-                              disabled={busy}
-                              type="submit"
-                            >
-                              儲存名稱
-                            </button>
-                            <button
-                              disabled={busy}
-                              onClick={() => requestTaskFormCancel('name')}
-                              type="button"
-                            >
-                              取消
-                            </button>
-                            {error && errorContext === 'task-rename' && (
-                              <p ref={errorMessage} role="alert" tabIndex={-1}>
-                                {error}
-                              </p>
-                            )}
-                          </form>
-                        )}
-                      {canModify &&
-                        canManageTask &&
-                        editingTaskItems?.task.id === task.id && (
-                          <form
-                            onKeyDown={blockImeEnter}
-                            data-error-context="items"
-                            noValidate
-                            onSubmit={(event) => void updateTaskItems(event)}
-                          >
-                            <h5>修改草稿任務的查核項目</h5>
-                            <fieldset
-                              aria-describedby={describedBy(
-                                `task-${task.id}-items-hint`,
-                                hasFieldError('edit-task-items') &&
-                                  fieldErrorId('edit-task-items'),
-                              )}
-                              aria-invalid={hasFieldError('edit-task-items')}
-                              data-field="edit-task-items"
-                              tabIndex={-1}
-                            >
-                              <legend>
-                                選擇一筆以上查核項目 <RequiredMark />
-                              </legend>
-                              <p
-                                className="field-hint"
-                                id={`task-${task.id}-items-hint`}
-                              >
-                                至少選擇一筆查核項目。
-                              </p>
-                              {/* IP-R24：草稿選單只額外呈現原本就選著的
-                                  停用項目，不讓使用者把它換成其他停用項目。 */}
-                              {items
-                                .filter(
-                                  (item) =>
-                                    item.is_active !== false ||
-                                    editingTaskItems.itemIds.includes(item.id),
-                                )
-                                .map((item) => {
-                                  const existingTasks = tasksForItem(
-                                    item.id,
-                                  ).filter(
-                                    (existing) => existing.id !== task.id,
-                                  )
-                                  const selected =
-                                    editingTaskItems.itemIds.includes(item.id)
-                                  const inactiveNoteId = [
-                                    'task',
-                                    task.id,
-                                    'item',
-                                    item.id,
-                                    'inactive-note',
-                                  ].join('-')
-                                  return (
-                                    <div
-                                      className="planning-task-item-choice"
-                                      key={item.id}
-                                    >
-                                      <label>
-                                        <input
-                                          aria-describedby={
-                                            item.is_active === false
-                                              ? inactiveNoteId
-                                              : undefined
-                                          }
-                                          checked={selected}
-                                          onChange={(event) => {
-                                            // 取消勾選的停用項目會從清單消失，
-                                            // 先把焦點移到選單群組，避免掉到 body。
-                                            if (
-                                              !event.target.checked &&
-                                              item.is_active === false
-                                            ) {
-                                              event.currentTarget
-                                                .closest('fieldset')
-                                                ?.focus({
-                                                  preventScroll: true,
-                                                })
-                                            }
-                                            const selectedIds =
-                                              editingTaskItems.itemIds
-                                            setEditingTaskItems({
-                                              ...editingTaskItems,
-                                              itemIds: event.target.checked
-                                                ? [...selectedIds, item.id]
-                                                : selectedIds.filter(
-                                                    (id) => id !== item.id,
-                                                  ),
-                                            })
-                                            clearFieldError('edit-task-items')
-                                          }}
-                                          type="checkbox"
-                                          value={item.id}
-                                        />
-                                        {item.instruction
-                                          ? [
-                                              item.title,
-                                              item.instruction,
-                                            ].join(' — ')
-                                          : item.title}
-                                        {item.is_active === false && (
-                                          <span>（已停用）</span>
-                                        )}
-                                      </label>
-                                      {item.is_active === false && (
-                                        <p id={inactiveNoteId}>
-                                          取消勾選後無法再加回。
-                                        </p>
-                                      )}
-                                      <details>
-                                        <summary style={{ minHeight: 44 }}>
-                                          本計畫已有 {existingTasks.length}{' '}
-                                          筆任務
-                                        </summary>
-                                        {existingTasks.length > 0 ? (
-                                          <ul>
-                                            {existingTasks.map((existing) => (
-                                              <li key={existing.id}>
-                                                {taskTitle(existing) ||
-                                                  '未命名任務'}
-                                                {existing.zone
-                                                  ? `（${existing.zone.name}）`
-                                                  : ''}
-                                              </li>
-                                            ))}
-                                          </ul>
-                                        ) : (
-                                          <p>目前沒有使用此項目的任務。</p>
-                                        )}
-                                      </details>
-                                    </div>
-                                  )
-                                })}
-                            </fieldset>
-                            {fieldErrorText('edit-task-items')}
-                            {error && errorContext === 'items' && (
-                              <p ref={errorMessage} role="alert" tabIndex={-1}>
-                                {error}
-                              </p>
-                            )}
-                            <button
-                              className="btn-primary"
-                              disabled={busy}
-                              type="submit"
-                            >
-                              儲存查核項目
-                            </button>
-                            <button
-                              disabled={busy}
-                              onClick={() => requestTaskFormCancel('items')}
-                              type="button"
-                            >
-                              取消
-                            </button>
-                          </form>
-                        )}
-                      {canModify &&
-                        canManageTask &&
-                        editingLocation?.task.id === task.id && (
-                          <form
-                            onKeyDown={blockImeEnter}
-                            data-error-context="location"
-                            noValidate
-                            onSubmit={(event) => {
-                              event.preventDefault()
-                              if (
-                                rejectBlank(
-                                  'location-zone',
-                                  zones.length > 0 &&
-                                    !zonesDenied &&
-                                    !editingLocation.zoneId,
-                                )
-                              ) {
-                                return
-                              }
-                              void act(
-                                () =>
-                                  client.updateLocation(task.id, {
-                                    zone_id: zones.length
-                                      ? editingLocation.zoneId || null
-                                      : null,
-                                    location_text:
-                                      editingLocation.locationText.trim() ||
-                                      null,
-                                  }),
-                                { area: 'tasks', text: '已更新任務地點。' },
-                                'location',
-                                TASK_LOCATION_BINDINGS,
-                                TASK_LOCATION_CODE_FIELDS,
-                              )
-                            }}
-                          >
-                            <h5>修改任務地點</h5>
-                            {zones.length > 0 && !zonesDenied && (
-                              <div>
-                                <label>
-                                  <span className="required-label">
-                                    分區 <RequiredMark />
-                                  </span>
-                                  <select
-                                    autoFocus
-                                    aria-describedby={describedBy(
-                                      'location-zone-hint',
-                                      hasFieldError('location-zone') &&
-                                        fieldErrorId('location-zone'),
-                                    )}
-                                    aria-invalid={hasFieldError(
-                                      'location-zone',
-                                    )}
-                                    onChange={(event) => {
-                                      setEditingLocation({
-                                        ...editingLocation,
-                                        zoneId: event.target.value,
-                                      })
-                                      clearFieldError('location-zone')
-                                    }}
-                                    data-field="location-zone"
-                                    required
-                                    value={editingLocation.zoneId}
-                                  >
-                                    <option value="">請選擇分區</option>
-                                    {zones.map((zone) => (
-                                      <option key={zone.id} value={zone.id}>
-                                        {zone.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                                <span
-                                  className="field-hint"
-                                  id="location-zone-hint"
-                                >
-                                  必填，從專案分區中選一個。
-                                </span>
-                                {fieldErrorText('location-zone')}
-                              </div>
-                            )}
-                            <label>
-                              補充地點
-                              <input
-                                autoFocus={zones.length === 0 || zonesDenied}
-                                aria-describedby={
-                                  hasFieldError('location-text')
-                                    ? fieldErrorId('location-text')
-                                    : undefined
-                                }
-                                aria-invalid={hasFieldError('location-text')}
-                                maxLength={256}
-                                onChange={(event) => {
-                                  setEditingLocation({
-                                    ...editingLocation,
-                                    locationText: event.target.value,
-                                  })
-                                  clearFieldError('location-text')
-                                }}
-                                data-field="location-text"
-                                value={editingLocation.locationText}
-                              />
-                            </label>
-                            {fieldErrorText('location-text')}
-                            <button
-                              className="btn-primary"
-                              disabled={busy}
-                              type="submit"
-                            >
-                              儲存地點
-                            </button>
-                            <button
-                              disabled={busy}
-                              onClick={() => requestTaskFormCancel('location')}
-                              type="button"
-                            >
-                              取消
-                            </button>
-                            {error && errorContext === 'location' && (
-                              <p ref={errorMessage} role="alert" tabIndex={-1}>
-                                {error}
-                              </p>
-                            )}
-                          </form>
-                        )}
-                      {canModify &&
-                        canAssignTask &&
-                        editingAssignee?.task.id === task.id && (
-                          <form
-                            onKeyDown={blockImeEnter}
-                            data-error-context="assignee"
-                            onSubmit={(event) => {
-                              event.preventDefault()
-                              void act(
-                                () =>
-                                  client.setSuggestedAssignee(
-                                    task.id,
-                                    editingAssignee.assigneeId || null,
-                                  ),
-                                { area: 'tasks', text: '已更新建議指派。' },
-                                'assignee',
-                                TASK_ASSIGNEE_BINDINGS,
-                                TASK_ASSIGNEE_CODE_FIELDS,
-                              )
-                            }}
-                          >
-                            <h5 ref={assigneeFormHeading} tabIndex={-1}>
-                              修改任務指派
-                            </h5>
-                            <label>
-                              建議指派人
-                              <select
-                                autoFocus
-                                aria-describedby={
-                                  [
-                                    hasFieldError('suggested-assignee')
-                                      ? fieldErrorId('suggested-assignee')
-                                      : '',
-                                    membersUnavailable
-                                      ? `assignee-list-unavailable-${task.id}`
-                                      : '',
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' ') || undefined
-                                }
-                                aria-invalid={hasFieldError(
-                                  'suggested-assignee',
-                                )}
-                                onChange={(event) => {
-                                  setEditingAssignee({
-                                    ...editingAssignee,
-                                    assigneeId: event.target.value,
-                                  })
-                                  clearFieldError('suggested-assignee')
-                                }}
-                                disabled={membersUnavailable}
-                                data-field="suggested-assignee"
-                                value={editingAssignee.assigneeId}
-                              >
-                                <option value="">不指定</option>
-                                {membersUnavailable &&
-                                  editingAssignee.assigneeId &&
-                                  !members.some(
-                                    (member) =>
-                                      member.id === editingAssignee.assigneeId,
-                                  ) && (
-                                    <option value={editingAssignee.assigneeId}>
-                                      {editingAssignee.task.assignee
-                                        ?.name_zh ??
-                                        editingAssignee.task.assignee
-                                          ?.username ??
-                                        '既有指派'}
-                                    </option>
-                                  )}
-                                {members.map((member) => (
-                                  <option key={member.id} value={member.id}>
-                                    {member.name_zh ?? member.username}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            {membersUnavailable && (
-                              <p
-                                className="assignee-list-unavailable"
-                                id={`assignee-list-unavailable-${task.id}`}
-                                tabIndex={-1}
-                              >
-                                {membersFailureText}
-                              </p>
-                            )}
-                            {membersFailure === 'temporary' && (
-                              <button
-                                disabled={retryingMembers}
-                                onClick={(event) =>
-                                  retryAssigneeListFrom(
-                                    event.currentTarget,
-                                    'suggested-assignee',
-                                  )
-                                }
-                                type="button"
-                              >
-                                {retryingMembers ? '重試中…' : '重試'}
-                              </button>
-                            )}
-                            {fieldErrorText('suggested-assignee')}
-                            {error && errorContext === 'assignee' && (
-                              <p ref={errorMessage} role="alert" tabIndex={-1}>
-                                {error}
-                              </p>
-                            )}
-                            <button
-                              className="btn-primary"
-                              disabled={busy}
-                              type="submit"
-                            >
-                              儲存指派
-                            </button>
-                            <button
-                              disabled={busy}
-                              onClick={() => requestTaskFormCancel('assignee')}
-                              type="button"
-                            >
-                              取消
-                            </button>
-                          </form>
-                        )}
-                      {discardingTaskForm &&
-                        discardingTaskForm !== 'new-task' &&
-                        ((discardingTaskForm === 'location' &&
-                          editingLocation?.task.id === task.id) ||
-                          (discardingTaskForm === 'items' &&
-                            editingTaskItems?.task.id === task.id) ||
-                          (discardingTaskForm === 'assignee' &&
-                            editingAssignee?.task.id === task.id) ||
-                          (discardingTaskForm === 'name' &&
-                            editingName?.task.id === task.id)) && (
-                          <ConfirmBox
-                            cancelLabel="保留編輯"
-                            confirmLabel="捨棄變更"
-                            onCancel={() => setDiscardingTaskForm(null)}
-                            onConfirm={discardTaskForm}
-                            title="有尚未儲存的變更"
-                            variant="danger"
-                          >
-                            <p>修改內容尚未儲存；捨棄後無法復原。</p>
-                          </ConfirmBox>
-                        )}
-                    </article>
-                  </li>
-                ))}
-              </ul>
-
-              {canModify && canCreateTask && !taskFormOpen && (
-                <button
-                  disabled={busy}
-                  onClick={() => {
-                    clearFieldError()
-                    setError('')
-                    setNotice(null)
-                    setTaskFormOpen(true)
-                    requestTaskFormFocus('first')
-                  }}
-                  ref={addTaskTrigger}
-                  type="button"
-                >
-                  ＋ 新增任務
-                </button>
-              )}
-              {canModify && canCreateTask && taskFormOpen && (
+              {view === 'plan-new' && !readOnly && canCreatePlan && (
                 <form
-                  id="task-creation-form"
                   onKeyDown={blockImeEnter}
-                  data-error-context="task"
+                  data-error-context="plan-create"
                   noValidate
-                  onSubmit={(event) => void createTask(event)}
+                  onSubmit={(event) => void createPlan(event)}
                 >
-                  <h3>新增任務</h3>
                   <label>
                     <span className="required-label">
-                      任務名稱 <RequiredMark />
+                      計畫名稱 <RequiredMark />
                     </span>
                     <input
-                      aria-describedby={
-                        hasFieldError('task-name')
-                          ? fieldErrorId('task-name')
-                          : undefined
-                      }
-                      aria-invalid={hasFieldError('task-name')}
-                      data-field="task-name"
+                      aria-describedby={describedBy(
+                        'plan-name-hint',
+                        hasFieldError('plan-name') &&
+                          fieldErrorId('plan-name'),
+                      )}
+                      aria-invalid={hasFieldError('plan-name')}
                       maxLength={128}
                       onChange={(event) => {
-                        setTaskName(event.target.value)
-                        setTaskNameTouched(true)
-                        clearFieldError('task-name')
+                        setPlanName(event.target.value)
+                        clearFieldError('plan-name')
                       }}
+                      data-field="plan-name"
                       required
-                      value={taskNameTouched ? taskName : suggestedName}
+                      value={planName}
                     />
                   </label>
-                  {fieldErrorText('task-name')}
-                  <fieldset
-                    aria-describedby={describedBy(
-                      'task-items-hint',
-                      hasFieldError('task-items') &&
-                        fieldErrorId('task-items'),
-                    )}
-                    aria-invalid={hasFieldError('task-items')}
-                    data-field="task-items"
-                    tabIndex={-1}
-                  >
-                    <legend>
-                      選擇一筆以上查核項目 <RequiredMark />
-                    </legend>
-                    <p className="field-hint" id="task-items-hint">
-                      至少選擇一筆查核項目。
-                    </p>
-                    {removedTaskItems.length > 0 && (
-                      <p role="status">
-                        已移除剛停用的項目：{removedTaskItems.join('、')}
-                      </p>
-                    )}
-                    {/* IP-R24：新增任務不得選入停用項目，清單只列啟用者。 */}
-                    {!loading &&
-                      items.length > 0 &&
-                      !items.some((item) => item.is_active !== false) && (
-                        <p className="field-hint">
-                          目前沒有啟用的查核項目，請先到專案查核項目新增或恢復。
-                        </p>
-                      )}
-                    {!loading && items.length === 0 && (
-                      <p className="field-hint">
-                        這個專案還沒有查核項目，請先到專案查核項目新增。
-                      </p>
-                    )}
-                    {items
-                      .filter((item) => item.is_active !== false)
-                      .map((item) => {
-                        const existingTasks = tasksForItem(item.id)
-                        const selected = taskItems.includes(item.id)
-                        return (
-                          <div key={item.id}>
-                            <label>
-                              <input
-                                checked={selected}
-                                onChange={(event) => {
-                                  toggleItem(item.id, event.target.checked)
-                                  clearFieldError('task-items')
-                                }}
-                                type="checkbox"
-                                value={item.id}
-                              />
-                              {item.instruction
-                                ? [item.title, item.instruction].join(' — ')
-                                : item.title}
-                            </label>
-                            {/* IP-R02 允許同項目建立多筆任務，所以只標示已有
-                              幾筆、不擋選擇，讓使用者自己避開重複任務。 */}
-                            <details>
-                              <summary style={{ minHeight: 44 }}>
-                                本計畫已有 {existingTasks.length} 筆任務
-                              </summary>
-                              {existingTasks.length > 0 ? (
-                                <ul>
-                                  {existingTasks.map((task) => (
-                                    <li key={task.id}>
-                                      {taskTitle(task) || '未命名任務'}
-                                      {task.zone
-                                        ? `（${task.zone.name}）`
-                                        : ''}
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p>目前沒有使用此項目的任務。</p>
-                              )}
-                            </details>
-                            {selected && existingTasks.length > 0 && (
-                              <p className="field-hint">
-                                此項目已在本計畫任務中使用；仍可建立另一筆任務。
-                              </p>
-                            )}
-                          </div>
-                        )
-                      })}
-                  </fieldset>
-                  {fieldErrorText('task-items')}
-                  {zones.length > 0 && !zonesDenied && (
-                    <div>
-                      <label>
-                        <span className="required-label">
-                          任務分區 <RequiredMark />
-                        </span>
-                        <select
-                          aria-describedby={describedBy(
-                            'task-zone-hint',
-                            hasFieldError('task-zone') &&
-                              fieldErrorId('task-zone'),
-                          )}
-                          aria-invalid={hasFieldError('task-zone')}
-                          onChange={(event) => {
-                            setTaskZoneId(event.target.value)
-                            clearFieldError('task-zone')
-                          }}
-                          data-field="task-zone"
-                          required
-                          value={taskZoneId}
-                        >
-                          <option value="">請選擇分區</option>
-                          {zones.map((zone) => (
-                            <option key={zone.id} value={zone.id}>
-                              {zone.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <span className="field-hint" id="task-zone-hint">
-                        必填，從專案分區中選一個。
-                      </span>
-                      {fieldErrorText('task-zone')}
-                    </div>
-                  )}
-                  {error && errorContext === 'task' && (
-                    <p ref={errorMessage} role="alert" tabIndex={-1}>
+                  <span className="field-hint" id="plan-name-hint">
+                    必填，最多 128 字。
+                  </span>
+                  {fieldErrorText('plan-name')}
+                  {error && errorContext === 'plan-create' && (
+                    <p
+                      className="field-error"
+                      id="plan-name-error"
+                      ref={errorMessage}
+                      role="alert"
+                      tabIndex={-1}
+                    >
                       {error}
                     </p>
                   )}
-                  <label>
-                    補充地點
-                    <input
-                      aria-describedby={
-                        hasFieldError('task-location')
-                          ? fieldErrorId('task-location')
-                          : undefined
-                      }
-                      aria-invalid={hasFieldError('task-location')}
-                      maxLength={256}
-                      onChange={(event) => {
-                        setTaskLocation(event.target.value)
-                        clearFieldError('task-location')
-                      }}
-                      data-field="task-location"
-                      value={taskLocation}
-                    />
-                  </label>
-                  {fieldErrorText('task-location')}
-                  <label>
-                    建議指派人
-                    <select
-                      aria-describedby={
-                        [
-                          hasFieldError('task-assignee')
-                            ? fieldErrorId('task-assignee')
-                            : '',
-                          membersUnavailable
-                            ? 'assignee-list-unavailable-create'
-                            : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ') || undefined
-                      }
-                      aria-invalid={hasFieldError('task-assignee')}
-                      onChange={(event) => {
-                        setAssigneeId(event.target.value)
-                        clearFieldError('task-assignee')
-                      }}
-                      disabled={membersUnavailable}
-                      data-field="task-assignee"
-                      value={assigneeId}
-                    >
-                      <option value="">不指定</option>
-                      {members.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.name_zh ?? member.username}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {membersUnavailable && (
-                    <p
-                      className="assignee-list-unavailable"
-                      id="assignee-list-unavailable-create"
-                      tabIndex={-1}
-                    >
-                      {membersFailureText}
-                    </p>
-                  )}
-                  {membersFailure === 'temporary' && (
-                    <button
-                      disabled={retryingMembers}
-                      onClick={(event) =>
-                        retryAssigneeListFrom(
-                          event.currentTarget,
-                          'task-assignee',
-                        )
-                      }
-                      type="button"
-                    >
-                      {retryingMembers ? '重試中…' : '重試'}
-                    </button>
-                  )}
-                  {fieldErrorText('task-assignee')}
+                  <button
+                    disabled={busy}
+                    type="button"
+                    onClick={() => navigate(base)}
+                  >
+                    取消
+                  </button>
                   <button
                     className="btn-primary"
                     disabled={busy}
                     type="submit"
                   >
-                    建立草稿任務
+                    建立計畫
                   </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => requestTaskFormCancel('new-task')}
-                    type="button"
-                  >
-                    取消
-                  </button>
-                  {discardingTaskForm === 'new-task' && (
-                    <ConfirmBox
-                      cancelLabel="保留編輯"
-                      confirmLabel="捨棄變更"
-                      onCancel={() => setDiscardingTaskForm(null)}
-                      onConfirm={discardTaskForm}
-                      title="有尚未儲存的變更"
-                      variant="danger"
-                    >
-                      <p>新增任務內容尚未儲存；捨棄後無法復原。</p>
-                    </ConfirmBox>
-                  )}
                 </form>
               )}
             </section>
           )}
+
+          {view !== 'list' &&
+            view !== 'plan-new' &&
+            selectedPlan &&
+            selectedPlanDetail && (
+              <section
+                hidden={planPending}
+                aria-labelledby={
+                  view === 'task' && routeTask
+                    ? `task-${routeTask.id}-heading`
+                    : 'planning-heading'
+                }
+              >
+                {(view === 'plan' || view === 'task') && (
+                  <p>
+                    計畫狀態：
+                    <StatusBadge status={selectedPlanDetail.status} />
+                  </p>
+                )}
+                {selectedPlanDetail.status === 'ARCHIVED' && (
+                  <p className="notice notice-info">
+                    計畫已封存。取消封存後才能新增、修改或派出任務。
+                  </p>
+                )}
+                {noticeFor('plan-detail')}
+                {view === 'plan' &&
+                  !readOnly &&
+                  (canManagePlan || canToggleArchive) && (
+                    <>
+                      {canManagePlan && (
+                        <button
+                          disabled={busy || selectedPlan.status === 'ARCHIVED'}
+                          onClick={() => {
+                            setError('')
+                            setNotice(null)
+                            clearFieldError()
+                            setEditingPlanName(true)
+                            setUpdatedPlanName(selectedPlan.name)
+                          }}
+                          type="button"
+                        >
+                          修改計畫名稱
+                        </button>
+                      )}{' '}
+                      {canToggleArchive && (
+                        <button
+                          className={
+                            selectedPlan.status !== 'ARCHIVED'
+                              ? 'btn-danger-outline'
+                              : undefined
+                          }
+                          disabled={busy}
+                          onClick={() =>
+                            confirm(
+                              selectedPlan.status === 'ARCHIVED'
+                                ? '取消封存計畫並依目前任務重算狀態？'
+                                : '封存計畫？封存期間任務將唯讀。',
+                              () =>
+                                selectedPlan.status === 'ARCHIVED'
+                                  ? client.unarchivePlan(selectedPlan.id)
+                                  : client.archivePlan(selectedPlan.id),
+                              {
+                                area: 'plan-detail',
+                                text:
+                                  selectedPlan.status === 'ARCHIVED'
+                                    ? '已取消封存計畫。'
+                                    : '已封存計畫。',
+                              },
+                              selectedPlan.status === 'ARCHIVED'
+                                ? undefined
+                                : { label: '確認' },
+                            )
+                          }
+                          type="button"
+                        >
+                          {selectedPlan.status === 'ARCHIVED'
+                            ? '取消封存'
+                            : '封存計畫'}
+                        </button>
+                      )}
+                    </>
+                  )}
+                {editingPlanName &&
+                  canManagePlan &&
+                  !readOnly &&
+                  selectedPlan.status !== 'ARCHIVED' && (
+                    <form
+                      onKeyDown={blockImeEnter}
+                      data-error-context="plan-rename"
+                      noValidate
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        if (
+                          rejectBlank('plan-rename', !updatedPlanName.trim())
+                        ) {
+                          return
+                        }
+                        void act(
+                          () =>
+                            client.updatePlan(selectedPlan.id, {
+                              name: updatedPlanName,
+                            }),
+                          { area: 'plan-detail', text: '已更新計畫名稱。' },
+                          'plan-rename',
+                          PLAN_RENAME_BINDINGS,
+                        )
+                      }}
+                    >
+                      <label>
+                        <span className="required-label">
+                          計畫名稱 <RequiredMark />
+                        </span>
+                        <input
+                          aria-describedby={describedBy(
+                            'updated-plan-name-hint',
+                            hasFieldError('plan-rename') &&
+                              fieldErrorId('plan-rename'),
+                          )}
+                          aria-invalid={hasFieldError('plan-rename')}
+                          maxLength={128}
+                          onChange={(event) => {
+                            setUpdatedPlanName(event.target.value)
+                            clearFieldError('plan-rename')
+                          }}
+                          data-field="plan-rename"
+                          required
+                          value={updatedPlanName}
+                        />
+                      </label>
+                      <span className="field-hint" id="updated-plan-name-hint">
+                        必填，最多 128 字。
+                      </span>
+                      {fieldErrorText('plan-rename')}
+                      {error && errorContext === 'plan-rename' && (
+                        <p
+                          className="field-error"
+                          id="updated-plan-name-error"
+                          ref={errorMessage}
+                          role="alert"
+                          tabIndex={-1}
+                        >
+                          {error}
+                        </p>
+                      )}
+                      <button
+                        aria-label="取消編輯"
+                        disabled={busy}
+                        onClick={() => {
+                          setEditingPlanName(false)
+                          clearFieldError('plan-rename')
+                        }}
+                        type="button"
+                      >
+                        取消
+                      </button>
+                      <button
+                        className="btn-primary"
+                        disabled={busy}
+                        type="submit"
+                      >
+                        儲存計畫名稱
+                      </button>
+                    </form>
+                  )}
+
+                {/* 按鈕與標題之間只靠標題的上邊距隔開，按鈕維持同一列。 */}
+                {view === 'plan' && (
+                  <div className="planning-section-title">
+                    <h3 style={{ marginBlockStart: 'var(--space-3)' }}>
+                      任務
+                    </h3>
+                    {view === 'plan' &&
+                      canModify &&
+                      canCreateTask &&
+                      !taskFormOpen && (
+                        <button
+                          className={
+                            editingPlanName ? undefined : 'btn-primary'
+                          }
+                          disabled={busy}
+                          onClick={() => {
+                            clearFieldError()
+                            setError('')
+                            setNotice(null)
+                            navigate(`${planPath}/tasks/new`)
+                          }}
+                          ref={addTaskTrigger}
+                          type="button"
+                        >
+                          ＋ 新增任務
+                        </button>
+                      )}
+                  </div>
+                )}
+                {noticeFor('tasks')}
+                {!planPending &&
+                (selectedPlanDetail.tasks ?? []).length === 0 ? (
+                  <p>尚未建立任務。</p>
+                ) : null}
+                <ul className="planning-task-list" role="list">
+                  {(view === 'task-new'
+                    ? []
+                    : (selectedPlanDetail.tasks ?? []).filter(
+                        (task) => view === 'plan' || task.id === taskId,
+                      )
+                  ).map((task) => {
+                    if (view === 'plan')
+                      return (
+                        <li key={task.id}>
+                          <article>
+                            <Link
+                              className="planning-task-row"
+                              to={taskUrl(task.id)}
+                              aria-label={task.name}
+                              aria-describedby={[
+                                `task-${task.id}-state`,
+                                `task-${task.id}-summary`,
+                              ].join(' ')}
+                            >
+                              <h4>
+                                {task.name}{' '}
+                                <span id={`task-${task.id}-state`}>
+                                  <StatusBadge
+                                    parenthesized
+                                    status={task.status}
+                                  />
+                                </span>
+                              </h4>
+                              <p id={`task-${task.id}-summary`}>
+                                {taskItemsSummary(task)}｜
+                                {task.zone?.name ??
+                                  task.location_text ??
+                                  '未填地點'}
+                                ｜建議指派：
+                                {task.assignee?.name_zh ??
+                                  task.assignee?.username ??
+                                  '未指派'}
+                                {task.assignee?.is_active === false && (
+                                  <span>
+                                    {inactiveAssigneeNotice(
+                                      task.status,
+                                      selectedPlanDetail.archived,
+                                    ).includes('請改派')
+                                      ? '（已停用，請改派）'
+                                      : '（已停用）'}
+                                  </span>
+                                )}
+                              </p>
+                            </Link>
+                          </article>
+                        </li>
+                      )
+                    return (
+                      <li key={task.id}>
+                        <article>
+                          {view === 'task' && (
+                            <h2
+                              ref={pageHeading}
+                              data-task-heading={task.id}
+                              id={`task-${task.id}-heading`}
+                              tabIndex={-1}
+                            >
+                              {taskTitle(task)}{' '}
+                              <StatusBadge
+                                parenthesized
+                                status={task.status}
+                              />
+                            </h2>
+                          )}
+                          {(view === 'task' ||
+                            (view === 'task-edit' && readOnly)) &&
+                            renderDispatchBlockers(task)}
+                          {(view === 'task' || editSection === 'location') &&
+                            task.zone && <p>分區：{task.zone.name}</p>}
+                          {(view === 'task' || editSection === 'location') &&
+                            task.location_text && (
+                              <p>補充地點：{task.location_text}</p>
+                            )}
+                          {(view === 'task' || editSection === 'items') && (
+                            <p>查核項目：{taskItemsSummary(task)}</p>
+                          )}
+                          {(view === 'task' || editSection === 'assignee') && (
+                            <p>
+                              建議指派：
+                              {task.assignee?.name_zh ??
+                                task.assignee?.username ??
+                                '未指派'}
+                              {task.assignee?.is_active === false &&
+                                (inactiveAssigneeNotice(
+                                  task.status,
+                                  selectedPlanDetail.archived,
+                                ).includes('請改派') ? (
+                                  <strong className="field-error">
+                                    （已停用，請改派）
+                                  </strong>
+                                ) : (
+                                  <span className="muted-text">
+                                    （已停用）
+                                  </span>
+                                ))}
+                            </p>
+                          )}
+                          {task.status === 'CANCELLED' && (
+                            <p>取消原因：{task.cancellation_reason}</p>
+                          )}
+                          {view === 'task' && task.status !== 'DRAFT' && (
+                            <p className="notice notice-info">
+                              任務已派出，不能更換查核項目
+                            </p>
+                          )}
+                          {view === 'task' && canModify && (
+                            <div className="planning-task-actions">
+                              <div className="named-row-actions">
+                                {task.status === 'DRAFT' &&
+                                  canDispatchTask && (
+                                    <button
+                                      className={
+                                        editingName ? undefined : 'btn-primary'
+                                      }
+                                      disabled={
+                                        busy ||
+                                        Object.values(
+                                          dispatchBlockers(task),
+                                        ).some(Boolean)
+                                      }
+                                      onClick={() =>
+                                        confirm(
+                                          dispatchConfirmation(task),
+                                          () => client.dispatchTask(task.id),
+                                          {
+                                            area: 'tasks',
+                                            text: '已派出任務，現場可以查看了。',
+                                          },
+                                        )
+                                      }
+                                      type="button"
+                                    >
+                                      派出任務
+                                    </button>
+                                  )}
+                                {['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(
+                                  task.status,
+                                ) && (
+                                  <>
+                                    {canAssignTask && (
+                                      <button
+                                        disabled={busy}
+                                        onClick={(event) => {
+                                          clearFieldError()
+                                          setNotice(null)
+                                          const trigger = event.currentTarget
+                                          assigneeTrigger.current = trigger
+                                          editTask(task, 'assignee')
+                                        }}
+                                        type="button"
+                                      >
+                                        修改建議指派
+                                        {task.assignee?.is_active === false
+                                          ? inactiveAssigneeNotice(
+                                              task.status,
+                                              selectedPlanDetail.archived,
+                                            )
+                                          : ''}
+                                      </button>
+                                    )}
+                                    {canManageTask && (
+                                      <button
+                                        disabled={busy}
+                                        onClick={(event) => {
+                                          clearFieldError()
+                                          setNotice(null)
+                                          const trigger = event.currentTarget
+                                          locationTrigger.current = trigger
+                                          editTask(task, 'location')
+                                        }}
+                                        type="button"
+                                      >
+                                        修改地點
+                                      </button>
+                                    )}
+                                    {canManageTask &&
+                                      task.status === 'DRAFT' && (
+                                        <button
+                                          disabled={busy}
+                                          onClick={() =>
+                                            openTaskItemsEditor(task)
+                                          }
+                                          ref={taskItemsTrigger}
+                                          type="button"
+                                        >
+                                          修改查核項目
+                                        </button>
+                                      )}
+                                    {canManageTask && (
+                                      <button
+                                        disabled={busy}
+                                        onClick={(event) => {
+                                          clearFieldError()
+                                          setNotice(null)
+                                          nameTrigger.current =
+                                            event.currentTarget
+                                          setEditingName({
+                                            task,
+                                            name: task.name,
+                                          })
+                                        }}
+                                        type="button"
+                                      >
+                                        修改名稱
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                                {['PENDING', 'IN_PROGRESS'].includes(
+                                  task.status,
+                                ) &&
+                                  canCancelTask && (
+                                    <button
+                                      className="btn-danger-outline"
+                                      disabled={busy}
+                                      onClick={(event) => {
+                                        setNotice(null)
+                                        cancelTrigger.current =
+                                          event.currentTarget
+                                        setCancelTask(task)
+                                      }}
+                                      type="button"
+                                    >
+                                      取消任務
+                                    </button>
+                                  )}
+                                {task.status === 'CANCELLED' &&
+                                  canCancelTask && (
+                                    <button
+                                      disabled={busy}
+                                      onClick={() =>
+                                        confirm(
+                                          '恢復此任務至取消前狀態？',
+                                          () => client.restoreTask(task.id),
+                                          {
+                                            area: 'tasks',
+                                            text: '已恢復任務。',
+                                          },
+                                        )
+                                      }
+                                      type="button"
+                                    >
+                                      恢復任務
+                                    </button>
+                                  )}
+                              </div>
+                              {task.status === 'DRAFT' && canDeleteTask && (
+                                <div className="planning-task-delete">
+                                  <button
+                                    className="btn-danger-outline"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      confirm(
+                                        [
+                                          `永久刪除草稿任務${draftTaskSummary(task)}？`,
+                                          '刪除後無法復原。',
+                                        ].join(''),
+                                        () => client.deleteDraftTask(task.id),
+                                        {
+                                          area: 'tasks',
+                                          text: '已刪除草稿任務。',
+                                        },
+                                        { label: '刪除' },
+                                      )
+                                    }
+                                    type="button"
+                                  >
+                                    刪除草稿
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {canModify &&
+                            canManageTask &&
+                            editingName?.task.id === task.id && (
+                              <form
+                                onKeyDown={blockImeEnter}
+                                data-error-context="task-rename"
+                                noValidate
+                                onSubmit={(event) => {
+                                  event.preventDefault()
+                                  if (
+                                    rejectBlank(
+                                      'task-rename',
+                                      !editingName.name.trim(),
+                                    )
+                                  ) {
+                                    return
+                                  }
+                                  void act(
+                                    () =>
+                                      client.updateTaskName(task.id, {
+                                        name: editingName.name,
+                                      }),
+                                    {
+                                      area: 'tasks',
+                                      text: '已更新任務名稱。',
+                                    },
+                                    'task-rename',
+                                    TASK_RENAME_BINDINGS,
+                                    TASK_RENAME_CODE_FIELDS,
+                                  )
+                                }}
+                              >
+                                <label>
+                                  <span className="required-label">
+                                    任務名稱 <RequiredMark />
+                                  </span>
+                                  <input
+                                    autoFocus
+                                    aria-describedby={
+                                      hasFieldError('task-rename')
+                                        ? fieldErrorId('task-rename')
+                                        : undefined
+                                    }
+                                    aria-invalid={hasFieldError('task-rename')}
+                                    data-field="task-rename"
+                                    maxLength={128}
+                                    onChange={(event) => {
+                                      setEditingName({
+                                        ...editingName,
+                                        name: event.target.value,
+                                      })
+                                      clearFieldError('task-rename')
+                                    }}
+                                    required
+                                    value={editingName.name}
+                                  />
+                                </label>
+                                {fieldErrorText('task-rename')}
+                                <button
+                                  disabled={busy}
+                                  onClick={() => requestTaskFormCancel('name')}
+                                  type="button"
+                                >
+                                  取消
+                                </button>
+                                <button
+                                  className="btn-primary"
+                                  disabled={busy}
+                                  type="submit"
+                                >
+                                  儲存名稱
+                                </button>
+                                {error && errorContext === 'task-rename' && (
+                                  <p
+                                    ref={errorMessage}
+                                    role="alert"
+                                    tabIndex={-1}
+                                  >
+                                    {error}
+                                  </p>
+                                )}
+                              </form>
+                            )}
+                          {canModify &&
+                            canManageTask &&
+                            editingTaskItems?.task.id === task.id && (
+                              <form
+                                onKeyDown={blockImeEnter}
+                                aria-labelledby="planning-heading"
+                                data-error-context="items"
+                                noValidate
+                                onSubmit={(event) =>
+                                  void updateTaskItems(event)
+                                }
+                              >
+                                <fieldset
+                                  aria-describedby={describedBy(
+                                    `task-${task.id}-items-hint`,
+                                    hasFieldError('edit-task-items') &&
+                                      fieldErrorId('edit-task-items'),
+                                  )}
+                                  aria-invalid={hasFieldError(
+                                    'edit-task-items',
+                                  )}
+                                  data-field="edit-task-items"
+                                  tabIndex={-1}
+                                >
+                                  <legend>
+                                    選擇一筆以上查核項目 <RequiredMark />
+                                  </legend>
+                                  <p
+                                    className="field-hint"
+                                    id={`task-${task.id}-items-hint`}
+                                  >
+                                    至少選擇一筆查核項目。
+                                  </p>
+                                  {/* IP-R24：草稿選單只額外呈現原本就選著的
+                                  停用項目，不讓使用者把它換成其他停用項目。 */}
+                                  {items
+                                    .filter(
+                                      (item) =>
+                                        item.is_active !== false ||
+                                        editingTaskItems.itemIds.includes(
+                                          item.id,
+                                        ),
+                                    )
+                                    .map((item) => {
+                                      const existingTasks = tasksForItem(
+                                        item.id,
+                                      ).filter(
+                                        (existing) => existing.id !== task.id,
+                                      )
+                                      const selected =
+                                        editingTaskItems.itemIds.includes(
+                                          item.id,
+                                        )
+                                      const inactiveNoteId = [
+                                        'task',
+                                        task.id,
+                                        'item',
+                                        item.id,
+                                        'inactive-note',
+                                      ].join('-')
+                                      return (
+                                        <div
+                                          className="planning-task-item-choice"
+                                          key={item.id}
+                                        >
+                                          <label>
+                                            <input
+                                              aria-describedby={
+                                                item.is_active === false
+                                                  ? inactiveNoteId
+                                                  : undefined
+                                              }
+                                              checked={selected}
+                                              onChange={(event) => {
+                                                // 取消勾選的停用項目會從清單消失，
+                                                // 先把焦點移到選單群組，避免掉到 body。
+                                                if (
+                                                  !event.target.checked &&
+                                                  item.is_active === false
+                                                ) {
+                                                  event.currentTarget
+                                                    .closest('fieldset')
+                                                    ?.focus({
+                                                      preventScroll: true,
+                                                    })
+                                                }
+                                                const selectedIds =
+                                                  editingTaskItems.itemIds
+                                                setEditingTaskItems({
+                                                  ...editingTaskItems,
+                                                  itemIds: event.target.checked
+                                                    ? [...selectedIds, item.id]
+                                                    : selectedIds.filter(
+                                                        (id) => id !== item.id,
+                                                      ),
+                                                })
+                                                clearFieldError(
+                                                  'edit-task-items',
+                                                )
+                                              }}
+                                              type="checkbox"
+                                              value={item.id}
+                                            />
+                                            <ItemChoiceLabel item={item} />
+                                          </label>
+                                          {item.is_active === false && (
+                                            <p id={inactiveNoteId}>
+                                              取消勾選後無法再加回。
+                                            </p>
+                                          )}
+                                          <details>
+                                            <summary style={{ minHeight: 44 }}>
+                                              本計畫已有 {existingTasks.length}{' '}
+                                              筆任務
+                                            </summary>
+                                            {existingTasks.length > 0 ? (
+                                              <ul>
+                                                {existingTasks.map(
+                                                  (existing) => (
+                                                    <li key={existing.id}>
+                                                      {taskTitle(existing) ||
+                                                        '未命名任務'}
+                                                      {existing.zone
+                                                        ? [
+                                                            '（',
+                                                            existing.zone.name,
+                                                            '）',
+                                                          ].join('')
+                                                        : ''}
+                                                    </li>
+                                                  ),
+                                                )}
+                                              </ul>
+                                            ) : (
+                                              <p>目前沒有使用此項目的任務。</p>
+                                            )}
+                                          </details>
+                                        </div>
+                                      )
+                                    })}
+                                </fieldset>
+                                {fieldErrorText('edit-task-items')}
+                                {error && errorContext === 'items' && (
+                                  <p
+                                    ref={errorMessage}
+                                    role="alert"
+                                    tabIndex={-1}
+                                  >
+                                    {error}
+                                  </p>
+                                )}
+                                <button
+                                  disabled={busy}
+                                  onClick={() =>
+                                    requestTaskFormCancel('items')
+                                  }
+                                  type="button"
+                                >
+                                  取消
+                                </button>
+                                <button
+                                  className="btn-primary"
+                                  disabled={busy}
+                                  type="submit"
+                                >
+                                  儲存查核項目
+                                </button>
+                              </form>
+                            )}
+                          {canModify &&
+                            canManageTask &&
+                            editingLocation?.task.id === task.id && (
+                              <form
+                                onKeyDown={blockImeEnter}
+                                aria-labelledby="planning-heading"
+                                data-error-context="location"
+                                noValidate
+                                onSubmit={(event) => {
+                                  event.preventDefault()
+                                  if (
+                                    rejectBlank(
+                                      'location-zone',
+                                      zones.length > 0 &&
+                                        !zonesDenied &&
+                                        !editingLocation.zoneId,
+                                    )
+                                  ) {
+                                    return
+                                  }
+                                  const text = editingLocation.locationText
+                                  void act(
+                                    () =>
+                                      client.updateLocation(task.id, {
+                                        zone_id: zones.length
+                                          ? editingLocation.zoneId || null
+                                          : null,
+                                        location_text: text.trim() || null,
+                                      }),
+                                    {
+                                      area: 'tasks',
+                                      text: '已更新任務地點。',
+                                    },
+                                    'location',
+                                    TASK_LOCATION_BINDINGS,
+                                    TASK_LOCATION_CODE_FIELDS,
+                                  )
+                                }}
+                              >
+                                {zones.length > 0 && !zonesDenied && (
+                                  <div>
+                                    <label>
+                                      <span className="required-label">
+                                        分區 <RequiredMark />
+                                      </span>
+                                      <select
+                                        autoFocus
+                                        aria-describedby={describedBy(
+                                          'location-zone-hint',
+                                          hasFieldError('location-zone') &&
+                                            fieldErrorId('location-zone'),
+                                        )}
+                                        aria-invalid={hasFieldError(
+                                          'location-zone',
+                                        )}
+                                        onChange={(event) => {
+                                          setEditingLocation({
+                                            ...editingLocation,
+                                            zoneId: event.target.value,
+                                          })
+                                          clearFieldError('location-zone')
+                                        }}
+                                        data-field="location-zone"
+                                        required
+                                        value={editingLocation.zoneId}
+                                      >
+                                        <option value="">請選擇分區</option>
+                                        {zones.map((zone) => (
+                                          <option
+                                            key={zone.id}
+                                            value={zone.id}
+                                          >
+                                            {zone.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <span
+                                      className="field-hint"
+                                      id="location-zone-hint"
+                                    >
+                                      必填，從專案分區中選一個。
+                                    </span>
+                                    {fieldErrorText('location-zone')}
+                                  </div>
+                                )}
+                                <label>
+                                  補充地點
+                                  <input
+                                    autoFocus={
+                                      zones.length === 0 || zonesDenied
+                                    }
+                                    aria-describedby={
+                                      hasFieldError('location-text')
+                                        ? fieldErrorId('location-text')
+                                        : undefined
+                                    }
+                                    aria-invalid={hasFieldError(
+                                      'location-text',
+                                    )}
+                                    maxLength={256}
+                                    onChange={(event) => {
+                                      setEditingLocation({
+                                        ...editingLocation,
+                                        locationText: event.target.value,
+                                      })
+                                      clearFieldError('location-text')
+                                    }}
+                                    data-field="location-text"
+                                    value={editingLocation.locationText}
+                                  />
+                                </label>
+                                {fieldErrorText('location-text')}
+                                <button
+                                  disabled={busy}
+                                  onClick={() =>
+                                    requestTaskFormCancel('location')
+                                  }
+                                  type="button"
+                                >
+                                  取消
+                                </button>
+                                <button
+                                  className="btn-primary"
+                                  disabled={busy}
+                                  type="submit"
+                                >
+                                  儲存地點
+                                </button>
+                                {error && errorContext === 'location' && (
+                                  <p
+                                    ref={errorMessage}
+                                    role="alert"
+                                    tabIndex={-1}
+                                  >
+                                    {error}
+                                  </p>
+                                )}
+                              </form>
+                            )}
+                          {canModify &&
+                            canAssignTask &&
+                            editingAssignee?.task.id === task.id && (
+                              <form
+                                onKeyDown={blockImeEnter}
+                                aria-labelledby="planning-heading"
+                                data-error-context="assignee"
+                                onSubmit={(event) => {
+                                  event.preventDefault()
+                                  void act(
+                                    () =>
+                                      client.setSuggestedAssignee(
+                                        task.id,
+                                        editingAssignee.assigneeId || null,
+                                      ),
+                                    {
+                                      area: 'tasks',
+                                      text: '已更新建議指派。',
+                                    },
+                                    'assignee',
+                                    TASK_ASSIGNEE_BINDINGS,
+                                    TASK_ASSIGNEE_CODE_FIELDS,
+                                  )
+                                }}
+                              >
+                                <label>
+                                  建議指派人
+                                  <select
+                                    autoFocus
+                                    aria-describedby={
+                                      [
+                                        hasFieldError('suggested-assignee')
+                                          ? fieldErrorId('suggested-assignee')
+                                          : '',
+                                        membersUnavailable
+                                          ? 'assignee-list-unavailable-' +
+                                            task.id
+                                          : '',
+                                      ]
+                                        .filter(Boolean)
+                                        .join(' ') || undefined
+                                    }
+                                    aria-invalid={hasFieldError(
+                                      'suggested-assignee',
+                                    )}
+                                    onChange={(event) => {
+                                      setEditingAssignee({
+                                        ...editingAssignee,
+                                        assigneeId: event.target.value,
+                                      })
+                                      clearFieldError('suggested-assignee')
+                                    }}
+                                    disabled={membersUnavailable}
+                                    data-field="suggested-assignee"
+                                    value={editingAssignee.assigneeId}
+                                  >
+                                    <option value="">不指定</option>
+                                    {membersUnavailable &&
+                                      editingAssignee.assigneeId &&
+                                      !members.some(
+                                        (member) =>
+                                          member.id ===
+                                          editingAssignee.assigneeId,
+                                      ) && (
+                                        <option
+                                          value={editingAssignee.assigneeId}
+                                        >
+                                          {editingAssignee.task.assignee
+                                            ?.name_zh ??
+                                            editingAssignee.task.assignee
+                                              ?.username ??
+                                            '既有指派'}
+                                        </option>
+                                      )}
+                                    {members.map((member) => (
+                                      <option
+                                        key={member.id}
+                                        value={member.id}
+                                      >
+                                        {member.name_zh ?? member.username}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                {membersUnavailable && (
+                                  <p
+                                    className="assignee-list-unavailable"
+                                    id={'assignee-list-unavailable-' + task.id}
+                                    tabIndex={-1}
+                                  >
+                                    {membersFailureText}
+                                  </p>
+                                )}
+                                {membersFailure === 'temporary' && (
+                                  <button
+                                    disabled={retryingMembers}
+                                    onClick={(event) =>
+                                      retryAssigneeListFrom(
+                                        event.currentTarget,
+                                        'suggested-assignee',
+                                      )
+                                    }
+                                    type="button"
+                                  >
+                                    {retryingMembers ? '重試中…' : '重試'}
+                                  </button>
+                                )}
+                                {fieldErrorText('suggested-assignee')}
+                                {error && errorContext === 'assignee' && (
+                                  <p
+                                    ref={errorMessage}
+                                    role="alert"
+                                    tabIndex={-1}
+                                  >
+                                    {error}
+                                  </p>
+                                )}
+                                <button
+                                  disabled={busy}
+                                  onClick={() =>
+                                    requestTaskFormCancel('assignee')
+                                  }
+                                  type="button"
+                                >
+                                  取消
+                                </button>
+                                <button
+                                  className="btn-primary"
+                                  disabled={busy}
+                                  type="submit"
+                                >
+                                  儲存建議指派
+                                </button>
+                              </form>
+                            )}
+                          {discardingTaskForm &&
+                            discardingTaskForm !== 'new-task' &&
+                            ((discardingTaskForm === 'location' &&
+                              editingLocation?.task.id === task.id) ||
+                              (discardingTaskForm === 'items' &&
+                                editingTaskItems?.task.id === task.id) ||
+                              (discardingTaskForm === 'assignee' &&
+                                editingAssignee?.task.id === task.id) ||
+                              (discardingTaskForm === 'name' &&
+                                editingName?.task.id === task.id)) && (
+                              <ConfirmBox
+                                cancelLabel="保留編輯"
+                                confirmLabel="捨棄變更"
+                                onCancel={() => setDiscardingTaskForm(null)}
+                                onConfirm={discardTaskForm}
+                                title="有尚未儲存的變更"
+                                variant="danger"
+                              >
+                                <p>修改內容尚未儲存；捨棄後無法復原。</p>
+                              </ConfirmBox>
+                            )}
+                        </article>
+                      </li>
+                    )
+                  })}
+                </ul>
+
+                {canModify &&
+                  canCreateTask &&
+                  taskFormOpen &&
+                  selectedPlanData?.path === requestPath && (
+                    <form
+                      id="task-creation-form"
+                      onKeyDown={blockImeEnter}
+                      data-error-context="task"
+                      noValidate
+                      onSubmit={(event) => void createTask(event)}
+                    >
+                      <label>
+                        <span className="required-label">
+                          任務名稱 <RequiredMark />
+                        </span>
+                        <input
+                          aria-describedby={
+                            hasFieldError('task-name')
+                              ? fieldErrorId('task-name')
+                              : undefined
+                          }
+                          aria-invalid={hasFieldError('task-name')}
+                          data-field="task-name"
+                          maxLength={128}
+                          onChange={(event) => {
+                            setTaskName(event.target.value)
+                            setTaskNameTouched(true)
+                            clearFieldError('task-name')
+                          }}
+                          required
+                          value={taskNameTouched ? taskName : suggestedName}
+                        />
+                      </label>
+                      {fieldErrorText('task-name')}
+                      <fieldset
+                        aria-describedby={describedBy(
+                          'task-items-hint',
+                          hasFieldError('task-items') &&
+                            fieldErrorId('task-items'),
+                        )}
+                        aria-invalid={hasFieldError('task-items')}
+                        data-field="task-items"
+                        tabIndex={-1}
+                      >
+                        <legend>
+                          選擇一筆以上查核項目 <RequiredMark />
+                        </legend>
+                        <p className="field-hint" id="task-items-hint">
+                          至少選擇一筆查核項目。
+                        </p>
+                        {removedTaskItems.length > 0 && (
+                          <p role="status">
+                            已移除剛停用的項目：{removedTaskItems.join('、')}
+                          </p>
+                        )}
+                        {/* IP-R24：新增任務不得選入停用項目，清單只列啟用者。 */}
+                        {!loading &&
+                          items.length > 0 &&
+                          !items.some((item) => item.is_active !== false) && (
+                            <p className="field-hint">
+                              目前沒有啟用的查核項目，請先到專案查核項目新增或恢復。
+                            </p>
+                          )}
+                        {!loading && items.length === 0 && (
+                          <p className="field-hint">
+                            這個專案還沒有查核項目，請先到專案查核項目新增。
+                          </p>
+                        )}
+                        {items
+                          .filter((item) => item.is_active !== false)
+                          .map((item) => {
+                            const existingTasks = tasksForItem(item.id)
+                            const selected = taskItems.includes(item.id)
+                            return (
+                              <div key={item.id}>
+                                <label>
+                                  <input
+                                    checked={selected}
+                                    onChange={(event) => {
+                                      toggleItem(item.id, event.target.checked)
+                                      clearFieldError('task-items')
+                                    }}
+                                    type="checkbox"
+                                    value={item.id}
+                                  />
+                                  {item.instruction
+                                    ? [item.title, item.instruction].join(
+                                        ' — ',
+                                      )
+                                    : item.title}
+                                </label>
+                                {/* IP-R02 允許同項目建立多筆任務，所以只標示已有
+                              幾筆、不擋選擇，讓使用者自己避開重複任務。 */}
+                                <details>
+                                  <summary style={{ minHeight: 44 }}>
+                                    本計畫已有 {existingTasks.length} 筆任務
+                                  </summary>
+                                  {existingTasks.length > 0 ? (
+                                    <ul>
+                                      {existingTasks.map((task) => (
+                                        <li key={task.id}>
+                                          {taskTitle(task) || '未命名任務'}
+                                          {task.zone
+                                            ? `（${task.zone.name}）`
+                                            : ''}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p>目前沒有使用此項目的任務。</p>
+                                  )}
+                                </details>
+                                {selected && existingTasks.length > 0 && (
+                                  <p className="field-hint">
+                                    此項目已在本計畫任務中使用；仍可建立另一筆任務。
+                                  </p>
+                                )}
+                              </div>
+                            )
+                          })}
+                      </fieldset>
+                      {fieldErrorText('task-items')}
+                      {zones.length > 0 && !zonesDenied && (
+                        <div>
+                          <label>
+                            <span className="required-label">
+                              任務分區 <RequiredMark />
+                            </span>
+                            <select
+                              aria-describedby={describedBy(
+                                'task-zone-hint',
+                                hasFieldError('task-zone') &&
+                                  fieldErrorId('task-zone'),
+                              )}
+                              aria-invalid={hasFieldError('task-zone')}
+                              onChange={(event) => {
+                                setTaskZoneId(event.target.value)
+                                clearFieldError('task-zone')
+                              }}
+                              data-field="task-zone"
+                              required
+                              value={taskZoneId}
+                            >
+                              <option value="">請選擇分區</option>
+                              {zones.map((zone) => (
+                                <option key={zone.id} value={zone.id}>
+                                  {zone.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <span className="field-hint" id="task-zone-hint">
+                            必填，從專案分區中選一個。
+                          </span>
+                          {fieldErrorText('task-zone')}
+                        </div>
+                      )}
+                      {error && errorContext === 'task' && (
+                        <p ref={errorMessage} role="alert" tabIndex={-1}>
+                          {error}
+                        </p>
+                      )}
+                      <label>
+                        補充地點
+                        <input
+                          aria-describedby={
+                            hasFieldError('task-location')
+                              ? fieldErrorId('task-location')
+                              : undefined
+                          }
+                          aria-invalid={hasFieldError('task-location')}
+                          maxLength={256}
+                          onChange={(event) => {
+                            setTaskLocation(event.target.value)
+                            clearFieldError('task-location')
+                          }}
+                          data-field="task-location"
+                          value={taskLocation}
+                        />
+                      </label>
+                      {fieldErrorText('task-location')}
+                      <label>
+                        建議指派人
+                        <select
+                          aria-describedby={
+                            [
+                              hasFieldError('task-assignee')
+                                ? fieldErrorId('task-assignee')
+                                : '',
+                              membersUnavailable
+                                ? 'assignee-list-unavailable-create'
+                                : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' ') || undefined
+                          }
+                          aria-invalid={hasFieldError('task-assignee')}
+                          onChange={(event) => {
+                            setAssigneeId(event.target.value)
+                            clearFieldError('task-assignee')
+                          }}
+                          disabled={membersUnavailable}
+                          data-field="task-assignee"
+                          value={assigneeId}
+                        >
+                          <option value="">不指定</option>
+                          {members.map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.name_zh ?? member.username}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {membersUnavailable && (
+                        <p
+                          className="assignee-list-unavailable"
+                          id="assignee-list-unavailable-create"
+                          tabIndex={-1}
+                        >
+                          {membersFailureText}
+                        </p>
+                      )}
+                      {membersFailure === 'temporary' && (
+                        <button
+                          disabled={retryingMembers}
+                          onClick={(event) =>
+                            retryAssigneeListFrom(
+                              event.currentTarget,
+                              'task-assignee',
+                            )
+                          }
+                          type="button"
+                        >
+                          {retryingMembers ? '重試中…' : '重試'}
+                        </button>
+                      )}
+                      {fieldErrorText('task-assignee')}
+                      <button
+                        disabled={busy}
+                        onClick={() => requestTaskFormCancel('new-task')}
+                        type="button"
+                      >
+                        取消
+                      </button>
+                      <button
+                        className="btn-primary"
+                        disabled={busy}
+                        type="submit"
+                      >
+                        建立草稿任務
+                      </button>
+                      {discardingTaskForm === 'new-task' && (
+                        <ConfirmBox
+                          cancelLabel="保留編輯"
+                          confirmLabel="捨棄變更"
+                          onCancel={() => setDiscardingTaskForm(null)}
+                          onConfirm={discardTaskForm}
+                          title="有尚未儲存的變更"
+                          variant="danger"
+                        >
+                          <p>新增任務內容尚未儲存；捨棄後無法復原。</p>
+                        </ConfirmBox>
+                      )}
+                    </form>
+                  )}
+              </section>
+            )}
         </>
       )}
       {cancelTask &&
