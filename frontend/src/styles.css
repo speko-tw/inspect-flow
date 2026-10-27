@@ -4,8 +4,12 @@
  *   - 按鈕（#500）：`button` 與 `.btn` 共用同一個基底，預設是次要
  *     （外框）。`.btn` 讓連結（`<Link className="btn">`）長得像按鈕；
  *     `.btn-primary` 是主要（每個區塊最多一個，`type="submit"` 不會
- *     自動變主要）；`.btn-danger` 只給不可復原的最終確認，觸發鈕用次要
- *     樣式；`.btn-sm` 是表格內的小尺寸。按鈕依內容寬度、靠左排列；
+ *     自動變主要）；`.btn-danger` 只給確認框內不可復原的最終確認；
+ *     停用、刪除等危險操作的觸發鈕用 `.btn-danger-outline`（外框紅）；
+ *     確認框（ConfirmBox）的確認鈕是例外：確認框是當下唯一的決策焦點，
+ *     非危險的確認鈕維持實心 `.btn-primary`，即使頁面上同時有頁級主要鈕
+ *     （UDS-R04 豁免）；
+ *     `.btn-sm` 是表格內的小尺寸。按鈕依內容寬度、靠左排列；
  *     只有 `.auth-card` 內的按鈕是全寬。確認與取消固定排成 [取消][確認]。
  *   - 返回上一層：`.back-link`（BackLink 元件，‹ 加「返回X」）。
  *   - 版面：`.auth-page`／`.auth-card`（登入、變更密碼、首次設定）、
@@ -23,6 +27,10 @@
   --content-width: 72rem;
   /* 窄螢幕下保留原觸控目標尺寸，避免這次 token 化改變操作幾何。 */
   --touch-target: 2.75rem;
+  /* 主要按鈕比觸控目標再高一階、留白更寬、有最小寬度，負責人說只靠
+     顏色「不太明顯」，要靠尺寸與字重補強（#534 裁定、UDS-R04）。 */
+  --control-primary-height: 3rem;
+  --control-primary-min-width: 8rem;
 
   --bg: var(--color-bg-page);
   --surface: var(--color-bg-surface);
@@ -356,6 +364,19 @@
   overflow-wrap: anywhere;
 }
 
+/* 中文可在任意字間折行，360px 下標題會在「示範廠」中間斷開或落出孤字。
+   代號（含「｜」）與名稱各自成為不可拆的區塊，斷點只會落在「｜」後面；
+   名稱本身過長時才在區塊內折行。 */
+.project-title-code {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.project-title-name {
+  display: inline-block;
+  max-width: 100%;
+}
+
 .project-home-body {
   display: grid;
   grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
@@ -560,10 +581,6 @@ body {
   margin: auto;
 }
 
-.page-load-error .btn-primary {
-  min-height: 44px;
-}
-
 .version-footer {
   padding: var(--space-2) var(--space-4);
   color: var(--text-muted);
@@ -753,14 +770,17 @@ button,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.5rem;
+  /* 次要按鈕維持 44px 觸控高度；主要按鈕是 48px，高度差是層級線索之一。 */
+  min-height: var(--touch-target);
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-weight: 600;
+  /* 次要按鈕字重比主要低一階。系統中文字型（PingFang）最粗只到 600，
+     主要用 700 時會貼齊 600；次要必須降到 500 才拉得開層級。 */
+  font-weight: 500;
   text-align: center;
   text-decoration: none;
   cursor: pointer;
@@ -777,9 +797,20 @@ button,
 
 /* 主要按鈕要明講；submit 不再自動變主要（搜尋、篩選等 submit 是次要）。 */
 .btn-primary {
+  min-width: min(var(--control-primary-min-width), 100%);
+  min-height: var(--control-primary-height);
+  padding: var(--space-2) var(--space-6);
+  border-width: 2px;
+  font-weight: 700;
   background: var(--primary);
   border-color: var(--primary);
   color: var(--on-primary);
+}
+
+/* 頁級主要按鈕（新增帳號、新增專案）直接放在頁面區塊底下，與接著出現的
+   搜尋欄位留出距離，48px 高的按鈕才不會貼著標籤。 */
+section > .btn-primary {
+  margin-block-end: var(--space-4);
 }
 
 @media (hover: hover) {
@@ -790,7 +821,7 @@ button,
   }
 }
 
-/* 只給不可復原的最終確認；打開確認框的觸發鈕用次要樣式。 */
+/* 只給確認框內不可復原的最終確認；打開確認框的觸發鈕用外框紅。 */
 .btn-danger {
   background: var(--danger);
   border-color: var(--danger);
@@ -802,6 +833,39 @@ button,
     background: var(--danger-hover);
     border-color: var(--danger-hover);
     color: var(--on-danger);
+  }
+}
+
+/* 外框強調：卡片清單裡每張卡都有「開啟」時，實心主要按鈕會讓整頁
+   同時出現多個醒目主要操作（UDS-R04）；改成品牌色外框，比一般按鈕
+   醒目、又讓出頁級主要按鈕。 */
+.btn-emphasis {
+  border-width: 2px;
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .btn-emphasis:hover:not(:disabled) {
+    border-color: var(--primary-hover);
+    color: var(--primary-hover);
+  }
+}
+
+/* 危險操作（停用、刪除）的觸發鈕：只用外框紅，實心紅留給確認框裡不可
+   復原的確認鈕；不可逆的刪除比停用更該用紅色提示。 */
+.btn-danger-outline {
+  border-width: 2px;
+  border-color: var(--danger);
+  color: var(--error-text);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .btn-danger-outline:hover:not(:disabled) {
+    background: var(--error-bg);
+    border-color: var(--danger-hover);
   }
 }
 
@@ -908,6 +972,17 @@ table {
     gap: var(--space-2);
     padding-inline: 0;
     border: 0;
+  }
+
+  /* 「不能批次停用自己的帳號」說明跨整張卡寬，不擠在右欄窄窄的一條。 */
+  .users-table-scroll .users-account-table tbody td > .field-hint {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  /* 卡片列是兩欄 grid，badge 是 grid 項目會被拉滿整欄；貼合內容靠左。 */
+  .users-table-scroll .users-account-table tbody td > .badge {
+    justify-self: start;
   }
 
   .users-table-scroll .users-account-table tbody td::before {
@@ -1018,6 +1093,8 @@ td .btn {
 .named-row-actions {
   display: flex;
   flex-wrap: wrap;
+  /* 同 .member-actions：取消維持 44px，不被 48px 的主要按鈕拉高。 */
+  align-items: center;
   gap: var(--space-2);
 }
 
@@ -1529,11 +1606,6 @@ output {
   );
 }
 
-/* 導覽列會裁切內容，焦點框畫在分頁內側才不會被切掉。 */
-.app-header-tab:focus-visible {
-  outline-offset: -3px;
-}
-
 @media (hover: hover) {
   a.app-header-tab:hover {
     background: var(--surface-alt);
@@ -1601,7 +1673,8 @@ a.app-header-tab[aria-current='page'] {
 
 @media (max-width: 40rem) {
   main {
-    padding: var(--space-4) var(--space-3);
+    /* 16px 與頁首內容的左緣一致（頁首最小內縮 16px），不再差 4px。 */
+    padding: var(--space-4);
   }
 
   .auth-card {
@@ -1944,7 +2017,7 @@ a.app-header-tab[aria-current='page'] {
   width: 100%;
   min-height: 2.5rem;
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: inherit;
@@ -1986,18 +2059,10 @@ a.app-header-tab[aria-current='page'] {
   font-size: 0.9rem;
 }
 
-/* 卡片操作在桌機與窄螢幕都可直接使用。 */
-.project-workspace-card .btn {
-  padding: var(--space-2) var(--space-4);
-}
-
-.project-workspace-card .btn-primary {
-  font-weight: 700;
-}
-
 .card-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
 }
 
@@ -2262,7 +2327,7 @@ a.app-header-tab[aria-current='page'] {
 .plan-list button {
   width: 100%;
   justify-content: flex-start;
-  border-color: var(--border);
+  border-color: var(--border-strong);
   text-align: left;
 }
 
@@ -2302,6 +2367,12 @@ a.app-header-tab[aria-current='page'] {
   .tpl-detail-list button,
   summary {
     min-height: var(--touch-target);
+  }
+
+  /* 上面的 .btn 與 .btn-primary 同特異性，放在檔尾才不會把主要按鈕
+     壓回 44px。 */
+  .btn-primary {
+    min-height: var(--control-primary-height);
   }
 
   /* 點擊區是整個 summary；範本檢查點卡片的 summary 是 flex，內容垂直置中。 */

@@ -1631,6 +1631,7 @@ export default function PlanningPage({
                               )}
                               {canDeleteTask && (
                                 <button
+                                  className="btn-danger-outline"
                                   disabled={busy}
                                   onClick={() =>
                                     confirm(

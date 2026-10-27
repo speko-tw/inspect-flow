@@ -71,9 +71,11 @@ describe('IP-AC23：停用與恢復', () => {
     expect(
       within(panel).queryByRole('button', { name: '確認刪除' }),
     ).toBeNull()
-    fireEvent.click(
-      within(panel).getByRole('button', { name: '停用這個項目' }),
-    )
+    const trigger = within(panel).getByRole('button', {
+      name: '停用這個項目',
+    })
+    expect(trigger).toHaveClass('btn-danger-outline')
+    fireEvent.click(trigger)
     const confirm = screen.getByRole('group', { name: '停用查核項目' })
     expect(confirm.closest('li')).toHaveTextContent(item.title)
     expect(confirm).toHaveTextContent('既有任務與查核紀錄不受影響')

@@ -109,17 +109,17 @@ export function PeoplePage({
   // 送出請求，直接顯示找不到（ADM-R25，#711）。
   if (personId && !isResourceId(personId)) {
     return (
-      <main className="admin-page">
+      <section className="admin-page">
         <RouteNotFound
           message="網址可能輸入錯誤，或這個帳號已不存在。"
           title="找不到這個帳號"
         />
-      </main>
+      </section>
     )
   }
 
   return (
-    <main
+    <section
       aria-labelledby={
         personId
           ? user.is_admin
@@ -179,7 +179,11 @@ export function PeoplePage({
         )
       ) : (
         user.is_admin && (
-          <button onClick={() => setWizardRequest((value) => value + 1)}>
+          <button
+            className="btn-primary"
+            onClick={() => setWizardRequest((value) => value + 1)}
+            type="button"
+          >
             新增帳號
           </button>
         )
@@ -232,7 +236,7 @@ export function PeoplePage({
           selectedUserId={personId ?? undefined}
         />
       )}
-    </main>
+    </section>
   )
 }
 

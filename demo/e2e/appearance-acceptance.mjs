@@ -97,7 +97,9 @@ async function capture(page, name) {
   const filename = `${name}.png`
   const destination = path.join(screenshots, filename)
   await page.screenshot({ path: destination, fullPage: true })
-  await copyFile(destination, path.join(handoffScreenshots, filename))
+  if (path.resolve(handoffScreenshots) !== path.resolve(screenshots)) {
+    await copyFile(destination, path.join(handoffScreenshots, filename))
+  }
   shots.push(filename)
 }
 

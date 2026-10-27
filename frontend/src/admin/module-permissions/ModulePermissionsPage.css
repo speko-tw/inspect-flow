@@ -40,3 +40,17 @@
     justify-self: start;
   }
 }
+
+/* 精靈的上一步／下一步與上方欄位拉開距離，主要按鈕才不會貼著輸入框。 */
+.wizard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-start: var(--space-5);
+}
+
+/* 「檢查」緊接在下拉選單後面，補上與欄位的間距。 */
+.permission-check-button {
+  margin-block-start: var(--space-4);
+}
