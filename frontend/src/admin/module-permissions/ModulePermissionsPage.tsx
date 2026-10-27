@@ -9,7 +9,8 @@ import {
 import { Link } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
-import { isNotFound } from '../../http'
+import { isForbidden, isNotFound } from '../../http'
+import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import permissionCodeContract from '../../permissionCodeContract'
 import {
   Button,
@@ -23,7 +24,6 @@ import {
 } from '../../components'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { Notice } from '../../ui/Notice'
-import { revealElement } from '../../ui/reveal'
 import {
   UnsavedLeaveBox,
   useUnsavedNavigationGuard,
@@ -54,8 +54,6 @@ import {
 } from '../roles/api'
 import {
   applyPermissionBundle,
-  createPermissionBundle,
-  deletePermissionBundle,
   getRevokeImpact,
   getUserEffectiveAccess,
   getUserModulePermissions,
@@ -65,7 +63,6 @@ import {
   listPermissionBundles,
   revokeModulePermission,
   setModuleDelegation,
-  updatePermissionBundle,
   type ModulePermission,
   type PermissionBundle,
   type RevokeImpact,
@@ -294,8 +291,12 @@ type ModulePermissionsPageProps = {
   onDirtyChange?: (dirty: boolean) => void
   onWizardBackToList?: () => void
   onWizardViewUser?: (id: string) => void
+  onForbidden?: () => void
+  onWizardCancel?: () => void
+  onCreationComplete?: (created: CreatedUser) => void
 }
 
+/** 保留帳號授權與職務精靈；新增成功由路由入口承接一次性結果。 */
 export default function ModulePermissionsPage(
   props: ModulePermissionsPageProps = {},
 ) {
@@ -315,6 +316,9 @@ function ModulePermissionsPageContent({
   onDirtyChange,
   onWizardBackToList,
   onWizardViewUser,
+  onWizardCancel,
+  onForbidden,
+  onCreationComplete,
 }: ModulePermissionsPageProps) {
   const { user: currentUser } = useCurrentUser()
   const [users, setUsers] = useState<User[]>([])
@@ -466,6 +470,10 @@ function ModulePermissionsPageContent({
   )
   const [existingAccount, setExistingAccount] = useState(false)
   const [error, setError] = useState('')
+  const [forbidden, setForbidden] = useState(false)
+  useEffect(() => {
+    if (forbidden) onForbidden?.()
+  }, [forbidden, onForbidden])
   const [nonmemberProject, setNonmemberProject] = useState('')
   const [notice, setNotice] = useState('')
   const [diagnosticError, setDiagnosticError] = useState('')
@@ -480,7 +488,6 @@ function ModulePermissionsPageContent({
       }
     >
   >({})
-  const bundleNameRef = useRef<HTMLDivElement>(null)
 
   function feedbackKey(scope: string) {
     return scope === 'diagnostic'
@@ -525,11 +532,6 @@ function ModulePermissionsPageContent({
     impact: RevokeImpact
     scope: 'access' | 'diagnostic'
   } | null>(null)
-  const [bundleToDelete, setBundleToDelete] =
-    useState<PermissionBundle | null>(null)
-  const [bundleName, setBundleName] = useState('')
-  const [bundleCodes, setBundleCodes] = useState<string[]>([])
-  const [editingBundle, setEditingBundle] = useState<string | null>(null)
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
@@ -626,7 +628,6 @@ function ModulePermissionsPageContent({
           : accessHeadingRef.current
     target?.focus({ preventScroll: true })
   }, [revoke, busy])
-  const bundleDeleteTrigger = useRef<HTMLButtonElement>(null)
   const wizardHeadingRef = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
@@ -681,6 +682,7 @@ function ModulePermissionsPageContent({
         setProjectOptionsStatus('ready')
       })
       .catch((caught: unknown) => {
+        if (isForbidden(caught)) setForbidden(true)
         setProjectOptionsStatus('error')
         setProjectOptionsError(message(caught))
         throw caught
@@ -709,6 +711,9 @@ function ModulePermissionsPageContent({
         wizardOptionsRequests.current[key] = pending
         try {
           await pending
+        } catch (caught) {
+          if (isForbidden(caught)) setForbidden(true)
+          throw caught
         } finally {
           if (wizardOptionsRequests.current[key] === pending)
             wizardOptionsRequests.current[key] = null
@@ -840,6 +845,7 @@ function ModulePermissionsPageContent({
         setUsersCatalogState({ status: 'ready', error: '' })
       })
       .catch((caught: unknown) => {
+        if (isForbidden(caught)) setForbidden(true)
         if (!active) return
         setUsersCatalogState({ status: 'error', error: message(caught) })
       })
@@ -864,6 +870,7 @@ function ModulePermissionsPageContent({
         setPermissionsCatalogState({ status: 'ready', error: '' })
       })
       .catch((caught: unknown) => {
+        if (isForbidden(caught)) setForbidden(true)
         if (!active) return
         setPermissionsCatalogState({ status: 'error', error: message(caught) })
       })
@@ -896,6 +903,7 @@ function ModulePermissionsPageContent({
       setAdvancedStatus('ready')
     })()
       .catch((caught: unknown) => {
+        if (isForbidden(caught)) setForbidden(true)
         setAdvancedStatus('error')
         setAdvancedError(message(caught))
         throw caught
@@ -927,6 +935,7 @@ function ModulePermissionsPageContent({
         if (embedded && currentUser.is_admin && selectedUserId) return
         await refresh().catch(() => undefined)
       } catch (caught) {
+        if (isForbidden(caught)) setForbidden(true)
         if (active) setError(message(caught))
       }
     }
@@ -959,6 +968,7 @@ function ModulePermissionsPageContent({
         }
       })
       .catch((caught: unknown) => {
+        if (isForbidden(caught)) setForbidden(true)
         // 載入失敗時不標成已載入：否則開通控制項會以空的權限
         // 草稿啟用，使用者可能在不知道現況下送出覆寫（#711）。
         if (active) {
@@ -1004,13 +1014,6 @@ function ModulePermissionsPageContent({
     }
   }, [currentUser.is_admin, participationReload, selectedUser])
 
-  useEffect(() => {
-    if (!editingBundle) return
-    const input = bundleNameRef.current?.querySelector('input') ?? null
-    revealElement(input)
-    input?.focus({ preventScroll: true })
-  }, [editingBundle])
-
   async function refreshEffectiveAccess() {
     if (!selectedUser) return
     const access = await getUserEffectiveAccess(
@@ -1043,6 +1046,7 @@ function ModulePermissionsPageContent({
         const impact = await getRevokeImpact(selectedUser, revoked[0])
         setRevoke({ code: revoked[0], impact, scope })
       } catch (caught) {
+        if (isForbidden(caught)) setForbidden(true)
         setOperationError(scope, message(caught))
       } finally {
         setBusy(false)
@@ -1074,6 +1078,7 @@ function ModulePermissionsPageContent({
         `已為${targetName}開通${grantedNames.join('、')}。`,
       )
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       setOperationError(scope, message(caught))
       const access = await getUserModulePermissions(selectedUser)
       if (diagnosticSelection.current.selectedUser !== selectedUser) return
@@ -1100,29 +1105,8 @@ function ModulePermissionsPageContent({
       setOperationNotice(revoke.scope, '權限已收回。')
       await diagnose()
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       setOperationError('revoke', message(caught))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function saveBundle() {
-    setBusy(true)
-    setOperationError('bundle-form', '')
-    try {
-      const input = { name: bundleName.trim(), permission_codes: bundleCodes }
-      if (editingBundle) await updatePermissionBundle(editingBundle, input)
-      else await createPermissionBundle(input)
-      setBundleName('')
-      setBundleCodes([])
-      setEditingBundle(null)
-      setBundles(await listPermissionBundles())
-      setOperationNotice(
-        'bundle-form',
-        '權限組合已儲存；既有帳號權限不會被改動。',
-      )
-    } catch (caught) {
-      setOperationError('bundle-form', message(caught))
     } finally {
       setBusy(false)
     }
@@ -1136,6 +1120,7 @@ function ModulePermissionsPageContent({
     try {
       await loadWizardOptions(3)
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       setError(message(caught))
       return
     }
@@ -1224,6 +1209,7 @@ function ModulePermissionsPageContent({
       if (created) setCreatedUsername(created.username)
       const completed = await finishProvisioning(nextProvisioning, created)
       if (created && completed) {
+        onCreationComplete?.(created)
         onTemporaryPassword?.(
           created.username,
           created.temporary_password,
@@ -1232,6 +1218,7 @@ function ModulePermissionsPageContent({
         )
       }
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       const errorMessage = managementErrorMessage(caught).replace(
         /[。.!?]+$/,
         '',
@@ -1273,6 +1260,7 @@ function ModulePermissionsPageContent({
           try {
             await addProjectMember(next.projectId, next.userId, [next.roleId])
           } catch (caught) {
+            if (isForbidden(caught)) setForbidden(true)
             const isConflict =
               caught instanceof ManagementApiError &&
               caught.status === 409 &&
@@ -1312,6 +1300,7 @@ function ModulePermissionsPageContent({
       }
       return true
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       setError(message(caught))
       setPartial(
         next.mergeExistingRoles
@@ -1328,6 +1317,12 @@ function ModulePermissionsPageContent({
     setError('')
     const completed = await finishProvisioning(provisioning)
     if (completed && createdUsername && temporaryPassword) {
+      const account = users.find((item) => item.id === createdId)
+      if (account)
+        onCreationComplete?.({
+          ...account,
+          temporary_password: temporaryPassword,
+        })
       onTemporaryPassword?.(
         createdUsername,
         temporaryPassword,
@@ -1509,6 +1504,7 @@ function ModulePermissionsPageContent({
         project_role: roleMissing,
       })
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       if (!active()) return
       if (isNotFound(caught) && needsProject && diagnosticProject) {
         setNonmemberProject(diagnosticProject)
@@ -1573,6 +1569,7 @@ function ModulePermissionsPageContent({
       ])
       await diagnose({ layer: 'module', label: '功能權限' })
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       if (stillCurrent()) setDiagnosticError(message(caught))
     } finally {
       setBusy(false)
@@ -1619,6 +1616,7 @@ function ModulePermissionsPageContent({
         label: `「${candidate.name}」角色`,
       })
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       setOperationError('diagnostic', message(caught))
     } finally {
       setBusy(false)
@@ -1639,6 +1637,7 @@ function ModulePermissionsPageContent({
       if (diagnosticResult || notice) await diagnose()
       setOperationNotice(scope, '權限組合已完整套用。')
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       setOperationError(scope, message(caught))
     } finally {
       setBusy(false)
@@ -1660,6 +1659,7 @@ function ModulePermissionsPageContent({
         enabled ? '已委派權限管理。' : '已收回權限委派。',
       )
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       setOperationError(scope, message(caught))
     }
   }
@@ -1678,6 +1678,7 @@ function ModulePermissionsPageContent({
       setRoles(await listRoles())
       setOperationNotice(scope, `已更新角色「${role.name}」的指派範圍。`)
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       setOperationError(scope, message(caught))
     }
   }
@@ -1689,41 +1690,9 @@ function ModulePermissionsPageContent({
       setCreatorRoleId(result.role_id)
       setOperationNotice('creator', '新專案預設角色已更新。')
     } catch (caught) {
+      if (isForbidden(caught)) setForbidden(true)
       setOperationError('creator', message(caught))
     }
-  }
-
-  async function removeBundle(bundle: PermissionBundle) {
-    setOperationError('bundle-delete', '')
-    try {
-      await deletePermissionBundle(bundle.id)
-      setBundles((current) => current.filter((item) => item.id !== bundle.id))
-      setBundleToDelete(null)
-      setOperationNotice('bundle-list', `已刪除權限組合「${bundle.name}」。`)
-    } catch (caught) {
-      setOperationError('bundle-delete', message(caught))
-    }
-  }
-
-  function bundleDeleteConfirmation(bundle: PermissionBundle) {
-    if (bundleToDelete?.id !== bundle.id) return null
-    return (
-      <ConfirmBox
-        title="刪除權限組合定義"
-        variant="danger"
-        confirmLabel="刪除定義"
-        onCancel={() => {
-          setBundleToDelete(null)
-          bundleDeleteTrigger.current?.focus({ preventScroll: true })
-        }}
-        onConfirm={() => removeBundle(bundle)}
-        role="region"
-      >
-        <p>對象：{bundle.name}</p>
-        <p>既有帳號已取得的權限會保留；之後無法再套用這個組合。</p>
-        {operationFeedback('bundle-delete')}
-      </ConfirmBox>
-    )
   }
 
   const revokePanel = revoke && (
@@ -1805,6 +1774,8 @@ function ModulePermissionsPageContent({
   ) : (
     <Link to={`/projects/${diagnosticProject}/members`}>前往專案成員設定</Link>
   )
+  if (forbidden) return onForbidden ? null : <AccessDeniedPage />
+
   return (
     <div className="admin-page permission-management">
       {!externalNavigationGuard && (
@@ -2234,24 +2205,31 @@ function ModulePermissionsPageContent({
                     (profile === 'field' || profile === 'external') && (
                       <p role="note">加入專案前看不到任何任務。</p>
                     )}
-                  <small>
+                  <p className="field-hint">
                     預設專案角色「
                     {profileRoleLabel(roles, profile, creatorRoleId)}」。
-                  </small>
+                  </p>
                   {!createdId ? (
                     <>
-                      <Button
-                        aria-describedby={
-                          createBlockReason
-                            ? 'wizard-create-block-reason'
-                            : undefined
-                        }
-                        disabled={Boolean(createBlockReason)}
-                        onClick={() => void createStaff()}
-                        variant="primary"
-                      >
-                        {existingAccount ? '套用職務' : '建立帳號'}
-                      </Button>
+                      <div className="wizard-actions">
+                        {onWizardCancel && (
+                          <Button disabled={busy} onClick={onWizardCancel}>
+                            取消
+                          </Button>
+                        )}
+                        <Button
+                          aria-describedby={
+                            createBlockReason
+                              ? 'wizard-create-block-reason'
+                              : undefined
+                          }
+                          disabled={Boolean(createBlockReason)}
+                          onClick={() => void createStaff()}
+                          variant="primary"
+                        >
+                          {existingAccount ? '套用職務' : '建立帳號'}
+                        </Button>
+                      </div>
                       {createBlockReason && (
                         <p id="wizard-create-block-reason" role="status">
                           {createBlockReason}
@@ -2287,6 +2265,11 @@ function ModulePermissionsPageContent({
               )}
               {step <= 3 && (
                 <div className="wizard-actions">
+                  {onWizardCancel && step < 3 && (
+                    <Button disabled={busy} onClick={onWizardCancel}>
+                      取消
+                    </Button>
+                  )}
                   {step > 0 && (
                     <Button
                       disabled={Boolean(createdId)}
@@ -2306,7 +2289,23 @@ function ModulePermissionsPageContent({
                   )}
                 </div>
               )}
-              {error && <Notice variant="error">{error}</Notice>}
+              {error && (
+                <div>
+                  <Notice variant="error">{error}</Notice>
+                  {onWizardCancel && (
+                    <Button
+                      onClick={() => {
+                        setError('')
+                        void loadWizardOptions(step).catch((caught: unknown) =>
+                          setError(message(caught)),
+                        )
+                      }}
+                    >
+                      重新載入選項
+                    </Button>
+                  )}
+                </div>
+              )}
               {partial && step !== 3 && (
                 <Notice variant="info">{partial}</Notice>
               )}
@@ -2434,93 +2433,6 @@ function ModulePermissionsPageContent({
           )}
           {!embedded && (
             <Card>
-              <h2>權限組合</h2>
-              {operationFeedback('bundle-list')}
-              <ul>
-                {bundles.map((bundle) => (
-                  <li
-                    key={bundle.id}
-                    style={{
-                      display: 'grid',
-                      gap: 'var(--space-2)',
-                      paddingBlock: 'var(--space-3)',
-                      borderBlockEnd: '1px solid var(--color-border)',
-                    }}
-                  >
-                    <strong>{bundle.name}</strong>
-                    <span>{bundle.permission_codes.join('、')}</span>
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: 'var(--space-2)',
-                      }}
-                    >
-                      <Button
-                        onClick={() => {
-                          setEditingBundle(bundle.id)
-                          setBundleName(bundle.name)
-                          setBundleCodes(bundle.permission_codes)
-                        }}
-                      >
-                        編輯
-                      </Button>
-                      <Button onClick={() => void applyBundle(bundle)}>
-                        套用至所選帳號
-                      </Button>
-                      <Button
-                        onClick={(event) => {
-                          bundleDeleteTrigger.current = event.currentTarget
-                          setBundleToDelete(bundle)
-                        }}
-                        variant="destructiveOutline"
-                      >
-                        刪除定義
-                      </Button>
-                    </div>
-                    {operationFeedback(`bundle:${bundle.id}`)}
-                    {bundleDeleteConfirmation(bundle)}
-                  </li>
-                ))}
-              </ul>
-              <div ref={bundleNameRef}>
-                <Field id="bundle-name" label="組合名稱">
-                  <Input
-                    value={bundleName}
-                    onChange={(event) => setBundleName(event.target.value)}
-                  />
-                </Field>
-              </div>
-              <fieldset>
-                <legend>包含權限</legend>
-                {visiblePermissions.map((item) => (
-                  <label key={item.code}>
-                    <input
-                      checked={bundleCodes.includes(item.code)}
-                      type="checkbox"
-                      onChange={(event) =>
-                        setBundleCodes((current) =>
-                          event.target.checked
-                            ? [...current, item.code]
-                            : current.filter((code) => code !== item.code),
-                        )
-                      }
-                    />
-                    {item.description}
-                  </label>
-                ))}
-              </fieldset>
-              <Button
-                disabled={busy || !bundleName.trim()}
-                onClick={() => void saveBundle()}
-              >
-                {editingBundle ? '儲存組合' : '新增組合'}
-              </Button>
-              {operationFeedback('bundle-form')}
-            </Card>
-          )}
-          {!embedded && (
-            <Card>
               <h2>快速診斷</h2>
               <p>建立專案、管理成員與管理範本庫，分別需要對應的權限。</p>
               <p>收回權限前會先重新讀取影響範圍；取消不會送出收回請求。</p>
@@ -2614,8 +2526,10 @@ function ModulePermissionsPageContent({
             currentUser.is_admin &&
             selectedAccount &&
             !selectedAccount.is_admin && (
-              <div>
-                <Button onClick={startExistingJob}>重新套用職務</Button>
+              <div className="wizard-actions">
+                <Button className="btn-emphasis" onClick={startExistingJob}>
+                  重新套用職務
+                </Button>
                 <p>{JOB_REAPPLY_EXPLANATION}</p>
               </div>
             )}

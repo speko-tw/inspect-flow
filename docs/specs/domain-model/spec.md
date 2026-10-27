@@ -56,6 +56,8 @@
 
 ### `User`（凍結）
 
+一般帳號管理的新增精靈依 ADM-R56／ADM-AC56 使用 `/accounts/new`，成功進入帳號詳情；首次設定新增第一位使用者仍由 AUT-R29／AUT-R46 的原流程提供。此為 UI 路由調整，不改本節欄位、建立授權或資料規則；詳情中的修改資料、公司連結與授權操作維持原地。
+
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
 | DOM-R01 | **已被取代**（由 DOM-R46 取代，[#259](https://github.com/speko-tw/inspect-flow/issues/259)）。原規定：`User` 必須具備公司、部門、地點、工號、英文姓名、中文姓名、email、`is_active`，且都不得為空值（`is_active` 預設 `true`）；改由 DOM-R46 依「公司可選、內建 admin 例外」重新定義。 | 已取代 | 原依據：負責人決定（#63，2026-09-26）；[KD-23](../../intents/03-decisions-and-stack.md#kd-23)（人員屬於一個 `Company`）；`is_active` 預設啟用為負責人裁定（[DOM-Q7](#dom-q7)，[#127](https://github.com/speko-tw/inspect-flow/issues/127)，2026-09-26）；取代依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29） | 原驗收：DOM-AC01（已隨取代條文改寫） |
@@ -593,3 +595,5 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 規格澄清（#735、PR #740 審查）：補齊角色 API 欄位與 DOM-AC47；停用持有人採共用有效啟用條件的否定，包含到期但尚未寫回的外部帳號，總人數口徑不變。
 
 - 範圍變更（負責人指示，#717）：新增來源項目 `is_active` 欄位 DOM-R79、DOM-AC78；細節為規格設計（非負責人裁定）。來源：[負責人指示（#717）](https://github.com/speko-tw/inspect-flow/issues/717)；[實作細節](https://github.com/speko-tw/inspect-flow/issues/717#issuecomment-6397735011)，細節為規格設計（非負責人裁定）。
+
+- 範圍變更（負責人裁定，#534，2026-10-26）：`User` 管理 UI 依 ADM-R56／ADM-AC56 改用新增帳號獨立頁並於詳情承接結果；沿用既有欄位、API、授權與首次設定，不新增 DOM 編號 — [負責人裁定](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)。

@@ -33,7 +33,7 @@ import RequireValidRouteIds from '../RequireValidRouteIds'
 import RouteNotFound from '../RouteNotFound'
 import { hasGlobalDashboardAccess } from './dashboard/api'
 import CompaniesPage from './CompaniesPage'
-import PeoplePage from './people/PeoplePage'
+import PeoplePage, { AccountCreationProvider } from './people/PeoplePage'
 import RolesPage from './roles/RolesPage'
 import ProjectHomePage from './projectHome/ProjectHomePage'
 import ProjectSectionPage from './projectHome/ProjectSectionPage'
@@ -304,7 +304,9 @@ export default function AdminPage() {
   const { user } = useCurrentUser()
   return (
     <WorkflowSummaryProvider key={user.id}>
-      <AdminPageContent />
+      <AccountCreationProvider>
+        <AdminPageContent />
+      </AccountCreationProvider>
     </WorkflowSummaryProvider>
   )
 }
@@ -392,7 +394,8 @@ function AdminPageContent() {
     <div className="app-shell">
       <AppHeader
         badge={
-          isProjectSectionRoute ? (
+          isProjectSectionRoute ||
+          location.pathname.startsWith('/accounts') ? (
             <p className="topbar-badge">Admin</p>
           ) : (
             <h1 className="topbar-badge">Admin</h1>
@@ -454,6 +457,10 @@ function AdminPageContent() {
                   />
                 )
               }
+            />
+            <Route
+              path={nestedRoutePath(ROUTES.adminAccountNew, ROUTES.adminShell)}
+              element={<PeoplePage onTemporaryPassword={() => undefined} />}
             />
             <Route
               path={nestedRoutePath(ROUTES.adminPeople, ROUTES.adminShell)}
@@ -592,6 +599,10 @@ function MemberAdminShell({
                 <Navigate replace to={indexTarget} />
               )
             }
+          />
+          <Route
+            path={nestedRoutePath(ROUTES.adminAccountNew, ROUTES.adminShell)}
+            element={<AccessDeniedPage />}
           />
           {canManageAccounts && (
             <Route

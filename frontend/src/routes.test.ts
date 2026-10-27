@@ -172,6 +172,20 @@ describe('product route metadata', () => {
     module_permissions: [],
   }
 
+  it('reserves account creation for admins before matching person IDs', () => {
+    expect(routeForPath('/accounts/new')).toBe(ROUTES.adminAccountNew)
+    expect(canAccessRoute(noAccess, ROUTES.adminAccountNew)).toBe(false)
+    expect(
+      canAccessRoute(
+        { ...noAccess, delegated_modules: ['project'] },
+        ROUTES.adminAccountNew,
+      ),
+    ).toBe(false)
+    expect(
+      canAccessRoute({ ...noAccess, is_admin: true }, ROUTES.adminAccountNew),
+    ).toBe(true)
+  })
+
   it('declares a path, page title, and permission for every route', () => {
     for (const [name, route] of Object.entries(ROUTES)) {
       expect(route.path, name).toBeTruthy()
@@ -220,6 +234,7 @@ describe('product route metadata', () => {
       [ROUTES.login, '/login'],
       [ROUTES.setup, '/setup'],
       [ROUTES.settings, '/settings/profile'],
+      [ROUTES.adminAccountNew, '/accounts/new'],
       [ROUTES.adminPeople, '/accounts/person-1'],
       [ROUTES.adminCompanies, '/companies'],
       [ROUTES.adminRoles, '/roles'],

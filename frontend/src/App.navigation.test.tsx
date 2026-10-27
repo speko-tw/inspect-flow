@@ -225,6 +225,20 @@ function stubBackend(
       if (url.endsWith('/module-permissions')) {
         return Response.json({ items: [] })
       }
+      if (url.endsWith(`/users/${ADMIN.id}`) && method === 'GET') {
+        return Response.json({
+          ...ADMIN,
+          name_en: null,
+          company_id: null,
+          department: null,
+          location: null,
+          employee_no: null,
+          auth_source: 'local',
+          is_active: true,
+          is_admin: backend.me?.is_admin ?? false,
+          is_system: false,
+        })
+      }
       if (url.includes('/users?') || url.endsWith('/users')) {
         return Response.json({
           items: [

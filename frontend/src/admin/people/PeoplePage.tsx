@@ -1,4 +1,10 @@
-import { useEffect, useState } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 
 import { ACCOUNT_LABEL } from '../../layout/navigationLabels'
@@ -13,6 +19,10 @@ import { request } from '../api'
 import { isResourceId } from '../../resourceId'
 import RouteNotFound from '../../RouteNotFound'
 import { routePath, ROUTES } from '../../routes'
+import { BackLink } from '../../layout/BackLink'
+import { Notice } from '../../ui/Notice'
+import TemporaryPassword from '../TemporaryPassword'
+import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 
 interface DelegatePerson {
@@ -39,10 +49,80 @@ function decodePersonId(segment: string): string {
   }
 }
 
-/** Admin 人員入口；保留清單與授權精靈狀態供清單、詳情路由共用。 */
-export function PeoplePage({
-  onTemporaryPassword,
+type CreationResult = {
+  id: string
+  username: string
+  temporary_password: string
+  name_zh: string | null
+}
+
+const CreationContext = createContext<{
+  created: CreationResult | null
+  setCreated: (result: CreationResult | null) => void
+} | null>(null)
+
+/** 跨新增與詳情路由保存一次性結果；離開目標頁即清除。 */
+export function AccountCreationProvider({
+  children,
 }: {
+  children: ReactNode
+}) {
+  const location = useLocation()
+  const [created, setCreated] = useState<CreationResult | null>(null)
+  const [previousPath, setPreviousPath] = useState(location.pathname)
+  if (previousPath !== location.pathname) {
+    setPreviousPath(location.pathname)
+    if (
+      created &&
+      location.pathname !==
+        routePath(ROUTES.adminPeople, {
+          personId: created.id,
+        })
+    )
+      setCreated(null)
+  }
+  return (
+    <CreationContext value={{ created, setCreated }}>
+      {children}
+    </CreationContext>
+  )
+}
+
+/** 帳號路由入口；草稿在路由切換時重置，密碼不進入歷史或儲存。 */
+export function PeoplePage(props: {
+  onTemporaryPassword: (
+    username: string,
+    password: string,
+    source?: 'created' | 'reset',
+    displayName?: string,
+  ) => void
+}) {
+  const location = useLocation()
+  const result = useContext(CreationContext)
+  return (
+    <PeopleRoute
+      key={location.pathname}
+      {...props}
+      created={
+        result?.created &&
+        location.pathname.replace(/\/$/, '') ===
+          routePath(ROUTES.adminPeople, { personId: result.created.id })
+          ? result.created
+          : null
+      }
+      onCreated={(created) => result?.setCreated(created)}
+    />
+  )
+}
+
+/** ADM-R56：清單、詳情與新增各用自己的網址及頁內草稿。 */
+function PeopleRoute({
+  onTemporaryPassword,
+  created,
+  onCreated,
+}: {
+  created: CreationResult | null
+  onCreated: (result: CreationResult) => void
   onTemporaryPassword: (
     username: string,
     password: string,
@@ -54,7 +134,6 @@ export function PeoplePage({
   const navigate = useNavigate()
   const { user } = useCurrentUser()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [wizardRequest, setWizardRequest] = useState(0)
   const [wizardDirty, setWizardDirty] = useState(false)
   const [wizardHasTemporaryPassword, setWizardHasTemporaryPassword] =
     useState(false)
@@ -62,27 +141,28 @@ export function PeoplePage({
     (() => void) | null
   >(null)
   const [userFormsDirty, setUserFormsDirty] = useState(false)
+  const [accessDenied, setAccessDenied] = useState(false)
   const pageGuard = useUnsavedNavigationGuard(
-    wizardDirty || userFormsDirty || wizardHasTemporaryPassword,
-    wizardHasTemporaryPassword
+    wizardDirty ||
+      userFormsDirty ||
+      wizardHasTemporaryPassword ||
+      Boolean(created),
+    wizardHasTemporaryPassword || created
       ? '臨時密碼抄下了嗎？'
       : '有尚未儲存的變更。確定要離開嗎？',
   )
-  // 完成頁點導覽的「帳號」會連到同一個網址，路徑沒變、只有
-  // location.key 換新；此時精靈要收起，回到清單（#713）。
-  const [seenLocationKey, setSeenLocationKey] = useState(location.key)
-  if (seenLocationKey !== location.key) {
-    setSeenLocationKey(location.key)
-    setWizardRequest(0)
-  }
-  const detailMatch = location.pathname.match(
+  const pathname = location.pathname.replace(/\/$/, '')
+  const detailMatch = pathname.match(
     new RegExp(
       `^${ROUTES.adminPeople.path.replace('/:personId?', '')}/([^/]+)$`,
     ),
   )
-  const personId = detailMatch ? decodePersonId(detailMatch[1]) : null
-  const createWizardOpen = user.is_admin && wizardRequest > 0
+  const isCreateRoute = pathname === ROUTES.adminAccountNew.path
+  const personId =
+    !isCreateRoute && detailMatch ? decodePersonId(detailMatch[1]) : null
+  const createWizardOpen = user.is_admin && isCreateRoute
   const query = searchParams.get('q') ?? ''
+  const listPath = `/accounts${query ? `?q=${encodeURIComponent(query)}` : ''}`
 
   function updateQuery(nextQuery: string) {
     const next = new URLSearchParams(searchParams)
@@ -107,6 +187,10 @@ export function PeoplePage({
 
   // 帳號編號會原樣拼進 API 路徑；特製網址（含 `/`、`?`）解碼後不得
   // 送出請求，直接顯示找不到（ADM-R25，#711）。
+  if (accessDenied || (isCreateRoute && !user.is_admin)) {
+    return <AccessDeniedPage />
+  }
+
   if (personId && !isResourceId(personId)) {
     return (
       <section className="admin-page">
@@ -139,7 +223,7 @@ export function PeoplePage({
         >
           <p>離開後就無法再次查看臨時密碼。</p>
         </ConfirmBox>
-      ) : wizardHasTemporaryPassword && pageGuard.pending ? (
+      ) : (wizardHasTemporaryPassword || created) && pageGuard.pending ? (
         <ConfirmBox
           cancelLabel="留在此頁"
           confirmLabel="離開此頁"
@@ -157,36 +241,31 @@ export function PeoplePage({
           {createWizardOpen ? '新增帳號' : ACCOUNT_LABEL}
         </h1>
       )}
-      {personId ? (
-        <p>
-          <Link
-            to={{
-              pathname: '/accounts',
-              search: query ? `?q=${encodeURIComponent(query)}` : '',
-            }}
-          >
-            返回{ACCOUNT_LABEL}清單
-          </Link>
-        </p>
-      ) : createWizardOpen ? (
-        !wizardHasTemporaryPassword && (
-          <button
-            onClick={() => requestPasswordLeave(() => setWizardRequest(0))}
-            type="button"
-          >
-            取消
-          </button>
-        )
-      ) : (
-        user.is_admin && (
-          <button
-            className="btn-primary"
-            onClick={() => setWizardRequest((value) => value + 1)}
-            type="button"
-          >
-            新增帳號
-          </button>
-        )
+      {personId || createWizardOpen ? (
+        <BackLink replace to={listPath}>
+          返回帳號清單
+        </BackLink>
+      ) : user.is_admin ? (
+        <Link
+          className="btn btn-primary"
+          replace
+          to={{
+            pathname: ROUTES.adminAccountNew.path,
+            search: location.search,
+          }}
+        >
+          新增帳號
+        </Link>
+      ) : null}
+      {created && (
+        <section aria-label="建立完成">
+          <Notice>
+            <h2>已新增{created.name_zh || created.username}的帳號</h2>
+          </Notice>
+          <p>帳號：{created.username}</p>
+          <p>他第一次登入必須先改成自己的密碼。離開此頁後就看不到這組密碼。</p>
+          <TemporaryPassword password={created.temporary_password} />
+        </section>
       )}
       {!user.is_admin && personId && (
         <DelegatedPersonHeading userId={personId} />
@@ -194,7 +273,6 @@ export function PeoplePage({
       {user.is_admin && !createWizardOpen ? (
         <UsersPage
           detailUserId={personId}
-          hideCreateForm
           initialQuery={query}
           externalNavigationGuard
           onDirtyChange={setUserFormsDirty}
@@ -202,10 +280,13 @@ export function PeoplePage({
           onSelectUser={(id) => {
             const next = new URLSearchParams(searchParams)
             if (query) next.set('q', query)
-            navigate({
-              pathname: routePath(ROUTES.adminPeople, { personId: id }),
-              search: next.toString(),
-            })
+            navigate(
+              {
+                pathname: routePath(ROUTES.adminPeople, { personId: id }),
+                search: next.toString(),
+              },
+              { replace: true },
+            )
           }}
           onTemporaryPassword={onTemporaryPassword}
         />
@@ -224,14 +305,35 @@ export function PeoplePage({
         <ModulePermissionsPage
           embedded
           externalNavigationGuard
-          openWizardRequest={wizardRequest}
+          onForbidden={() => setAccessDenied(true)}
+          openWizardRequest={createWizardOpen ? 1 : 0}
+          onWizardCancel={
+            createWizardOpen
+              ? () => navigate(listPath, { replace: true })
+              : undefined
+          }
+          onCreationComplete={(result) => {
+            onCreated(result)
+            pageGuard.allowNavigation(() =>
+              navigate(
+                {
+                  pathname: routePath(ROUTES.adminPeople, {
+                    personId: result.id,
+                  }),
+                  search: location.search,
+                },
+                { replace: true },
+              ),
+            )
+          }}
           onDirtyChange={setWizardDirty}
           onTemporaryPasswordVisible={setWizardHasTemporaryPassword}
           onRequestTemporaryPasswordLeave={requestPasswordLeave}
-          onWizardBackToList={() => setWizardRequest(0)}
+          onWizardBackToList={() => navigate(listPath, { replace: true })}
           onWizardViewUser={(id) => {
-            setWizardRequest(0)
-            navigate(routePath(ROUTES.adminPeople, { personId: id }))
+            navigate(routePath(ROUTES.adminPeople, { personId: id }), {
+              replace: true,
+            })
           }}
           selectedUserId={personId ?? undefined}
         />

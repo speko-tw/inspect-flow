@@ -2399,9 +2399,7 @@ describe('ModulePermissionsPage', () => {
     expect(screen.getByRole('region', { name: '不能做' })).toHaveTextContent(
       '查看未授權的專案',
     )
-    expect(
-      screen.getByText(/預設專案角色/, { selector: 'small' }),
-    ).toBeVisible()
+    expect(screen.getByText(/預設專案角色/, { selector: 'p' })).toBeVisible()
     expect(screen.getByText(/預設專案角色「專案工程師」/)).toBeVisible()
   })
 
@@ -3295,34 +3293,27 @@ describe('#734 T7 其他權限寫入的就近回饋', () => {
     const details = summary.closest('details') as HTMLDetailsElement
     if (!details.open) fireEvent.click(summary)
     await waitFor(() => expect(details).toHaveAttribute('open'))
-    await screen.findByLabelText('組合名稱')
+    await screen.findByLabelText(/可管理.*專案.*權限/)
   }
 
   it('套用組合的結果留在該組合列', async () => {
-    await prepare()
-    const row = screen
-      .getByText('公司主管', { selector: 'strong' })
-      .closest('li') as HTMLElement
+    permissionPage({
+      embedded: true,
+      selectedUserId: 'person',
+      openWizard: false,
+    })
+    await screen.findByText(/能使用：/)
+    fireEvent.click(screen.getByText('進階設定', { selector: 'summary' }))
+    const row = (
+      await screen.findByText('公司主管', { selector: 'span' })
+    ).closest('li') as HTMLElement
     fireEvent.click(
       within(row).getByRole('button', {
-        name: '套用至所選帳號',
+        name: '套用',
       }),
     )
     expect(await within(row).findByRole('status')).toHaveTextContent(
       '權限組合已完整套用。',
-    )
-  })
-
-  it('新增組合的結果留在送出鈕所屬區塊', async () => {
-    await prepare()
-    fireEvent.change(screen.getByLabelText('組合名稱'), {
-      target: { value: '試用權限組合' },
-    })
-    const trigger = screen.getByRole('button', { name: '新增組合' })
-    const area = trigger.closest('div') as HTMLElement
-    fireEvent.click(trigger)
-    expect(await within(area).findByRole('status')).toHaveTextContent(
-      '權限組合已儲存；既有帳號權限不會被改動。',
     )
   })
 
@@ -3346,20 +3337,6 @@ describe('#734 T7 其他權限寫入的就近回饋', () => {
     fireEvent.click(within(row).getByLabelText('可指派'))
     expect(await within(row).findByRole('status')).toHaveTextContent(
       '已更新角色「目前角色」的指派範圍。',
-    )
-  })
-
-  it('刪除組合的確認留在該組合列', async () => {
-    await prepare()
-    const row = screen
-      .getByText('公司主管', { selector: 'strong' })
-      .closest('li') as HTMLElement
-    fireEvent.click(within(row).getByRole('button', { name: '刪除定義' }))
-    const box = within(row).getByRole('region', {
-      name: '刪除權限組合定義',
-    })
-    await waitFor(() =>
-      expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus(),
     )
   })
 })
@@ -3437,9 +3414,10 @@ it('T6 直接補救只送 API 需求差集，不提交或遺失其他權限草�
 it('診斷缺功能後套用組合會自動重查，缺口與開通鈕消失', async () => {
   const { fetchMock } = permissionPage({
     openWizard: false,
+    embedded: true,
+    selectedUserId: 'person',
     memberRoleIds: ['field-role'],
   })
-  fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
   await screen.findByText(/能使用：/)
   const area = screen.getByRole('region', {
     name: '為什麼他不能做這件事？',
@@ -3458,12 +3436,12 @@ it('診斷缺功能後套用組合會自動重查，缺口與開通鈕消失', a
     ).length
   const before = diagnosticRequests()
   fireEvent.click(screen.getByText('進階設定'))
-  const row = screen
-    .getByText('現場工程師常用', { selector: 'strong' })
-    .closest('li')!
+  const row = (
+    await screen.findByText('現場工程師常用', { selector: 'span' })
+  ).closest('li')!
   fireEvent.click(
     within(row).getByRole('button', {
-      name: '套用至所選帳號',
+      name: '套用',
     }),
   )
   await within(area).findByText('這個人具備此操作所需的有效權限。')

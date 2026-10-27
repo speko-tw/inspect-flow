@@ -108,3 +108,13 @@
 ### PR #740 第一輪審查修正（#735）
 
 同步 PR #740 審查：密碼原生選取、有效否定斷言、組合重查、收回焦點、到期參數一次消費與舊診斷退路；使用指南同步新畫面。
+
+
+## #635 第 6 批：新增帳號獨立頁
+
+- 範圍：`frontend/src/routes.ts`、`routes.test.ts`、`admin/AdminPage.tsx` 與帳號測試區段、`admin/people/`、`admin/UsersPage.tsx`、`admin/module-permissions/`、`demo/e2e/permissions-acceptance.mjs`；同步本規格與 authentication 的帳號建立說明，不改 API、資料模型或全域樣式。
+- `SaveErrorFocus.test.tsx`、`UsersCompaniesGuards.test.tsx` 只調整帳號部分（負責人本次執行時明示授權）；公司／角色部分保留 #756 責任區。
+- ADM-AC56：路由、搜尋返回、無權直接開頁、重新整理、單一 h1、成功 replace 與一次性密碼、上一頁不回精靈，分別以 routes、PeoplePage、AdminPage 測試與真 Chrome E2E 驗證。舊列內修改測試遷移至正式詳情；舊新增表單與組合定義編輯專屬測試刪除，保留首次設定 UserForm 與組合套用測試。
+- 完整驗收：指定專用 PostgreSQL 的 `make check`、demo E2E；1280 淺色／360 深色逐頁截圖與按鈕、實心紅、水平溢位量測，產物存工作單指定的 repo 外目錄。
+
+- 完整 gate 跟進：負責人另行授權 `App.navigation.test.tsx` 只補帳號詳情 API mock；`auth/RequireAuth.test.tsx` 的帳號落點改等待真正的帳號 h1，仍保留登入返回路徑斷言。

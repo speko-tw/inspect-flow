@@ -50,7 +50,6 @@ import {
 import { mapWithConcurrency } from './mapWithConcurrency'
 import { getUserParticipatingProjects } from './module-permissions/api'
 import { useCursorList } from './useCursorList'
-import UserForm from './UserForm'
 import { ACCOUNT_LABEL } from '../layout/navigationLabels'
 import './UsersPage.css'
 
@@ -185,15 +184,14 @@ type PendingAction = {
   kind: 'admin' | 'deactivate' | 'activate' | 'reset'
 }
 
+/** 帳號清單與詳情；列上只提供詳情連結，修改在詳情中完成。 */
 export default function UsersPage({
   onTemporaryPassword,
   detailUserId: rawDetailUserId,
   initialQuery,
-  hideCreateForm = false,
   externalNavigationGuard = false,
   onQueryApplied,
   onDirtyChange,
-  onSelectUser,
 }: {
   onTemporaryPassword: (
     username: string,
@@ -203,7 +201,6 @@ export default function UsersPage({
   ) => void
   detailUserId?: string | null
   initialQuery?: string
-  hideCreateForm?: boolean
   externalNavigationGuard?: boolean
   onQueryApplied?: (query: string) => void
   onDirtyChange?: (dirty: boolean) => void
@@ -847,22 +844,6 @@ export default function UsersPage({
       : ''
   }
 
-  function created(user: {
-    username: string
-    temporary_password: string
-    name_zh?: string | null
-  }) {
-    setDirtyForms({})
-    onTemporaryPassword(
-      user.username,
-      user.temporary_password,
-      'created',
-      user.name_zh || user.username,
-    )
-    void reload()
-    void loadCompanies()
-  }
-
   const expiredBatchUsers =
     batchActivationPreview?.users.filter((user) =>
       batchActivationPreview.previews.some(
@@ -876,21 +857,11 @@ export default function UsersPage({
 
   // 在「帳號」頁（有 onSelectUser）裡，頁面標題已是「帳號」，清單不再
   // 重複標題；連結到詳情的列也沒有操作欄，只有四欄（#713）。
-  const embeddedList = Boolean(onSelectUser)
-  const listColumnCount = embeddedList ? 5 : 7
 
   return (
     <section
-      aria-label={
-        !detailUserId && embeddedList ? `${ACCOUNT_LABEL}清單` : undefined
-      }
-      aria-labelledby={
-        detailUserId
-          ? 'person-basic-heading'
-          : embeddedList
-            ? undefined
-            : 'users-heading'
-      }
+      aria-label={!detailUserId ? `${ACCOUNT_LABEL}清單` : undefined}
+      aria-labelledby={detailUserId ? 'person-basic-heading' : undefined}
     >
       {!externalNavigationGuard && (
         <UsersNavigationGuard hasUnsavedChanges={hasDirtyForms} />
@@ -1170,7 +1141,6 @@ export default function UsersPage({
           )}
           {loading ? <p>載入中…</p> : null}
           <div>
-            {!embeddedList && <h1 id="users-heading">{ACCOUNT_LABEL}清單</h1>}
             <CursorListSearch
               disabled={loading}
               label={`搜尋${ACCOUNT_LABEL}`}
@@ -1214,9 +1184,7 @@ export default function UsersPage({
                 role="region"
                 tabIndex={0}
               >
-                <table
-                  className={onSelectUser ? 'users-account-table' : undefined}
-                >
+                <table className="users-account-table">
                   <thead>
                     <tr>
                       <th scope="col">
@@ -1226,12 +1194,6 @@ export default function UsersPage({
                       <th scope="col">帳號</th>
                       <th scope="col">公司</th>
                       <th scope="col">狀態</th>
-                      {!embeddedList && (
-                        <>
-                          <th scope="col">系統管理者</th>
-                          <th scope="col">操作</th>
-                        </>
-                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -1273,20 +1235,17 @@ export default function UsersPage({
                             )}
                           </td>
                           <th scope="row">
-                            {onSelectUser ? (
-                              <Link
-                                className="users-account-name-link"
-                                to={
-                                  '/accounts/' +
-                                  encodeURIComponent(user.id) +
-                                  location.search
-                                }
-                              >
-                                {user.name_zh || user.username}
-                              </Link>
-                            ) : (
-                              user.name_zh || user.username
-                            )}
+                            <Link
+                              className="users-account-name-link"
+                              replace
+                              to={
+                                '/accounts/' +
+                                encodeURIComponent(user.id) +
+                                location.search
+                              }
+                            >
+                              {user.name_zh || user.username}
+                            </Link>
                           </th>
                           <td data-label="帳號">{user.username}</td>
                           <td data-label="公司">
@@ -1297,216 +1256,7 @@ export default function UsersPage({
                               status={activeStatus(user.is_active)}
                             />
                           </td>
-                          {!embeddedList && (
-                            <td>
-                              <button
-                                disabled={
-                                  user.is_system ||
-                                  user.auth_source !== 'local'
-                                }
-                                onClick={() => {
-                                  setSaveError(null)
-                                  setExpiryEditorUser(null)
-                                  setEditingUser(
-                                    editingUser === user.id ? null : user.id,
-                                  )
-                                }}
-                                type="button"
-                              >
-                                修改資料
-                              </button>
-                              <button
-                                disabled={
-                                  user.is_system ||
-                                  user.auth_source !== 'local'
-                                }
-                                onClick={() => {
-                                  setSaveError(null)
-                                  setEditingCompany(
-                                    editingCompany === user.id
-                                      ? null
-                                      : user.id,
-                                  )
-                                  if (editingCompany !== user.id)
-                                    void loadCompanies()
-                                }}
-                                type="button"
-                              >
-                                公司連結
-                              </button>
-                              <button
-                                disabled={user.is_system || busyUser !== null}
-                                onClick={() => void toggleAdmin(user)}
-                                type="button"
-                              >
-                                {user.is_admin ? '收回管理者' : '指派管理者'}
-                              </button>
-                              <button
-                                className={
-                                  user.is_active
-                                    ? 'btn-danger-outline'
-                                    : undefined
-                                }
-                                disabled={user.is_system || busyUser !== null}
-                                onClick={() =>
-                                  requestAction(
-                                    user,
-                                    user.is_active ? 'deactivate' : 'activate',
-                                  )
-                                }
-                                type="button"
-                              >
-                                {user.is_active ? '停用' : '啟用'}
-                              </button>
-                            </td>
-                          )}
                         </tr>
-                        {!onSelectUser &&
-                          pendingAction?.user.id === user.id && (
-                            <tr className="row-detail">
-                              <td colSpan={listColumnCount}>
-                                <ConfirmBox
-                                  busy={busyUser === user.id}
-                                  confirmDisabled={
-                                    !['admin', 'reset'].includes(
-                                      pendingAction.kind,
-                                    ) &&
-                                    (!actionPreview ||
-                                      Boolean(previewError) ||
-                                      (pendingAction.kind === 'activate' &&
-                                        'account_expired' in actionPreview &&
-                                        actionPreview.account_expired))
-                                  }
-                                  key={`${user.id}:${pendingAction.kind}`}
-                                  confirmLabel={
-                                    pendingAction.kind === 'reset'
-                                      ? '確認重設'
-                                      : pendingAction.kind === 'deactivate'
-                                        ? '確認停用帳號'
-                                        : '確認'
-                                  }
-                                  label="操作確認"
-                                  onCancel={cancelPendingAction}
-                                  onConfirm={confirmAction}
-                                  role="region"
-                                  revealRequest={actionPreview ? 1 : 0}
-                                  rootRef={confirmationRef}
-                                  variant={confirmVariant(pendingAction)}
-                                >
-                                  {pendingAction.kind === 'deactivate' && (
-                                    <h2>停用 1 個帳號？</h2>
-                                  )}
-                                  <p>
-                                    {pendingAction.kind === 'deactivate'
-                                      ? deactivationAccountText(
-                                          pendingAction.user,
-                                        )
-                                      : actionMessage(pendingAction)}
-                                  </p>
-                                  {pendingAction.kind === 'deactivate' && (
-                                    <DeactivationConsequences />
-                                  )}
-                                  {previewError && (
-                                    <Notice variant="error">
-                                      {previewError}
-                                    </Notice>
-                                  )}
-                                  {pendingAction.kind === 'deactivate' &&
-                                    actionPreview &&
-                                    'last_manager_projects' in
-                                      actionPreview && (
-                                      <>
-                                        <DeactivationWarning
-                                          projects={
-                                            actionPreview.last_manager_projects
-                                          }
-                                        />
-                                        <DeactivationReassignmentLinks
-                                          projects={
-                                            actionPreview.reassignment_projects
-                                          }
-                                        />
-                                      </>
-                                    )}
-                                  {pendingAction.kind === 'activate' &&
-                                    actionPreview &&
-                                    'permission_codes' in actionPreview && (
-                                      <RestoreChoices
-                                        preview={actionPreview}
-                                        name={
-                                          pendingAction.user.name_zh ??
-                                          pendingAction.user.username
-                                        }
-                                        selection={restoreSelection}
-                                        onChange={setRestoreSelection}
-                                      />
-                                    )}
-                                  {actionError && (
-                                    <Notice variant="error">
-                                      {actionError}
-                                    </Notice>
-                                  )}
-                                </ConfirmBox>
-                              </td>
-                            </tr>
-                          )}
-                        {!onSelectUser &&
-                          (editingUser === user.id ||
-                            editingCompany === user.id) && (
-                            <tr className="row-detail">
-                              <td colSpan={listColumnCount}>
-                                {editingUser === user.id && (
-                                  <UserDetailsForm
-                                    busy={busyUser !== null}
-                                    error={rowError(user.id, 'details')}
-                                    errorFocusRequest={saveError?.request}
-                                    onCancel={() => {
-                                      setSaveError(null)
-                                      setEditingUser(null)
-                                      reportDirty(`details:${user.id}`, false)
-                                    }}
-                                    onDirtyChange={(dirty) =>
-                                      reportDirty(`details:${user.id}`, dirty)
-                                    }
-                                    onSave={(fields) =>
-                                      act(user.id, 'details', () =>
-                                        updateUser(user.id, fields),
-                                      )
-                                    }
-                                    user={user}
-                                  />
-                                )}
-                                {editingCompany === user.id && (
-                                  <CompanyLinkForm
-                                    busy={busyUser !== null}
-                                    companies={companies}
-                                    error={rowError(user.id, 'company')}
-                                    errorFocusRequest={saveError?.request}
-                                    onCancel={() => {
-                                      setSaveError(null)
-                                      setEditingCompany(null)
-                                      reportDirty(`company:${user.id}`, false)
-                                    }}
-                                    onDirtyChange={(dirty) =>
-                                      reportDirty(`company:${user.id}`, dirty)
-                                    }
-                                    onSave={(companyId, fields) =>
-                                      act(user.id, 'company', () =>
-                                        companyId === user.company_id
-                                          ? updateUser(user.id, fields)
-                                          : linkUserCompany(
-                                              user.id,
-                                              companyId,
-                                              fields,
-                                            ),
-                                      )
-                                    }
-                                    user={user}
-                                  />
-                                )}
-                              </td>
-                            </tr>
-                          )}
                       </Fragment>
                     ))}
                   </tbody>
@@ -1724,14 +1474,6 @@ export default function UsersPage({
               />
             )}
           </div>
-          {!hideCreateForm && (
-            <UserForm
-              companies={companies}
-              onCompanyOptionsRequested={() => void loadCompanies()}
-              onCreated={created}
-              onDirtyChange={(dirty) => reportDirty('create', dirty)}
-            />
-          )}
         </>
       )}
     </section>

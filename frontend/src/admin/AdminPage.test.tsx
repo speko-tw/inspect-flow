@@ -539,8 +539,9 @@ async function createAccountThroughWizard(
   username: string,
   email = `${username}@example.com`,
   name = '李柏',
+  expectSuccess = true,
 ) {
-  fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
+  fireEvent.click(await screen.findByRole('link', { name: '新增帳號' }))
   await screen.findByRole('heading', { name: '設定帳號', level: 2 })
   fireEvent.change(screen.getByLabelText('帳號名稱'), {
     target: { value: username },
@@ -556,6 +557,9 @@ async function createAccountThroughWizard(
   fireEvent.click(screen.getByRole('button', { name: '下一步' }))
   fireEvent.click(screen.getByRole('button', { name: '下一步' }))
   fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+  if (expectSuccess) {
+    await screen.findByRole('heading', { level: 1, name })
+  }
 }
 
 async function openAccountDetails(username: string, displayName: string) {
@@ -600,7 +604,7 @@ describe('管理表單未儲存導覽防護', () => {
       name: item.label === '帳號' ? '帳號' : '公司管理',
     })
     if (item.label === '帳號') {
-      fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
+      fireEvent.click(screen.getByRole('link', { name: '新增帳號' }))
       await screen.findByRole('heading', { name: '設定帳號', level: 2 })
     }
     fireEvent.change(screen.getByLabelText(item.input), {
@@ -618,7 +622,9 @@ describe('管理表單未儲存導覽防護', () => {
     expect(confirm).toHaveBeenLastCalledWith(
       '有尚未儲存的變更。確定要離開嗎？',
     )
-    expect(screen.getByTestId('pathname')).toHaveTextContent(item.path)
+    expect(screen.getByTestId('pathname')).toHaveTextContent(
+      item.label === '帳號' ? '/accounts/new' : item.path,
+    )
 
     confirm.mockReturnValue(true)
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器下一頁' }))
@@ -637,7 +643,7 @@ describe('管理表單未儲存導覽防護', () => {
       name: item.label === '帳號' ? '帳號' : '公司管理',
     })
     if (item.label === '帳號') {
-      fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
+      fireEvent.click(screen.getByRole('link', { name: '新增帳號' }))
       await screen.findByRole('heading', { name: '設定帳號', level: 2 })
     }
     fireEvent.change(screen.getByLabelText(item.input), {
@@ -1021,10 +1027,7 @@ describe('admin user and company pages', () => {
     ).toHaveLength(1)
     expect(passwordHeading).toBeVisible()
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(password)
-    expect(screen.getByRole('button', { name: '回清單' })).toBeVisible()
-    expect(
-      screen.getByRole('button', { name: '查看這個帳號的能力' }),
-    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '返回帳號清單' })).toBeVisible()
     expectNoPasswordPersistence(password)
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1045,7 +1048,7 @@ describe('admin user and company pages', () => {
       screen.getAllByRole('heading', { name: '已新增李柏的帳號' }),
     ).toHaveLength(1)
     expectNoPasswordPersistence(password)
-    fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    fireEvent.click(screen.getByRole('link', { name: '返回帳號清單' }))
     expect(
       await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
     ).toBeVisible()
@@ -1053,7 +1056,7 @@ describe('admin user and company pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '留在此頁' }))
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(password)
 
-    fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    fireEvent.click(screen.getByRole('link', { name: '返回帳號清單' }))
     fireEvent.click(screen.getByRole('button', { name: '離開此頁' }))
     expect(await screen.findByRole('heading', { name: '帳號' })).toBeVisible()
     expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
@@ -1131,6 +1134,11 @@ describe('admin user and company pages', () => {
       fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
     })
     await screen.findByRole('heading', { name: '已重設鄧安娜的臨時密碼' })
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(
+        '/accounts/user-1',
+      ),
+    )
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     await waitFor(() =>
       expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？'),
@@ -1184,7 +1192,7 @@ describe('admin user and company pages', () => {
       await screen.findByRole('button', { name: '已複製' }),
     ).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    fireEvent.click(screen.getByRole('link', { name: '返回帳號清單' }))
     expect(
       await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
     ).toBeVisible()
@@ -1277,6 +1285,11 @@ describe('admin user and company pages', () => {
     await createAccountThroughWizard('bob.lee')
     expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
       'back-navigation-password',
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(
+        '/accounts/user-2',
+      ),
     )
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     await waitFor(() =>
@@ -1441,7 +1454,12 @@ describe('admin user and company pages', () => {
   it('translates API conflicts to a Traditional Chinese message', async () => {
     managementFetch()
     renderAdmin()
-    await createAccountThroughWizard('bob.lee', 'anna@example.com')
+    await createAccountThroughWizard(
+      'bob.lee',
+      'anna@example.com',
+      '李柏',
+      false,
+    )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Email 已被使用。',
@@ -2690,7 +2708,8 @@ it('建立完成有臨時密碼時標題帶姓名，頂端取消隱藏', async (
   ).toBeVisible()
   expect(within(done).getByText('帳號：trial.new')).toBeVisible()
   expect(
-    within(done).getByRole('heading').nextElementSibling,
+    within(done).getByRole('heading').closest('[role="status"]')!
+      .nextElementSibling,
   ).toHaveTextContent('帳號：trial.new')
   expect(done).toHaveTextContent('他第一次登入必須先改成自己的密碼')
   expect(done.textContent).not.toContain('王新進 的')
@@ -2701,4 +2720,91 @@ it('建立完成有臨時密碼時標題帶姓名，頂端取消隱藏', async (
       }),
     ).toBeNull(),
   )
+})
+
+it('ADM-AC56：直接開新增帳號有單一 h1，重新進頁回到第一步', async () => {
+  const fetchMock = managementFetch()
+  const view = renderAdmin('/accounts/new?q=anna')
+  await screen.findByLabelText('帳號名稱')
+  expect(
+    fetchMock.mock.calls.some(([url]) =>
+      /\/users\/new(?:[/?]|$)/.test(String(url)),
+    ),
+  ).toBe(false)
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+    '新增帳號',
+  )
+  expect(screen.getByRole('link', { name: '返回帳號清單' })).toHaveAttribute(
+    'href',
+    '/accounts?q=anna',
+  )
+  fireEvent.change(screen.getByLabelText('帳號名稱'), {
+    target: { value: 'draft.user' },
+  })
+  view.unmount()
+  renderAdmin('/accounts/new?q=anna')
+  expect(await screen.findByLabelText('帳號名稱')).toHaveValue('')
+  expect(screen.getByText('步驟 1／4：帳號資料')).toBeVisible()
+  expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
+})
+
+it.each([{ delegated_modules: [] }, { delegated_modules: ['project'] }])(
+  'ADM-AC56：非管理者直接開新增網址不載入精靈：%j',
+  async ({ delegated_modules }) => {
+    const fetchMock = managementFetch()
+    renderAdmin('/accounts/new', false, { delegated_modules })
+    expect(
+      await screen.findByRole('heading', { name: '無權限' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText('帳號名稱')).toBeNull()
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        /\/users\/new(?:[/?]|$)/.test(String(url)),
+      ),
+    ).toBe(false)
+  },
+)
+
+it('ADM-AC56：新增頁選項載入 403 顯示無權限', async () => {
+  const fetchMock = managementFetch()
+  const original = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (input, init) => {
+    if (String(input).includes('/api/v1/companies')) {
+      return Response.json(
+        { error: { code: 'permission.denied' } },
+        { status: 403 },
+      )
+    }
+    return original(input, init)
+  })
+  renderAdmin('/accounts/new')
+  expect(await screen.findByRole('heading', { name: '無權限' })).toBeVisible()
+  expect(screen.queryByLabelText('帳號名稱')).toBeNull()
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+})
+
+it('ADM-AC56：新增頁選項失敗就近提示並可重試', async () => {
+  const fetchMock = managementFetch()
+  const original = fetchMock.getMockImplementation()!
+  let failed = false
+  fetchMock.mockImplementation(async (input, init) => {
+    if (String(input).includes('/api/v1/companies') && !failed) {
+      failed = true
+      return Response.json(
+        { error: { code: 'server.error' } },
+        { status: 500 },
+      )
+    }
+    return original(input, init)
+  })
+  renderAdmin('/accounts/new')
+  expect(await screen.findByRole('alert')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '重新載入選項' }))
+  expect(
+    await screen.findByRole('option', { name: '示範公司' }),
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
 })

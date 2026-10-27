@@ -52,6 +52,11 @@ export const ROUTES = {
     title: PAGE_TITLES.account,
     permission: 'admin-or-account-delegate',
   },
+  adminAccountNew: {
+    path: '/accounts/new',
+    title: '新增帳號',
+    permission: 'admin-only',
+  },
   adminPeople: {
     path: '/accounts/:personId?',
     title: PAGE_TITLES.account,
@@ -275,6 +280,7 @@ const ACCESS_ROUTES: Array<{ route: ProductRoute; end: boolean }> = [
   { route: ROUTES.dashboardTasks, end: true },
   { route: ROUTES.dashboardIndex, end: true },
   { route: ROUTES.dashboard, end: false },
+  { route: ROUTES.adminAccountNew, end: true },
   { route: ROUTES.adminPeople, end: false },
   { route: ROUTES.adminCompanies, end: false },
   { route: ROUTES.adminRoles, end: false },
