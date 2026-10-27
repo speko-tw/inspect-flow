@@ -238,7 +238,7 @@ function draftTaskSummary(task: InspectionTask): string {
 
 /**
  * 依 ADM-R17、IP-R02、IP-R10 呈現專案計畫與任務管理。
- * #727：依專案 viewer 權限隱藏修改入口；後端仍覆核實際寫入。
+ * #727：依 ADM-R17、ADM-R28、IP-R01 與 viewer 權限隱藏入口；後端仍覆核寫入。
  */
 type PlanningPageProps = {
   client?: PlanningPageClient
@@ -1750,7 +1750,7 @@ function PlanningContent({
                   : '計畫與任務'}
         </h2>
       )}
-      {(view === 'list' || view === 'plan' || view === 'task') && (
+      {(view === 'list' || view === 'plan') && (
         <p>計畫的狀態會跟著任務自動更新；任務派出後，現場才看得到。</p>
       )}
       {(view === 'task-new' || view === 'task-edit') && selectedPlan && (
@@ -1898,7 +1898,7 @@ function PlanningContent({
                     : 'planning-heading'
                 }
               >
-                {(view === 'plan' || view === 'task') && (
+                {view === 'plan' && (
                   <p>
                     計畫狀態：
                     <StatusBadge status={selectedPlanDetail.status} />
@@ -1909,6 +1909,20 @@ function PlanningContent({
                     計畫已封存。取消封存後才能新增、修改或派出任務。
                   </p>
                 )}
+                {view === 'plan' &&
+                  !canToggleArchive &&
+                  writeCodes.filter(canWrite).length === 1 &&
+                  viewerPermissions?.includes(
+                    selectedPlanDetail.status === 'ARCHIVED'
+                      ? 'inspection_plan.archive'
+                      : 'inspection_plan.unarchive',
+                  ) && (
+                    <p className="notice notice-info">
+                      {selectedPlanDetail.status === 'ARCHIVED'
+                        ? '你只有封存權限；計畫已封存，沒有取消封存權限。'
+                        : '你只有取消封存權限；計畫尚未封存，沒有封存權限。'}
+                    </p>
+                  )}
                 {noticeFor('plan-detail')}
                 {view === 'plan' &&
                   !readOnly &&
@@ -2050,12 +2064,10 @@ function PlanningContent({
                     </form>
                   )}
 
-                {/* 按鈕與標題之間只靠標題的上邊距隔開，按鈕維持同一列。 */}
+                {/* 標題列負責區隔計畫操作與任務區段，按鈕維持同一列。 */}
                 {view === 'plan' && (
                   <div className="planning-section-title">
-                    <h3 style={{ marginBlockStart: 'var(--space-3)' }}>
-                      任務
-                    </h3>
+                    <h3>任務</h3>
                     {view === 'plan' &&
                       canModify &&
                       canCreateTask &&
@@ -2105,7 +2117,9 @@ function PlanningContent({
                               ].join(' ')}
                             >
                               <h4>
-                                {task.name}{' '}
+                                <span className="planning-task-name">
+                                  {task.name}
+                                </span>{' '}
                                 <span id={`task-${task.id}-state`}>
                                   <StatusBadge
                                     parenthesized
@@ -2113,7 +2127,10 @@ function PlanningContent({
                                   />
                                 </span>
                               </h4>
-                              <p id={`task-${task.id}-summary`}>
+                              <p
+                                className="planning-task-summary"
+                                id={`task-${task.id}-summary`}
+                              >
                                 {taskItemsSummary(task)}｜
                                 {task.zone?.name ??
                                   task.location_text ??
@@ -2140,6 +2157,14 @@ function PlanningContent({
                     return (
                       <li key={task.id}>
                         <article>
+                          {view === 'task' && (
+                            <p className="planning-parent-plan">
+                              所屬計畫：
+                              <Link to={planPath}>
+                                {selectedPlanDetail.name}
+                              </Link>
+                            </p>
+                          )}
                           {view === 'task' && (
                             <h2
                               ref={pageHeading}

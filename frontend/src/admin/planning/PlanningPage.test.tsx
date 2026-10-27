@@ -109,6 +109,43 @@ async function openTaskCreationForm(): Promise<void> {
 }
 
 describe('planning management page', () => {
+  it('任務詳情以所屬計畫連結取代計畫層介紹與狀態', async () => {
+    const client = createMockPlanningClient()
+    const plan = await client.createPlan('project-demo-1', {
+      name: '任務所屬計畫',
+    })
+    const [item] = await client.listProjectItems('project-demo-1')
+    await client.createTask(plan.id, {
+      name: '任務詳情案例',
+      item_ids: [item.id],
+      zone_id: null,
+      location_text: '工地',
+      suggested_assignee_id: null,
+    })
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    await click(await screen.findByRole('link', { name: /任務所屬計畫/ }))
+    const taskLink = await screen.findByRole('link', {
+      name: '任務詳情案例',
+    })
+    expect(taskLink.querySelector('h4 .planning-task-name')).toHaveTextContent(
+      '任務詳情案例',
+    )
+    expect(taskLink.querySelector('.planning-task-summary')).toBeVisible()
+    await click(taskLink)
+
+    expect(screen.getByText('所屬計畫：')).toBeVisible()
+    expect(screen.getByRole('link', { name: /任務所屬計畫/ })).toHaveAttribute(
+      'href',
+      expect.stringContaining(`/planning/${plan.id}`),
+    )
+    expect(screen.queryByText(/計畫狀態：/)).toBeNull()
+    expect(
+      screen.queryByText(
+        '計畫的狀態會跟著任務自動更新；任務派出後，現場才看得到。',
+      ),
+    ).toBeNull()
+  })
+
   it(
     'manages plans, multi-item tasks, dispatch, cancel, ' + 'and restore',
     async () => {
@@ -959,9 +996,9 @@ describe('planning management page', () => {
     expect(archiveButton.parentElement).toBe(
       screen.getByRole('button', { name: '修改計畫名稱' }).parentElement,
     )
-    expect(screen.getByRole('heading', { name: '任務' })).toHaveStyle({
-      marginBlockStart: 'var(--space-3)',
-    })
+    expect(
+      screen.getByRole('heading', { name: '任務' }).parentElement,
+    ).toHaveClass('planning-section-title')
     await click(screen.getByRole('button', { name: '封存計畫' }))
     await click(
       within(screen.getByRole('dialog')).getByRole('button', { name: '確認' }),
@@ -3103,6 +3140,22 @@ describe('#727c 各動作依實際權限', () => {
     }
     expect(screen.getAllByRole('button', { name: button })[0]).toBeVisible()
     expect(screen.queryByRole('button', { name: '建立計畫' })).toBeNull()
+    const entryNames = [
+      '修改計畫名稱',
+      '封存計畫',
+      '取消封存',
+      '＋ 新增任務',
+      '修改查核項目',
+      '修改建議指派',
+      '派出任務',
+      '刪除草稿',
+      '取消任務',
+    ]
+    for (const name of entryNames) {
+      if (name !== button) {
+        expect(screen.queryByRole('button', { name })).toBeNull()
+      }
+    }
     if (
       code === 'inspection_task.create' ||
       code === 'inspection_task.assign'
@@ -3111,6 +3164,66 @@ describe('#727c 各動作依實際權限', () => {
     } else {
       expect(loadAssignees).not.toHaveBeenCalled()
     }
+  })
+
+  it.each([
+    [
+      '封存中',
+      'inspection_plan.archive',
+      '計畫已封存，沒有取消封存權限。',
+      true,
+    ],
+    [
+      '尚未封存',
+      'inspection_plan.unarchive',
+      '計畫尚未封存，沒有封存權限。',
+      false,
+    ],
+  ])(
+    '%s 時只有相反狀態權限會顯示原因',
+    async (_label, permission, message, archived) => {
+      const client = createMockPlanningClient()
+      const plan = await client.createPlan('project-demo-1', {
+        name: '唯讀原因計畫',
+      })
+      if (archived) await client.archivePlan(plan.id)
+      render(
+        <PlanningPage
+          client={client}
+          initialProjectId="project-demo-1"
+          viewerPermissions={[permission]}
+        />,
+      )
+      await click(await screen.findByRole('link', { name: /唯讀原因計畫/ }))
+
+      expect(await screen.findByText(new RegExp(message))).toBeVisible()
+      expect(screen.queryByRole('button', { name: '修改計畫名稱' })).toBeNull()
+      expect(screen.queryByRole('button', { name: '封存計畫' })).toBeNull()
+      expect(screen.queryByRole('button', { name: '取消封存' })).toBeNull()
+    },
+  )
+
+  it('有其他計畫寫入權限時不顯示單一封存權限的唯讀說明', async () => {
+    const client = createMockPlanningClient()
+    const plan = await client.createPlan('project-demo-1', {
+      name: '混合封存權限計畫',
+    })
+    render(
+      <PlanningPage
+        client={client}
+        initialProjectId="project-demo-1"
+        viewerPermissions={[
+          'inspection_plan.unarchive',
+          'inspection_plan.manage',
+        ]}
+      />,
+    )
+    await click(await screen.findByRole('link', { name: /混合封存權限計畫/ }))
+
+    expect(screen.getByRole('button', { name: '修改計畫名稱' })).toBeVisible()
+    expect(screen.queryByText(/你只有取消封存權限/)).toBeNull()
+    expect(screen.queryByText(/沒有任何可用的操作/)).toBeNull()
+    expect(plan.status).toBe('DRAFT')
   })
 })
 

@@ -163,6 +163,7 @@ function TaskList({
   const [loading, setLoading] = useState(() => !restore || !memory.has(key))
   const [error, setError] = useState<'forbidden' | 'other' | null>(null)
   const [retry, setRetry] = useState(0)
+  const pendingDefaultScope = allowAutoScope && !state
 
   useEffect(() => {
     let active = true
@@ -269,7 +270,11 @@ function TaskList({
   return (
     <>
       <h1 className="field-heading">
-        {scope === 'all' ? '全部任務' : PAGE_TITLES.tasks}
+        {pendingDefaultScope
+          ? '任務'
+          : scope === 'all'
+            ? '全部任務'
+            : PAGE_TITLES.tasks}
       </h1>
       <p className="field-intro">已派出的未完成任務，依派送時間排列。</p>
       {noAssignedTasks && scope === 'mine' && Boolean(state?.items.length) && (

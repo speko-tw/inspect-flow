@@ -23,6 +23,7 @@
 .save-template-steps ul {
   display: grid;
   gap: 0.5rem;
+  list-style: none;
   padding-inline-start: 1rem;
 }
 
@@ -45,8 +46,16 @@
 }
 
 .save-template-steps button[aria-pressed='true'] {
+  border-width: 2px;
   border-color: var(--primary);
   background: var(--surface-alt);
   box-shadow: inset 0 0 0 2px var(--primary);
+  font-weight: 700;
+}
+
+.save-template-selected-marker,
+.tpl-selected-marker {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
   font-weight: 700;
 }

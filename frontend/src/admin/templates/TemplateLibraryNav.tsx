@@ -144,6 +144,13 @@ export function TemplateLibraryNav({
                               {selectSystemOnly ? '•' : systemOpen ? '▾' : '▸'}
                             </span>
                             <span>{system.name}</span>
+                            {mode === 'select' &&
+                              selected?.type === 'system' &&
+                              selected.id === system.id && (
+                                <span className="tpl-selected-marker">
+                                  ✓ 已選取
+                                </span>
+                              )}
                             {itemCount !== undefined && (
                               <span
                                 aria-hidden="true"

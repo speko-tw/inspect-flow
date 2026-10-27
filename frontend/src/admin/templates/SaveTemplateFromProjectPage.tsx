@@ -230,6 +230,14 @@ export default function SaveTemplateFromProjectPage() {
                   type="button"
                 >
                   {row.project_code} · {row.name}
+                  {project?.id === row.id && (
+                    <span
+                      aria-hidden="true"
+                      className="save-template-selected-marker"
+                    >
+                      ✓ 已選取
+                    </span>
+                  )}
                 </button>
               </li>
             ))}
@@ -255,6 +263,14 @@ export default function SaveTemplateFromProjectPage() {
                       >
                         {item.title}（{item.inspection_points.length}{' '}
                         個查核項次； 來源範本：{item.source_template_name}）
+                        {source?.id === item.id && (
+                          <span
+                            aria-hidden="true"
+                            className="save-template-selected-marker"
+                          >
+                            ✓ 已選取
+                          </span>
+                        )}
                       </button>
                     </li>
                   ))}
