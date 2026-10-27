@@ -355,7 +355,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   'user.external_not_qualified': '外部協作人員不可指派系統管理者權限。',
   'company.inactive': '不能把帳號連結到已停用的公司。',
   'user.username_conflict': '帳號名稱已被使用。',
-  'user.email_conflict': 'Email 已被使用。',
+  'user.email_conflict': '電子郵件已被使用。',
   'user.employee_no_conflict': '這家公司已有相同工號。',
   'company.name_conflict': '公司名稱已被使用。',
   'project.member_conflict': '這個帳號已經是此專案的成員。',

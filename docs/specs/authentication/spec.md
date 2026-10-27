@@ -154,6 +154,8 @@
 
 ### 前端
 
+一般管理情境的新增帳號入口依 ADM-R56 使用 `/accounts/new`，仍由 AUT-R46 的 Admin 專用 API 建立，不新增權限碼；成功結果由帳號詳情承接，臨時密碼只在記憶體保存並依 ADM-R15 保護離頁。首次設定新增第一位使用者仍留在原設定流程。
+
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
 | AUT-R29 | 前端**必須**提供登入頁，欄位為「帳號名稱或 email」與密碼，送出到登入 API；認證失敗（401）時只顯示一種通用訊息（「帳號或密碼錯誤」），不得透露帳號是否存在或鎖定；伺服器暫時無法處理（503）時顯示「伺服器暫時忙碌，請稍後再試。」登入成功後的落點、登入後導回、登出與換帳號例外依 `admin-dashboard` ADM-R50；變更密碼入口依 AUT-R53。Admin Web 另**必須**提供首次設定頁：`GET /api/v1/setup/status` 回 `setup_required = true` 時，未登入的使用者被導向此頁，輸入首次登入碼與新密碼（兩次），送出到 AUT-R44 的路由；`invalid_code` 只顯示一種通用訊息，設定成功後（已登入）進入新增第一個使用者的步驟，由首次設定流程提供，呼叫新增使用者 API（[#263](https://github.com/speko-tw/inspect-flow/issues/263)）；一般的使用者與公司管理頁屬 [#265](https://github.com/speko-tw/inspect-flow/issues/265)。`setup_required = false` 時，首次設定頁不可進入 | 必須 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)；架構基準 §17；通用訊息依 AUT-R06；[KD-45](../../intents/03-decisions-and-stack.md#kd-45)、[KD-43](../../intents/03-decisions-and-stack.md#kd-43)；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）；[PR #311 審查建議（規格澄清）](https://github.com/speko-tw/inspect-flow/pull/311#pullrequestreview-5393249857) |
@@ -453,3 +455,5 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - 規格澄清（負責人試用回饋 #734，W-734R）：AUT-R38、AUT-AC41 補明發版前重測行為，依 [#734](https://github.com/speko-tw/inspect-flow/issues/734) 同步實作與驗收。
 
 - 規格澄清（#734，第 2 輪審查）：補齊強制改密碼的錯誤用詞及成功後切回一般模式的 R／AC。
+
+- 範圍變更（負責人裁定，#534，2026-10-26）：帳號管理 UI 依 ADM-R56／ADM-AC56 改用 `/accounts/new`，成功到詳情且保留一次性密碼離頁保護；AUT-R46 的建立授權、API 與首次設定流程不變，不新增 AUT 編號 — [負責人裁定](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)。

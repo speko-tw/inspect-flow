@@ -210,3 +210,7 @@ DOM-R79、DOM-AC78 由 inspection-planning #717 實作；一支 migration 附加
 ## #635 第 5 批管理 UI
 
 依據：負責人裁定（#534，2026-10-26）。公司與角色管理 UI 的路由分工依 ADM-R55／ADM-AC55；沿用 DOM-R32／R33／R55 與既有 API。角色影響範圍與公司啟停用、使用者選取及原子批次操作維持原規則；前端路由／欄位錯誤測試及真後端 Chrome 流程驗收，不新增 schema、migration 或 DOM 編號。
+
+## #635 第 6 批帳號 UI 路由同步
+
+一般新增帳號精靈與建立成功的詳情結果依 admin-dashboard ADM-R56／ADM-AC56 及其計畫驗收。本計畫只同步 `User` 的 UI 入口說明，不改資料模型、API、欄位約束、首次設定或現有帳號詳情的原地操作；與 #756 的 Company／Role 區段分開。

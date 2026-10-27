@@ -1,0 +1,3 @@
+.account-created-result > p:last-child {
+  margin-block-start: var(--space-4);
+}
