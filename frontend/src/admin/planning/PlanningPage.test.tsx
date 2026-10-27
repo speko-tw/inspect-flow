@@ -1402,8 +1402,9 @@ describe('planning forms guard (#507)', () => {
 
     const form = formByContext('assignee')
     const selector = within(form).getByLabelText('建議指派人')
-    const formHeading = within(form).getByRole('heading', {
-      name: '修改建議指派',
+    const formHeading = screen.getByRole('heading', {
+      name: /^修改建議指派｜/,
+      level: 2,
     })
     await waitFor(() => expect(formHeading).toHaveFocus())
     expect(selector).toBeDisabled()
@@ -1423,7 +1424,7 @@ describe('planning forms guard (#507)', () => {
 
   it('confirms plan switches with a dirty task form (ADM-R38)', async () => {
     const { client } = await seeded()
-    const nextPlan = await client.createPlan('project-demo-1', {
+    await client.createPlan('project-demo-1', {
       name: '第二計畫',
     })
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
@@ -1459,7 +1460,6 @@ describe('planning forms guard (#507)', () => {
       name: '＋ 新增任務',
     })
     expect(addTaskButton).toBeVisible()
-    expect(nextPlan.name).toBe('第二計畫')
   })
 
   it('maps plan creation 422 fields and focuses the reported name', async () => {
@@ -2163,7 +2163,7 @@ describe('planning forms guard (#507)', () => {
       await click(within(list).getByRole('button', { name: '填寫地點' }))
 
       expect(
-        within(article).getByRole('heading', { name: '修改任務地點' }),
+        screen.getByRole('heading', { name: /^修改地點｜/, level: 2 }),
       ).toBeVisible()
       await waitFor(() =>
         expect(within(article).getByLabelText(/分區/)).toHaveFocus(),
@@ -2189,8 +2189,9 @@ describe('planning forms guard (#507)', () => {
         ).toHaveFocus(),
       )
       expect(
-        within(article).getByRole('heading', {
-          name: '修改草稿任務的查核項目',
+        screen.getByRole('heading', {
+          name: /^修改查核項目｜/,
+          level: 2,
         }),
       ).toBeVisible()
       expect(window.location.hash).toBe(hashBefore)
@@ -2208,9 +2209,9 @@ describe('planning forms guard (#507)', () => {
         name: '修改查核項目',
       })
       await click(edit)
-      const form = within(article).getByRole('heading', {
-        name: '修改草稿任務的查核項目',
-      }).parentElement as HTMLElement
+      const form = within(article).getByRole('form', {
+        name: /^修改查核項目｜/,
+      })
       expect(within(form).queryByText(/本計畫已有 1 筆任務/)).toBeNull()
       expect(within(form).getAllByText(/本計畫已有 0 筆任務/)).toHaveLength(3)
 
@@ -2228,9 +2229,9 @@ describe('planning forms guard (#507)', () => {
       edit = within(article).getByRole('button', { name: '修改查核項目' })
       await waitFor(() => expect(edit).toHaveFocus())
       await click(edit)
-      const reopened = within(article).getByRole('heading', {
-        name: '修改草稿任務的查核項目',
-      }).parentElement as HTMLElement
+      const reopened = within(article).getByRole('form', {
+        name: /^修改查核項目｜/,
+      })
       await click(within(reopened).getByLabelText(/鋼筋保護層/))
       await click(
         within(reopened).getByRole('button', { name: '儲存查核項目' }),
@@ -2258,9 +2259,9 @@ describe('planning forms guard (#507)', () => {
       await click(
         within(article).getByRole('button', { name: '修改查核項目' }),
       )
-      const form = within(article).getByRole('heading', {
-        name: '修改草稿任務的查核項目',
-      }).parentElement as HTMLElement
+      const form = within(article).getByRole('form', {
+        name: /^修改查核項目｜/,
+      })
       await click(within(form).getByRole('button', { name: '儲存查核項目' }))
 
       const message = await within(form).findByText(
@@ -2281,9 +2282,9 @@ describe('planning forms guard (#507)', () => {
       await click(
         within(article).getByRole('button', { name: '修改查核項目' }),
       )
-      const form = within(article).getByRole('heading', {
-        name: '修改草稿任務的查核項目',
-      }).parentElement as HTMLElement
+      const form = within(article).getByRole('form', {
+        name: /^修改查核項目｜/,
+      })
       await click(within(form).getByLabelText(/混凝土外觀/))
       await click(within(form).getByRole('button', { name: '儲存查核項目' }))
 
@@ -2311,9 +2312,9 @@ describe('planning forms guard (#507)', () => {
       await click(
         within(article).getByRole('button', { name: '修改查核項目' }),
       )
-      const form = within(article).getByRole('heading', {
-        name: '修改草稿任務的查核項目',
-      }).parentElement as HTMLElement
+      const form = within(article).getByRole('form', {
+        name: /^修改查核項目｜/,
+      })
       await click(within(form).getByLabelText(/鋼筋保護層/))
       await click(within(form).getByRole('button', { name: '儲存查核項目' }))
 
@@ -2369,8 +2370,8 @@ describe('planning forms guard (#507)', () => {
         within(article).queryByRole('button', { name: '修改查核項目' }),
       ).toBeNull()
       expect(
-        within(article).queryByRole('heading', {
-          name: '修改草稿任務的查核項目',
+        within(article).queryByRole('form', {
+          name: /^修改查核項目｜/,
         }),
       ).toBeNull()
       const unload = new Event('beforeunload', {
@@ -2432,7 +2433,7 @@ describe('planning forms guard (#507)', () => {
         within(article).queryByRole('button', { name: '修改建議指派' }),
       ).toBeNull()
       expect(
-        within(article).queryByRole('heading', { name: '修改建議指派' }),
+        within(article).queryByRole('form', { name: /^修改建議指派｜/ }),
       ).toBeNull()
     })
 
@@ -2799,7 +2800,7 @@ describe('planning trial fixes (#634)', () => {
 
     expect(creationForm()).toBeNull()
     expect(
-      within(article).queryByRole('heading', { name: '修改建議指派' }),
+      within(article).queryByRole('form', { name: /^修改建議指派｜/ }),
     ).not.toBeInTheDocument()
     await waitFor(() =>
       expect(
@@ -2855,10 +2856,12 @@ describe('planning trial fixes (#634)', () => {
     })
     await click(shortcut)
     expect(screen.queryByText('已更新計畫名稱。')).toBeNull()
-    const form = within(article).getByRole('heading', { name: '修改建議指派' })
+    const form = within(article).getByRole('form', {
+      name: /^修改建議指派｜/,
+    })
     expect(form).toBeVisible()
     await click(
-      within(form.closest('form') as HTMLElement).getByRole('button', {
+      within(form).getByRole('button', {
         name: '取消',
       }),
     )

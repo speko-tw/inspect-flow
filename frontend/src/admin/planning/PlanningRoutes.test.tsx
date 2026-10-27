@@ -155,8 +155,8 @@ describe('IP-AC27～29：計畫與任務獨立網址', () => {
       )
       expect(screen.getByLabelText('目前網址')).toHaveTextContent(path)
       expect(
-        screen.getByRole('link', { name: '返回計畫詳情' }),
-      ).toHaveAttribute('href', `${base}/${plan.id}`)
+        screen.getByRole('link', { name: '返回任務詳情' }),
+      ).toHaveAttribute('href', `${base}/${plan.id}/tasks/${task.id}`)
     },
   )
 
@@ -292,7 +292,101 @@ describe('IP-AC27～29：計畫與任務獨立網址', () => {
   })
 })
 
-describe('R2 載入與重試', () => {
+describe('載入、重試與明細一致性', () => {
+  it('explains why archived plans are read-only', async () => {
+    const { client, plan } = await seeded()
+    await client.archivePlan(plan.id)
+    open(client, `${base}/${plan.id}`)
+    expect(
+      await screen.findByText(
+        '計畫已封存。取消封存後才能新增、修改或派出任務。',
+      ),
+    ).toBeVisible()
+  })
+
+  it('explains why dispatched task items cannot be replaced', async () => {
+    const { client, plan, task } = await seeded(true)
+    await client.dispatchTask(task.id)
+    open(client, `${base}/${plan.id}/tasks/${task.id}`)
+    expect(
+      await screen.findByText('任務已派出，不能更換查核項目'),
+    ).toBeVisible()
+  })
+
+  it('retries project loading after a transient failure', async () => {
+    const { client } = await seeded()
+    const original = client.getProject.bind(client)
+    client.getProject = vi
+      .fn()
+      .mockRejectedValueOnce(new ManagementApiError(503, 'unavailable'))
+      .mockImplementation(original)
+    open(client, base)
+    expect(await screen.findByRole('alert')).toBeVisible()
+    await click(screen.getByRole('button', { name: '重新載入' }))
+    expect(await screen.findByRole('link', { name: /橋梁計畫/ })).toBeVisible()
+    expect(client.getProject).toHaveBeenCalledTimes(2)
+  })
+
+  it('hides old detail and success until saved detail reloads', async () => {
+    const { client, plan, task } = await seeded()
+    const original = client.getPlan.bind(client)
+    const before = await original(plan.id)
+    const getProject = vi.spyOn(client, 'getProject')
+    const gate = deferred()
+    client.getPlan = vi
+      .fn()
+      .mockResolvedValueOnce(before)
+      .mockImplementation(async (id: string) => {
+        await gate.promise
+        return original(id)
+      })
+    open(client, `${base}/${plan.id}/tasks/${task.id}/edit`)
+    fireEvent.change(await screen.findByLabelText('補充地點'), {
+      target: { value: '南側新地點' },
+    })
+    await click(screen.getByRole('button', { name: '儲存地點' }))
+    expect(screen.getByText('載入中…')).toBeVisible()
+    expect(screen.getByText('補充地點：北側')).not.toBeVisible()
+    expect(screen.getByText('已更新任務地點。')).not.toBeVisible()
+    await act(async () => gate.resolve())
+    expect(await screen.findByText('補充地點：南側新地點')).toBeVisible()
+    expect(screen.getByText('已更新任務地點。')).toBeVisible()
+    expect(getProject).toHaveBeenCalledTimes(1)
+  })
+
+  it(
+    'does not show an empty task list ' + 'while created detail reloads',
+    async () => {
+      const client = createMockPlanningClient()
+      const plan = await client.createPlan(projectId, { name: '空計畫' })
+      const original = client.getPlan.bind(client)
+      const before = await original(plan.id)
+      const gate = deferred()
+      client.getPlan = vi
+        .fn()
+        .mockResolvedValueOnce(before)
+        .mockImplementation(async (id: string) => {
+          await gate.promise
+          return original(id)
+        })
+      open(client, `${base}/${plan.id}/tasks/new`)
+      await click(await screen.findByLabelText(/混凝土外觀/))
+      fireEvent.change(screen.getByLabelText(/任務名稱/), {
+        target: { value: '第一筆任務' },
+      })
+      await click(screen.getByRole('button', { name: '建立草稿任務' }))
+      expect(screen.getByText('載入中…')).toBeVisible()
+      expect(screen.queryByText('尚未建立任務。')).toBeNull()
+      await act(async () => gate.resolve())
+      expect(
+        await screen.findByRole('heading', {
+          name: /第一筆任務/,
+          level: 2,
+        }),
+      ).toBeVisible()
+    },
+  )
+
   it(
     'keeps a created task loading until ' + 'delayed plan detail resolves',
     async () => {
@@ -369,7 +463,7 @@ describe('R2 載入與重試', () => {
   })
 })
 
-describe('R2 網址、返回與草稿邊界', () => {
+describe('網址、返回與草稿邊界', () => {
   it.each(['', '?section=invalid', '?section=', '/'])(
     'uses the location editor for default, invalid or trailing edit URL %s',
     async (suffix) => {
@@ -422,20 +516,23 @@ describe('R2 網址、返回與草稿邊界', () => {
     },
   )
 
-  it('returns denied direct forms to the plan list after detail 403', async () => {
-    const { client, plan, task } = await seeded()
-    client.getPlan = vi
-      .fn()
-      .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
-    open(client, `${base}/${plan.id}/tasks/${task.id}/edit`)
-    expect(
-      await screen.findByRole('heading', { name: '無權限' }),
-    ).toBeVisible()
-    expect(document.querySelector('form')).toBeNull()
-    const back = screen.getByRole('link', { name: '返回計畫清單' })
-    expect(back).toHaveClass('btn')
-    expect(back).toHaveAttribute('href', base)
-  })
+  it(
+    'returns denied direct forms to the plan list ' + 'after detail 403',
+    async () => {
+      const { client, plan, task } = await seeded()
+      client.getPlan = vi
+        .fn()
+        .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
+      open(client, `${base}/${plan.id}/tasks/${task.id}/edit`)
+      expect(
+        await screen.findByRole('heading', { name: '無權限' }),
+      ).toBeVisible()
+      expect(document.querySelector('form')).toBeNull()
+      const back = screen.getByRole('link', { name: '返回計畫清單' })
+      expect(back).toHaveClass('btn')
+      expect(back).toHaveAttribute('href', base)
+    },
+  )
 
   it.each(['location', 'items', 'assignee'])(
     'rejects completed task direct editing: %s',
@@ -599,7 +696,7 @@ describe('R2 網址、返回與草稿邊界', () => {
   )
 })
 
-describe('R2 動作與表單一致性', () => {
+describe('動作與表單一致性', () => {
   it.each([
     ['new-task', '建立草稿任務'],
     ['location', '儲存地點'],

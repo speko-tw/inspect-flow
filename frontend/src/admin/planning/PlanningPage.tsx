@@ -284,7 +284,7 @@ export default function PlanningPage(props: PlanningPageProps) {
   const section = new URLSearchParams(location.search).get('section')
   const editSection: EditSection =
     section === 'items' || section === 'assignee' ? section : 'location'
-  // IP-R29：確認離頁後才清除草稿，避免返回或換資源時沿用舊輸入。
+  // IP-R29：畸形網址不代表有效資源，直接回 404，避免發出無效 API 請求。
   if (!valid) return <RouteNotFound />
   return (
     <PlanningContent
@@ -445,6 +445,8 @@ function PlanningContent({
     (location.state as { focusLabel?: string } | null)?.focusLabel,
   )
   const [reloadKey, setReloadKey] = useState(0)
+  // 專案尚未載入時獨立重試，避免每次寫入後重載都重查專案。
+  const [projectRetryKey, setProjectRetryKey] = useState(0)
   const [planName, setPlanName] = useState('')
   const [editingPlanName, setEditingPlanName] = useState(false)
   const [updatedPlanName, setUpdatedPlanName] = useState('')
@@ -460,7 +462,6 @@ function PlanningContent({
   const [taskNameTouched, setTaskNameTouched] = useState(false)
   const [taskFormOpen, setTaskFormOpen] = useState(view === 'task-new')
   const focusedTaskFormPath = useRef('')
-  const [taskToFocus, setTaskToFocus] = useState('')
   const [taskZoneId, setTaskZoneId] = useState('')
   const [taskLocation, setTaskLocation] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
@@ -631,7 +632,8 @@ function PlanningContent({
     const consumesState =
       navigationType === 'REPLACE' && previousLocation.path === pathKey
     if (!consumesState) {
-      // IP-R29：換資源才捨棄舊草稿；清除 flash state 不應再重設畫面。
+      // IP-R29：確認離頁後才捨棄舊草稿，避免換資源時沿用舊輸入；
+      // 清除 flash state 不應再重設畫面。
       setRouteKey(location.key)
       setEditReturnFocus(
         (location.state as { returnFocus?: string } | null)?.returnFocus,
@@ -652,7 +654,6 @@ function PlanningContent({
       setDiscardingTaskForm(null)
       setTaskFormOpen(view === 'task-new')
       setPlanFailure(null)
-      setTaskToFocus('')
       setInitializedEditor(false)
       setEditingLocation(null)
       setEditingName(null)
@@ -916,7 +917,7 @@ function PlanningContent({
     return () => {
       active = false
     }
-  }, [client, initialProjectId])
+  }, [client, initialProjectId, projectRetryKey])
 
   useEffect(() => {
     if (!projectId) return
@@ -1112,18 +1113,6 @@ function PlanningContent({
     planPending,
   ])
 
-  useEffect(() => {
-    if (!selectedPlanDetail || !taskToFocus) return
-    const heading = pageContent.current?.querySelector<HTMLElement>(
-      `[data-task-heading="${taskToFocus}"]`,
-    )
-    if (!heading) return
-    // ADM-R28：建立成功後把視線帶到新任務，確認資料已進入任務清單。
-    heading.scrollIntoView?.({ block: 'center' })
-    heading.focus()
-    pendingTaskHeading.current = ''
-    setTaskToFocus('')
-  }, [selectedPlanDetail, taskToFocus])
   const canEditPlan = Boolean(
     selectedPlan &&
     selectedPlan.status !== 'ARCHIVED' &&
@@ -1454,7 +1443,6 @@ function PlanningContent({
       TASK_CREATE_CODE_FIELDS,
     )
     if (created) {
-      setTaskToFocus(pendingTaskHeading.current)
       resetTaskForm()
       leaveGuard.allowNavigation(() =>
         navigate(taskUrl(pendingTaskHeading.current), {
@@ -1719,11 +1707,19 @@ function PlanningContent({
     >
       {view !== 'list' && (
         <BackLink
-          to={view === 'plan-new' || view === 'plan' ? base : planPath}
+          to={
+            view === 'plan-new' || view === 'plan'
+              ? base
+              : view === 'task-edit'
+                ? taskPath
+                : planPath
+          }
         >
           {view === 'plan-new' || view === 'plan'
             ? '返回計畫清單'
-            : '返回計畫詳情'}
+            : view === 'task-edit'
+              ? '返回任務詳情'
+              : '返回計畫詳情'}
         </BackLink>
       )}
       {view !== 'task' && (
@@ -1732,6 +1728,8 @@ function PlanningContent({
           ref={(node) => {
             pageHeading.current = node
             selectedPlanHeading.current = view === 'plan' ? node : null
+            assigneeFormHeading.current =
+              view === 'task-edit' && editSection === 'assignee' ? node : null
           }}
           tabIndex={-1}
         >
@@ -1782,7 +1780,10 @@ function PlanningContent({
           <button
             type="button"
             disabled={planPending || (loading && !currentPlanFailure)}
-            onClick={() => setReloadKey((key) => key + 1)}
+            onClick={() => {
+              if (!projectId) setProjectRetryKey((key) => key + 1)
+              else setReloadKey((key) => key + 1)
+            }}
           >
             重新載入
           </button>
@@ -1890,6 +1891,7 @@ function PlanningContent({
             selectedPlan &&
             selectedPlanDetail && (
               <section
+                hidden={planPending}
                 aria-labelledby={
                   view === 'task' && routeTask
                     ? `task-${routeTask.id}-heading`
@@ -2070,10 +2072,11 @@ function PlanningContent({
                   </div>
                 )}
                 {noticeFor('tasks')}
-                {(selectedPlanDetail.tasks ?? []).length === 0 ? (
+                {!planPending &&
+                (selectedPlanDetail.tasks ?? []).length === 0 ? (
                   <p>尚未建立任務。</p>
                 ) : null}
-                <ul>
+                <ul className="planning-task-list" role="list">
                   {(view === 'task-new'
                     ? []
                     : (selectedPlanDetail.tasks ?? []).filter(
@@ -2107,7 +2110,7 @@ function PlanningContent({
                                 {task.zone?.name ??
                                   task.location_text ??
                                   '未填地點'}
-                                ｜ 建議指派：
+                                ｜建議指派：
                                 {task.assignee?.name_zh ??
                                   task.assignee?.username ??
                                   '未指派'}
@@ -2383,7 +2386,6 @@ function PlanningContent({
                                   )
                                 }}
                               >
-                                <h3>修改任務名稱</h3>
                                 <label>
                                   <span className="required-label">
                                     任務名稱 <RequiredMark />
@@ -2440,13 +2442,13 @@ function PlanningContent({
                             editingTaskItems?.task.id === task.id && (
                               <form
                                 onKeyDown={blockImeEnter}
+                                aria-labelledby="planning-heading"
                                 data-error-context="items"
                                 noValidate
                                 onSubmit={(event) =>
                                   void updateTaskItems(event)
                                 }
                               >
-                                <h3>修改草稿任務的查核項目</h3>
                                 <fieldset
                                   aria-describedby={describedBy(
                                     `task-${task.id}-items-hint`,
@@ -2609,6 +2611,7 @@ function PlanningContent({
                             editingLocation?.task.id === task.id && (
                               <form
                                 onKeyDown={blockImeEnter}
+                                aria-labelledby="planning-heading"
                                 data-error-context="location"
                                 noValidate
                                 onSubmit={(event) => {
@@ -2642,7 +2645,6 @@ function PlanningContent({
                                   )
                                 }}
                               >
-                                <h3>修改任務地點</h3>
                                 {zones.length > 0 && !zonesDenied && (
                                   <div>
                                     <label>
@@ -2749,6 +2751,7 @@ function PlanningContent({
                             editingAssignee?.task.id === task.id && (
                               <form
                                 onKeyDown={blockImeEnter}
+                                aria-labelledby="planning-heading"
                                 data-error-context="assignee"
                                 onSubmit={(event) => {
                                   event.preventDefault()
@@ -2768,9 +2771,6 @@ function PlanningContent({
                                   )
                                 }}
                               >
-                                <h3 ref={assigneeFormHeading} tabIndex={-1}>
-                                  修改建議指派
-                                </h3>
                                 <label>
                                   建議指派人
                                   <select

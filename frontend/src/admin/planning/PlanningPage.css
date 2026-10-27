@@ -54,3 +54,8 @@
   display: inline-block;
   white-space: nowrap;
 }
+
+.planning-task-list {
+  list-style: none;
+  padding: 0;
+}
