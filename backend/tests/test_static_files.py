@@ -47,7 +47,7 @@ def test_missing_service_worker_is_not_cacheable(
 
 def test_runtime_base_path_rewrites_entry_and_manifest(tmp_path, monkeypatch):
     (tmp_path / "index.html").write_text(
-        '<head><script src="/assets/app.js"></script></head>'
+        '<head><script src="./assets/app.js"></script></head>'
         '<link href="/manifest.webmanifest">'
     )
     (tmp_path / "manifest.webmanifest").write_text(
@@ -72,3 +72,13 @@ def test_reject_invalid_base_path(monkeypatch):
     monkeypatch.setenv("INSPECTFLOW_BASE_PATH", '/bad"><script>')
     with pytest.raises(ValueError, match="INSPECTFLOW_BASE_PATH"):
         create_app()
+
+
+def test_root_deep_link_resolves_relative_build_assets(tmp_path, monkeypatch):
+    (tmp_path / "index.html").write_text(
+        '<head><script src="./assets/app.js"></script></head>'
+    )
+    monkeypatch.setenv("INSPECTFLOW_STATIC_DIR", str(tmp_path))
+    monkeypatch.delenv("INSPECTFLOW_BASE_PATH", raising=False)
+    response = TestClient(create_app()).get("/projects/new")
+    assert 'src="/assets/app.js"' in response.text

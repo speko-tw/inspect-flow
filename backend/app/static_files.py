@@ -60,9 +60,13 @@ class SPAStaticFiles(StaticFiles):
 
         if served_index:
             html = (self.static_directory / "index.html").read_text()
-            if self.base_path:
-                html = html.replace('src="/', f'src="{self.base_path}/')
-                html = html.replace('href="/', f'href="{self.base_path}/')
+            # DPL-R09：Vite 相對入口在深層頁也要從部署根目錄解析。
+            for attribute in ("src", "href"):
+                for prefix in ("/", "./"):
+                    html = html.replace(
+                        f'{attribute}="{prefix}',
+                        f'{attribute}="{self.base_path}/',
+                    )
             meta = (
                 '<meta name="inspectflow-base-path" '
                 f'content="{self.base_path}">'
