@@ -24,6 +24,7 @@ import { Notice } from '../../ui/Notice'
 import TemporaryPassword from '../TemporaryPassword'
 import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import './PeoplePage.css'
 
 interface DelegatePerson {
   id: string
@@ -267,7 +268,7 @@ function PeopleRoute({
         </Link>
       ) : null}
       {created && (
-        <section aria-label="建立完成">
+        <section aria-label="建立完成" className="account-created-result">
           <Notice>
             <h2>已新增{created.name_zh || created.username}的帳號</h2>
           </Notice>

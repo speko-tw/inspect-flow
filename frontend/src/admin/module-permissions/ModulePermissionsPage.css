@@ -56,6 +56,10 @@
   margin-block-start: var(--space-4);
 }
 
+.wizard-steps {
+  margin-block-end: var(--space-4);
+}
+
 .wizard-steps [aria-current='step'] {
   font-weight: 700;
 }
