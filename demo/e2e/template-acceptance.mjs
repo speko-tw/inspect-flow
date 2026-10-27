@@ -12,6 +12,9 @@ const work = process.env.DEMO_WORK_DIR ?? '/private/tmp/inspectflow-demo-e2e'
 const result = JSON.parse(
   await readFile(path.join(work, 'seed-result.json'), 'utf8'),
 )
+const planningMeasurements = []
+const planningButtonStates = []
+
 const browser = await chromium.launch({
   channel: 'chrome',
   headless: true,
@@ -244,6 +247,8 @@ try {
   // 測試產物跟隨隔離工作目錄，交付時再複製到指定位置。
   const shots = path.join(work, 'screenshots', 'project-items')
   await mkdir(shots, { recursive: true })
+  const planningShots = path.join(work, 'screenshots', 'planning')
+  await mkdir(planningShots, { recursive: true })
   const activationZones = await api(`/projects/${result.projects.B}/zones`)
   assert.equal(activationZones.status, 200)
   assert.ok(activationZones.data.items.length > 0)
@@ -360,9 +365,9 @@ try {
       }).click()
     }
     await page.getByRole('link', { name: '計畫與任務', exact: true }).click()
-    const activationPlanButton = page.locator('.plan-list').getByRole(
-      'button', { name: new RegExp(planName) },
-    )
+    const activationPlanButton = page
+      .locator('.plan-list')
+      .getByRole('link', { name: new RegExp(planName) })
     await activationPlanButton.waitFor()
     const activationPlanLabel = await activationPlanButton.innerText()
     assert.equal(
@@ -370,13 +375,195 @@ try {
       `${planName}（草稿）`.replace(/\s/g, ''),
     )
     process.stdout.write(JSON.stringify({ activationPlanLabel }) + '\n')
+    // IP-AC27～29：沿站內入口走過六種獨立頁，以真 Chrome 留證。
+    const planningShot = async (name) => {
+      await page.getByText('載入中…', { exact: true }).waitFor({
+        state: 'hidden',
+      })
+      const itemEdit = page.getByRole('button', {
+        name: '修改查核項目',
+        exact: true,
+      })
+      const buttonState = () =>
+        itemEdit.evaluate((el) => ({
+          classes: el.className,
+          hovered: el.matches(':hover'),
+          focused: el === document.activeElement,
+          focusVisible: el.matches(':focus-visible'),
+          background: getComputedStyle(el).backgroundColor,
+          outline: getComputedStyle(el).outlineStyle,
+        }))
+      const before = name === 'task-detail' ? await buttonState() : null
+      // 中性截圖移開指標並清掉按鈕焦點，避免把互動態誤當一般樣式。
+      const neutralize = async () => {
+        await page.mouse.move(0, 0)
+        await page.evaluate(() => {
+          const active = document.activeElement
+          if (active instanceof HTMLElement && active.matches('button,.btn')) {
+            active.blur()
+          }
+        })
+      }
+      await neutralize()
+      // 沿用主題驗收的字型與兩個 frame 等待，不在字型或版面更新中拍照。
+      const settled = async () => {
+        await page.evaluate(() => document.fonts.ready)
+        await page.evaluate(
+          () =>
+            new Promise((resolve) => {
+              requestAnimationFrame(() => requestAnimationFrame(resolve))
+            }),
+        )
+      }
+      await settled()
+      if (before) {
+        const settleButton = async () =>
+          page.waitForFunction(
+            (element) => element.getAnimations().length === 0,
+            await itemEdit.elementHandle(),
+          )
+        await settleButton()
+        const neutral = await buttonState()
+        await itemEdit.hover()
+        await settleButton()
+        const hover = await buttonState()
+        assert.notEqual(hover.background, neutral.background)
+        await neutralize()
+        await settleButton()
+        await itemEdit.focus()
+        const focus = await buttonState()
+        assert.equal(focus.background, neutral.background)
+        await neutralize()
+        await settled()
+        planningButtonStates.push({
+          width,
+          scheme,
+          before,
+          neutral,
+          hover,
+          focus,
+          screenshot: await buttonState(),
+        })
+      }
+      const root = page
+        .locator(
+          'section[aria-labelledby="planning-heading"], ' +
+            'section[aria-labelledby^="task-"]',
+        )
+        .first()
+      const measurement = await root.evaluate((root) => {
+        const visible = (el) =>
+          el.getClientRects().length > 0 &&
+          getComputedStyle(el).visibility !== 'hidden'
+        const controls = [...root.querySelectorAll('button,.btn')]
+          .filter(visible)
+          .filter((el) => !el.closest('[role="dialog"]'))
+          .map((el) => ({
+            text: el.textContent.trim(),
+            classes: el.className,
+            height: el.getBoundingClientRect().height,
+            fontWeight: Number(getComputedStyle(el).fontWeight),
+            kind: el.classList.contains('planning-plan-link')
+              ? 'row-link'
+              : el.classList.contains('btn-primary')
+                ? 'primary'
+                : el.classList.contains('btn-danger-outline')
+                  ? 'danger-outline'
+                  : el.classList.contains('btn-emphasis')
+                    ? 'emphasis'
+                    : el.classList.contains('btn-danger')
+                      ? 'danger'
+                      : 'secondary',
+          }))
+        return {
+          primaryCount: controls.filter((el) => el.kind === 'primary').length,
+          solidDangerCount: controls.filter((el) => el.kind === 'danger')
+            .length,
+          horizontalOverflow:
+            document.documentElement.scrollWidth > innerWidth,
+          controls,
+        }
+      })
+      assert.ok(measurement.primaryCount <= 1)
+      assert.equal(measurement.solidDangerCount, 0)
+      assert.equal(measurement.horizontalOverflow, false)
+      for (const control of measurement.controls) {
+        if (control.kind === 'primary') {
+          assert.ok(control.height >= 48, JSON.stringify(control))
+          assert.equal(control.fontWeight, 700)
+        } else {
+          if (control.kind === 'secondary') {
+            assert.equal(
+              Math.round(control.height),
+              44,
+              JSON.stringify(control),
+            )
+            assert.equal(control.fontWeight, 500)
+          } else {
+            // main 的 2px 外框變體字重 600，自然高度可大於 44px。
+            assert.ok(control.height >= 44, JSON.stringify(control))
+            if (control.kind !== 'row-link') {
+              assert.equal(control.fontWeight, 600)
+            }
+          }
+        }
+      }
+      planningMeasurements.push({
+        width,
+        scheme,
+        page: name,
+        url: page.url(),
+        ...measurement,
+      })
+      await page.evaluate(() => scrollTo(0, 0))
+      await page.screenshot({
+        path: path.join(planningShots, `${width}-${scheme}-${name}.png`),
+        fullPage: true,
+        animations: 'disabled',
+      })
+    }
+    await planningShot('plan-list')
+    await page.getByRole('link', { name: '建立計畫', exact: true }).click()
+    await page.getByLabel('計畫名稱', { exact: false }).waitFor()
+    await planningShot('plan-new')
+    await page
+      .getByLabel('計畫名稱', { exact: false })
+      .fill(`獨立頁計畫 ${width}`)
+    await page.getByRole('button', { name: '建立計畫', exact: true }).click()
+    await page
+      .getByRole('heading', {
+        name: `獨立頁計畫 ${width}`,
+        exact: true,
+      })
+      .waitFor()
+    await page.getByText('已建立計畫，接著新增任務。').waitFor()
+    await page.waitForFunction(() => history.state?.usr == null)
+    await page.reload()
+    assert.equal(await page.getByText('已建立計畫，接著新增任務。').count(), 0)
+    await page.goBack()
+    await activationPlanButton.waitFor()
     await activationPlanButton.click()
+    await page.getByRole('heading', { name: planName, exact: true }).waitFor()
+    const taskRow = page.getByRole('link', {
+      name: `保留停用項目 ${width}`,
+      exact: true,
+    })
+    assert.ok((await taskRow.boundingBox()).height >= 44)
+    await planningShot('plan-detail')
     await page.getByRole('button', { name: '＋ 新增任務' }).click()
+    await page.getByRole('button', { name: '建立草稿任務' }).waitFor()
+    await planningShot('task-new')
     const taskForm = page.locator('[data-error-context="task"]')
     assert.equal(
       await taskForm.locator(`input[value="${activationItem.id}"]`).count(),
       0,
     )
+    await taskForm.getByRole('button', { name: '取消', exact: true }).click()
+    await page
+      .getByRole('link', { name: `保留停用項目 ${width}`, exact: true })
+      .click()
+    await page.getByRole('button', { name: '修改地點', exact: true }).waitFor()
+    await planningShot('task-detail')
     const draftArticle = page.locator('article').filter({
       has: page.getByRole('heading', {
         name: new RegExp(`保留停用項目 ${width}`),
@@ -387,7 +574,80 @@ try {
       .locator('[data-error-context="items"]')
       .locator(`input[value="${activationItem.id}"]`)
     assert.equal(await retainedInput.isChecked(), true)
+    await planningShot('task-edit-items')
+    await page.reload()
+    assert.equal(await retainedInput.isChecked(), true)
+    await page
+      .locator('form')
+      .getByRole('button', { name: '取消', exact: true })
+      .click()
+    await page.getByRole('button', { name: '修改地點', exact: true }).click()
+    const locationForm = page.locator('[data-error-context="location"]')
+    await locationForm.getByLabel('補充地點').waitFor()
+    await planningShot('task-edit')
+    await locationForm.getByLabel('補充地點').fill(`北側 ${width}`)
+    await locationForm.getByRole('button', { name: '儲存地點' }).click()
+    await page.getByText('已更新任務地點。', { exact: true }).waitFor()
+    assert.equal((await api(taskPath)).data.location_text, `北側 ${width}`)
+    await page
+      .getByRole('button', { name: '修改建議指派', exact: true })
+      .click()
+    await page.locator('[data-error-context="assignee"]').waitFor()
+    await planningShot('task-edit-assignee')
+    await page
+      .locator('form')
+      .getByRole('button', { name: '取消', exact: true })
+      .click()
+
     assert.equal((await api(`${taskPath}:dispatch`, 'POST')).status, 200)
+    if (width === 1280) {
+      const planningBase = `/projects/${result.projects.B}/planning`
+      const pagePath = `${planningBase}/${plan.data.id}`
+      const taskPage = `${pagePath}/tasks/${draft.data.id}`
+      await page.goto(`${base}${taskPage}`)
+      await page.getByText('任務已派出，不能更換查核項目').waitFor()
+      await planningShot('task-dispatched')
+      assert.equal(
+        (await api(`/inspection-plans/${plan.data.id}:archive`, 'POST'))
+          .status,
+        200,
+      )
+      await page.goto(`${base}${pagePath}`)
+      await page
+        .getByText('計畫已封存。取消封存後才能新增、修改或派出任務。')
+        .waitFor()
+      await planningShot('plan-archived')
+      assert.equal(
+        (await api(`/inspection-plans/${plan.data.id}:unarchive`, 'POST'))
+          .status,
+        200,
+      )
+      let failDetail = true
+      const detailApi = `**/api/v1/inspection-plans/${plan.data.id}`
+      await page.route(detailApi, async (route) => {
+        if (failDetail && route.request().method() === 'GET') {
+          await route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: { code: 'unavailable' } }),
+          })
+        } else await route.continue()
+      })
+      await page.goto(`${base}${taskPage}`)
+      await page.getByRole('alert').waitFor()
+      await page.getByRole('button', { name: '重新載入' }).waitFor()
+      await planningShot('load-error')
+      failDetail = false
+      await page.getByRole('button', { name: '重新載入' }).click()
+      await page
+        .getByRole('heading', {
+          name: new RegExp(`保留停用項目 ${width}`),
+          level: 2,
+        })
+        .waitFor()
+      await page.unroute(detailApi)
+    }
+
     await page.goto(`${base}${itemBase}`)
     await page.getByText('已停用（1）', { exact: true }).click()
     await page
@@ -424,6 +684,11 @@ try {
       .status,
     200,
   )
+
+  await writeFile(path.join(work, 'planning-theme-measurements.json'),
+    JSON.stringify(planningMeasurements, null, 2) + '\n')
+  await writeFile(path.join(work, 'planning-button-states.json'),
+    JSON.stringify(planningButtonStates, null, 2) + '\n')
 
   process.stdout.write(JSON.stringify({
     result: 'PASS',

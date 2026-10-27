@@ -179,6 +179,31 @@ export const ROUTES = {
     title: PAGE_TITLES.projectPlanning,
     permission: 'project-access',
   },
+  projectPlanNew: {
+    path: '/projects/:projectId/planning/new',
+    title: '建立計畫',
+    permission: 'project-access',
+  },
+  projectPlan: {
+    path: '/projects/:projectId/planning/:planId',
+    title: '計畫詳情',
+    permission: 'project-access',
+  },
+  projectTaskNew: {
+    path: '/projects/:projectId/planning/:planId/tasks/new',
+    title: '新增任務',
+    permission: 'project-access',
+  },
+  projectTask: {
+    path: '/projects/:projectId/planning/:planId/tasks/:taskId',
+    title: '任務詳情',
+    permission: 'project-access',
+  },
+  projectTaskEdit: {
+    path: '/projects/:projectId/planning/:planId/tasks/:taskId/edit',
+    title: '修改任務',
+    permission: 'project-access',
+  },
   projectProgress: {
     path: '/projects/:projectId/progress',
     title: PAGE_TITLES.projectProgress,
@@ -288,6 +313,11 @@ const ACCESS_ROUTES: Array<{ route: ProductRoute; end: boolean }> = [
   { route: ROUTES.projectInspectionTemplates, end: true },
   { route: ROUTES.projectProgressTask, end: true },
   { route: ROUTES.projectProgress, end: true },
+  { route: ROUTES.projectPlanNew, end: true },
+  { route: ROUTES.projectTaskNew, end: true },
+  { route: ROUTES.projectTaskEdit, end: true },
+  { route: ROUTES.projectTask, end: true },
+  { route: ROUTES.projectPlan, end: true },
   { route: ROUTES.projectPlanning, end: true },
   { route: ROUTES.projectItemChange, end: true },
   { route: ROUTES.projectItems, end: true },
