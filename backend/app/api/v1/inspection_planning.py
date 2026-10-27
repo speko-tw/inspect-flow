@@ -1,7 +1,7 @@
 """提供 Plan、Task、分區及專案項目 API，統一權限與錯誤契約。
 
 涵蓋 IP-R01～IP-R14（含 IP-R11 dispatched_at）、
-IP-R18／IP-R19 的專案進度查詢與詳情，以及 IP-R30 workflow-summary。
+IP-R18／IP-R19 的專案進度查詢與詳情。
 """
 
 from __future__ import annotations

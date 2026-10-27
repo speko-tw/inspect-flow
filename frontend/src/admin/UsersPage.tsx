@@ -254,6 +254,9 @@ export default function UsersPage({
     message: string
   } | null>(null)
   const [externalNoProject, setExternalNoProject] = useState<User[]>([])
+  // ADM-R47：提醒保持精簡，兩組獨立展開完整清單。
+  const [showAllExternal, setShowAllExternal] = useState(false)
+  const [showAllUnmanaged, setShowAllUnmanaged] = useState(false)
   const [unmanagedProjects, setUnmanagedProjects] = useState<
     UnmanagedProject[]
   >([])
@@ -1115,29 +1118,57 @@ export default function UsersPage({
               {externalNoProject.length > 0 && (
                 <section aria-label="沒有參與專案的外部協作帳號">
                   <ul>
-                    {externalNoProject.map((user) => (
-                      <li key={user.id}>
-                        {user.name_zh || user.username}（{user.username}）
-                        {user.account_expires_on
-                          ? `，到期日 ${user.account_expires_on}`
-                          : ''}
-                      </li>
-                    ))}
+                    {externalNoProject
+                      .slice(0, showAllExternal ? undefined : 5)
+                      .map((user) => (
+                        <li key={user.id}>
+                          <Link to={`/accounts/${user.id}`}>
+                            {user.name_zh || user.username}（{user.username}）
+                          </Link>
+                          {user.account_expires_on
+                            ? `，到期日 ${user.account_expires_on}`
+                            : ''}
+                        </li>
+                      ))}
                   </ul>
+                  {externalNoProject.length > 5 && (
+                    <button
+                      aria-expanded={showAllExternal}
+                      onClick={() => setShowAllExternal(!showAllExternal)}
+                      type="button"
+                    >
+                      {showAllExternal
+                        ? '只看前 5 筆'
+                        : `查看全部（${externalNoProject.length}）`}
+                    </button>
+                  )}
                 </section>
               )}
               {unmanagedProjects.length > 0 && (
                 <section aria-label="沒有啟用管理成員的專案">
                   <ul>
-                    {unmanagedProjects.map((project) => (
-                      <li key={project.id}>
-                        <Link to={`/projects/${project.id}/members`}>
-                          {project.project_code}／{project.name}（
-                          {project.member_count} 位成員）
-                        </Link>
-                      </li>
-                    ))}
+                    {unmanagedProjects
+                      .slice(0, showAllUnmanaged ? undefined : 5)
+                      .map((project) => (
+                        <li key={project.id}>
+                          <Link to={`/projects/${project.id}/members`}>
+                            {project.project_code}／{project.name}（
+                            {project.member_count} 位成員）
+                          </Link>
+                        </li>
+                      ))}
                   </ul>
+                  {unmanagedProjects.length > 5 && (
+                    <button
+                      aria-expanded={showAllUnmanaged}
+                      onClick={() => setShowAllUnmanaged(!showAllUnmanaged)}
+                      type="button"
+                    >
+                      {showAllUnmanaged
+                        ? '只看前 5 筆'
+                        : `查看全部（${unmanagedProjects.length}）`}
+                    </button>
+                  )}
                 </section>
               )}
             </section>
@@ -1360,7 +1391,7 @@ export default function UsersPage({
                     {batchActivationPreview && (
                       <ConfirmBox
                         busy={batchActivationBusy}
-                        confirmDisabled={eligibleBatchCount === 0}
+                        hideConfirm={eligibleBatchCount === 0}
                         confirmLabel={
                           batchActivationBusy
                             ? '正在啟用帳號…'
@@ -1378,21 +1409,15 @@ export default function UsersPage({
                       >
                         {expiredBatchUsers.length > 0 && (
                           <div className="notice-warning" role="status">
-                            <p>
-                              {expiredBatchUsers.length} 個外部帳號已過到期日，
-                              這次不會啟用：
-                              {expiredBatchUsers
-                                .map((user) => user.name_zh || user.username)
-                                .join('、')}
-                            </p>
                             <ul>
                               {expiredBatchUsers.map((user) => (
                                 <li key={user.id}>
                                   <Link
                                     to={`/accounts/${user.id}?edit=expiry`}
                                   >
-                                    改到期日：{user.name_zh || user.username}
+                                    {user.name_zh || user.username}
                                   </Link>
+                                  已過到期日，不能啟用。請先改到期日，再回來啟用。
                                 </li>
                               ))}
                             </ul>
@@ -1755,7 +1780,7 @@ function UserDetailsForm({
       noValidate
       unexpectedErrorMessage="修改帳號失敗。請檢查資料後再試一次，或聯絡系統管理員。"
     >
-      <h3>修改帳號資料</h3>
+      <h3 className="account-edit-title">修改帳號資料</h3>
       <FormErrorSummary
         errors={Object.entries(fieldErrors).map(([field, message]) => ({
           fieldId:

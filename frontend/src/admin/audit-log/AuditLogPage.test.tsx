@@ -83,7 +83,7 @@ describe('稽核查詢頁', () => {
   it('人員清單失敗時仍以操作者快照顯示舊姓名與單位', async () => {
     mockFetch(undefined, undefined, () => Response.json({}, { status: 500 }))
     render(<AuditLogPage />)
-    expect(await screen.findByText('安娜．內部．甲公司')).toBeVisible()
+    expect(await screen.findByText('安娜．甲公司')).toBeVisible()
     expect(screen.getByRole('alert')).toHaveTextContent('篩選選項載入失敗')
     expect(screen.queryByText('未知帳號')).toBeNull()
     expect(screen.queryByText('帳號：anna')).toBeNull()
@@ -99,10 +99,9 @@ describe('稽核查詢頁', () => {
       await screen.findByRole('option', { name: '班 (ben)' }),
     ).toBeInTheDocument()
     expect(screen.getAllByText('甲專案 (P-1)')).toHaveLength(2)
-    expect(screen.getByText('安娜．內部．甲公司')).toBeVisible()
+    expect(screen.getByText('安娜．甲公司')).toBeVisible()
     expect(screen.getByText('帳號：anna')).toBeVisible()
     expect(screen.getByText('安娜新名 (anna)')).toBeVisible()
-    expect(screen.getByText('帳號：anna')).toBeVisible()
     const userRequests = fetcher.mock.calls
       .map(([input]) => new URL(String(input), 'http://localhost'))
       .filter((url) => url.pathname.endsWith('/users'))
@@ -217,6 +216,7 @@ describe('稽核查詢頁', () => {
     await waitFor(() =>
       expect(screen.getAllByText('帳號：anna')).toHaveLength(4),
     )
+    expect(screen.getAllByText('帳號：安娜新名 (anna)')).toHaveLength(2)
     expect(screen.getByText('角色：現場工程師')).toBeVisible()
     expect(screen.getByText('對象', { selector: 'dd' })).toBeVisible()
     // 收合的「改前與改後內容」是給稽核者看的原始資料，不在白話範圍。

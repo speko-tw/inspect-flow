@@ -232,4 +232,5 @@
 - 範圍變更（負責人指示，#717）：TPL-R27 改引用停用規則，新增 TPL-R28、TPL-AC32；細節為規格設計（非負責人裁定）。來源：[負責人指示（#717）](https://github.com/speko-tw/inspect-flow/issues/717)；[實作細節](https://github.com/speko-tw/inspect-flow/issues/717#issuecomment-6397735011)，細節為規格設計（非負責人裁定）。
 
 - 規格澄清（#742）：TPL-R27、TPL-AC30 的 `task_count` 只對 Admin 與同時具 `inspection.use`、`project_inspection_item.edit` 權限者回傳數字，其他讀取者回 `null` 且不執行引用聚合，與刪除操作的授權一致 — [#742](https://github.com/speko-tw/inspect-flow/issues/742)
-- 規格澄清（#728）：TPL-AC29 補上新序號為目標系統最大序號加 1，空系統從 1 開始.
+
+- 規格澄清（#728）：TPL-AC29 補上新序號為目標系統最大序號加 1，空系統從 1 開始。
