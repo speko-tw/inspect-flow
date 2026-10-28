@@ -6,6 +6,8 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -45,8 +47,112 @@ def volume_targets(service: dict[str, Any]) -> set[tuple[str, str, str]]:
     }
 
 
+def check_image_tags() -> None:
+    """直接執行 workflow 的驗證片段，避免測試與發布規則分歧。"""
+    workflow = (ROOT / ".github/workflows/publish-image.yml").read_text(
+        encoding="utf-8"
+    )
+    step = workflow.split("      - name: Validate image tag\n", 1)[1]
+    step = step.split("      - uses:", 1)[0]
+    require(
+        "          REF: ${{ github.ref }}\n" in step,
+        "手動發布必須以 github.ref 檢查來源分支。",
+    )
+    snippet = textwrap.dedent(
+        step.split("          python - <<'PY'\n", 1)[1].split(
+            "          PY\n", 1
+        )[0]
+    )
+    cases = (
+        ("push", "v0.5.2", "0.5.2", "refs/tags/v0.5.2", None),
+        ("push", "v0.5.2", "0.5.1", "refs/tags/v0.5.2", "version PR"),
+        ("push", "vlatest", "0.5.2", "refs/tags/vlatest", "release tags"),
+        ("push", "v1.2.3-rc", "0.5.2", "refs/tags/v1.2.3-rc", "release tags"),
+        (
+            "workflow_dispatch",
+            "pilot-test",
+            "0.5.2",
+            "refs/heads/topic",
+            "from main",
+        ),
+        ("workflow_dispatch", "pilot-test", "0.5.2", "refs/heads/main", None),
+        (
+            "workflow_dispatch",
+            "latest",
+            "0.5.2",
+            "refs/heads/main",
+            "release tags",
+        ),
+        (
+            "workflow_dispatch",
+            "1.2.3-rc",
+            "0.5.2",
+            "refs/heads/main",
+            "release tags",
+        ),
+        (
+            "workflow_dispatch",
+            "pilot-test",
+            "0.5.2",
+            "refs/tags/main",
+            "from main",
+        ),
+        ("push", "vpilot-test", "0.5.2", "refs/tags/vpilot-test", None),
+        ("push", "vbad/tag", "0.5.2", "refs/tags/vbad/tag", "invalid Docker"),
+        ("push", "0.5.2", "0.5.2", "refs/tags/0.5.2", "start with v"),
+    )
+    with tempfile.TemporaryDirectory(prefix="image-tag-check-") as tmp:
+        directory = Path(tmp)
+        for event, tag, version, ref, error in cases:
+            # VERSION 的空白也須與正式執行時採相同處理。
+            (directory / "VERSION").write_text(
+                f"  {version} \n", encoding="utf-8"
+            )
+            output = directory / "output"
+            output.write_text("", encoding="utf-8")
+            env = os.environ.copy()
+            env.update(
+                EVENT_NAME=event,
+                REF_NAME=tag,
+                REF=ref,
+                INPUT_TAG=tag,
+                GITHUB_OUTPUT=str(output),
+                GITHUB_SHA="1234567890abcdef",
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", snippet],
+                cwd=directory,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if error is None:
+                value = tag[1:] if event == "push" else tag
+                stable = str(event == "push" and tag == "v0.5.2").lower()
+                expected = f"commit=1234567\nvalue={value}\nstable={stable}\n"
+                require(
+                    result.returncode == 0
+                    and output.read_text(encoding="utf-8") == expected,
+                    f"{event} {tag} 應成功且輸出正確：{result.stderr}",
+                )
+            else:
+                require(
+                    result.returncode != 0
+                    and error in result.stderr
+                    and not output.read_text(encoding="utf-8"),
+                    f"{event} {tag} 應拒絕並說明原因：{result.stderr}",
+                )
+            print(
+                f"Image tag: {event} {tag} VERSION={version} {ref}: "
+                f"exit={result.returncode} PASS"
+            )
+    print("Image tag checks passed (no image published).")
+
+
 def main() -> int:
     """檢查預設具名 volume 與選用的主機資料夾 設定。"""
+    check_image_tags()
     env = os.environ.copy()
     env.update(
         {

@@ -59,7 +59,9 @@ class SPAStaticFiles(StaticFiles):
             served_index = True
 
         if served_index:
-            html = (self.static_directory / "index.html").read_text()
+            html = (self.static_directory / "index.html").read_text(
+                encoding="utf-8"
+            )
             # DPL-R09：Vite 相對入口在深層頁也要從部署根目錄解析。
             for attribute in ("src", "href"):
                 for prefix in ("/", "./"):
@@ -75,7 +77,7 @@ class SPAStaticFiles(StaticFiles):
             response = HTMLResponse(html)
         elif path == "manifest.webmanifest":
             manifest: dict[str, Any] = json.loads(
-                (self.static_directory / path).read_text()
+                (self.static_directory / path).read_text(encoding="utf-8")
             )
             manifest["start_url"] = f"{self.base_path}/tasks/"
             manifest["scope"] = f"{self.base_path}/"

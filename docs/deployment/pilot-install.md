@@ -70,6 +70,8 @@ cd inspectflow
 
 ### 子路徑 `/inspectflow/`
 
+優先使用專用主機名稱；與其他應用共用主機名稱時，只放受信任的應用，因為同源頁面的 XSS 可以呼叫 InspectFlow API。
+
 改下載同版 `deploy/nginx/inspectflow-subpath.conf.example`，並在 `.env` 設 `INSPECTFLOW_BASE_PATH=/inspectflow` 後重建容器：`docker compose up -d`。若同網域已有 `server` 區塊，只複製範例中的兩個 `location` 區塊到既有 HTTPS server，不要再建重複的 server。Nginx 將 `/inspectflow` 轉至 `/inspectflow/`，再剝掉前綴轉送。不要同時由代理與 app 各剝一次。
 
 同一個 image 在執行期注入入口資源、React Router basename、API 前綴與 manifest 的 start_url、scope、icons。深層網址重新整理也會使用絕對的部署前綴。因 `__Host-` 規則要求 Path=/，cookie 維持整個主機的 `/`，登出以同一路徑清除；同網域只部署一份 InspectFlow。現階段產品未註冊 service worker，沒有離線功能；本次保持停用，日後啟用時須一起驗證 scope。

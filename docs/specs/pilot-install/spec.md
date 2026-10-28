@@ -43,7 +43,7 @@
 | DPL-R04 | login cookie 必須永遠維持 `Secure`、`HttpOnly`、`SameSite=Strict`、`__Host-` 與 `Path=/`；不得提供關閉設定。 | 必須 | KD-30、#758 |
 | DPL-R05 | 主機 port 與綁定位址必須由 `.env` 設定；資料目錄可選具名 volume 或 bind mount，bind mount 由同一 Compose 讀取 `.env` 的主機路徑。 | 必須 | #758、負責人指示（2026-10-27） |
 | DPL-R06 | SPA 深層路由必須提供 `index.html`；未知 `/api` 路徑不得回傳前端頁面；`index.html` 與 `sw.js` 不得長期快取。 | 必須 | #758 |
-| DPL-R07 | 發布 workflow 必須只建置 `linux/amd64`；v-tag push 發布去除 `v` 的版本標籤，只有完整 `vX.Y.Z` 更新 `latest`；手動 tag 不得為 `latest` 或以數字三段版本開頭。 | 必須 | #758 |
+| DPL-R07 | 發布 workflow 必須只建置 `linux/amd64`；v-tag push 發布去除 `v` 的版本標籤，只有完整 `vX.Y.Z` 更新 `latest`；push tag 去除 `v` 後不得為 `latest`，以數字三段版本開頭者必須是完整 `vX.Y.Z`，且版號必須等於根目錄 `VERSION`（去除前後空白），否則須先合併版號 PR；手動發布只允許從 `refs/heads/main` 執行，tag 不得為 `latest` 或以數字三段版本開頭。 | 必須 | #758 |
 | DPL-R08 | SQLite 與預留的上傳路徑必須在 down/up、換 image 與 bind mount 重啟後保留資料。照片上傳功能尚未提供時另列未驗收。 | 必須 | KD-08、#758、負責人指示（2026-10-27） |
 | DPL-R09 | 同一 image 必須由執行期 `INSPECTFLOW_BASE_PATH` 支援根目錄及子路徑；Nginx 剝除前綴，入口資源、Router、API 與 manifest 必須一致。靜態 fallback 只處理 GET／HEAD，保留 API 405。 | 必須 | #758、負責人指示（2026-10-28） |
 
@@ -74,13 +74,15 @@
 | DPL-AC09 | 同一 image | 以 Nginx HTTPS 分別代理根目錄及 `/inspectflow/` | 首頁、深層網址、設定、登入、登出、建立專案及資源載入成功；cookie Secure；manifest 前綴一致 | DPL-R04、DPL-R09 |
 | DPL-AC10 | 已建資料 | 停機備份、變更資料、再還原 | 備份經 gzip 驗證後原子改名；還原前 gzip 與 tar 檢查均通過才刪除舊資料，壞備份須保留現有資料；還原後可讀回原資料，更新先停舊版，migration 成功才啟動 | DPL-R02、DPL-R08 |
 
-目前不註冊 service worker；沿用既有停用策略，不宣稱離線可用。cookie 維持 Path=/ 以符合 __Host- 限制；同一網域僅部署一份。完整 `pilot-deployment` 仍在 0.9.x，本規格僅為精簡子集。
+目前不註冊 service worker；沿用既有停用策略，不宣稱離線可用。cookie 維持 Path=/ 以符合 __Host- 限制；同一網域僅部署一份。優先使用專用主機名稱；與其他應用共用主機名稱時，只放受信任的應用，因為同源頁面的 XSS 可以呼叫 InspectFlow API。完整 `pilot-deployment` 仍在 0.9.x，本規格僅為精簡子集。
 
 ## 待釐清
 
 - 無。照片上傳依賴 `field-evidence`，不是本規格的驗收條件。
 
 ## 變更紀錄
+
+- 規格澄清（#768）：補明正式 tag 與 `VERSION` 比對、拒絕保留標籤與預發版覆蓋、手動發布僅限 main，以及共用主機名稱的同源信任邊界。
 
 - 範圍變更（負責人指示，2026-10-27，[#758](https://github.com/speko-tw/inspect-flow/issues/758)）：簡易部署提前至 0.6.x；照片 AC 改以其他產品資料寫入與重啟／換版持久性驗證，照片功能完成後另驗收；新增可設定主機連接埠、綁定位址與 bind mount。
 
