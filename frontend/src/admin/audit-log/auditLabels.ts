@@ -117,8 +117,9 @@ export function eventLabel(entry: AuditLogEntry): string {
 
 /**
  * 對象的白話描述，例如「帳號：安娜 (anna)」。權限、委派、成員這類
- * 紀錄真正受影響的是人，所以優先顯示那個帳號；其餘取紀錄內容的名稱
- * 欄位或專案清單。都查不到就只顯示對象類型，不顯示內部編號。
+ * 紀錄真正受影響的是人；有 name_zh 快照時優先使用，否則查目前人員
+ * 清單。其餘取紀錄內容的名稱欄位或專案清單；username 僅作名稱備援。
+ * 都查不到就只顯示對象類型，不顯示內部編號（ALG-R22）。
  */
 export function entityLabel(
   entry: AuditLogEntry,
@@ -129,12 +130,15 @@ export function entityLabel(
   },
 ): string {
   const payload = payloadOf(entry)
-  const person =
+  const snapshotPerson = typeof payload.name_zh === 'string' && payload.name_zh
+  const personId =
     entry.entity_type === 'user'
-      ? lookup.userName(entry.entity_id)
+      ? entry.entity_id
       : typeof payload.user_id === 'string'
-        ? lookup.userName(payload.user_id)
+        ? payload.user_id
         : null
+  const person =
+    snapshotPerson || (personId ? lookup.userName(personId) : null)
   if (person) {
     return `${entry.entity_type === 'project_member' ? '成員' : '帳號'}：${person}`
   }

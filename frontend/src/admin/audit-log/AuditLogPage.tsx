@@ -67,9 +67,8 @@ export default function AuditLogPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // 篩選選項與名稱對照一次載入：紀錄多數只存 id，紀錄內容有名稱欄位
-  // 時優先用，查不到才用這些清單在前端查表（ALG-R03，被記錄的對象
-  // 日後可能已刪除）。
+  // 篩選選項與對象名稱對照一次載入；操作者主行固定使用寫入時快照，
+  // 名單只提供登入名與沒有對象快照時的備援查找（ALG-R22）。
   useEffect(() => {
     let active = true
     void listAllPages<{ id: string; name: string }>('/roles')
@@ -185,8 +184,9 @@ export default function AuditLogPage() {
     return roles.find((role) => role.id === id)?.name ?? null
   }
 
-  function actorName(id: string): string {
-    return userName(id) ?? '未知帳號'
+  function accountUsername(id: string): string | null {
+    const user = users.find((candidate) => candidate.id === id)
+    return user?.username ?? null
   }
 
   // 內部編號不給人看：查不到名稱就回 null，由呼叫端決定怎麼說。
@@ -218,7 +218,12 @@ export default function AuditLogPage() {
             </div>
             <div>
               <dt>操作者</dt>
-              <dd>{actorName(entry.created_by)}</dd>
+              <dd className="audit-actor">
+                <span>{entry.actor_snapshot}</span>
+                {accountUsername(entry.created_by) && (
+                  <small>帳號：{accountUsername(entry.created_by)}</small>
+                )}
+              </dd>
             </div>
             <div>
               <dt>對象</dt>

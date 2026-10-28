@@ -363,6 +363,8 @@ export default defineConfig(({ mode, command, isPreview }) => {
   const { lanAccessPlugin, ...devServerOptions } = devHttps
 
   return {
+    // DPL-R09：動態預載以模組網址解析，避免綁死部署根目錄。
+    base: './',
     define: {
       __INSPECTFLOW_VERSION__: JSON.stringify(version),
       __INSPECTFLOW_COMMIT__: JSON.stringify(commit),

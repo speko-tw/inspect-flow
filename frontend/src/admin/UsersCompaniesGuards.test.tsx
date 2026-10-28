@@ -98,6 +98,18 @@ function stubBackend(
       name: string
     }>
     temporaryPassword?: string
+    externalNoProject?: Array<{
+      id: string
+      username: string
+      name_zh: string | null
+      account_expires_on: string | null
+    }>
+    unmanagedProjects?: Array<{
+      id: string
+      project_code: string
+      name: string
+      member_count: number
+    }>
   } = {},
 ) {
   const users = (options.users ?? [regularUser]).map((user) => ({ ...user }))
@@ -159,10 +171,16 @@ function stubBackend(
           })
         }
         if (call.path.includes('/external-without-project')) {
-          return Response.json({ items: [], next_cursor: null })
+          return Response.json({
+            items: options.externalNoProject ?? [],
+            next_cursor: null,
+          })
         }
         if (call.path.includes('/projects/unmanaged')) {
-          return Response.json({ items: [], next_cursor: null })
+          return Response.json({
+            items: options.unmanagedProjects ?? [],
+            next_cursor: null,
+          })
         }
         if (call.path.endsWith('/active-users')) {
           const companyId = call.path.split('/')[4]
@@ -328,6 +346,32 @@ describe('UsersPage 帳號詳情', () => {
         screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
       ).findByRole('option', { name: '示範公司' }),
     ).toBeVisible()
+  })
+
+  it('有提醒時進入清單便直接顯示，不需手動展開', async () => {
+    stubBackend({
+      externalNoProject: [
+        {
+          id: 'external-1',
+          username: 'outside',
+          name_zh: '外部人員',
+          account_expires_on: null,
+        },
+      ],
+      unmanagedProjects: [
+        {
+          id: 'project-1',
+          project_code: 'P-1',
+          name: '未管理專案',
+          member_count: 2,
+        },
+      ],
+    })
+    renderUsers()
+    expect(await screen.findByText(/提醒：/)).toBeVisible()
+    expect(screen.getByText('外部人員（outside）')).toBeVisible()
+    expect(screen.getByRole('link', { name: /P-1／未管理專案/ })).toBeVisible()
+    expect(screen.queryByRole('group')).toBeNull()
   })
 
   it('進入清單自動載入提醒，沒有提醒時整塊隱藏', async () => {
@@ -780,14 +824,14 @@ describe('UsersPage 批次停用帳號（#414）', () => {
     const box = await screen.findByRole('region', { name: '批次啟用確認' })
 
     expect(within(box).getByRole('status')).toHaveTextContent(
-      '1 個外部帳號已過到期日',
+      '鄧安娜已過到期日，不能啟用。請先改到期日，再回來啟用。',
     )
-    expect(
-      within(box).getByRole('link', { name: '改到期日：鄧安娜' }),
-    ).toHaveAttribute('href', '/accounts/user-1?edit=expiry')
-    expect(
-      within(box).getByRole('button', { name: '確認啟用其餘 0 個帳號' }),
-    ).toBeDisabled()
+    expect(within(box).getByRole('link', { name: '鄧安娜' })).toHaveAttribute(
+      'href',
+      '/accounts/user-1?edit=expiry',
+    )
+    expect(within(box).queryByRole('button', { name: /確認啟用/ })).toBeNull()
+    expect(within(box).getAllByText(/鄧安娜/)).toHaveLength(1)
     expect(backend.count('POST', /:batch-active-status$/)).toBe(0)
     expect(within(box).queryByText(/請逐一確認每個帳號要恢復/)).toBeNull()
     expect(within(box).queryByRole('group')).toBeNull()
@@ -833,6 +877,32 @@ describe.each(userFormCases)('$name 共用表單', (formCase) => {
       input: within(button.closest('form')!).getByLabelText(formCase.input),
     }
   }
+
+  it('存檔失敗後取消再開表單會清除舊錯誤', async () => {
+    const backend = stubBackend({
+      fail: (call) =>
+        call.method === formCase.method && call.path === formCase.path,
+    })
+    renderUsers({ detailUserId: 'user-1' })
+    const section = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
+    fireEvent.click(
+      within(section).getByRole('button', { name: formCase.open }),
+    )
+    const button = await screen.findByRole('button', { name: formCase.button })
+    const form = button.closest('form')!
+    formCase.prepare(within(form).getByLabelText(formCase.input))
+    fireEvent.click(button)
+    await screen.findByRole('alert')
+    fireEvent.click(within(form).getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(section).getByRole('button', { name: formCase.open }),
+    )
+    await screen.findByRole('button', { name: formCase.button })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(backend.count(formCase.method, formCase.path)).toBe(1)
+  })
 
   it('實際修改欄位會攔截 beforeunload', async () => {
     const { form, input } = await openForm()
@@ -2115,11 +2185,12 @@ it('批次啟用排除到期者，警示附編輯連結且只送出其餘帳號'
   fireEvent.click(within(area).getByRole('button', { name: '批次啟用帳號' }))
   const box = await within(area).findByRole('region', { name: '批次啟用確認' })
   expect(within(box).getByRole('status')).toHaveTextContent(
-    '1 個外部帳號已過到期日',
+    '鄧安娜已過到期日，不能啟用。請先改到期日，再回來啟用。',
   )
-  expect(
-    within(box).getByRole('link', { name: '改到期日：鄧安娜' }),
-  ).toHaveAttribute('href', '/accounts/user-1?edit=expiry')
+  expect(within(box).getByRole('link', { name: '鄧安娜' })).toHaveAttribute(
+    'href',
+    '/accounts/user-1?edit=expiry',
+  )
   expect(within(box).getAllByRole('group')).toHaveLength(1)
   fireEvent.click(
     within(box).getByRole('button', {
@@ -2824,4 +2895,44 @@ it('帳號詳情：資料寫入中互鎖停用、重設及儲存，完成後恢�
   expect(screen.getByRole('button', { name: '重設臨時密碼' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: '修改資料' }))
   expect(screen.getByRole('button', { name: '儲存資料' })).toBeEnabled()
+})
+
+it('提醒每組先列五筆，提供帳號連結並能查看全部', async () => {
+  stubBackend({
+    externalNoProject: Array.from({ length: 7 }, (_, i) => ({
+      id: `external-${i}`,
+      username: `outside${i}`,
+      name_zh: `外部人員${i}`,
+      account_expires_on: null,
+    })),
+    unmanagedProjects: Array.from({ length: 6 }, (_, i) => ({
+      id: `project-${i}`,
+      project_code: `P-${i}`,
+      name: `未管理專案${i}`,
+      member_count: 2,
+    })),
+  })
+  renderUsers()
+  const reminders = await screen.findByRole('region', { name: '提醒' })
+  const external = within(reminders).getByRole('region', {
+    name: '沒有參與專案的外部協作帳號',
+  })
+  const projects = within(reminders).getByRole('region', {
+    name: '沒有啟用管理成員的專案',
+  })
+  expect(within(external).getAllByRole('listitem')).toHaveLength(5)
+  expect(within(projects).getAllByRole('listitem')).toHaveLength(5)
+  expect(
+    within(external).getByRole('link', { name: '外部人員0（outside0）' }),
+  ).toHaveAttribute('href', '/accounts/external-0')
+  expect(within(external).queryByText(/外部人員5/)).toBeNull()
+  fireEvent.click(
+    within(external).getByRole('button', { name: '查看全部（7）' }),
+  )
+  expect(within(external).getAllByRole('listitem')).toHaveLength(7)
+  expect(within(projects).getAllByRole('listitem')).toHaveLength(5)
+  fireEvent.click(
+    within(projects).getByRole('button', { name: '查看全部（6）' }),
+  )
+  expect(within(projects).getAllByRole('listitem')).toHaveLength(6)
 })

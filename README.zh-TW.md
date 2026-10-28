@@ -122,4 +122,5 @@ make run-frontend-https  # 以 HTTPS 啟動前端
 
 ## 文件
 
+- [Docker 簡易試用部署](docs/deployment/pilot-install.md)
 - [設計意圖（Design Intents）](docs/intents/README.md)：說明 InspectFlow 為什麼這樣設計，包含總覽與架構圖、設計原則、關鍵決策與技術棧、名詞對照，以及待決議事項。
