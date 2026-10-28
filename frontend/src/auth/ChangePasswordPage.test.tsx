@@ -174,9 +174,32 @@ describe('全無權限帳號的設定落點（role-tasks.md）', () => {
 
     await screen.findByRole('heading', { name: '請先設定新密碼' })
     expect(screen.getByRole('status')).toHaveTextContent(
-      '尚未開通任何功能，請洽系統管理者',
+      '你的帳號尚未開通任何功能，請洽系統管理者開通。',
     )
     expect(screen.getByLabelText(/^(目前密碼|臨時密碼)$/)).toBeVisible()
+  })
+
+  it('顯示密碼勾選同時切換三個欄位，取消後恢復隱藏', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(TEMP_PASSWORD_USER)),
+    )
+    renderPage()
+    const toggle = await screen.findByRole('checkbox', { name: '顯示密碼' })
+    const fields = [
+      'change-password-current',
+      'change-password-new',
+      'change-password-confirm',
+    ].map((id) => document.getElementById(id)!)
+    fields.forEach((field) =>
+      expect(field).toHaveAttribute('type', 'password'),
+    )
+    fireEvent.click(toggle)
+    fields.forEach((field) => expect(field).toHaveAttribute('type', 'text'))
+    fireEvent.click(toggle)
+    fields.forEach((field) =>
+      expect(field).toHaveAttribute('type', 'password'),
+    )
   })
 
   it('不對仍有功能權限、只是開啟設定的帳號顯示說明', async () => {
@@ -187,7 +210,9 @@ describe('全無權限帳號的設定落點（role-tasks.md）', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: '請先設定新密碼' })
-    expect(screen.queryByText('尚未開通任何功能，請洽系統管理者')).toBeNull()
+    expect(
+      screen.queryByText('你的帳號尚未開通任何功能，請洽系統管理者開通。'),
+    ).toBeNull()
   })
 })
 

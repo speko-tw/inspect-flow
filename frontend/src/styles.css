@@ -2525,3 +2525,47 @@ output.temporary-password {
 .tpl-detail-list button {
   justify-content: flex-start;
 }
+
+.access-denied-heading {
+  font-size: var(--font-size-heading);
+}
+
+.diagnostic-role-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.settings-no-access {
+  text-wrap: balance;
+}
+
+.settings-show-password {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-logout {
+  margin-block-start: var(--space-8);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--border);
+}
+
+.people-account-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-2);
+}
+
+.people-account-search label {
+  flex: 1 1 12rem;
+}
+
+@media (max-width: 40rem) {
+  .tpl-name-form .tpl-actions > .tpl-hint {
+    display: none;
+  }
+}

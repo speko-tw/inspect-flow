@@ -947,7 +947,7 @@ export default function UsersPage({
                   onClick={() => toggleAdmin(detail)}
                   type="button"
                 >
-                  {detail.is_admin ? '收回管理者' : '指派管理者'}
+                  {detail.is_admin ? '收回管理者' : '設為系統管理者'}
                 </button>
                 <button
                   className={

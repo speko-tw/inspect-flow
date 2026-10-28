@@ -1550,7 +1550,14 @@ function ModulePermissionsPageContent({
             : '',
         roleMessage:
           diagnostic.action === 'manage_project_members'
-            ? '這個專案裡沒有可以管理成員的角色。'
+            ? selected && projects.find((row) => row.id === diagnosticProject)
+              ? `${selected.name_zh || selected.username}在「${
+                  projects.find((row) => row.id === diagnosticProject)?.name
+                }」的角色（${
+                  access.project_roles?.map((role) => role.name).join('、') ||
+                  '未指派角色'
+                }）不能管理成員。`
+              : '目前的專案角色不能管理成員。'
             : '這個專案裡沒有可以查看或執行任務的角色。',
         nonmember: false,
       })
@@ -1716,6 +1723,14 @@ function ModulePermissionsPageContent({
     }
   }
 
+  const hasGrants = accessDraft.some((code) => !userAccess.includes(code))
+  const hasRevokes = userAccess.some((code) => !accessDraft.includes(code))
+  const accessChangeLabel = hasGrants
+    ? hasRevokes
+      ? '套用變更'
+      : '開通所選權限'
+    : '收回所選權限'
+
   const revokePanel = revoke && (
     <ConfirmBox
       title="確認收回權限"
@@ -1730,9 +1745,10 @@ function ModulePermissionsPageContent({
       role="region"
     >
       <p>
-        對象：
-        {permissions.find((item) => item.code === revoke.code)?.description ??
-          revoke.code}
+        要收回的權限：
+        {permissions
+          .find((item) => item.code === revoke.code)
+          ?.description.replace('模組', '功能') ?? revoke.code}
       </p>
       <p>
         影響 {revoke.impact.membership_count}{' '}
@@ -1780,17 +1796,24 @@ function ModulePermissionsPageContent({
               />
             </div>
           ))}
-          <Button
-            disabled={busy || !selectedCandidateRole}
-            onClick={() => void repairDiagnosticRole()}
-          >
-            指派所選角色
-          </Button>
+          <div className="diagnostic-role-actions">
+            <Button
+              disabled={busy || !selectedCandidateRole}
+              onClick={() => void repairDiagnosticRole()}
+            >
+              指派所選角色
+            </Button>
+            <Link to={`/projects/${diagnosticProject}/members`}>
+              前往專案成員設定
+            </Link>
+          </div>
         </>
       )}
-      <Link to={`/projects/${diagnosticProject}/members`}>
-        前往專案成員設定
-      </Link>
+      {safeCandidateRole && (
+        <Link to={`/projects/${diagnosticProject}/members`}>
+          前往專案成員設定
+        </Link>
+      )}
     </section>
   ) : (
     <Link to={`/projects/${diagnosticProject}/members`}>前往專案成員設定</Link>
@@ -1833,6 +1856,7 @@ function ModulePermissionsPageContent({
               </>
             )}
           <fieldset disabled={busy || !capabilitySummaryReady}>
+            <legend>可開通的功能</legend>
             {visiblePermissions.map((item) => (
               <label key={item.code}>
                 <input
@@ -1860,7 +1884,7 @@ function ModulePermissionsPageContent({
                   void submitAccessDraft()
                 }}
               >
-                開通
+                {accessChangeLabel}
               </Button>
             )}
           {operationFeedback('access')}
@@ -1872,7 +1896,7 @@ function ModulePermissionsPageContent({
           {step === 4 ? (
             <section aria-label="建立完成">
               <h2>
-                {existingAccount ? '職務已套用' : `已新增${createdName}的帳號`}
+                {existingAccount ? '職務已套用' : `已建立帳號：${createdName}`}
               </h2>
               {/* 臨時密碼離開就看不到，所以放在標題正下方最先看到。 */}
               {!existingAccount && (
@@ -2469,7 +2493,7 @@ function ModulePermissionsPageContent({
                         void submitAccessDraft()
                       }}
                     >
-                      開通
+                      {accessChangeLabel}
                     </Button>
                   )}
                 </>
@@ -2545,7 +2569,7 @@ function ModulePermissionsPageContent({
             )}
           <div aria-label="帳號能力摘要" role="region">
             <p role="status">
-              能使用：
+              可使用功能：
               {capabilitySummaryLoading
                 ? '載入中…'
                 : capabilitySummaryError
@@ -2557,7 +2581,9 @@ function ModulePermissionsPageContent({
                       : permissions
                           .filter((item) => userAccess.includes(item.code))
                           .map((item) =>
-                            item.description.replace('模組', '功能'),
+                            item.description
+                              .replace('模組', '功能')
+                              .replace(/^使用/, ''),
                           )
                           .join('、') || '尚未開通功能。'}
             </p>

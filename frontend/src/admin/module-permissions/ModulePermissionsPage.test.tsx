@@ -1028,6 +1028,7 @@ describe('ModulePermissionsPage', () => {
       delegateMode: true,
     })
     await screen.findByRole('heading', { name: '權限' })
+    expect(screen.getByRole('group', { name: '可開通的功能' })).toBeVisible()
     const checkbox = await screen.findByLabelText('使用專案功能')
     fireEvent.click(checkbox)
     expect(
@@ -1037,7 +1038,7 @@ describe('ModulePermissionsPage', () => {
       ),
     ).toHaveLength(0)
 
-    fireEvent.click(screen.getByRole('button', { name: '開通' }))
+    fireEvent.click(screen.getByRole('button', { name: '開通所選權限' }))
 
     expect(
       await within(
@@ -1089,7 +1090,7 @@ describe('ModulePermissionsPage', () => {
     ).toBeVisible()
     expect(screen.getByLabelText('使用專案功能')).toBeDisabled()
     // 沒有可改的草稿，「開通」按鈕不會出現。
-    expect(screen.queryByRole('button', { name: '開通' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '開通所選權限' })).toBeNull()
     expect(
       calls.filter((call) => call.path === '/users/person/module-permissions'),
     ).toHaveLength(1)
@@ -1163,7 +1164,9 @@ describe('ModulePermissionsPage', () => {
         }),
       )
     })
-    expect(await within(summary).findByText(/使用查核功能/)).toBeVisible()
+    expect(
+      await within(summary).findByText(/可使用功能：查核功能/),
+    ).toBeVisible()
   })
 
   it('retries only the failed permission catalog and clears its error', async () => {
@@ -1231,7 +1234,7 @@ describe('ModulePermissionsPage', () => {
       name: '帳號能力摘要',
     })
     expect(
-      await within(summaryForB).findByText(/能使用：使用專案功能/),
+      await within(summaryForB).findByText(/可使用功能：專案功能/),
     ).toBeVisible()
     await act(async () => {
       first.resolve(
@@ -1244,7 +1247,7 @@ describe('ModulePermissionsPage', () => {
     const currentSummary = screen.getByRole('region', {
       name: '帳號能力摘要',
     })
-    expect(currentSummary).toHaveTextContent('能使用：使用專案功能')
+    expect(currentSummary).toHaveTextContent('可使用功能：專案功能')
     expect(currentSummary).not.toHaveTextContent('使用查核功能')
   })
 
@@ -1647,7 +1650,7 @@ describe('ModulePermissionsPage', () => {
       applyResponse.resolve(Response.json({ granted_codes: ['project.use'] }))
       await applyResponse.promise
     })
-    expect(await screen.findByRole('heading', { name: '已新增林沐青的帳號' }))
+    expect(await screen.findByRole('heading', { name: '已建立帳號：林沐青' }))
   })
 
   it('retries only unfinished setup steps after account creation', async () => {
@@ -1678,7 +1681,7 @@ describe('ModulePermissionsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '重試未完成的步驟' }))
 
     expect(
-      await screen.findByRole('heading', { name: '已新增林沐青的帳號' }),
+      await screen.findByRole('heading', { name: '已建立帳號：林沐青' }),
     ).toBeVisible()
     expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
       'temporary-secret',
@@ -1705,7 +1708,7 @@ describe('ModulePermissionsPage', () => {
     await chooseProfile('內業規劃')
     fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
     expect(
-      await screen.findByRole('heading', { name: '已新增林沐青的帳號' }),
+      await screen.findByRole('heading', { name: '已建立帳號：林沐青' }),
     ).toBeVisible()
 
     fireEvent.click(screen.getByRole('button', { name: '新增另一個帳號' }))
@@ -1714,7 +1717,7 @@ describe('ModulePermissionsPage', () => {
       'temporary-secret',
     )
     expect(
-      screen.getByRole('heading', { name: '已新增林沐青的帳號' }),
+      screen.getByRole('heading', { name: '已建立帳號：林沐青' }),
     ).toBeVisible()
 
     confirmedAction?.()
@@ -1739,7 +1742,7 @@ describe('ModulePermissionsPage', () => {
     await chooseProfile('內業規劃')
     fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
     expect(
-      await screen.findByRole('heading', { name: '已新增林沐青的帳號' }),
+      await screen.findByRole('heading', { name: '已建立帳號：林沐青' }),
     ).toBeVisible()
 
     fireEvent.click(screen.getByRole('button', { name: '回清單' }))
@@ -1768,7 +1771,7 @@ describe('ModulePermissionsPage', () => {
     await chooseProfile('內業規劃')
     fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
     expect(
-      await screen.findByRole('heading', { name: '已新增林沐青的帳號' }),
+      await screen.findByRole('heading', { name: '已建立帳號：林沐青' }),
     ).toBeVisible()
 
     fireEvent.click(screen.getByRole('button', { name: '查看這個帳號的能力' }))
@@ -1799,7 +1802,7 @@ describe('ModulePermissionsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '重試未完成的步驟' }))
 
     expect(
-      await screen.findByRole('heading', { name: '已新增林沐青的帳號' }),
+      await screen.findByRole('heading', { name: '已建立帳號：林沐青' }),
     ).toBeVisible()
     expect(
       calls.filter((call) => call.method === 'POST' && call.path === '/users'),
@@ -1837,7 +1840,7 @@ describe('ModulePermissionsPage', () => {
         '這個帳號已經是此專案的成員。',
       )
       expect(
-        screen.queryByRole('heading', { name: '已新增林沐青的帳號' }),
+        screen.queryByRole('heading', { name: '已建立帳號：林沐青' }),
       ).toBeNull()
       expect(
         calls.filter(
@@ -1871,7 +1874,7 @@ describe('ModulePermissionsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(
-      await screen.findByRole('heading', { name: '已新增林沐青的帳號' }),
+      await screen.findByRole('heading', { name: '已建立帳號：林沐青' }),
     ).toBeVisible()
     expect(
       calls.some(
@@ -2150,8 +2153,8 @@ describe('ModulePermissionsPage', () => {
       permissionCodes: ['project.use'],
     })
     await screen.findByRole('heading', { name: '能做什麼' })
-    await screen.findByText(/能使用：/)
-    const summaryText = /能使用：/
+    await screen.findByText(/可使用功能：/)
+    const summaryText = /可使用功能：/
     const capabilitySummary = await screen.findByText(summaryText)
     expect(capabilitySummary).toBeVisible()
     const advancedSummary = screen.getByText('進階設定')
@@ -2177,7 +2180,7 @@ describe('ModulePermissionsPage', () => {
           call.method === 'PUT' && call.path.endsWith('/inspection.use'),
       ),
     ).toBe(false)
-    fireEvent.click(screen.getAllByRole('button', { name: '開通' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: '開通所選權限' })[0])
     await waitFor(() =>
       expect(
         calls.some(
@@ -2199,7 +2202,7 @@ describe('ModulePermissionsPage', () => {
       ),
     ).toBe(false)
     fireEvent.click(
-      within(permissionsPanel).getByRole('button', { name: '開通' }),
+      within(permissionsPanel).getByRole('button', { name: '收回所選權限' }),
     )
     expect(
       await screen.findByRole('heading', {
@@ -2229,8 +2232,8 @@ describe('ModulePermissionsPage', () => {
   it('diagnoses module and project-role layers before allowing task access', async () => {
     const { calls } = permissionPage({ openWizard: false })
     await screen.findByRole('heading', { name: '能做什麼' })
-    await screen.findByText(/能使用：/)
-    expect(await screen.findByText(/能使用：/)).toBeVisible()
+    await screen.findByText(/可使用功能：/)
+    expect(await screen.findByText(/可使用功能：/)).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -2291,8 +2294,8 @@ describe('ModulePermissionsPage', () => {
   it('shows the diagnosis result after the check button', async () => {
     permissionPage({ openWizard: false })
     await screen.findByRole('heading', { name: '能做什麼' })
-    await screen.findByText(/能使用：/)
-    expect(await screen.findByText(/能使用：/)).toBeVisible()
+    await screen.findByText(/可使用功能：/)
+    expect(await screen.findByText(/可使用功能：/)).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -2320,8 +2323,8 @@ describe('ModulePermissionsPage', () => {
       permissionCodes: ['inspection.use'],
     })
     await screen.findByRole('heading', { name: '能做什麼' })
-    await screen.findByText(/能使用：/)
-    expect(await screen.findByText(/能使用：/)).toBeVisible()
+    await screen.findByText(/可使用功能：/)
+    expect(await screen.findByText(/可使用功能：/)).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -2332,7 +2335,7 @@ describe('ModulePermissionsPage', () => {
     ).toBeVisible()
     expect(
       screen.getByRole('region', { name: '帳號能力摘要' }),
-    ).toHaveTextContent('能使用：使用查核功能')
+    ).toHaveTextContent('可使用功能：查核功能')
     const candidateChooser = screen.getByRole('region', {
       name: '可選專案角色',
     })
@@ -2379,8 +2382,8 @@ describe('ModulePermissionsPage', () => {
       permissionCodes: ['inspection.use'],
     })
     await screen.findByRole('heading', { name: '能做什麼' })
-    await screen.findByText(/能使用：/)
-    expect(await screen.findByText(/能使用：/)).toBeVisible()
+    await screen.findByText(/可使用功能：/)
+    expect(await screen.findByText(/可使用功能：/)).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -2391,7 +2394,7 @@ describe('ModulePermissionsPage', () => {
     ).toBeVisible()
     expect(
       screen.getByRole('region', { name: '帳號能力摘要' }),
-    ).toHaveTextContent('能使用：使用查核功能')
+    ).toHaveTextContent('可使用功能：查核功能')
     expect(screen.queryByRole('button', { name: '指派所選角色' })).toBeNull()
   })
 
@@ -2441,7 +2444,7 @@ describe('ModulePermissionsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(
-      await screen.findByRole('heading', { name: '已新增林沐青的帳號' }),
+      await screen.findByRole('heading', { name: '已建立帳號：林沐青' }),
     ).toBeVisible()
     const memberWrite = calls.find(
       (call) => call.path.endsWith('/members') && call.method === 'POST',
@@ -2460,8 +2463,8 @@ describe('ModulePermissionsPage', () => {
       permissionCodes: ['inspection.use'],
     })
     await screen.findByRole('heading', { name: '能做什麼' })
-    await screen.findByText(/能使用：/)
-    expect(await screen.findByText(/能使用：/)).toBeVisible()
+    await screen.findByText(/可使用功能：/)
+    expect(await screen.findByText(/可使用功能：/)).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -2488,7 +2491,7 @@ describe('ModulePermissionsPage', () => {
       permissionCodes: ['inspection.use'],
     })
     await screen.findByRole('heading', { name: '能做什麼' })
-    await screen.findByText(/能使用：/)
+    await screen.findByText(/可使用功能：/)
     const link = await screen.findByRole('link', { name: 'PR-1／示範工程' })
     expect(link.closest('li')).toHaveTextContent('：專案工程師')
     expect(link.closest('li')).not.toHaveTextContent('現場工程師')
@@ -2516,7 +2519,7 @@ describe('ModulePermissionsPage', () => {
       permissionCodes: ['inspection.use'],
     })
     await screen.findByRole('heading', { name: '能做什麼' })
-    await screen.findByText(/能使用：/)
+    await screen.findByText(/可使用功能：/)
     expect(await screen.findByText('目前沒有參與專案。')).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
@@ -2543,8 +2546,8 @@ describe('ModulePermissionsPage', () => {
       permissionCodes: ['inspection.use'],
     })
     await screen.findByRole('heading', { name: '能做什麼' })
-    await screen.findByText(/能使用：/)
-    expect(await screen.findByText(/能使用：/)).toBeVisible()
+    await screen.findByText(/可使用功能：/)
+    expect(await screen.findByText(/可使用功能：/)).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -2691,6 +2694,11 @@ describe('ModulePermissionsPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '檢查' }))
 
+    expect(
+      await screen.findByText(
+        '缺少專案管理功能的權限；林沐青在「示範工程」的角色（目前角色）不能管理成員。',
+      ),
+    ).toBeVisible()
     const chooser = await screen.findByRole('region', {
       name: '可選專案角色',
     })
@@ -2748,7 +2756,7 @@ describe('帳號審查修正（#414）', () => {
       selectedUserId: 'person',
       permissionCodes: ['project.use'],
     })
-    await screen.findByText(/能使用：使用專案功能/)
+    await screen.findByText(/可使用功能：專案功能/)
     const accessCalls = () =>
       calls.filter((c) => c.path === '/users/person/module-permissions').length
     const beforeApply = accessCalls()
@@ -2765,7 +2773,7 @@ describe('帳號審查修正（#414）', () => {
     fireEvent.click(screen.getByRole('button', { name: '查看這個帳號的能力' }))
     const summary = await screen.findByRole('region', { name: '帳號能力摘要' })
     await waitFor(() => expect(summary).not.toHaveTextContent('載入中'))
-    expect(summary).toHaveTextContent('使用專案功能')
+    expect(summary).toHaveTextContent('可使用功能：專案功能')
     const select = within(summary).getByLabelText('專案')
     await within(select).findByRole('option', { name: '示範工程' })
     fireEvent.change(select, { target: { value: 'project-1' } })
@@ -2986,8 +2994,8 @@ describe('#727 診斷錯誤白話', () => {
         )
       },
     })
-    await screen.findByText(/能使用：/)
-    await screen.findByText(/能使用：/)
+    await screen.findByText(/可使用功能：/)
+    await screen.findByText(/可使用功能：/)
     fireEvent.change(await screen.findByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -3015,8 +3023,8 @@ describe('#727 診斷錯誤白話', () => {
 
 describe('#734 T5/T6 診斷區塊與完整缺口', () => {
   async function openDiagnostic() {
-    await screen.findByText(/能使用：/)
-    await screen.findByText(/能使用：/)
+    await screen.findByText(/可使用功能：/)
+    await screen.findByText(/可使用功能：/)
     const area = screen.getByRole('region', {
       name: '為什麼他不能做這件事？',
     })
@@ -3237,8 +3245,8 @@ it('T5：較晚回來的舊問題不能覆蓋目前區塊的診斷', async () =>
     finish = resolve
   })
   permissionPage({ openWizard: false, diagnosticResponse: () => delayed })
-  await screen.findByText(/能使用：/)
-  await screen.findByText(/能使用：/)
+  await screen.findByText(/可使用功能：/)
+  await screen.findByText(/可使用功能：/)
   const area = screen.getByRole('region', {
     name: '為什麼他不能做這件事？',
   })
@@ -3269,8 +3277,8 @@ it('T5：較晚回來的舊問題不能覆蓋目前區塊的診斷', async () =>
 describe('#734 T7 其他權限寫入的就近回饋', () => {
   async function prepare() {
     permissionPage({ openWizard: false })
-    await screen.findByText(/能使用：/)
-    await screen.findByText(/能使用：/)
+    await screen.findByText(/可使用功能：/)
+    await screen.findByText(/可使用功能：/)
     const summary = screen.getByText('進階設定', { selector: 'summary' })
     const details = summary.closest('details') as HTMLDetailsElement
     if (!details.open) fireEvent.click(summary)
@@ -3284,7 +3292,7 @@ describe('#734 T7 其他權限寫入的就近回饋', () => {
       selectedUserId: 'person',
       openWizard: false,
     })
-    await screen.findByText(/能使用：/)
+    await screen.findByText(/可使用功能：/)
     fireEvent.click(screen.getByText('進階設定', { selector: 'summary' }))
     const row = (
       await screen.findByText('公司主管', { selector: 'span' })
@@ -3352,7 +3360,7 @@ it('T6 直接補救只送 API 需求差集，不提交或遺失其他權限草�
       })
     },
   })
-  await screen.findByText(/能使用：/)
+  await screen.findByText(/可使用功能：/)
   fireEvent.click(screen.getByText('進階設定', { selector: 'summary' }))
   const access = await screen.findByRole('region', { name: '已設定的權限' })
   const draft = within(access).getByLabelText('管理範本庫')
@@ -3390,7 +3398,7 @@ it('診斷缺功能後套用組合會自動重查，缺口與開通鈕消失', a
     selectedUserId: 'person',
     memberRoleIds: ['field-role'],
   })
-  await screen.findByText(/能使用：/)
+  await screen.findByText(/可使用功能：/)
   const area = screen.getByRole('region', {
     name: '為什麼他不能做這件事？',
   })
@@ -3445,8 +3453,8 @@ it.each([['inspection.use'], []])(
           ],
         }),
     })
-    await screen.findByText(/能使用：/)
-    await screen.findByText(/能使用：/)
+    await screen.findByText(/可使用功能：/)
+    await screen.findByText(/可使用功能：/)
     const area = screen.getByRole('region', {
       name: '為什麼他不能做這件事？',
     })
@@ -3469,16 +3477,17 @@ it('收回失敗取消後重開清舊錯誤，成功後回到區塊標題', asyn
     permissionCodes: ['project.use'],
     failRevokeOnce: true,
   })
-  await screen.findByText(/能使用：/)
-  await screen.findByText(/能使用：/)
+  await screen.findByText(/可使用功能：/)
+  await screen.findByText(/可使用功能：/)
   fireEvent.click(screen.getByText('進階設定'))
   const area = screen.getByRole('region', { name: '已設定的權限' })
   const assigned = within(area).getByRole('checkbox', { name: '使用專案功能' })
   await waitFor(() => expect(assigned).toBeChecked())
   fireEvent.click(assigned)
-  const trigger = within(area).getByRole('button', { name: '開通' })
+  const trigger = within(area).getByRole('button', { name: '收回所選權限' })
   fireEvent.click(trigger)
   let box = await within(area).findByRole('region', { name: '確認收回權限' })
+  expect(box).toHaveTextContent('要收回的權限：使用專案功能')
   fireEvent.click(within(box).getByRole('button', { name: '確認收回' }))
   await within(box).findByRole('alert')
   fireEvent.click(within(box).getByRole('button', { name: '取消' }))
@@ -3499,15 +3508,15 @@ it('收回失敗取消後重開清舊錯誤，成功後回到區塊標題', asyn
 
 it('收回成功仍有其他未送出草稿時，焦點回到原觸發鈕', async () => {
   permissionPage({ openWizard: false, permissionCodes: ['project.use'] })
-  await screen.findByText(/能使用：/)
-  await screen.findByText(/能使用：/)
+  await screen.findByText(/可使用功能：/)
+  await screen.findByText(/可使用功能：/)
   fireEvent.click(screen.getByText('進階設定'))
   const area = screen.getByRole('region', { name: '已設定的權限' })
   const assigned = within(area).getByRole('checkbox', { name: '使用專案功能' })
   await waitFor(() => expect(assigned).toBeChecked())
   fireEvent.click(assigned)
   fireEvent.click(within(area).getByRole('checkbox', { name: '使用查核功能' }))
-  const trigger = within(area).getByRole('button', { name: '開通' })
+  const trigger = within(area).getByRole('button', { name: '套用變更' })
   fireEvent.click(trigger)
   const box = await within(area).findByRole('region', {
     name: '確認收回權限',
@@ -3625,7 +3634,7 @@ describe('W-635-b6-r2 精靈回歸', () => {
           { status: 403 },
         ),
     })
-    await screen.findByText(/能使用：/)
+    await screen.findByText(/可使用功能：/)
     fireEvent.click(screen.getByText('進階設定', { selector: 'summary' }))
     const row = (
       await screen.findByText('公司主管', { selector: 'span' })

@@ -160,10 +160,9 @@ describe('專案網址的 id 無效或不存在', () => {
       expect(
         await screen.findByRole('heading', { name: '找不到這個專案' }),
       ).toBeVisible()
-      expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
-        'href',
-        home,
-      )
+      expect(
+        screen.getByRole('link', { name: '回到我的首頁' }),
+      ).toHaveAttribute('href', home)
       expectNoLegacyMessage()
       // 不留空的專案頁框。
       expect(screen.queryByRole('navigation', { name: '專案區段' })).toBeNull()
@@ -178,7 +177,7 @@ describe('專案網址的 id 無效或不存在', () => {
     expect(
       await screen.findByRole('heading', { name: '找不到這個專案' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/projects',
     )
@@ -199,7 +198,7 @@ describe('專案網址的 id 無效或不存在', () => {
       expect(
         await screen.findByRole('heading', { name: '找不到這個專案' }),
       ).toBeVisible()
-      expect(screen.getByRole('link', { name: '回首頁' })).toBeVisible()
+      expect(screen.getByRole('link', { name: '回到我的首頁' })).toBeVisible()
     },
   )
 
@@ -210,7 +209,7 @@ describe('專案網址的 id 無效或不存在', () => {
     expect(
       await screen.findByRole('heading', { name: '找不到這個專案' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/overview',
     )
@@ -223,7 +222,7 @@ describe('專案網址的 id 無效或不存在', () => {
     expect(
       await screen.findByRole('heading', { name: '找不到這個查核項目' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/projects',
     )
@@ -256,10 +255,9 @@ describe('不存在的子路徑', () => {
       expect(
         await screen.findByRole('heading', { name: '找不到這個頁面' }),
       ).toBeVisible()
-      expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
-        'href',
-        home,
-      )
+      expect(
+        screen.getByRole('link', { name: '回到我的首頁' }),
+      ).toHaveAttribute('href', home)
     },
   )
 
@@ -279,7 +277,7 @@ describe('不存在的子路徑', () => {
     expect(
       await screen.findByRole('heading', { name: '找不到這個頁面' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: '回首頁' })).toBeVisible()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toBeVisible()
   })
 
   it.each(['/accounts', '/accounts/user-1'])(

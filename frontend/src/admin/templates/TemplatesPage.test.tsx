@@ -416,6 +416,19 @@ async function startNewItem(): Promise<void> {
 
 afterEach(() => vi.unstubAllGlobals())
 
+it('範本麵包屑在系統、項目與編輯頁保留斜線兩側空白', async () => {
+  templateFetch()
+  render(<TemplatesPage canManage />)
+  await openSystem()
+  expect(screen.getByText('範本庫 / 土木工程 / 護欄')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '欄杆尺寸' }))
+  expect(
+    await screen.findByText('範本庫 / 土木工程 / 護欄 / 欄杆尺寸'),
+  ).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '編輯查核項目' }))
+  expect(screen.getByText('範本庫 / 土木工程 / 護欄')).toBeVisible()
+})
+
 it('存檔後返回並選取新範本，顯示目標類別與系統', async () => {
   templateFetch({
     categories: [category],

@@ -72,6 +72,7 @@ export default function ChangePasswordPage() {
   const { user } = useCurrentUser()
   const target = landingPath(user)
   const hasFeatureAccess = target !== '/settings'
+  const [showPassword, setShowPassword] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -185,13 +186,17 @@ export default function ChangePasswordPage() {
       }
       title={forced ? '請先設定新密碼' : PAGE_TITLES.personalSettings}
       lead={
-        forced
-          ? '你用的是管理者給的臨時密碼，設定自己的密碼後才能繼續使用。'
-          : '調整外觀或變更密碼。'
+        !hasFeatureAccess
+          ? undefined
+          : forced
+            ? '你用的是管理者給的臨時密碼，設定自己的密碼後才能繼續使用。'
+            : '調整外觀或變更密碼。'
       }
     >
       {!hasFeatureAccess && (
-        <p role="status">尚未開通任何功能，請洽系統管理者</p>
+        <p className="notice-info settings-no-access" role="status">
+          你的帳號尚未開通任何功能，請洽系統管理者開通。
+        </p>
       )}
       {!forced && <AppearanceSettings />}
       <UnsavedLeaveBox guard={leaveGuard} />
@@ -242,7 +247,7 @@ export default function ChangePasswordPage() {
               <input
                 {...control}
                 name="current-password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 required
                 value={currentPassword}
@@ -269,7 +274,7 @@ export default function ChangePasswordPage() {
               <input
                 {...control}
                 name="new-password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="new-password"
                 required
                 value={newPassword}
@@ -293,7 +298,7 @@ export default function ChangePasswordPage() {
               <input
                 {...control}
                 name="confirm-password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="new-password"
                 required
                 value={confirmPassword}
@@ -305,6 +310,14 @@ export default function ChangePasswordPage() {
               />
             )}
           </FormField>
+          <label className="settings-show-password">
+            <input
+              type="checkbox"
+              checked={showPassword}
+              onChange={(event) => setShowPassword(event.target.checked)}
+            />
+            顯示密碼
+          </label>
         </FormGroup>
         {errorField === 'form' && error !== null ? (
           <FormError focusRequest={errorAttempt} tabIndex={-1}>
@@ -314,7 +327,9 @@ export default function ChangePasswordPage() {
         {success && !forced && <p role="status">{success}</p>}
         <FormSubmitButton className="btn-primary">變更密碼</FormSubmitButton>
       </Form>
-      <LogoutButton />
+      <div className="settings-logout">
+        <LogoutButton />
+      </div>
     </AuthLayout>
   )
 }

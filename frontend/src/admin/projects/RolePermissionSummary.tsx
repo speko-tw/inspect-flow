@@ -38,7 +38,7 @@ export default function RolePermissionSummary({
             onClick={() => setExpanded((value) => !value)}
             type="button"
           >
-            完整權限
+            查看完整權限
           </button>
           <ul hidden={!expanded} id={listId}>
             {details.map(({ code, label }) => (

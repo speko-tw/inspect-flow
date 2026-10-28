@@ -22,7 +22,7 @@ describe('RolePermissionSummary', () => {
     const button = screen.getByRole('button', {
       name: '「示範內業」完整權限',
     })
-    expect(button).toHaveTextContent('完整權限')
+    expect(button).toHaveTextContent('查看完整權限')
     expect(button).toHaveAttribute('aria-expanded', 'false')
     const list = document.getElementById(button.getAttribute('aria-controls')!)
     expect(list).toHaveAttribute('hidden')

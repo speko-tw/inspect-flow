@@ -491,7 +491,7 @@ describe('UsersPage 帳號詳情', () => {
     expect(labels).toEqual([
       '修改資料',
       '修改公司連結',
-      '指派管理者',
+      '設為系統管理者',
       '停用帳號',
       '重設臨時密碼',
     ])
@@ -572,7 +572,9 @@ describe('UsersPage 帳號詳情', () => {
     await screen.findByRole('heading', { name: '鄧安娜' })
     expect(screen.getByRole('button', { name: '修改資料' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '修改公司連結' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '指派管理者' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: '設為系統管理者' }),
+    ).toBeDisabled()
     expect(screen.getByRole('button', { name: '停用帳號' })).toBeDisabled()
   })
 
@@ -1290,7 +1292,9 @@ describe('UsersPage 操作確認框（#507）', () => {
     const row = (
       await screen.findByRole('heading', { name: '鄧安娜' })
     ).closest('section')!
-    fireEvent.click(within(row).getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(
+      within(row).getByRole('button', { name: '設為系統管理者' }),
+    )
     return screen.getByRole('region', { name: '操作確認' })
   }
 
@@ -1506,10 +1510,10 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
     expect(confirmButton(box)).toBeDisabled()
   })
 
-  it('指派管理者是一般主色', async () => {
+  it('設為系統管理者是一般主色', async () => {
     stubBackend()
     renderUsers({ detailUserId: 'user-1' })
-    const box = await openFor(/anna\.deng/, '指派管理者')
+    const box = await openFor(/anna\.deng/, '設為系統管理者')
 
     expect(box).toHaveClass('confirm-box-neutral')
     expect(confirmButton(box)).toHaveClass('btn-primary')
@@ -2952,7 +2956,7 @@ it('帳號詳情：資料寫入中互鎖停用、重設及儲存，完成後恢�
   fireEvent.change(screen.getByLabelText('中文姓名'), {
     target: { value: '鄧安娜更新' },
   })
-  fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
+  fireEvent.click(screen.getByRole('button', { name: '設為系統管理者' }))
   fireEvent.click(
     within(screen.getByRole('region', { name: '操作確認' })).getByRole(
       'button',

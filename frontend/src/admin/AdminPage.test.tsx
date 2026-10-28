@@ -1029,7 +1029,7 @@ describe('admin user and company pages', () => {
     await createAccountThroughWizard('bob.lee')
 
     const passwordHeading = await screen.findByRole('heading', {
-      name: '已新增李柏的帳號',
+      name: '已建立帳號：李柏',
       level: 2,
     })
     expect(
@@ -1057,7 +1057,7 @@ describe('admin user and company pages', () => {
     )
     expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
     expect(
-      screen.getAllByRole('heading', { name: '已新增李柏的帳號' }),
+      screen.getAllByRole('heading', { name: '已建立帳號：李柏' }),
     ).toHaveLength(1)
     expectNoPasswordPersistence(password)
     fireEvent.click(screen.getByRole('link', { name: '返回帳號清單' }))
@@ -1254,7 +1254,7 @@ describe('admin user and company pages', () => {
     )
     expect(
       await screen.findByRole('heading', {
-        name: '已新增李柏的帳號',
+        name: '已建立帳號：李柏',
         level: 2,
       }),
     ).toBeVisible()
@@ -1487,7 +1487,7 @@ describe('admin user and company pages', () => {
     managementFetch({ failAdminAction: true })
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
-    fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(screen.getByRole('button', { name: '設為系統管理者' }))
     const confirmation = screen.getByRole('region', { name: '操作確認' })
     // 確認與取消固定排成 [取消][確認]，只有最終確認是危險色（#500）。
     const buttons = within(confirmation).getAllByRole('button')
@@ -1495,7 +1495,7 @@ describe('admin user and company pages', () => {
       '取消',
       '確認',
     ])
-    // 指派管理者是授予權限，確認用主要色；停用與收回才用危險色。
+    // 設為系統管理者是授予權限，確認用主要色；停用與收回才用危險色。
     expect(buttons[1]).toHaveClass('btn-primary')
     expect(buttons[0]).not.toHaveClass('btn-danger', 'btn-primary')
     // ConfirmBox 的初始焦點由 effect 設定，等待它完成後再檢查。
@@ -1550,7 +1550,7 @@ describe('admin user and company pages', () => {
       ).not.toBeInTheDocument()
     })
     expect(basic.getByText('帳號：anna.new')).toBeInTheDocument()
-    fireEvent.click(basic.getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(basic.getByRole('button', { name: '設為系統管理者' }))
     const assignment = basic.getByRole('region', { name: '操作確認' })
     expect(assignment).toHaveTextContent('anna.new')
     expect(assignment).toHaveTextContent('系統全部權限')
@@ -1576,7 +1576,7 @@ describe('admin user and company pages', () => {
       ).toHaveFocus(),
     )
     fireEvent.click(within(switched).getByRole('button', { name: '取消' }))
-    fireEvent.click(basic.getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(basic.getByRole('button', { name: '設為系統管理者' }))
     fireEvent.click(
       within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
@@ -1590,7 +1590,7 @@ describe('admin user and company pages', () => {
           init?.method === 'PUT',
       ),
     ).toBe(false)
-    fireEvent.click(basic.getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(basic.getByRole('button', { name: '設為系統管理者' }))
     fireEvent.click(
       within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
@@ -1638,7 +1638,7 @@ describe('admin user and company pages', () => {
     )
     await waitFor(() => {
       expect(
-        basic.getByRole('button', { name: '指派管理者' }),
+        basic.getByRole('button', { name: '設為系統管理者' }),
       ).toBeInTheDocument()
     })
     fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
@@ -2747,7 +2747,7 @@ it('建立完成有臨時密碼時標題帶姓名，頂端取消隱藏', async (
   await createAccountThroughWizard('trial.new', 'trial@example.test', '王新進')
   const done = await screen.findByRole('region', { name: '建立完成' })
   expect(
-    within(done).getByRole('heading', { name: '已新增王新進的帳號' }),
+    within(done).getByRole('heading', { name: '已建立帳號：王新進' }),
   ).toBeVisible()
   expect(within(done).getByText('帳號：trial.new')).toBeVisible()
   expect(

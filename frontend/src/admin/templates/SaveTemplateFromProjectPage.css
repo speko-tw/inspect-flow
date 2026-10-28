@@ -11,7 +11,8 @@
 .save-template-steps {
   display: grid;
   gap: 1.25rem;
-  padding-inline-start: 1.5rem;
+  list-style: none;
+  padding-inline-start: 0;
 }
 
 .save-template-steps > li {
@@ -25,7 +26,7 @@
   gap: 0.5rem;
   /* 巢狀 ul 預設的空心圓像不能點的單選鈕。 */
   list-style: none;
-  padding-inline-start: 1rem;
+  padding-inline-start: 0;
 }
 
 .save-template-target {
@@ -65,9 +66,15 @@
   justify-self: start;
 }
 
-.save-template-steps ul button {
+.save-template-steps > li > ul button {
+  width: 100%;
   justify-content: flex-start;
   text-align: start;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-2);
+}
+
+.save-template-item-label {
+  display: grid;
+  gap: var(--space-1);
 }

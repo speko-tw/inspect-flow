@@ -30,7 +30,10 @@ describe('AccessDeniedPage', () => {
       screen.getByRole('heading', { level: 2, name: '無權限' }),
     ).toBeVisible()
     expect(screen.getByRole('status')).toHaveTextContent(
-      '你沒有使用這個頁面的權限',
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
+    expect(screen.getByRole('heading', { name: '無權限' })).toHaveClass(
+      'access-denied-heading',
     )
     expect(screen.getByRole('status')).toHaveClass('notice-info')
     expect(screen.queryByRole('alert')).toBeNull()
