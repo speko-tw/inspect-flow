@@ -1206,9 +1206,56 @@ function PlanningContent({
         role="list"
         style={{ listStyle: 'none' }}
       >
-        {blockers.unassigned && <li>尚未指派建議指派人。</li>}
-        {blockers.noLocation && <li>尚未填寫地點。</li>}
-        {blockers.noItems && <li>尚未選擇查核項目。</li>}
+        {blockers.unassigned && (
+          <li>
+            {canModify && canAssignTask
+              ? '尚未指派：'
+              : '尚未指派建議指派人。'}
+            {canModify && canAssignTask && (
+              <button
+                onClick={(event) => {
+                  clearFieldError()
+                  setNotice(null)
+                  assigneeTrigger.current = event.currentTarget
+                  editTask(task, 'assignee', '指定建議指派人')
+                }}
+                type="button"
+              >
+                指定建議指派人
+              </button>
+            )}
+          </li>
+        )}
+        {blockers.noLocation && (
+          <li>
+            {canModify && canManageTask ? '尚未填寫地點：' : '尚未填寫地點。'}
+            {canModify && canManageTask && (
+              <button
+                onClick={(event) => {
+                  clearFieldError()
+                  setNotice(null)
+                  locationTrigger.current = event.currentTarget
+                  editTask(task, 'location', '填寫地點')
+                }}
+                type="button"
+              >
+                填寫地點
+              </button>
+            )}
+          </li>
+        )}
+        {blockers.noItems && (
+          <li>
+            {canModify && canManageTask
+              ? '尚未選擇查核項目：請直接修改這筆草稿的查核項目。'
+              : '尚未選擇查核項目。'}
+            {canModify && canManageTask && task.status === 'DRAFT' && (
+              <button onClick={() => openTaskItemsEditor(task)} type="button">
+                選擇查核項目
+              </button>
+            )}
+          </li>
+        )}
       </ul>
     )
   }

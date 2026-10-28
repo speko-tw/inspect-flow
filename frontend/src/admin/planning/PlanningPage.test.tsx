@@ -2222,35 +2222,123 @@ describe('planning forms guard (#507)', () => {
       ).not.toHaveAttribute('aria-describedby')
     })
 
-    it('shows only a reason list without dispatch permission', async () => {
+    it.each([
+      { assign: true, manage: false },
+      { assign: false, manage: true },
+      { assign: true, manage: true },
+    ])(
+      'keeps permitted shortcuts without dispatch: %j',
+      async ({ assign, manage }) => {
+        const client = await seededComplete()
+        reshapeTasks(client, (task) => ({
+          ...task,
+          assignee_id: null,
+          assignee: null,
+          zone_id: null,
+          zone: null,
+          location_text: null,
+          items: [],
+        }))
+        render(
+          <PlanningPage
+            client={client}
+            initialProjectId="project-demo-1"
+            viewerPermissions={[
+              'inspection_plan.read',
+              'inspection_task.read',
+              ...(assign ? ['inspection_task.assign'] : []),
+              ...(manage ? ['inspection_task.manage'] : []),
+            ]}
+          />,
+        )
+        await click(await screen.findByRole('link', { name: /橋梁查核（/ }))
+        await openTaskDetail()
+        let article = await screen.findByRole('article')
+        let list = within(article).getByRole('list', { name: BLOCKERS })
+        expect(within(list).getAllByRole('listitem')).toHaveLength(3)
+        expect(within(list).getAllByRole('button')).toHaveLength(
+          Number(assign) + Number(manage) * 2,
+        )
+        expect(within(article).queryByText(/派出前還需要/)).toBeNull()
+        expect(
+          within(article).queryByRole('button', { name: '派出任務' }),
+        ).toBeNull()
+        for (const [label, allowed, field] of [
+          ['指定建議指派人', assign, /建議指派人/],
+          ['填寫地點', manage, /分區/],
+        ] as const) {
+          if (!allowed) {
+            expect(
+              within(list).queryByRole('button', { name: label }),
+            ).toBeNull()
+            continue
+          }
+          const shortcut = within(list).getByRole('button', { name: label })
+          await click(shortcut)
+          await waitFor(() =>
+            expect(within(article).getByLabelText(field)).toHaveFocus(),
+          )
+          await click(within(article).getByRole('button', { name: '取消' }))
+          article = await screen.findByRole('article')
+          list = within(article).getByRole('list', { name: BLOCKERS })
+          await waitFor(() =>
+            expect(
+              within(list).getByRole('button', { name: label }),
+            ).toHaveFocus(),
+          )
+        }
+        if (manage) {
+          await click(
+            within(list).getByRole('button', { name: '選擇查核項目' }),
+          )
+          expect(
+            screen.getByRole('form', { name: /^修改查核項目｜/ }),
+          ).toBeVisible()
+        } else {
+          expect(
+            within(list).queryByRole('button', {
+              name: '選擇查核項目',
+            }),
+          ).toBeNull()
+        }
+      },
+    )
+
+    it('shows plain reasons without modification permissions', async () => {
       const client = await seededComplete()
       reshapeTasks(client, (task) => ({
         ...task,
         assignee_id: null,
         assignee: null,
+        zone_id: null,
+        zone: null,
+        location_text: null,
+        items: [],
       }))
       render(
         <PlanningPage
           client={client}
           initialProjectId="project-demo-1"
-          viewerPermissions={[
-            'inspection_plan.read',
-            'inspection_task.read',
-            'inspection_task.assign',
-          ]}
+          viewerPermissions={['inspection_plan.read', 'inspection_task.read']}
         />,
       )
       await click(await screen.findByRole('link', { name: /橋梁查核（/ }))
       await openTaskDetail()
       const article = await screen.findByRole('article')
       const list = within(article).getByRole('list', { name: BLOCKERS })
-      expect(list).toHaveTextContent('尚未指派建議指派人。')
+      expect(
+        within(list)
+          .getAllByRole('listitem')
+          .map((li) => li.textContent),
+      ).toEqual([
+        '尚未指派建議指派人。',
+        '尚未填寫地點。',
+        '尚未選擇查核項目。',
+      ])
       expect(within(list).queryByRole('button')).toBeNull()
       expect(within(article).queryByText(/派出前還需要/)).toBeNull()
       expect(
-        within(article).queryByRole('button', {
-          name: '派出任務',
-        }),
+        within(article).queryByRole('button', { name: '派出任務' }),
       ).toBeNull()
     })
 
