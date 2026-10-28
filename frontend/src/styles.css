@@ -2541,6 +2541,10 @@ output.temporary-password {
   text-wrap: balance;
 }
 
+.settings-no-access span {
+  display: inline-block;
+}
+
 .settings-show-password {
   display: flex;
   align-items: center;
@@ -2551,6 +2555,16 @@ output.temporary-password {
   margin-block-start: var(--space-8);
   padding-block-start: var(--space-4);
   border-block-start: 1px solid var(--border);
+}
+
+.settings-logout .btn {
+  width: auto;
+}
+
+.settings-logout button {
+  width: auto;
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 .people-account-search {

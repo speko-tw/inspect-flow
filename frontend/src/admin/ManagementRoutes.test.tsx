@@ -597,7 +597,9 @@ it('角色清單強調查看，完整權限使用一般次按鈕', async () => {
   expect(
     await screen.findByRole('link', { name: '查看角色 角色1' }),
   ).toHaveClass('btn-emphasis')
-  const summary = screen.getByRole('button', { name: '「角色1」完整權限' })
+  const summary = screen.getByRole('button', {
+    name: '查看完整權限（角色1）',
+  })
   expect(summary).toHaveClass('btn')
   expect(summary).not.toHaveClass('btn-emphasis')
 })

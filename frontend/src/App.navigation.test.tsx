@@ -621,11 +621,9 @@ describe('依後端存取摘要決定落點（#480）', () => {
     expect(
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
-    expect(
-      await screen.findByText('你沒有使用這個頁面的權限', {
-        selector: 'p[role="status"]',
-      }),
-    ).toBeVisible()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
     expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/templates',
@@ -644,11 +642,9 @@ describe('依後端存取摘要決定落點（#480）', () => {
     expect(
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
-    expect(
-      await screen.findByText('你沒有使用這個頁面的權限', {
-        selector: 'p[role="status"]',
-      }),
-    ).toBeVisible()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
     expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/settings',
@@ -678,9 +674,9 @@ describe('出路與 404（#480）', () => {
     renderApp('/settings')
 
     await screen.findByRole('heading', { name: '個人設定' })
-    expect(
-      screen.getByText('你的帳號尚未開通任何功能，請洽系統管理者開通。'),
-    ).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '你的帳號尚未開通任何功能，請洽系統管理者開通。',
+    )
     expect(screen.queryByRole('link', { name: /^返回/ })).toBeNull()
   })
 

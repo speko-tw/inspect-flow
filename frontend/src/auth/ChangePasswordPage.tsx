@@ -140,6 +140,7 @@ export default function ChangePasswordPage() {
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')
+        setShowPassword(false)
         setSuccess(SUCCESS_NOTICE)
         return
       }
@@ -186,7 +187,7 @@ export default function ChangePasswordPage() {
       }
       title={forced ? '請先設定新密碼' : PAGE_TITLES.personalSettings}
       lead={
-        !hasFeatureAccess
+        !forced && !hasFeatureAccess
           ? undefined
           : forced
             ? '你用的是管理者給的臨時密碼，設定自己的密碼後才能繼續使用。'
@@ -195,7 +196,8 @@ export default function ChangePasswordPage() {
     >
       {!hasFeatureAccess && (
         <p className="notice-info settings-no-access" role="status">
-          你的帳號尚未開通任何功能，請洽系統管理者開通。
+          <span>你的帳號尚未開通任何功能，</span>
+          <span>請洽系統管理者開通。</span>
         </p>
       )}
       {!forced && <AppearanceSettings />}

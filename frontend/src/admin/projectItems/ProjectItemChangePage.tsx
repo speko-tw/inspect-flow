@@ -1048,8 +1048,8 @@ export default function ProjectItemChangePage({
                     (task) => task.status !== 'DRAFT',
                   ) && (
                     <p>
-                      已派出任務的舊結果與照片會依重新查核規則作廢；
-                      已取消任務於恢復時套用目前標準。
+                      {'已派出任務的舊結果與照片會依重新查核規則作廢；' +
+                        '已取消任務於恢復時套用目前標準。'}
                     </p>
                   )}
                 </>

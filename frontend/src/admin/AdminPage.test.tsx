@@ -1795,7 +1795,9 @@ describe('admin user and company pages', () => {
     const permissionNotice = screen.getByText('你沒有使用這個頁面的權限', {
       selector: 'p',
     })
-    expect(permissionNotice).toHaveTextContent('你沒有使用這個頁面的權限')
+    expect(permissionNotice).toHaveTextContent(
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
     expect(permissionNotice).toHaveAttribute('role', 'status')
     expect(permissionNotice).toHaveClass('notice-info')
     expect(permissionNotice).not.toHaveClass('notice-error')
@@ -1815,9 +1817,7 @@ describe('admin user and company pages', () => {
         screen.getByRole('heading', { name: '無權限' }),
       ).toBeInTheDocument()
       expect(
-        screen.getByText('你沒有使用這個頁面的權限', {
-          selector: 'p',
-        }),
+        screen.getByText('你沒有使用這個頁面的權限', { selector: 'p' }),
       ).toHaveAttribute('role', 'status')
       expect(screen.queryByRole('alert')).toBeNull()
       expect(
@@ -2123,10 +2123,11 @@ describe('admin user and company pages', () => {
 
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
     expect(
-      screen.getByText('你沒有使用這個頁面的權限', {
-        selector: 'p',
-      }),
+      screen.getByText('你沒有使用這個頁面的權限', { selector: 'p' }),
     ).toHaveAttribute('role', 'status')
+    expect(
+      screen.getByText('你沒有使用這個頁面的權限', { selector: 'p' }),
+    ).toHaveTextContent('你沒有使用這個頁面的權限。如需使用，請洽系統管理者。')
     expect(screen.queryByRole('link', { name: '範本' })).toBeNull()
     expect(
       fetchMock.mock.calls.some(([input]) =>
@@ -2401,10 +2402,13 @@ describe('admin user and company pages', () => {
       })
 
       expect(
-        screen.getByText('你沒有使用這個頁面的權限', {
-          selector: 'p',
-        }),
+        screen.getByText('你沒有使用這個頁面的權限', { selector: 'p' }),
       ).toHaveAttribute('role', 'status')
+      expect(
+        screen.getByText('你沒有使用這個頁面的權限', { selector: 'p' }),
+      ).toHaveTextContent(
+        '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+      )
     })
 
     it('does not route to template management without access', () => {
@@ -2804,6 +2808,12 @@ it.each([{ delegated_modules: [] }, { delegated_modules: ['project'] }])(
     expect(
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
+    expect(
+      screen.getByText('新增帳號只有系統管理者能操作。', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
+    expect(screen.queryByText(/如需使用，請洽系統管理者/)).toBeNull()
     expect(screen.queryByLabelText('帳號名稱')).toBeNull()
     expect(
       fetchMock.mock.calls.some(([url]) =>

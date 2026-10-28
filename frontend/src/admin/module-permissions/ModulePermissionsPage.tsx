@@ -70,6 +70,23 @@ type DiagnosticResult = {
   nonmember: boolean
 }
 
+/** 依帳號、專案與角色資料完整度組出成員管理診斷。 */
+export function projectMemberRoleDiagnostic(
+  userName: string | undefined,
+  projectName: string | undefined,
+  projectRoles: Array<{ name: string }> | undefined,
+) {
+  if (!userName || !projectName || !projectRoles) {
+    return '目前的專案角色不能管理成員。'
+  }
+  if (projectRoles.length === 0) {
+    return `${userName}在「${projectName}」尚未被指派角色，所以不能管理成員。`
+  }
+  return `${userName}在「${projectName}」的角色（${projectRoles
+    .map((role) => role.name)
+    .join('、')}）不能管理成員。`
+}
+
 type IdentityField =
   | 'username'
   | 'name'
@@ -1550,14 +1567,11 @@ function ModulePermissionsPageContent({
             : '',
         roleMessage:
           diagnostic.action === 'manage_project_members'
-            ? selected && projects.find((row) => row.id === diagnosticProject)
-              ? `${selected.name_zh || selected.username}在「${
-                  projects.find((row) => row.id === diagnosticProject)?.name
-                }」的角色（${
-                  access.project_roles?.map((role) => role.name).join('、') ||
-                  '未指派角色'
-                }）不能管理成員。`
-              : '目前的專案角色不能管理成員。'
+            ? projectMemberRoleDiagnostic(
+                selected?.name_zh || selected?.username,
+                projects.find((row) => row.id === diagnosticProject)?.name,
+                access.project_roles,
+              )
             : '這個專案裡沒有可以查看或執行任務的角色。',
         nonmember: false,
       })

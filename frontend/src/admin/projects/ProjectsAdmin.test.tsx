@@ -1723,6 +1723,9 @@ describe('admin projects page', () => {
     )
     await screen.findByRole('heading', { name: '修改專案' })
     const nextName = screen.getByLabelText(/工程名稱/)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '修改專案' })).toHaveFocus(),
+    )
     nextName.focus()
     fireEvent.change(nextName, { target: { value: 'B 的草稿' } })
 
@@ -3349,7 +3352,7 @@ describe('project members for an office user (not admin, #481)', () => {
 
     const checkbox = screen.getByLabelText('查核員')
     const button = screen.getByRole('button', {
-      name: '「查核員」完整權限',
+      name: '查看完整權限（查核員）',
     })
     expect(button).toHaveAttribute('aria-expanded', 'false')
     const checked = (checkbox as HTMLInputElement).checked
@@ -3542,11 +3545,9 @@ describe('project members for an office user (not admin, #481)', () => {
     expect(
       await screen.findByRole('heading', { name: '無權限', level: 2 }),
     ).toBeVisible()
-    expect(
-      await screen.findByText('你沒有使用這個頁面的權限', {
-        selector: 'p[role="status"]',
-      }),
-    ).toBeVisible()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
     expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/settings',

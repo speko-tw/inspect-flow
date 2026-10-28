@@ -11,7 +11,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import buttonStyles from '../../components/components.module.css'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
-import ModulePermissionsPage from './ModulePermissionsPage'
+import ModulePermissionsPage, {
+  projectMemberRoleDiagnostic,
+} from './ModulePermissionsPage'
 
 const currentUserMock = vi.hoisted(() => vi.fn())
 
@@ -740,6 +742,18 @@ function assignCandidateRole(roleName: string) {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ModulePermissionsPage', () => {
+  it('uses a neutral member diagnostic when data is missing', () => {
+    expect(projectMemberRoleDiagnostic(undefined, '示範工程', [])).toBe(
+      '目前的專案角色不能管理成員。',
+    )
+    expect(projectMemberRoleDiagnostic('林沐青', undefined, [])).toBe(
+      '目前的專案角色不能管理成員。',
+    )
+    expect(projectMemberRoleDiagnostic('林沐青', '示範工程', undefined)).toBe(
+      '目前的專案角色不能管理成員。',
+    )
+  })
+
   it('帳號能力頁只載入該帳號，診斷出現即載入專案選項', async () => {
     const { calls } = permissionPage({
       embedded: true,
@@ -2708,12 +2722,31 @@ describe('ModulePermissionsPage', () => {
     expect(candidate).not.toHaveTextContent('角色可用權限')
     expect(
       within(candidate).getByRole('button', {
-        name: '「現場工程師比目前多給的能力」完整權限',
+        name: '查看完整權限（現場工程師比目前多給的能力）',
       }),
     ).toBeVisible()
     const summaries = candidate.querySelectorAll('.role-permission-summary')
     expect(summaries).toHaveLength(1)
     expect(summaries[0]).not.toHaveTextContent('檢視專案基本資料')
+  })
+
+  it('shows user and project when no role is assigned', async () => {
+    permissionPage({ openWizard: false, memberRoleIds: [] })
+    await screen.findByText(/可使用功能：/)
+    const area = screen.getByRole('region', {
+      name: '為什麼他不能做這件事？',
+    })
+    fireEvent.change(within(area).getByLabelText('要檢查的操作'), {
+      target: { value: 'members' },
+    })
+    fireEvent.change(within(area).getByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(within(area).getByRole('button', { name: '檢查' }))
+
+    expect(await within(area).findByRole('status')).toHaveTextContent(
+      '林沐青在「示範工程」尚未被指派角色，所以不能管理成員。',
+    )
   })
 
   it('orders advanced settings before the capability summary', async () => {

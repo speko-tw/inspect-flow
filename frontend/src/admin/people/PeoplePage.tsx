@@ -268,7 +268,9 @@ function PeopleRoute({
           </Notice>
           <p>帳號：{created.username}</p>
           <div className="notice notice-warning" role="status">
-            請複製這組密碼交給{created.name_zh || created.username}。{''}
+            請複製這組密碼交給{created.name_zh || created.username}。
+            {/* 吃掉 JSX 換行空白，避免全形句號後多出半形空白。 */}
+            {''}
             對方第一次登入時必須改成自己的密碼。這組密碼只顯示這一次，離開這頁後就無法再查看。
           </div>
           <TemporaryPassword password={created.temporary_password} />

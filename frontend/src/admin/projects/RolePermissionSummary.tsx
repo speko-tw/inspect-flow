@@ -34,7 +34,7 @@ export default function RolePermissionSummary({
             className={buttonClassName}
             aria-controls={listId}
             aria-expanded={expanded}
-            aria-label={`「${name}」完整權限`}
+            aria-label={`查看完整權限（${name}）`}
             onClick={() => setExpanded((value) => !value)}
             type="button"
           >

@@ -394,6 +394,7 @@ export default function SaveTemplateFromProjectPage() {
                 >
                   {busy ? '儲存中…' : '存入這個系統'}
                 </button>
+                {!name.trim() && <p>請輸入範本名稱</p>}
                 {selected?.type !== 'system' && <p>請先選好存入的系統</p>}
                 {stepError('save')}
               </div>

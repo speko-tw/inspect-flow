@@ -202,6 +202,29 @@ describe('全無權限帳號的設定落點（role-tasks.md）', () => {
     )
   })
 
+  it('沒有功能權限的臨時密碼帳號同時顯示引言與資訊框', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          ...NO_FEATURE_USER,
+          must_change_password: true,
+        }),
+      ),
+    )
+    renderPage()
+
+    await screen.findByRole('heading', { name: '請先設定新密碼' })
+    expect(
+      screen.getByText(
+        '你用的是管理者給的臨時密碼，設定自己的密碼後才能繼續使用。',
+      ),
+    ).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '你的帳號尚未開通任何功能，請洽系統管理者開通。',
+    )
+  })
+
   it('不對仍有功能權限、只是開啟設定的帳號顯示說明', async () => {
     vi.stubGlobal(
       'fetch',
@@ -210,9 +233,7 @@ describe('全無權限帳號的設定落點（role-tasks.md）', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: '請先設定新密碼' })
-    expect(
-      screen.queryByText('你的帳號尚未開通任何功能，請洽系統管理者開通。'),
-    ).toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })
 
@@ -726,6 +747,7 @@ it('無功能權限帳號完成強制改密碼後切回一般設定文案', asyn
   )
   renderPage()
   await screen.findByRole('heading', { name: '請先設定新密碼' })
+  fireEvent.click(await screen.findByRole('checkbox', { name: '顯示密碼' }))
   fireEvent.change(screen.getByLabelText('臨時密碼'), {
     target: { value: 'temporary' },
   })
@@ -737,6 +759,13 @@ it('無功能權限帳號完成強制改密碼後切回一般設定文案', asyn
   })
   fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
   expect(await screen.findByText('密碼已變更。')).toBeVisible()
+  for (const id of [
+    'change-password-current',
+    'change-password-new',
+    'change-password-confirm',
+  ]) {
+    expect(document.getElementById(id)).toHaveAttribute('type', 'password')
+  }
   expect(screen.getByRole('heading', { name: '個人設定' })).toBeVisible()
   expect(screen.getByLabelText('目前密碼')).toBeVisible()
   expect(screen.queryByText(/你用的是管理者給的臨時密碼/)).toBeNull()
