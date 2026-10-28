@@ -219,7 +219,11 @@ export default function UsersPage({
     new URLSearchParams(location.search).get('edit') === 'expiry'
   const consumedExpiryRequest = useRef('')
   const [expiryEditorUser, setExpiryEditorUser] = useState<string | null>(null)
-  const userList = useCursorList(listUsersPage, managementErrorMessage)
+  const userList = useCursorList(
+    listUsersPage,
+    managementErrorMessage,
+    initialQuery?.trim() ?? '',
+  )
   const {
     items: users,
     query,
@@ -239,6 +243,7 @@ export default function UsersPage({
   const companyListRequest = useRef<Promise<void> | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
   const [detailError, setDetailError] = useState('')
+  const [detailReloadKey, setDetailReloadKey] = useState(0)
   const [detailNotFound, setDetailNotFound] = useState(false)
   // 詳情更新只同步快照；若把 detailUser 放入載入依賴，儲存與重查
   // 會再次載入並重掛表單，清掉使用者正在編輯的內容。
@@ -394,7 +399,7 @@ export default function UsersPage({
     return () => {
       active = false
     }
-  }, [detailUserId, onNotFound, users])
+  }, [detailUserId, detailReloadKey, onNotFound, users])
 
   useEffect(() => {
     // 到期日捷徑只消費網址；replace 不得重載詳情或重掛表單（#741）。
@@ -891,7 +896,20 @@ export default function UsersPage({
       {detailUserId ? (
         <section aria-labelledby="person-basic-heading">
           {!detail && <h1 id="person-basic-heading">帳號詳情</h1>}
-          {detailError && <p role="alert">{detailError}</p>}
+          {detailError && (
+            <>
+              <p role="alert">{detailError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailError('')
+                  setDetailReloadKey((key) => key + 1)
+                }}
+              >
+                重新載入
+              </button>
+            </>
+          )}
           {!detail && !detailError && <p role="status">載入中…</p>}
           {detail && (
             <>

@@ -70,7 +70,7 @@ const currentUser: CurrentUser = {
   is_external_collaborator: false,
 }
 
-type Call = { method: string; path: string; body: string }
+type Call = { method: string; path: string; body: string; q: string }
 
 /**
  * 列表請求立刻回應；`hold` 回傳 Deferred 時，該請求等到它完成才回應
@@ -83,6 +83,7 @@ function stubBackend(
     failureCode?: string
     failureStatus?: number
     users?: User[]
+    usersByQuery?: Record<string, User[]>
     detailUser?: User
     companies?: Company[]
     activeCompanyUsers?: Record<
@@ -124,6 +125,7 @@ function stubBackend(
         method: init?.method ?? 'GET',
         path: url.pathname,
         body: String(init?.body ?? ''),
+        q: url.searchParams.get('q') ?? '',
       }
       calls.push(call)
       const gate = options.hold?.(call)
@@ -136,7 +138,10 @@ function stubBackend(
       }
       if (call.method === 'GET') {
         if (call.path === '/api/v1/users') {
-          return Response.json({ items: users, next_cursor: null })
+          return Response.json({
+            items: options.usersByQuery?.[call.q] ?? users,
+            next_cursor: null,
+          })
         }
         if (call.path === '/api/v1/companies') {
           return Response.json({ items: companies, next_cursor: null })
@@ -317,6 +322,78 @@ afterEach(() => {
 })
 
 describe('UsersPage 帳號詳情', () => {
+  it('初始搜尋只發一次過濾請求，顯示符合條件的帳號', async () => {
+    const other = {
+      ...regularUser,
+      id: 'user-2',
+      username: 'bob.lin',
+      name_zh: '林鮑伯',
+    }
+    const backend = stubBackend({
+      users: [other],
+      usersByQuery: { 鄧: [regularUser] },
+    })
+    renderUsers({ initialQuery: '  鄧  ' })
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '搜尋' })).toBeEnabled(),
+    )
+    const requests = backend.calls.filter(
+      (call) => call.path === '/api/v1/users',
+    )
+    expect(requests).toHaveLength(1)
+    expect(requests[0].q).toBe('鄧')
+    expect(screen.getByRole('row', { name: /anna\.deng/ })).toBeVisible()
+    expect(screen.queryByRole('row', { name: /bob\.lin/ })).toBeNull()
+  })
+
+  it('掛載後 initialQuery 改變仍會重新搜尋', async () => {
+    const other = {
+      ...regularUser,
+      id: 'user-2',
+      username: 'bob.lin',
+      name_zh: '林鮑伯',
+    }
+    const backend = stubBackend({
+      usersByQuery: { '': [regularUser], 林: [other] },
+    })
+    const view = renderUsers({ initialQuery: '' })
+    await screen.findByRole('row', { name: /anna\.deng/ })
+    view.rerender(
+      <DataMemoryRouter>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <UsersPage initialQuery=" 林 " onTemporaryPassword={vi.fn()} />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+
+    expect(await screen.findByRole('row', { name: /bob\.lin/ })).toBeVisible()
+    expect(screen.queryByRole('row', { name: /anna\.deng/ })).toBeNull()
+    expect(
+      backend.calls
+        .filter((call) => call.path === '/api/v1/users')
+        .map((call) => call.q),
+    ).toEqual(['', '林'])
+  })
+
+  it('帳號詳情第一次失敗後可重新載入成功', async () => {
+    let attempts = 0
+    const backend = stubBackend({
+      users: [],
+      detailUser: regularUser,
+      fail: (call) => call.path === '/api/v1/users/user-1' && ++attempts === 1,
+    })
+    renderUsers({ detailUserId: 'user-1' })
+    expect(await screen.findByRole('alert')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '重新載入' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '鄧安娜' }),
+    ).toBeVisible()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(backend.count('GET', '/api/v1/users/user-1')).toBe(2)
+  })
+
   it('列表使用 User.company_name 且不載入全公司清單', async () => {
     const backend = stubBackend()
     renderUsers({
@@ -399,7 +476,7 @@ describe('UsersPage 帳號詳情', () => {
     expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
   })
 
-  it('details retain the main action order and add temporary password reset', async () => {
+  it('詳情保留主要操作順序並提供臨時密碼重設', async () => {
     stubBackend()
     renderUsers({ detailUserId: 'user-1' })
     await screen.findByRole('heading', { name: '鄧安娜' })
@@ -538,7 +615,7 @@ describe('UsersPage 帳號詳情', () => {
     ).toBe(1)
   })
 
-  it('requires in-page confirmation before deactivating from account detail', async () => {
+  it('帳號詳情停用前必須在頁內確認', async () => {
     const backend = stubBackend({ users: [{ ...regularUser }] })
     renderUsers({ detailUserId: 'user-1' })
     await screen.findByRole('heading', { name: '鄧安娜' })

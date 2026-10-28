@@ -214,6 +214,7 @@ function ProjectMembersSection({
     useState<Loaded<MemberCandidate[]>>(LOADING)
   const [rolesState, setRolesState] = useState<Loaded<Role[]>>(LOADING)
   const [reloadKey, setReloadKey] = useState(0)
+  const [rolesRefreshing, setRolesRefreshing] = useState(false)
   const [busy, setBusy] = useState(false)
   const guard = useSubmitGuard()
   const [message, setMessage] = useState<{
@@ -284,6 +285,7 @@ function ProjectMembersSection({
       !rowNotice ||
       membersState.status !== 'ready' ||
       rolesState.status === 'loading' ||
+      rolesRefreshing ||
       (isAdmin && projectState.status === 'loading')
     ) {
       return
@@ -305,6 +307,7 @@ function ProjectMembersSection({
     mode,
     projectState.status,
     rolesState.status,
+    rolesRefreshing,
     rowNotice,
   ])
 
@@ -328,7 +331,10 @@ function ProjectMembersSection({
     }
     track(listProjectMembers(projectId), setMembersState)
     track(listMemberCandidates(projectId), setCandidatesState)
-    track(listAssignableRoles(projectId), setRolesState)
+    track(listAssignableRoles(projectId), (next) => {
+      setRolesState(next)
+      setRolesRefreshing(false)
+    })
     // 專案基本資料只給系統管理者看；專案身分由外層區段殼顯示，
     // 內業不必為此多打一支需要別的權限的 API。
     if (isAdmin) track(getProject(projectId), setProjectState)
@@ -552,9 +558,19 @@ function ProjectMembersSection({
     ? roles.filter((role) => role.is_external_allowed)
     : roles
   function reload() {
-    setMembersState(LOADING)
-    setCandidatesState(LOADING)
-    setRolesState(LOADING)
+    // 舊角色仍可顯示，但新增成員提示須等角色重查完成才揭露（#734）。
+    setRolesRefreshing(true)
+    // 更新時保留已載入的清單，避免卸載成員列而丟失焦點與捲動位置。
+    // 失敗的區塊仍切回 loading，讓重新載入清掉舊錯誤。
+    setMembersState((current) =>
+      current.status === 'ready' ? current : LOADING,
+    )
+    setCandidatesState((current) =>
+      current.status === 'ready' ? current : LOADING,
+    )
+    setRolesState((current) =>
+      current.status === 'ready' ? current : LOADING,
+    )
     setReloadKey((key) => key + 1)
   }
   // 沒有可加入的人時，只顯示說明；角色勾選與加入按鈕都沒有意義。
