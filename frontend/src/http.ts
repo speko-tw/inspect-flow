@@ -1,3 +1,5 @@
+import { withBasePath } from './basePath'
+
 // 共用 HTTP 層：JSON 請求、錯誤 envelope 解析、游標分頁與錯誤文案。
 //
 // 各功能區的錯誤類別（ManagementApiError、FieldApiError、
@@ -83,7 +85,7 @@ export async function request<T>(
   init?: RequestInit,
   ErrorClass: HttpErrorClass = HttpError,
 ): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(withBasePath(`${API_BASE}${path}`), {
     ...init,
     credentials: 'same-origin',
     headers: {
