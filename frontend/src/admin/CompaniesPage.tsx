@@ -385,6 +385,7 @@ function CompanyScreen({
     setBatchNotice('')
     setBatchLoading(true)
     try {
+      // 預覽保留各公司的帳號歸屬，送出時才能只停用使用者勾選的帳號。
       const activeUsers = await mapWithConcurrency(selected, (item) =>
         activate
           ? Promise.resolve({ users: [], count: 0 })

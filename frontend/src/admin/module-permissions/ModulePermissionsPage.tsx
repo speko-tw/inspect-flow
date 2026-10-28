@@ -203,6 +203,7 @@ const JOB_REAPPLY_EXPLANATION = [
   '會加入該角色，不移除既有功能或角色。',
 ].join('')
 
+/** 以無重複且完整相同的代碼集合辨識起手式，避免陣列順序影響比對。 */
 function samePermissionCodes(left: string[], right: string[]): boolean {
   if (left.length !== right.length) return false
   const normalizedLeft = [...new Set(left)].sort()
@@ -213,6 +214,7 @@ function samePermissionCodes(left: string[], right: string[]): boolean {
   )
 }
 
+/** 同名組合內容遭修改或候選不唯一時拒絕猜測，避免套錯職務權限。 */
 function profileDefaultBundle(
   bundles: PermissionBundle[],
   profile: Profile,
@@ -233,6 +235,10 @@ function profileDefaultBundle(
   return matching.length === 1 ? matching[0] : null
 }
 
+/**
+ * system／office 沿用新專案預設角色；
+ * 現場與外部職務須精確符合角色能力及可指派條件，避免額外授權。
+ */
 function profileDefaultRole(
   roles: Role[],
   profile: Profile,
@@ -304,6 +310,7 @@ type ModulePermissionsPageProps = {
 export default function ModulePermissionsPage(
   props: ModulePermissionsPageProps = {},
 ) {
+  // ADM-R56：切換帳號或重新開精靈時重建狀態，避免帶入上一份草稿。
   const remountKey =
     props.selectedUserId ?? `wizard:${props.openWizardRequest ?? 0}`
   return <ModulePermissionsPageContent key={remountKey} {...props} />
@@ -715,6 +722,7 @@ function ModulePermissionsPageContent({
   const loadWizardOptions = useCallback(
     async (nextStep: number) => {
       if (!embedded || !currentUser.is_admin || !wizardOpen) return
+      // 同一步可能由導覽與送出觸發；共用請求，但失敗後必須允許重試。
       const loadOnce = async (
         key: 'companies' | 'projects' | 'roles',
         load: () => Promise<void>,
@@ -756,6 +764,7 @@ function ModulePermissionsPageContent({
           setRoles(roleRows)
           setBundles(bundleRows)
           setCreatorRoleId(creatorRole.role_id)
+          // 同次送出接著要選角色；ref 讓它不必等待 React 提交 state。
           wizardRoleData.current = {
             roles: roleRows,
             bundles: bundleRows,
@@ -1058,6 +1067,7 @@ function ModulePermissionsPageContent({
     if (!selectedUser) return
     const granted = accessDraft.filter((code) => !userAccess.includes(code))
     const revoked = userAccess.filter((code) => !accessDraft.includes(code))
+    // ADM-R10：收回前先查影響並確認，本次不混送尚未確認的新增授權。
     if (revoked.length > 0) {
       setBusy(true)
       setOperationError(scope, '')
@@ -1098,6 +1108,7 @@ function ModulePermissionsPageContent({
       )
     } catch (caught) {
       setOperationError(scope, message(caught))
+      // 逐項授予可能只成功一部分；以伺服器現況重建草稿，避免假設全敗。
       const access = await getUserModulePermissions(selectedUser)
       if (diagnosticSelection.current.selectedUser !== selectedUser) return
       setUserAccess(access.permission_codes)
@@ -1272,6 +1283,8 @@ function ModulePermissionsPageContent({
     }
   }
 
+  // 建立帳號、套用組合及加入專案不是同一筆交易；逐步記住成功結果，
+  // 重試只補未完成步驟，保留已建立帳號及其一次性臨時密碼。
   async function finishProvisioning(
     pending: Provisioning,
     created?: CreatedUser,
@@ -1284,6 +1297,7 @@ function ModulePermissionsPageContent({
         setProvisioning(next)
       }
       if (next.projectId && !next.memberDone) {
+        // 重新套用職務只補角色，保留這個帳號原本在專案內的其他能力。
         if (next.mergeExistingRoles) {
           const members = await listProjectMembers(next.projectId)
           const existingMember = members.find(
@@ -1312,6 +1326,8 @@ function ModulePermissionsPageContent({
             const existingMember = members.find(
               (member) => member.user_id === next.userId,
             )
+            // 上次加入可能已成功但回應遺失；只有角色完全符合才視為完成，
+            // 不能把任何成員衝突都當作這次設定已套用。
             const expectedRoleExists =
               existingMember?.role_ids.length === 1 &&
               existingMember.role_ids.includes(next.roleId)

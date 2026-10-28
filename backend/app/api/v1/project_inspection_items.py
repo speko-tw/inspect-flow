@@ -129,6 +129,8 @@ def apply_template_to_project(
         ) from exc
     if result is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    # 空系統沒有建立任何資源，所以不回 201；
+    # 依 template-system/spec.md 的介面表回 200 與空清單。
     if system_id is not None and not result:
         response.status_code = 200
     return [

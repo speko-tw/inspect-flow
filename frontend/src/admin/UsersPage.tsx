@@ -62,6 +62,7 @@ type RestorePreviewSelection = {
   task_ids: string[]
 }
 
+/** ADM-R33：恢復項目預設不勾選，避免重新啟用時默認恢復舊授權。 */
 function emptyRestorePreviewSelection(): RestorePreviewSelection {
   return {
     permission_codes: [],
@@ -304,6 +305,7 @@ export default function UsersPage({
     reassignmentProjects: DeactivationCheck['last_manager_projects']
   } | null>(null)
   const batchDeactivationRequestId = useRef(0)
+  // 請求不必取消，但失效後的回應不能復活已關閉的確認框。
   const invalidateBatchDeactivationPreview = useCallback(() => {
     batchDeactivationRequestId.current += 1
     setBatchDeactivationLoading(false)
@@ -471,6 +473,7 @@ export default function UsersPage({
 
   const loadCompanies = useCallback(async () => {
     if (companyListLoaded.current) return
+    // 多個編輯入口共用在途請求；失敗不標記快取，讓下次開啟可重試。
     if (companyListRequest.current) return companyListRequest.current
     const id = ++companyRequestId.current
     setCompanyListError('')
@@ -531,6 +534,7 @@ export default function UsersPage({
     setSaveError(null)
     setBusyUser(userId)
     try {
+      // 詳情可能不在目前搜尋結果內，不能只靠列表重載更新畫面。
       const updated = await operation()
       setDetailUser((current) => (current?.id === userId ? updated : current))
       setEditingUser(null)
@@ -687,6 +691,7 @@ export default function UsersPage({
   async function confirmBatchActivation() {
     clearBatchMessages()
     if (!batchActivationPreview || batchActivationBusy) return
+    // DOM-R75：到期帳號須先改到期日；不可混入這次批次啟用請求。
     const expiredIds = new Set(
       batchActivationPreview.previews
         .filter((preview) => preview.account_expired)
@@ -1521,6 +1526,7 @@ export default function UsersPage({
   )
 }
 
+/** 清單已有公司名稱時不依賴選項載入，避免未開表單就顯示不完整。 */
 function companyLabel(user: User, companies: Company[]): string {
   const name =
     user.company_name ??
@@ -1653,6 +1659,7 @@ function RestoreChoices({
   )
 }
 
+/** 將離頁守衛獨立掛載，讓外層接管導覽時不重複攔截。 */
 function UsersNavigationGuard({
   hasUnsavedChanges,
 }: {
@@ -1662,6 +1669,7 @@ function UsersNavigationGuard({
   return <UnsavedLeaveBox guard={guard} />
 }
 
+/** 帳號基本資料的獨立草稿，將未儲存狀態交給頁面統一保護。 */
 function UserDetailsForm({
   focusExpiry = false,
   user,
@@ -1903,6 +1911,7 @@ function UserDetailsForm({
   )
 }
 
+/** 公司連結與公司內資料一起編輯，避免拆次儲存留下不一致資料。 */
 function CompanyLinkForm({
   user,
   busy,
@@ -1942,6 +1951,8 @@ function CompanyLinkForm({
     onDirtyChange(dirty)
   }, [dirty, onDirtyChange])
 
+  // DOM-R47：工號、部門與地點屬於公司，不能沿用到另一家公司。
+  // 選回原公司時取回原值，避免誤切選項後必須重填原有公司資料。
   function changeCompany(value: string) {
     setCompanyId(value)
     if (value === user.company_id) {

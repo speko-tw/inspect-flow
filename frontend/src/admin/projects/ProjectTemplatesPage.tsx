@@ -52,6 +52,7 @@ function formatTime(value: string): string {
       }).format(date)
 }
 
+// TPL-R14：預覽需與後端 strip／casefold 一致，JS trim／小寫有 Unicode 差異。
 const PYTHON_WHITESPACE =
   '\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680' +
   '\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000'
@@ -66,6 +67,7 @@ function pythonStrip(value: string): string {
 function pythonCasefold(value: string): string {
   return Array.from(pythonStrip(value), (character) => {
     const codepoint = character.codePointAt(0) ?? 0
+    // 無點 i、大寫 ẞ（U+1E9E）與 Cherokee 的摺疊規則無法只靠一般大小寫往返。
     if (codepoint === 0x0131) return character
     if (codepoint === 0x1e9e) return 'ss'
     if (
@@ -404,6 +406,7 @@ export default function ProjectTemplatesPage({
     : selected?.type === 'category'
       ? categories.find((item) => item.id === selected.id)
       : undefined
+  // 依系統 ID 取快取，較晚回來的其他系統資料不會成為目前預覽。
   const templates = selectedSystem
     ? (templatesBySystem[selectedSystem.id] ?? [])
     : []
@@ -463,6 +466,7 @@ export default function ProjectTemplatesPage({
     selectedTemplates.length > 0 &&
     (mode === 'system' || activeSelection?.type === 'item'),
   )
+  // TPL-R14：整系統不能略過衝突項目，部分已套用仍須改選單項。
   const selectedAlreadyApplied = selectedTemplates.some((item) =>
     isAlreadyApplied(item, projectItemNames),
   )
