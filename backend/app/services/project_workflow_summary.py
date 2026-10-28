@@ -79,7 +79,7 @@ def get_project_workflow_summary(
     access = calculate_effective_access(
         session, user_id=operator.id, project_id=project_id
     )
-    # IP-R11 回傳的碼供前端判斷入口，須反映模組可使用總開關。
+    # IP-R30 回傳的碼供前端判斷入口，須反映模組可使用總開關。
     permissions = (
         frozenset(
             code.value

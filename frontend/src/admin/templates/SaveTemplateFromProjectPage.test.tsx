@@ -109,11 +109,18 @@ describe('SaveTemplateFromProjectPage', () => {
       name: 'P-1 · 工程一',
     })
     fireEvent.click(projectButton)
+    expect(projectButton).toHaveTextContent('✓ 已選取')
     expect(await screen.findByText('步驟 2／3')).toBeVisible()
-    fireEvent.click(await screen.findByRole('button', { name: /鋼筋查核/ }))
+    const sourceButton = await screen.findByRole('button', {
+      name: /鋼筋查核/,
+    })
+    fireEvent.click(sourceButton)
+    expect(sourceButton).toHaveTextContent('✓ 已選取')
     expect(await screen.findByText('步驟 3／3')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: '土木' }))
-    fireEvent.click(await screen.findByRole('button', { name: '結構' }))
+    const systemButton = await screen.findByRole('button', { name: '結構' })
+    fireEvent.click(systemButton)
+    expect(systemButton).toHaveTextContent('✓ 已選取')
     fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
 
     await waitFor(() =>

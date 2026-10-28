@@ -220,7 +220,8 @@ export default function SaveTemplateFromProjectPage() {
             onChange={(event) => setQuery(event.target.value)}
             value={query}
           />
-          <ul>
+          {/* 去掉項目符號後 Safari 不再把 ul 當清單報讀，所以明示 role。 */}
+          <ul role="list">
             {filteredProjects.map((row) => (
               <li key={row.id}>
                 <button
@@ -230,6 +231,16 @@ export default function SaveTemplateFromProjectPage() {
                   type="button"
                 >
                   {row.project_code} · {row.name}
+                  {/* 選取狀態已由 aria-pressed 朗讀，標記只補視覺線索，
+                      避免重複報讀。 */}
+                  {project?.id === row.id && (
+                    <span
+                      aria-hidden="true"
+                      className="save-template-selected-marker"
+                    >
+                      ✓ 已選取
+                    </span>
+                  )}
                 </button>
               </li>
             ))}
@@ -242,7 +253,8 @@ export default function SaveTemplateFromProjectPage() {
             {loading ? <p role="status">載入中…</p> : null}
             {/* TPL-R28：存為範本不列停用來源，須先到專案恢復。 */}
             {!loading && (
-              <ul>
+              // 去掉項目符號後 Safari 不再把 ul 當清單報讀，所以明示 role。
+              <ul role="list">
                 {projectItems
                   .filter((item) => item.is_active !== false)
                   .map((item) => (
@@ -255,6 +267,16 @@ export default function SaveTemplateFromProjectPage() {
                       >
                         {item.title}（{item.inspection_points.length}{' '}
                         個查核項次； 來源範本：{item.source_template_name}）
+                        {/* 選取狀態已由 aria-pressed 朗讀，標記只補視覺線索，
+                            避免重複報讀。 */}
+                        {source?.id === item.id && (
+                          <span
+                            aria-hidden="true"
+                            className="save-template-selected-marker"
+                          >
+                            ✓ 已選取
+                          </span>
+                        )}
                       </button>
                     </li>
                   ))}
@@ -273,6 +295,7 @@ export default function SaveTemplateFromProjectPage() {
               {stepError('target')}
               <div aria-disabled={busy} inert={busy}>
                 <TemplateLibraryNav
+                  showSelectedMarker
                   categories={categories}
                   systems={systems}
                   items={[]}

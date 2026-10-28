@@ -44,6 +44,32 @@ describe('稽核事件白話對照', () => {
     )
   })
 
+  it('對象優先顯示事件快照名稱，不使用目前人員清單名稱', () => {
+    expect(
+      entityLabel(
+        auditLogEntryFixture({
+          event_type: 'user.created',
+          entity_type: 'user',
+          after: { name_zh: '當時姓名', username: 'anna.d' },
+        }),
+        { userName: () => '目前姓名', projectName: () => null },
+      ),
+    ).toBe('帳號：當時姓名')
+  })
+
+  it('修改帳號名稱仍以目前人員清單顯示姓名與帳號', () => {
+    expect(
+      entityLabel(
+        auditLogEntryFixture({
+          event_type: 'user.username_changed',
+          entity_type: 'user',
+          after: { username: 'anna.d' },
+        }),
+        { ...noLookup, userName: () => '鄧安娜 (anna.d)' },
+      ),
+    ).toBe('帳號：鄧安娜 (anna.d)')
+  })
+
   it('對象沒有名稱時只顯示類型，不顯示編號', () => {
     const label = entityLabel(
       auditLogEntryFixture({

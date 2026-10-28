@@ -1,5 +1,7 @@
 import { Component, type ReactNode } from 'react'
 
+import { withBasePath } from '../basePath'
+
 type PageLoadErrorVariant = 'page' | 'updated'
 
 /**
@@ -87,7 +89,7 @@ export default class RouteLoadErrorBoundary extends Component<
             >
               重新載入
             </button>
-            <a href="/">回首頁</a>
+            <a href={withBasePath('/')}>回首頁</a>
           </main>
         )
       }

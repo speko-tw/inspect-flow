@@ -131,7 +131,7 @@ class WorkflowProjectIdentity(BaseModel):
     id: UUID
     project_code: str
     name: str
-    # IP-R11、ADM-R41：專案首頁顯示本公司角色，免另呼叫專案詳情。
+    # IP-R30、ADM-R41：專案首頁顯示本公司角色，免另呼叫專案詳情。
     company_role: str
 
 

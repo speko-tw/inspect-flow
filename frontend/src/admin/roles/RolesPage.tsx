@@ -450,7 +450,11 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
     )
   }
   function describeImpact(item: Role) {
-    return `會影響 ${item.project_count} 個專案中的 ${item.user_count} 個帳號`
+    const inactive =
+      item.inactive_user_count > 0
+        ? `（含 ${item.inactive_user_count} 個已停用）`
+        : ''
+    return `會影響 ${item.project_count} 個專案中的 ${item.user_count} 個帳號${inactive}`
   }
 
   if (forbidden) return <AccessDeniedPage />
@@ -668,7 +672,7 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
               )}
             </div>
             {role.id === creatorRoleId && (
-              <p>
+              <p className="default-role-delete-hint">
                 這個角色是「新專案預設角色」，不能刪除。要刪除，請先回
                 <Link to={listPath}>角色清單</Link>
                 ，用「設定新專案預設角色」改選別的角色。
