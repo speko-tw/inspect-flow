@@ -261,10 +261,16 @@ it.each([
     },
   })
   renderAt('/overview/projects/project-1/tasks')
-  expect(await screen.findByText('（已停用）')).toBeVisible()
-  expect(screen.queryByText(/請改派/)).toBeNull()
+  const notice =
+    !plan_archived && status === 'PENDING'
+      ? '（已停用，請改派）'
+      : '（已停用）'
+  expect(await screen.findByText(notice)).toBeVisible()
+  if (notice.includes('請改派'))
+    expect(screen.getByText(notice)).toHaveClass('field-error')
   fireEvent.click(screen.getByRole('link', { name: /二樓機房/ }))
   const detail = await screen.findByRole('region', { name: '任務明細' })
-  expect(within(detail).getByText('（已停用）')).toBeVisible()
-  expect(within(detail).queryByText(/請改派/)).toBeNull()
+  expect(within(detail).getByText(notice)).toBeVisible()
+  if (notice.includes('請改派'))
+    expect(within(detail).getByText(notice)).toHaveClass('field-error')
 })

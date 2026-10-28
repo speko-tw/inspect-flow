@@ -116,12 +116,6 @@
   line-height: 1.2;
 }
 
-.dashboard-summary-hint {
-  margin-top: var(--space-1);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-small);
-}
-
 .dashboard-summary-card.is-completion strong {
   color: var(--color-action-primary);
   font-size: clamp(2.125rem, 4vw, 3rem);
@@ -221,12 +215,6 @@
 
 .dashboard-project-name {
   min-width: 0;
-}
-
-.dashboard-project-name small {
-  display: block;
-  margin-top: 2px;
-  color: var(--color-text-secondary);
 }
 
 .dashboard-project-link {

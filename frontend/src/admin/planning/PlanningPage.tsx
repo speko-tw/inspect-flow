@@ -587,11 +587,11 @@ function PlanningContent({
   const [cancelReason, setCancelReason] = useState('')
   const [confirmation, setConfirmation] = useState<{
     title: string
-    details?: React.ReactNode
+    details: React.ReactNode
     confirmLabel: string
     action: () => Promise<unknown>
     success: { area: NoticeArea; text: string }
-    danger?: { label: string }
+    danger?: boolean
   } | null>(null)
   const [discardingTaskForm, setDiscardingTaskForm] = useState<
     'location' | 'assignee' | 'items' | 'name' | 'new-task' | null
@@ -1135,109 +1135,90 @@ function PlanningContent({
     editTask(task, 'items')
   }
 
-  // 沒有任何阻擋原因時不渲染清單，避免空的 <ul> 被報讀成「清單，0 項」。
+  // 派出鈕的描述只包含原因與欄位捷徑，不包含額外的權限提示。
   function renderDispatchBlockers(task: InspectionTask) {
     if (task.status !== 'DRAFT') return null
     const blockers = dispatchBlockers(task)
-    // 詳情已在派出鈕旁說明，避免舊警示與改派入口重複。
-    const showUnassigned =
-      blockers.unassigned && !(view === 'task' && canModify)
-    if (!showUnassigned && !blockers.noLocation && !blockers.noItems) {
-      return null
+    if (!Object.values(blockers).some(Boolean)) return null
+    if (canModify && canDispatchTask) {
+      const reasons = [
+        {
+          blocked: blockers.unassigned,
+          label: '指定建議指派人',
+          allowed: canAssignTask,
+          section: 'assignee' as const,
+        },
+        {
+          blocked: blockers.noLocation,
+          label: '填寫地點',
+          allowed: canManageTask,
+          section: 'location' as const,
+        },
+        {
+          blocked: blockers.noItems,
+          label: '選擇查核項目',
+          allowed: canManageTask,
+          section: 'items' as const,
+        },
+      ].filter((reason) => reason.blocked)
+      return (
+        <>
+          <p id={`dispatch-needs-${task.id}`}>
+            派出前還需要：
+            {reasons.map((reason, index) => (
+              <span key={reason.label}>
+                {index > 0 && '、'}
+                {reason.allowed ? (
+                  <button
+                    onClick={(event) => {
+                      clearFieldError()
+                      setNotice(null)
+                      if (reason.section === 'items') {
+                        openTaskItemsEditor(task)
+                      } else {
+                        if (reason.section === 'assignee')
+                          assigneeTrigger.current = event.currentTarget
+                        else locationTrigger.current = event.currentTarget
+                        editTask(task, reason.section, reason.label)
+                      }
+                    }}
+                    type="button"
+                  >
+                    {reason.label}
+                  </button>
+                ) : (
+                  reason.label
+                )}
+              </span>
+            ))}
+          </p>
+          {blockers.unassigned && !canAssignTask && (
+            <p>請洽有指派權限的專案管理者</p>
+          )}
+        </>
+      )
     }
     return (
       <ul
         aria-label="派出前需要處理的項目"
         className="task-dispatch-blockers"
-        // 去掉項目符號後 Safari 會不再把 <ul> 當清單報讀，所以明示 role。
+        // Safari 在隱藏項目符號時需要明示清單語意。
         role="list"
         style={{ listStyle: 'none' }}
       >
-        {showUnassigned && (
-          <li>
-            {canModify && canAssignTask
-              ? '尚未指派：'
-              : '尚未指派建議指派人。'}
-            {canModify && canDispatchTask && !canAssignTask && (
-              <p>請洽有指派權限的專案管理者</p>
-            )}
-            {canModify && canAssignTask && (
-              <button
-                onClick={(event) => {
-                  clearFieldError()
-                  setNotice(null)
-                  assigneeTrigger.current = event.currentTarget
-                  editTask(task, 'assignee', '指定建議指派人')
-                }}
-                type="button"
-              >
-                指定建議指派人
-              </button>
-            )}
-          </li>
-        )}
-        {blockers.noLocation && (
-          <li>
-            {canModify && canManageTask ? '尚未填寫地點：' : '尚未填寫地點。'}
-            {canModify && canManageTask && (
-              <button
-                onClick={(event) => {
-                  clearFieldError()
-                  setNotice(null)
-                  locationTrigger.current = event.currentTarget
-                  editTask(task, 'location', '填寫地點')
-                }}
-                type="button"
-              >
-                填寫地點
-              </button>
-            )}
-          </li>
-        )}
-        {blockers.noItems && (
-          <li>
-            {canModify && canManageTask
-              ? '尚未選擇查核項目：請直接修改這筆草稿的查核項目。'
-              : '尚未選擇查核項目。'}
-            {canModify && canManageTask && task.status === 'DRAFT' && (
-              <button onClick={() => openTaskItemsEditor(task)} type="button">
-                選擇查核項目
-              </button>
-            )}
-          </li>
-        )}
+        {blockers.unassigned && <li>尚未指派建議指派人。</li>}
+        {blockers.noLocation && <li>尚未填寫地點。</li>}
+        {blockers.noItems && <li>尚未選擇查核項目。</li>}
       </ul>
     )
   }
 
-  function confirm(
-    title: string,
-    action: () => Promise<unknown>,
-    success: { area: NoticeArea; text: string },
-    danger?: { label: string },
-    details?: React.ReactNode,
-  ): void {
+  function confirm(options: NonNullable<typeof confirmation>): void {
     setError('')
     setNotice(null)
     setErrorContext('dialog')
     confirmationTrigger.current = document.activeElement as HTMLElement
-    const confirmLabel = title.startsWith('派出')
-      ? '確認派出'
-      : title.startsWith('刪除')
-        ? '確認刪除'
-        : title.startsWith('取消封存')
-          ? '確認取消封存'
-          : title.startsWith('封存')
-            ? '確認封存'
-            : '確認恢復'
-    setConfirmation({
-      title,
-      action,
-      success,
-      danger,
-      details,
-      confirmLabel,
-    })
+    setConfirmation(options)
   }
 
   function closeDialogs(): void {
@@ -1983,25 +1964,35 @@ function PlanningContent({
                           }
                           disabled={busy}
                           onClick={() =>
-                            confirm(
-                              selectedPlan.status === 'ARCHIVED'
-                                ? '取消封存計畫並依目前任務重算狀態？'
-                                : '封存計畫？封存期間任務將唯讀。',
-                              () =>
+                            confirm({
+                              title:
+                                selectedPlan.status === 'ARCHIVED'
+                                  ? '取消封存這個計畫？'
+                                  : '封存這個計畫？',
+                              confirmLabel:
+                                selectedPlan.status === 'ARCHIVED'
+                                  ? '確認取消封存'
+                                  : '確認封存',
+                              details: (
+                                <p>
+                                  {selectedPlan.status === 'ARCHIVED'
+                                    ? '取消封存後依目前任務重算計畫狀態。'
+                                    : '封存期間任務將唯讀。'}
+                                </p>
+                              ),
+                              action: () =>
                                 selectedPlan.status === 'ARCHIVED'
                                   ? client.unarchivePlan(selectedPlan.id)
                                   : client.archivePlan(selectedPlan.id),
-                              {
+                              success: {
                                 area: 'plan-detail',
                                 text:
                                   selectedPlan.status === 'ARCHIVED'
                                     ? '已取消封存計畫。'
                                     : '已封存計畫。',
                               },
-                              selectedPlan.status === 'ARCHIVED'
-                                ? undefined
-                                : { label: '確認' },
-                            )
+                              danger: selectedPlan.status !== 'ARCHIVED',
+                            })
                           }
                           type="button"
                         >
@@ -2252,40 +2243,9 @@ function PlanningContent({
                               任務已派出，不能更換查核項目
                             </p>
                           )}
-                          {view === 'task' && canModify && (
-                            <>
-                              {task.status === 'DRAFT' && (
-                                <div id={`dispatch-needs-${task.id}`}>
-                                  {Object.values(dispatchBlockers(task)).some(
-                                    Boolean,
-                                  ) && (
-                                    <p>
-                                      派出前還需要：
-                                      {[
-                                        dispatchBlockers(task).unassigned
-                                          ? '指定建議指派人'
-                                          : '',
-                                        dispatchBlockers(task).noLocation
-                                          ? '填寫地點'
-                                          : '',
-                                        dispatchBlockers(task).noItems
-                                          ? '選擇查核項目'
-                                          : '',
-                                      ]
-                                        .filter(Boolean)
-                                        .join('、')}
-                                    </p>
-                                  )}
-                                  {dispatchBlockers(task).unassigned &&
-                                    canDispatchTask &&
-                                    !canAssignTask && (
-                                      <p>請洽有指派權限的專案管理者</p>
-                                    )}
-                                  {renderDispatchBlockers(task)}
-                                </div>
-                              )}
-                            </>
-                          )}
+                          {view === 'task' &&
+                            canModify &&
+                            renderDispatchBlockers(task)}
                           {view === 'task' && canModify && (
                             <div className="planning-task-actions">
                               <div className="named-row-actions">
@@ -2309,16 +2269,17 @@ function PlanningContent({
                                         ).some(Boolean)
                                       }
                                       onClick={() =>
-                                        confirm(
-                                          '派出這個任務？',
-                                          () => client.dispatchTask(task.id),
-                                          {
+                                        confirm({
+                                          title: '派出這個任務？',
+                                          confirmLabel: '確認派出',
+                                          action: () =>
+                                            client.dispatchTask(task.id),
+                                          success: {
                                             area: 'tasks',
                                             text: '已派出任務，現場可以查看了。',
                                           },
-                                          undefined,
-                                          dispatchConfirmation(task),
-                                        )
+                                          details: dispatchConfirmation(task),
+                                        })
                                       }
                                       type="button"
                                     >
@@ -2421,14 +2382,19 @@ function PlanningContent({
                                     <button
                                       disabled={busy}
                                       onClick={() =>
-                                        confirm(
-                                          '恢復此任務至取消前狀態？',
-                                          () => client.restoreTask(task.id),
-                                          {
+                                        confirm({
+                                          title: '恢復這個任務？',
+                                          confirmLabel: '確認恢復',
+                                          details: (
+                                            <p>任務將恢復至取消前狀態。</p>
+                                          ),
+                                          action: () =>
+                                            client.restoreTask(task.id),
+                                          success: {
                                             area: 'tasks',
                                             text: '已恢復任務。',
                                           },
-                                        )
+                                        })
                                       }
                                       type="button"
                                     >
@@ -2442,19 +2408,23 @@ function PlanningContent({
                                     className="btn-danger-outline"
                                     disabled={busy}
                                     onClick={() =>
-                                      confirm(
-                                        '刪除這個草稿？',
-                                        () => client.deleteDraftTask(task.id),
-                                        {
+                                      confirm({
+                                        title: '刪除這個草稿？',
+                                        confirmLabel: '確認刪除',
+                                        action: () =>
+                                          client.deleteDraftTask(task.id),
+                                        success: {
                                           area: 'tasks',
                                           text: '已刪除草稿任務。',
                                         },
-                                        { label: '確認刪除' },
-                                        <p>
-                                          任務{draftTaskSummary(task)}。
-                                          刪除後無法復原。
-                                        </p>,
-                                      )
+                                        danger: true,
+                                        details: (
+                                          <p>
+                                            {`任務${draftTaskSummary(task)}。` +
+                                              '刪除後無法復原。'}
+                                          </p>
+                                        ),
+                                      })
                                     }
                                     type="button"
                                   >
@@ -3361,7 +3331,7 @@ function PlanningContent({
           title={confirmation.title}
           variant={confirmation.danger ? 'danger' : 'neutral'}
         >
-          {confirmation.details ?? <p>{confirmation.title}</p>}
+          {confirmation.details}
           {error && errorContext === 'dialog' && (
             <p ref={errorMessage} role="alert" tabIndex={-1}>
               {error}

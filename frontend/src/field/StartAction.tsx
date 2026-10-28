@@ -257,7 +257,7 @@ export default function StartAction({
         />
       ) : (
         <>
-          <p>看完需求後開始查核。</p>
+          <p>開始前請先看下方查核需求。</p>
           <Button
             id="field-start-task"
             variant="primary"

@@ -33,7 +33,6 @@ function assigneeLabel(task: DashboardTask) {
   if (!task.suggested_assignee) return '未提供建議指派'
   return (
     <SuggestedAssignee
-      showReassignNotice={false}
       person={task.suggested_assignee}
       status={task.status}
       archived={Boolean(task.plan_archived)}

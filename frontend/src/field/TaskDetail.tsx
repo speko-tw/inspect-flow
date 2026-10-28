@@ -196,6 +196,7 @@ export default function TaskDetail({
             </div>
           </Card>
           <section className="field-action-panel" aria-label="任務操作">
+            <h2 className="visually-hidden">任務操作</h2>
             <Card className="field-action-card">
               <StartAction
                 task={task}

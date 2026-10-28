@@ -313,6 +313,12 @@ describe('planning management page', () => {
           name: '恢復任務',
         }),
       )
+      expect(screen.getByRole('dialog')).toHaveTextContent(
+        '任務將恢復至取消前狀態。',
+      )
+      expect(
+        screen.getByRole('heading', { name: '恢復這個任務？' }),
+      ).toBeVisible()
       await click(screen.getByRole('button', { name: '確認恢復' }))
       await screen.findByRole('heading', {
         name: /橋梁外牆複查\s+（待開始）/,
@@ -695,7 +701,7 @@ describe('planning management page', () => {
     expect(dialog).toHaveTextContent(
       '任務「混凝土外觀－北區」（查核項目：混凝土外觀）。',
     )
-    expect(dialog).toHaveTextContent('刪除後無法復原')
+    expect(dialog).toHaveTextContent('。刪除後無法復原。')
     expect(within(dialog).queryByRole('button', { name: '確認' })).toBeNull()
     const remove = within(dialog).getByRole('button', { name: '確認刪除' })
     expect(remove).toHaveClass('btn-danger')
@@ -1010,6 +1016,12 @@ describe('planning management page', () => {
       screen.getByRole('heading', { name: '任務' }).parentElement,
     ).toHaveClass('planning-section-title')
     await click(screen.getByRole('button', { name: '封存計畫' }))
+    expect(
+      screen.getByRole('heading', { name: '封存這個計畫？' }),
+    ).toBeVisible()
+    expect(
+      within(screen.getByRole('dialog')).getByText('封存期間任務將唯讀。'),
+    ).toBeVisible()
     await click(
       within(screen.getByRole('dialog')).getByRole('button', {
         name: '確認封存',
@@ -1036,6 +1048,14 @@ describe('planning management page', () => {
     ).toBeNull()
     await click(screen.getByRole('link', { name: '返回計畫詳情' }))
     await click(screen.getByRole('button', { name: '取消封存' }))
+    expect(
+      screen.getByRole('heading', { name: '取消封存這個計畫？' }),
+    ).toBeVisible()
+    expect(
+      within(screen.getByRole('dialog')).getByText(
+        '取消封存後依目前任務重算計畫狀態。',
+      ),
+    ).toBeVisible()
     await click(
       within(screen.getByRole('dialog')).getByRole('button', {
         name: '確認取消封存',
@@ -2069,7 +2089,7 @@ describe('planning forms guard (#507)', () => {
 
     await click(
       within(article).getByRole('button', {
-        name: '修改建議指派',
+        name: '指定建議指派人',
       }),
     )
     fireEvent.change(within(article).getByLabelText('建議指派人'), {
@@ -2083,6 +2103,7 @@ describe('planning forms guard (#507)', () => {
     })
 
     await click(within(article).getByRole('button', { name: '派出任務' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('派出後現場即可查看')
     const confirm = screen.getByRole('button', { name: '確認派出' })
 
     await click(confirm)
@@ -2196,6 +2217,41 @@ describe('planning forms guard (#507)', () => {
         within(article).queryByRole('list', { name: BLOCKERS }),
       ).not.toBeInTheDocument()
       expect(article.querySelector('.task-dispatch-blockers')).toBeNull()
+      expect(
+        within(article).getByRole('button', { name: '派出任務' }),
+      ).not.toHaveAttribute('aria-describedby')
+    })
+
+    it('shows only a reason list without dispatch permission', async () => {
+      const client = await seededComplete()
+      reshapeTasks(client, (task) => ({
+        ...task,
+        assignee_id: null,
+        assignee: null,
+      }))
+      render(
+        <PlanningPage
+          client={client}
+          initialProjectId="project-demo-1"
+          viewerPermissions={[
+            'inspection_plan.read',
+            'inspection_task.read',
+            'inspection_task.assign',
+          ]}
+        />,
+      )
+      await click(await screen.findByRole('link', { name: /橋梁查核（/ }))
+      await openTaskDetail()
+      const article = await screen.findByRole('article')
+      const list = within(article).getByRole('list', { name: BLOCKERS })
+      expect(list).toHaveTextContent('尚未指派建議指派人。')
+      expect(within(list).queryByRole('button')).toBeNull()
+      expect(within(article).queryByText(/派出前還需要/)).toBeNull()
+      expect(
+        within(article).queryByRole('button', {
+          name: '派出任務',
+        }),
+      ).toBeNull()
     })
 
     it('lists a missing location and jumps to the location field', async () => {
@@ -2208,11 +2264,18 @@ describe('planning forms guard (#507)', () => {
       }))
       const article = await openPlan(client)
 
-      const list = within(article).getByRole('list', { name: BLOCKERS })
-      expect(list).toHaveStyle({ listStyle: 'none' })
-      expect(list).toHaveAttribute('role', 'list')
-      expect(list.style.paddingInlineStart).toBe('')
-      expect(within(list).getByText(/尚未填寫地點/)).toBeVisible()
+      const list = within(article).getByText(/派出前還需要/)
+      expect(list.tagName).toBe('P')
+      const dispatch = within(article).getByRole('button', {
+        name: '派出任務',
+      })
+      expect(dispatch).toHaveAttribute('aria-describedby', list.id)
+      expect(list).toHaveTextContent('派出前還需要：填寫地點')
+      expect(
+        within(article).getAllByRole('button', {
+          name: '填寫地點',
+        }),
+      ).toHaveLength(1)
       expect(within(article).queryByText(/尚未指派/)).toBeNull()
       expect(
         within(article).getByRole('button', { name: '派出任務' }),
@@ -2233,10 +2296,18 @@ describe('planning forms guard (#507)', () => {
       reshapeTasks(client, (task) => ({ ...task, items: [] }))
       const article = await openPlanBare(client)
 
-      const list = within(article).getByRole('list', { name: BLOCKERS })
-      expect(within(list).getByText(/尚未選擇查核項目/)).toHaveTextContent(
-        '請直接修改這筆草稿的查核項目',
-      )
+      const list = within(article).getByText(/派出前還需要/)
+      expect(list.tagName).toBe('P')
+      const dispatch = within(article).getByRole('button', {
+        name: '派出任務',
+      })
+      expect(dispatch).toHaveAttribute('aria-describedby', list.id)
+      expect(list).toHaveTextContent('派出前還需要：選擇查核項目')
+      expect(
+        within(article).getAllByRole('button', {
+          name: '選擇查核項目',
+        }),
+      ).toHaveLength(1)
       const hashBefore = window.location.hash
 
       await click(within(list).getByRole('button', { name: '選擇查核項目' }))
@@ -2473,7 +2544,7 @@ describe('planning forms guard (#507)', () => {
         .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
       const article = await openPlan(client)
       expect(
-        within(article).getByRole('button', { name: '修改建議指派' }),
+        within(article).getByRole('button', { name: '指定建議指派人' }),
       ).toBeVisible()
       await click(within(article).getByRole('button', { name: '修改地點' }))
       await click(within(article).getByRole('button', { name: '儲存地點' }))
@@ -2484,7 +2555,7 @@ describe('planning forms guard (#507)', () => {
         ).toBeNull(),
       )
       expect(
-        within(article).queryByRole('button', { name: '修改建議指派' }),
+        within(article).queryByRole('button', { name: '指定建議指派人' }),
       ).toBeNull()
       expect(within(article).getByText(/尚未指派/)).toBeVisible()
       expect(
@@ -2906,13 +2977,13 @@ describe('planning trial fixes (#634)', () => {
     expect(screen.queryByRole('button', { name: '捨棄變更' })).toBeNull()
   })
 
-  it('assignee editor clears notices and restores focus', async () => {
+  it('shortcuts clear notices and return focus to their button', async () => {
     const { article } = await setup()
     await renameWithNotice()
 
     await openTaskDetail()
     const shortcut = within(article).getByRole('button', {
-      name: '修改建議指派',
+      name: '指定建議指派人',
     })
     await click(shortcut)
     expect(screen.queryByText('已更新計畫名稱。')).toBeNull()
@@ -2920,6 +2991,9 @@ describe('planning trial fixes (#634)', () => {
       name: /^修改建議指派｜/,
     })
     expect(form).toBeVisible()
+    await waitFor(() =>
+      expect(within(form).getByLabelText('建議指派人')).toHaveFocus(),
+    )
     await click(
       within(form).getByRole('button', {
         name: '取消',
@@ -2928,7 +3002,7 @@ describe('planning trial fixes (#634)', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: '修改建議指派' }),
+        screen.getByRole('button', { name: '指定建議指派人' }),
       ).toHaveFocus(),
     )
   })

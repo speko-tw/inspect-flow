@@ -462,7 +462,7 @@ export default function ProjectEditPage() {
           <fieldset disabled={saving}>
             <FormGroup title="專案資料">
               <FormField
-                description="選您公司在這個工地的身分，系統會依此提供對應的檢查表單。同一工地要用另一種身分，請另開專案。"
+                description="選您公司在這個工地的身分，會決定報表種類。同一工地要用另一種身分，請另開專案。"
                 error={fieldErrors.company_role}
                 id="edit-company-role"
                 label="本公司在這個案子的角色"

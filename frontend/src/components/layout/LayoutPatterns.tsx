@@ -175,6 +175,7 @@ export function ConfirmationPanel({
 }: {
   tone: 'neutral' | 'danger'
   title: string
+  /** 省略時 title 必須已含受影響對象（UDS-R09）。 */
   subject?: string
   impact: string
   cancelLabel: string

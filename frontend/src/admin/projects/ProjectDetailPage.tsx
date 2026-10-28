@@ -1110,8 +1110,9 @@ function ProjectMembersSection({
                       variant="danger"
                     >
                       <p>
-                        要把「{personLabel(member)}」移出專案嗎？
-                        移出後這個人在本專案的角色會一併移除；不影響他在其他專案的角色。
+                        {`要把「${personLabel(member)}」移出專案嗎？` +
+                          '移出後這個人在本專案的角色會一併移除；' +
+                          '不影響他在其他專案的角色。'}
                       </p>
                       {alertFor('remove')}
                     </ConfirmBox>

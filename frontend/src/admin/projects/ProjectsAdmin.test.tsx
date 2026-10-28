@@ -1281,9 +1281,11 @@ describe('admin projects page', () => {
         .getAllByRole('option')
         .map((option) => option.textContent),
     ).toEqual(['承攬施工方（一級自主檢查）', '監造方（二級抽查（驗））'])
-    expect(within(form).getByText(/選您公司在這個工地的身分/)).toBeVisible()
     expect(
-      within(form).getByText(/同一工地要用另一種身分，請另開專案/),
+      within(form).getByText(
+        '選您公司在這個工地的身分，會決定報表種類。' +
+          '同一工地要用另一種身分，請另開專案。',
+      ),
     ).toBeVisible()
 
     fillProjectForm()
@@ -3051,6 +3053,7 @@ describe('admin project members', () => {
     expect(calls(fetchMock, 'DELETE', /members/)).toHaveLength(0)
     const confirm = screen.getByRole('group', { name: '移出確認' })
     expectCancelThenDanger(confirm, ['取消', '確認移出'])
+    expect(confirm).toHaveTextContent('嗎？移出後這個人在本專案的角色')
     // ConfirmBox 的初始焦點由 effect 設定，等待它完成後再檢查。
     await waitFor(() =>
       expect(
@@ -3949,7 +3952,7 @@ describe('project members forms guard (#507)', () => {
     )
     expect(
       screen.getByText(
-        '選您公司在這個工地的身分，系統會依此提供對應的檢查表單。同一工地要用另一種身分，請另開專案。',
+        '選您公司在這個工地的身分，會決定報表種類。同一工地要用另一種身分，請另開專案。',
       ),
     ).toBeVisible()
   })
