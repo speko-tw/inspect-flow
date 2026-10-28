@@ -94,7 +94,7 @@
 
 上表「範本管理員」一詞與 `system-role-assignments` 路由是**過渡期**行為（TPL-R09、AUT-R50）；正式行為依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)：寫入、存成範本與跨專案瀏覽的存取層級改為「需模組權限 `template.manage`（委派不放行）」，讀取範本庫改為需範本模組「可使用」`template.use`（原「具任一專案查核項目編輯權限者」另須具 `template.use`），`GET /api/v1/projects` 列出全部專案的條件依 `domain-model` 專案管理 API（正式條件為規格設計，非負責人裁定）；`system-role-assignments` 兩條路由在改造完成後移除，改由 `admin-dashboard` 的模組權限 API 授予與收回。
 
-`GET /api/v1/projects` 維持 AUT-R20 的 Admin 存取；新增範本管理員可列出全部專案，其他非 Admin（包括一般專案成員及無專案權限者）仍回 403，不提供過濾列表。回歸驗收確認 Admin 與範本管理員可取得全部專案，其他非 Admin 拒絕。名稱衝突回 `template.name_conflict`（409）；分類有系統時回 `template.category_not_empty`（409）；系統有查核項目時回 `template.system_not_empty`（409）。
+`GET /api/v1/projects` 的正式存取條件見 domain-model 專案管理 API。回歸驗收確認有權使用者可取得全部專案，未授權者回 403，不提供過濾列表。名稱衝突回 `template.name_conflict`（409）；分類有系統時回 `template.category_not_empty`（409）；系統有查核項目時回 `template.system_not_empty`（409）。
 
 `POST /api/v1/projects/{project_id}/templates` 的 body 必含 `project_inspection_item_id` 與目標 `system_id`；來源項目必須屬於路徑指定的專案。系統以專案副本的結構欄位建立獨立範本；目標系統中去除前後空白且不分大小寫後同名的項目回 `409 template.name_conflict`。成功建立時寫入 `template_item.created_from_project` 稽核事件。專案查核項目列表以 `created_at`、`id` 升冪分頁，回 `{items, next_cursor}`，無下一頁時 `next_cursor` 為 `null`。一般登入者依 `require_project_permission` 檢查專案成員權限；非成員或不存在的專案都回 `403 permission.denied`。Admin 與範本管理員可讀取全部專案，指定的專案不存在時回 `404 resource.not_found`。
 
@@ -119,7 +119,7 @@
 | TPL-AC05 | 一個 `system_id` 下有多個查核項目，另有單一項目範本；另有一個沒有查核項目的有效系統 | 分別以 `system_id` 與 `template_id` 套用到專案；套用後改名或刪除來源系統及類別 | 可套用單項與整個系統；每筆 `ProjectInspectionItem` 複製項目結構並保存 `project_id`、套用時間、來源範本名稱（單項用 `title`、系統用系統名稱）及當下來源類別／系統名稱；來源改名或刪除不改寫來源路徑快照及副本內容；既有無路徑資料回傳空值、不推測類別／系統；套用沒有查核項目的有效系統回 `200` 與空清單 | TPL-R04、TPL-R08 |
 | TPL-AC06 | 專案已套用範本，另有 Admin 或範本管理員 | 覆蓋或刪除來源範本，檢查專案副本；Admin 或範本管理員再讀取及存成範本 | 專案副本不變；Admin 或範本管理員能查看所有專案並把任一專案項目存成範本 | TPL-R08、TPL-R09 |
 | TPL-AC07 | 項次含文字標準、數值標準及照片需求 | 儲存並讀回定義，檢查範本結構與允許欄位 | 文字標準不解析；數值標準不接受實測值或自動判定；每個項次恰好有一筆必填的照片需求，多送一筆回 422；`min_count >= 1`、無最大數量且只接受照片類型；範本不接受 `overview`、`is_overview` 等總覽標記，故總覽照不能滿足項次最低數量。現場拍照覆蓋、跨項次共用照片與總覽照選拍行為由 P6 `field-evidence` #105 驗收 | TPL-R05、TPL-R06、TPL-R07 |
-| TPL-AC08 | 已登入 Admin、範本管理員、一般專案成員（含專案管理者）、無專案權限者 | 呼叫範本分類、系統、單項與整系統寫入端點、存成範本、跨專案查核項目列表及 `GET /api/v1/projects`；改名／刪除分類與系統；指派或收回全系統角色 | Admin 與範本管理員可執行全部範本庫寫入、存成範本及跨專案瀏覽；Admin 與範本管理員可列出全部專案，其他非 Admin 回 403；只有 Admin 可指派或收回固定角色且成功後留下稽核紀錄；專案成員（含專案管理者）可瀏覽與套用有權限的範本，但不能寫入範本或跨專案瀏覽；分類下有系統或系統下有查核項目時刪除分別回 409 與對應錯誤碼；API 符合共用慣例 | TPL-R09、TPL-R10 |
+| TPL-AC08 | 已登入 Admin、範本管理員、一般專案成員（含專案管理者）、無專案權限者 | 呼叫範本分類、系統、單項與整系統寫入端點、存成範本、跨專案查核項目列表及 `GET /api/v1/projects`；改名／刪除分類與系統；指派或收回全系統角色 | Admin 與範本管理員可執行全部範本庫寫入、存成範本及跨專案瀏覽；Admin 與範本管理員可列出全部專案，其他非 Admin 回 403；正式條件見 domain-model 專案管理 API；只有 Admin 可指派或收回固定角色且成功後留下稽核紀錄；專案成員（含專案管理者）可瀏覽與套用有權限的範本，但不能寫入範本或跨專案瀏覽；分類下有系統或系統下有查核項目時刪除分別回 409 與對應錯誤碼；API 符合共用慣例 | TPL-R09、TPL-R10 |
 | TPL-AC09 | 項次有多個文字或數字實測欄位，且設有數值標準 另有多個實測欄位與既有綁定錯誤。 | 儲存並讀回範本欄位定義，另嘗試省略綁定欄位、綁文字欄位或讓一個數字欄位綁兩個標準 移除失敗後解除再綁定，另在有錯誤的欄位之前新增／移除其他欄位。 | 每個數字欄位都有單位；每個數值標準必須綁定該項次的一個數字欄位，有數值標準時不得缺少綁定欄位；一個數字欄位最多綁一個數值標準；只有綁定欄位的單位與標準相同並由系統帶入、不可另設；其他數字欄位可自設單位；非法關聯被拒絕；範本不含現場實測值或單位換算。嘗試移除綁定欄位時只有原因與判定標準捷徑，沒有移除確認；解除標準後可正常移除。 舊錯誤不復活，錯誤不跑到另一欄，主動失敗時警示取得焦點。 | TPL-R11 |
 | TPL-AC10 | Admin 或範本管理員已登入且範本庫有工程類別、系統及範本 | 使用 MVP 範本管理 UI 新增、改名、預覽及刪除分類、系統與範本 | 管理 UI 可完成分類與範本管理；分類下有系統或系統下有查核項目時刪除被拒絕，並顯示對應的 409 錯誤 | TPL-R10、TPL-R12 |
 | TPL-AC11 | 數值標準分別採區間與標準值加減誤差，且資料庫已有舊 `range` 資料 | 建立、更新、讀取、套用及存成範本；另測試省略形式且誤差為空的舊請求、上下限反序、負誤差、缺欄位與欄位混填 | 兩種合法形式完整保留；省略形式預設 `tolerance` 且空誤差補 `0`；明填形式時空誤差及其他非法輸入回 422；舊資料遷移為 `tolerance`，空誤差補 `0`；實測欄位綁定與單位規則不變 | TPL-R11、TPL-R13 |
@@ -177,7 +177,7 @@
 | TPL-Q2 全系統角色（過渡期） | 過渡期（程式改造完成前）固定只有 `template_admin`（範本管理員），以程式內 enum／常數表示；不建角色定義表或 seed；改造後改為範本模組權限（TPL-R09）。`SystemRoleAssignment` 只記 `user_id` 與角色代碼。Admin 指派或收回均寫稽核紀錄；是否可自訂定為 MVP 不提供，未來需要時另開規格。 | 固定單一角色可避免為尚無其他需求的角色清單引入管理表、種子時序及不可取得的 role ID。 | KD-24、KD-27、KD-29、KD-49；固定清單與實作方式為規格設計（非負責人裁定）。 |
 | TPL-Q3、TPL-Q6 專案副本責任 | 本規格定義並建立 0.3.x 最小 `ProjectInspectionItem`：複製一筆範本項目及其巢狀結構，另含 `project_id`、來源範本名稱、套用時間。單項套用的來源名稱取 `title`；整系統套用取系統名稱。P4 `inspection-planning` 得擴充副本欄位，並定義修改後的作廢、重查或更正流程。 | KD-55 將後續作廢／重查／更正流程交由 P4；目前實作套用仍須有穩定的最小目標資料表。 | KD-03、KD-47、KD-55（依 PR #335）；最小表與名稱來源為規格設計。 |
 | TPL-Q4 Evidence `TEXT` | MVP 不建立 `TEXT` Evidence 類型，只支援照片；未來如需文字或其他類型，另開規格。 | KD-53 將 MVP 範圍限為照片，避免規格資料模型超出已定 MVP 邊界。 | KD-53；架構基準 §12.6。 |
-| TPL-Q7 API 與管理 UI | 採本規格「介面」列出的 `/api/v1` 資源路徑；分類與系統支援新增、改名、刪除，分類有系統或系統有項目時回指定 409；角色指派以固定代碼操作。`GET /api/v1/projects` 維持 AUT-R20 的 Admin 放行，新增範本管理員可讀取全部專案，其他非 Admin 維持 403，依 TPL-AC08 回歸。範本管理 UI 納入 MVP（T5）。 | 明確固定資源路徑、拒絕條件與授權分支，讓 API、授權與 UI 任務依同一契約拆分。 | API-R01～API-R09；KD-49；架構基準 §12.3–12.7；授權分支為規格設計。 |
+| TPL-Q7 API 與管理 UI | 採本規格「介面」列出的 `/api/v1` 資源路徑；分類與系統支援新增、改名、刪除，分類有系統或系統有項目時回指定 409；角色指派以固定代碼操作。`GET /api/v1/projects` 的正式存取條件見 domain-model 專案管理 API，依 TPL-AC08 回歸。範本管理 UI 納入 MVP（T5）。 | 明確固定資源路徑、拒絕條件與授權分支，讓 API、授權與 UI 任務依同一契約拆分。 | API-R01～API-R09；KD-49；架構基準 §12.3–12.7；授權分支為規格設計。 |
 | TPL-Q8 數值標準綁定 | 每個數值標準必須綁定同一項次的一個數字實測欄位；有數值標準時必須存在綁定欄位；一個數字欄位最多綁定一個數值標準。被綁欄位沿用標準單位，其他數字欄位自行設定單位。 | 單一明確欄位避免標準對應值含糊；限制一對一關聯可以維持單位來源唯一。 | KD-37、KD-52、KD-54；原始單位裁定見 [#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965931420)。 |
 
 
@@ -189,6 +189,7 @@
 - TPL-R23、TPL-AC21～TPL-AC22：依 #429 核可原型補充專案套用與存為範本流程；介面細節為規格設計（非負責人裁定）。
 - 規格澄清（#705）：TPL-R23、TPL-AC21～TPL-AC23 改用 `/projects/{id}/inspection-items/templates`；舊 `/admin/projects/{id}/inspection-items/templates` 與 `/admin/projects/{id}/templates` 回 404、不轉址。
 - 範圍變更（負責人試用回饋，#666，2026-10-15）：全數已套用時改為只顯示一句說明並停用套用；409 訊息使用「」— [#666](https://github.com/speko-tw/inspect-flow/issues/666)
+- 規格澄清（#728）：`GET /projects` 授權條件統一引用 domain-model 專案管理 API — [#728](https://github.com/speko-tw/inspect-flow/issues/728)
 - TPL-R22／TPL-AC20：依第 3 輪審查明確手風琴展開狀態轉移與輸入期間的穩定性 — [PR #453 第 3 輪審查](https://github.com/speko-tw/inspect-flow/pull/453#pullrequestreview-5411083162)。
 - 對齊 #375 路線圖，將 Report Delivery 更新為 P8，並將範本建議、審核與核准流程更新為 0.6.x — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 

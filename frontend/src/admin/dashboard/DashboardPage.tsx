@@ -65,6 +65,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
   const [engineerState, setEngineerState] = useState<LoadState>('loading')
   const [engineerListKey, setEngineerListKey] = useState('')
   const [retryKey, setRetryKey] = useState(0)
+  // 搜尋、頁籤與重試共用請求身分，切換條件時立即隱藏上一組資料。
   const projectRequestKey = `${projectQuery}:${retryKey}:${tab}`
   const engineerRequestKey = [
     selectedProject,
@@ -78,6 +79,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
     engineerListKey === engineerRequestKey ? engineerState : 'loading'
   const projectRequestKeyRef = useRef(projectRequestKey)
   const engineerRequestKeyRef = useRef(engineerRequestKey)
+  // 在畫面提交時更新身分，讓舊載入更多回應不能插入新條件的清單。
   useLayoutEffect(() => {
     projectRequestKeyRef.current = projectRequestKey
     engineerRequestKeyRef.current = engineerRequestKey
@@ -88,6 +90,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
   const projects =
     projectsResult.key === projectsKey ? projectsResult.items : []
   const summaryKey = `${projectsState}:${retryKey}:${selectedProject}`
+  // 非全域檢視者尚無可選專案時，不以空 ID 請求全域摘要。
   const noProjectScope =
     projectsState === 'ready' && !globalAccess && !selectedProject
   const summaryState =
@@ -167,6 +170,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
   useEffect(() => {
     if (tab !== 'projects') return
     let active = true
+    // 延後搜尋減少逐字請求；清理計時器與 active 各自擋下未送出及晚回應。
     const timer = window.setTimeout(() => {
       setProjectListKey(projectRequestKey)
       setProjectListState('loading')
@@ -238,6 +242,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
 
   async function loadMoreProjects() {
     if (!projectCursor) return
+    // 載入更多不屬於 effect 清理範圍，須另擋搜尋／頁籤切換後的晚回應。
     const requestKey = projectRequestKey
     setProjectListState('loading')
     try {
@@ -258,6 +263,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
 
   async function loadMoreEngineers() {
     if (!engineerCursor) return
+    // 工程師載入更多也綁定專案範圍，避免混入前一專案的工作量。
     const requestKey = engineerRequestKey
     setEngineerState('loading')
     try {
