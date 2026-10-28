@@ -233,9 +233,8 @@ export default function ProjectTemplatesPage({
   useEffect(() => {
     let active = true
     async function loadProject() {
-      // TPL-R09: only Admin or a template manager may save as a template.
-      // The server computes it (`has_template_access`); the page never
-      // guesses, and `GET /projects` is 403 for everyone else.
+      // TPL-R09：存為範本只開放 Admin 或範本管理者，依後端摘要判斷。
+      // #728：主管也可讀全部專案清單，但不因此取得存為範本的權限。
       const canManage =
         user.can_manage_template_library ?? user.has_template_access === true
       setSaveAllowed(canManage)

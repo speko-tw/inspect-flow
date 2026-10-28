@@ -92,8 +92,7 @@ const TEMPLATE: TemplateItem = {
   ],
 }
 
-// The server decides `has_template_access` and `GET /projects` access
-// from the same rule, so the mock keeps them in step via `canSave`.
+// mock 以 canSave 決定是否回傳跨專案清單，並模擬是否顯示存為範本。
 let managerMock = false
 
 function mockApi(

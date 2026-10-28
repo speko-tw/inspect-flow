@@ -475,31 +475,31 @@ def _member_conflict(exc: IntegrityError) -> bool:
     )
 
 
-@router.get(
-    "",
-    response_model=ProjectListResponse,
-    dependencies=[
-        Depends(
-            require_module_permission("template.manage"),
-            scope="function",
-        )
-    ],
-)
+@router.get("", response_model=ProjectListResponse)
 def list_projects(
     q: str | None = Query(default=None, max_length=256),
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db, scope="function"),  # noqa
+    user: User = Depends(require_login_access, scope="function"),  # noqa
 ) -> ProjectListResponse:
-    """分頁列出專案，存取以模組權限 ``template.manage`` 把關（Admin 放行）。
+    """分頁列出跨專案基本欄位，不附帶專案詳情或修改權限。
 
+    依 domain-model 專案管理 API，Admin、看全部專案進度或管理範本庫
+    者可讀全部清單；一般成員改用 ``GET /me/projects``。
     ``q`` 比對專案名稱與代號；依專案名稱排序並以 cursor 分頁，每筆帶
     ``member_count``（ADM-R12）。專案代號不要求唯一，重複的代號在該筆
-    ``warnings`` 標 ``project_code.duplicate``，不拒絕。規格
-    （domain-model/spec.md:278）的正式行為另允許
-    ``all_project_progress.read``，目前仍在規格所稱的過渡期，程式
-    只認 ``template.manage``。
+    ``warnings`` 標 ``project_code.duplicate``，不拒絕。
     """
+    # DOM-R61：委派不放行。依 07-permission-model，跨專案清單只
+    # 檢查第 1 層專用權限，無須 project.use。
+    access = calculate_effective_access(db, user_id=user.id)
+    if not (
+        access.is_admin
+        or access.module_permissions
+        & {"all_project_progress.read", "template.manage"}
+    ):
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
     filters = []
     query = (q or "").strip()
     if query:

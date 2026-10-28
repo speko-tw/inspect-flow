@@ -301,7 +301,7 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     stubSession()
     renderApp(['/tasks'])
 
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByRole('heading', { name: '全部任務' })
     fireEvent.click(screen.getByRole('button', { name: / ▾$/ }))
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
@@ -314,7 +314,7 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     stubSession()
     renderApp(['/tasks'])
 
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByRole('heading', { name: '全部任務' })
     fireEvent.click(screen.getByRole('button', { name: / ▾$/ }))
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
