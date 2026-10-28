@@ -27,11 +27,13 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
           INPUT_TAG: ${{ inputs.tag }}
         run: |
           python - <<'PY'
           import os
           import re
+          from pathlib import Path
 
           if os.environ["EVENT_NAME"] == "push":
               value = os.environ["REF_NAME"]
@@ -39,7 +41,21 @@ jobs:
                   raise SystemExit("tag pushes must start with v")
               stable = bool(re.fullmatch(r"v\d+\.\d+\.\d+", value))
               value = value[1:]
+              # 避免別名或預發版覆蓋正式發布標籤。
+              if value == "latest" or (
+                  re.match(r"\d+\.\d+\.\d+", value) and not stable
+              ):
+                  raise SystemExit("tag cannot replace release tags")
+              if stable:
+                  version = Path("VERSION").read_text(encoding="utf-8").strip()
+                  if value != version:
+                      raise SystemExit(
+                          "release tag must match VERSION; "
+                          "merge the version PR first"
+                      )
           else:
+              if os.environ["REF"] != "refs/heads/main":
+                  raise SystemExit("manual publish must run from main")
               value = os.environ["INPUT_TAG"]
               stable = False
               if value == "latest" or re.match(r"\d+\.\d+\.\d+", value):
