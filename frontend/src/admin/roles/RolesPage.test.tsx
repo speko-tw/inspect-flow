@@ -639,10 +639,13 @@ describe('admin role management page', () => {
   it('confirms the fresh impact before saving changes', async () => {
     const fetchMock = rolesFetch({
       roles: [
-        makeRole('r1', 'Viewer', [MANAGE.code], {
-          user_count: 5,
-          project_count: 2,
-        }),
+        {
+          ...makeRole('r1', 'Viewer', [MANAGE.code], {
+            user_count: 5,
+            project_count: 2,
+          }),
+          inactive_user_count: 1,
+        },
       ],
     })
     renderRoles()
@@ -661,7 +664,7 @@ describe('admin role management page', () => {
       name: '修改「Viewer」',
     })
     expect(confirmation).toHaveTextContent(
-      '此變更會影響 2 個專案中的 5 個帳號',
+      '此變更會影響 2 個專案中的 5 個帳號（含 1 個已停用）',
     )
     // 影響範圍向後端重新取得，而且確認前不送出修改。
     expect(calls(fetchMock, 'GET').map(([url]) => url)).toContain(
@@ -1123,5 +1126,7 @@ it('持有人數保留總數並標出其中停用者，確認影響範圍仍用�
   const box = await screen.findByRole('region', {
     name: '刪除「含停用者角色」',
   })
-  expect(box).toHaveTextContent('會影響 2 個專案中的 5 個帳號')
+  expect(box).toHaveTextContent(
+    '會影響 2 個專案中的 5 個帳號（含 1 個已停用）',
+  )
 })

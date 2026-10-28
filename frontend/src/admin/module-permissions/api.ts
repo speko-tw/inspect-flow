@@ -121,30 +121,6 @@ export function listPermissionBundles() {
   return listAllPages<PermissionBundle>('/permission-bundles')
 }
 
-export function createPermissionBundle(input: {
-  name: string
-  permission_codes: string[]
-}) {
-  return request<PermissionBundle>('/permission-bundles', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
-}
-
-export function updatePermissionBundle(
-  id: string,
-  input: { name: string; permission_codes: string[] },
-) {
-  return request<PermissionBundle>(`/permission-bundles/${enc(id)}`, {
-    method: 'PATCH',
-    body: JSON.stringify(input),
-  })
-}
-
-export function deletePermissionBundle(id: string) {
-  return request<void>(`/permission-bundles/${enc(id)}`, { method: 'DELETE' })
-}
-
 export function applyPermissionBundle(userId: string, bundleId: string) {
   return request<{ user_id: string; granted_codes: string[] }>(
     `/users/${enc(userId)}/permission-bundles/${enc(bundleId)}:apply`,

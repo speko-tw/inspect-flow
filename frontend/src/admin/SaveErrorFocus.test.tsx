@@ -93,6 +93,7 @@ function stubBackend(conflictCode: string) {
       ) {
         return Response.json({ items: [], next_cursor: null })
       }
+      if (pathname.endsWith('/users/user-1')) return Response.json(regularUser)
       if (pathname.endsWith('/users')) {
         return Response.json({ items: [regularUser], next_cursor: null })
       }
@@ -125,11 +126,15 @@ afterEach(() => {
 describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
   it.each([
     ['修改資料', '儲存資料'],
-    ['公司連結', '儲存公司連結'],
+    ['修改公司連結', '儲存公司連結'],
   ])('使用者「%s」表單', async (open, save) => {
     stubBackend('user.email_conflict')
-    renderPage(<UsersPage onTemporaryPassword={vi.fn()} />)
-    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    renderPage(
+      <UsersPage detailUserId="user-1" onTemporaryPassword={vi.fn()} />,
+    )
+    const row = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
     fireEvent.click(within(row).getByRole('button', { name: open }))
     const form = (await screen.findByRole('button', { name: save })).closest(
       'form',
@@ -138,7 +143,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
     fireEvent.click(within(form).getByRole('button', { name: save }))
 
     const alert = await within(form).findByRole('alert')
-    expect(alert).toHaveTextContent('Email 已被使用。')
+    expect(alert).toHaveTextContent('電子郵件已被使用。')
     // 錯誤先呈現，焦點再由 effect 移入；等待兩個狀態同步完成。
     await waitFor(() => expect(alert).toHaveFocus())
     // 頁頂沒有另一份錯誤（也就沒有重複朗讀）。
@@ -154,10 +159,14 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
 
   it('同一列兩個表單都開著時，只有送出失敗的表單顯示錯誤並聚焦', async () => {
     stubBackend('user.email_conflict')
-    renderPage(<UsersPage onTemporaryPassword={vi.fn()} />)
-    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    renderPage(
+      <UsersPage detailUserId="user-1" onTemporaryPassword={vi.fn()} />,
+    )
+    const row = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
     fireEvent.click(within(row).getByRole('button', { name: '修改資料' }))
-    fireEvent.click(within(row).getByRole('button', { name: '公司連結' }))
+    fireEvent.click(within(row).getByRole('button', { name: '修改公司連結' }))
     const detailsForm = (
       await screen.findByRole('button', { name: '儲存資料' })
     ).closest('form') as HTMLFormElement
@@ -170,7 +179,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
     )
 
     const alert = await within(companyForm).findByRole('alert')
-    expect(alert).toHaveTextContent('Email 已被使用。')
+    expect(alert).toHaveTextContent('電子郵件已被使用。')
     await waitFor(() => expect(alert).toHaveFocus())
     expect(within(detailsForm).queryByRole('alert')).toBeNull()
     expect(screen.getAllByRole('alert')).toHaveLength(1)

@@ -73,6 +73,15 @@
   overflow-wrap: anywhere;
 }
 
+.audit-actor {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.audit-actor small {
+  color: var(--text-muted);
+}
+
 .audit-entry pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

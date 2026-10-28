@@ -137,7 +137,7 @@ describe('RequireAuth 導向登入頁並保留原路徑（AUT-AC28）', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '登入' }))
 
-    await screen.findByRole('heading', { name: 'Admin' })
+    await screen.findByRole('heading', { name: '帳號', level: 1 })
 
     await waitFor(() => {
       const probe = screen.getByTestId('location-probe').textContent ?? ''

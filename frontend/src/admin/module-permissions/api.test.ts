@@ -6,7 +6,6 @@ import {
   getUserEffectiveAccess,
   grantModulePermission,
   setModuleDelegation,
-  updatePermissionBundle,
   revokeModulePermission,
 } from './api'
 
@@ -84,7 +83,6 @@ describe('module permission API contract', () => {
     await grantModulePermission('u/1', 'c?d')
     await getRevokeImpact('u/1', 'c?d')
     await setModuleDelegation('u/1', 'm/../x', true)
-    await updatePermissionBundle('b/1', { name: 'n', permission_codes: [] })
     await applyPermissionBundle('u/1', 'b?1')
 
     const urls = fetchMock.mock.calls.map(([url]) => String(url))
@@ -96,7 +94,6 @@ describe('module permission API contract', () => {
       '/users/u%2F1/module-permissions/c%3Fd/revoke-impact',
     )
     expect(urls[3]).toContain('/users/u%2F1/module-delegations/m%2F..%2Fx')
-    expect(urls[4]).toContain('/permission-bundles/b%2F1')
-    expect(urls[5]).toContain('/users/u%2F1/permission-bundles/b%3F1:apply')
+    expect(urls[4]).toContain('/users/u%2F1/permission-bundles/b%3F1:apply')
   })
 })
