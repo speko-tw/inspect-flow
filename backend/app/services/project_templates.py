@@ -101,7 +101,7 @@ def _copy_template_item(
     applied_at: datetime,
     operator_id: UUID,
 ) -> ProjectInspectionItem:
-    # TPL-R08：建立獨立子結構，來源日後覆蓋或刪除不能影響專案副本。
+    # TPL-R08：項目與全部子結構都新建列複製，不保留對來源的參照。
     copy = ProjectInspectionItem(
         project_id=project_id,
         sequence=template.sequence,

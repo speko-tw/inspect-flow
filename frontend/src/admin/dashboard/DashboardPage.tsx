@@ -65,7 +65,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
   const [engineerState, setEngineerState] = useState<LoadState>('loading')
   const [engineerListKey, setEngineerListKey] = useState('')
   const [retryKey, setRetryKey] = useState(0)
-  // 搜尋、分頁與重試共用請求身分，切換條件時立即隱藏上一組資料。
+  // 搜尋、頁籤與重試共用請求身分，切換條件時立即隱藏上一組資料。
   const projectRequestKey = `${projectQuery}:${retryKey}:${tab}`
   const engineerRequestKey = [
     selectedProject,
@@ -79,7 +79,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
     engineerListKey === engineerRequestKey ? engineerState : 'loading'
   const projectRequestKeyRef = useRef(projectRequestKey)
   const engineerRequestKeyRef = useRef(engineerRequestKey)
-  // 在畫面提交時更新身分，讓舊分頁回應不能插入新條件的清單。
+  // 在畫面提交時更新身分，讓舊載入更多回應不能插入新條件的清單。
   useLayoutEffect(() => {
     projectRequestKeyRef.current = projectRequestKey
     engineerRequestKeyRef.current = engineerRequestKey
@@ -242,7 +242,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
 
   async function loadMoreProjects() {
     if (!projectCursor) return
-    // 載入更多不屬於 effect 清理範圍，須另擋搜尋／分頁切換後的晚回應。
+    // 載入更多不屬於 effect 清理範圍，須另擋搜尋／頁籤切換後的晚回應。
     const requestKey = projectRequestKey
     setProjectListState('loading')
     try {
@@ -263,7 +263,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
 
   async function loadMoreEngineers() {
     if (!engineerCursor) return
-    // 工程師分頁也綁定專案範圍，避免混入前一專案的工作量。
+    // 工程師載入更多也綁定專案範圍，避免混入前一專案的工作量。
     const requestKey = engineerRequestKey
     setEngineerState('loading')
     try {

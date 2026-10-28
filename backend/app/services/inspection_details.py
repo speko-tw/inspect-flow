@@ -34,7 +34,6 @@ def inspection_points_detail(
     Child rows of every point load in one batched query per table, so the
     query count does not grow with the number of points.
     """
-    # 先跨項次批次載入，再按原輸入順序組裝，兼顧查詢數與畫面順序。
     point_ids = [point.id for point in points]
     fields = load_grouped(
         db,
@@ -129,7 +128,6 @@ def inspection_points_by_item(
         numeric_standard_model=numeric_standard_model,
         evidence_requirement_model=evidence_requirement_model,
     )
-    # 用項次 ID 還原各項目分組，避免批次攤平後把子結構配到別的項目。
     by_point = {
         point.id: detail for point, detail in zip(flat, rendered, strict=True)
     }

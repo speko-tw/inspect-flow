@@ -67,7 +67,7 @@ function pythonStrip(value: string): string {
 function pythonCasefold(value: string): string {
   return Array.from(pythonStrip(value), (character) => {
     const codepoint = character.codePointAt(0) ?? 0
-    // 無點 i、德文 ß 與 Cherokee 的摺疊規則無法只靠一般大小寫往返。
+    // 無點 i、大寫 ẞ（U+1E9E）與 Cherokee 的摺疊規則無法只靠一般大小寫往返。
     if (codepoint === 0x0131) return character
     if (codepoint === 0x1e9e) return 'ss'
     if (

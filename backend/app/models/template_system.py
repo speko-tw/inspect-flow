@@ -286,7 +286,7 @@ class ProjectInspectionItem(AuditMixin, TimestampedBase):
     sequence: Mapped[int] = mapped_column(nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
     instruction: Mapped[str] = mapped_column(String, nullable=False)
-    # TPL-R08：保留套用當下名稱，不能用來源外鍵即時查名取代快照。
+    # TPL-R08：存套用當下的名稱；來源日後改名或刪除都不得改寫此快照。
     source_template_name: Mapped[str] = mapped_column(String, nullable=False)
     source_category_name: Mapped[str | None] = mapped_column(String)
     source_system_name: Mapped[str | None] = mapped_column(String)

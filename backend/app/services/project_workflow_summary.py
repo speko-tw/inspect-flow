@@ -82,7 +82,7 @@ def get_project_workflow_summary(
     *,
     project_id: UUID,
 ) -> ProjectWorkflowSummary:
-    """依 IP-R11 聚合可見資料，避免首頁載入完整任務集合。"""
+    """依 IP-R30 聚合可見資料，避免首頁載入完整任務集合。"""
     operator = get_current_operator(session)
     access = calculate_effective_access(
         session, user_id=operator.id, project_id=project_id
@@ -174,7 +174,7 @@ def get_project_workflow_summary(
     )
     pending_reinspection_count = 0
     draft_tasks_missing_assignee = 0
-    # IP-R11：不可由零筆推斷是否有權；可見性另回旗標，查詢沿用清單規則。
+    # IP-R30：不可由零筆推斷是否有權；可見性另回旗標，查詢沿用清單規則。
     if task_counts_visible:
         visible_filters = inspection_task_visibility_filters(
             session, project_id=project_id
@@ -187,7 +187,8 @@ def get_project_workflow_summary(
         for status, count in rows:
             task_counts[cast(TaskStatus, status)] = count
 
-        # IP-R11：封存計畫仍列入狀態數，但不能成為待派出的下一步。
+        # 封存計畫仍列入狀態數（程式現況）；
+        # IP-R30：封存計畫不能成為待派出的下一步。
         available_drafts = (
             select(InspectionTask.id)
             .join(
@@ -223,7 +224,7 @@ def get_project_workflow_summary(
             or 0
         )
 
-        # IP-R11：同任務可能有多個待重查項目，只計一次任務。
+        # IP-R30：同任務可能有多個待重查項目，只計一次任務。
         pending_reinspection_count = (
             session.scalar(
                 select(func.count(func.distinct(TaskInspectionItem.task_id)))
@@ -247,7 +248,7 @@ def get_project_workflow_summary(
     else:
         draft_count = 0
 
-    # IP-R11：準備工作以缺少資料為待辦，派出／重查則以尚有工作為待辦。
+    # IP-R30：準備工作以缺少資料為待辦，派出／重查則以尚有工作為待辦。
     step_data = (
         ("add_members", member_count, member_count == 0),
         ("add_inspection_items", item_count, item_count == 0),

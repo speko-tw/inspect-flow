@@ -235,7 +235,10 @@ function profileDefaultBundle(
   return matching.length === 1 ? matching[0] : null
 }
 
-/** 現場與外部職務須精確符合角色能力及可指派條件，避免額外授權。 */
+/**
+ * system／office 沿用新專案預設角色；
+ * 現場與外部職務須精確符合角色能力及可指派條件，避免額外授權。
+ */
 function profileDefaultRole(
   roles: Role[],
   profile: Profile,
