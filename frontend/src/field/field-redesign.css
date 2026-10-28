@@ -308,7 +308,9 @@
   padding: var(--space-5);
 }
 
-.field-redesign .field-action-card > p {
+.field-redesign .field-action-card > p,
+.field-redesign .field-action-card > small {
+  display: block;
   margin: var(--space-4) 0 0;
   color: var(--color-text-secondary);
 }

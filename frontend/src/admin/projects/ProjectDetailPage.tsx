@@ -1034,6 +1034,7 @@ function ProjectMembersSection({
                     )}
                     <label className="member-batch-select">
                       <input
+                        aria-label={`選取 ${personLabel(member)} 的角色`}
                         checked={selectedMemberIds.includes(member.user_id)}
                         disabled={
                           busy ||
@@ -1055,7 +1056,7 @@ function ProjectMembersSection({
                         type="checkbox"
                         value={member.user_id}
                       />
-                      選取 {personLabel(member)} 的角色
+                      選取
                     </label>
                     {!member.is_active && (
                       <p
@@ -1159,14 +1160,6 @@ function ProjectMembersSection({
                       >
                         修改角色
                       </Link>
-                      {member.user_id === currentUser.id && (
-                        <span
-                          className="member-warning"
-                          id={`self-role-warning-${member.id}`}
-                        >
-                          不能修改自己的專案角色。
-                        </span>
-                      )}
                       <button
                         aria-label={memberRemoveLabel(member)}
                         className="btn-danger-outline"
@@ -1180,6 +1173,15 @@ function ProjectMembersSection({
                         移出專案
                       </button>
                     </div>
+                  )}
+                  {member.user_id === currentUser.id && (
+                    <p
+                      className="field-hint"
+                      style={{ flexBasis: '100%', margin: 0 }}
+                      id={`self-role-warning-${member.id}`}
+                    >
+                      不能修改自己的專案角色。
+                    </p>
                   )}
                 </li>
               ))}

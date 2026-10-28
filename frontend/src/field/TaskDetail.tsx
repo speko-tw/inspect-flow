@@ -195,6 +195,23 @@ export default function TaskDetail({
               />
             </div>
           </Card>
+          <section className="field-action-panel" aria-label="任務操作">
+            <Card className="field-action-card">
+              <StartAction
+                task={task}
+                title={heading}
+                back={back}
+                onTask={setTask}
+                onListChange={onListChange}
+                onUnauthorized={() =>
+                  navigate(ROUTES.login.path, {
+                    state: { from: location.pathname + location.search },
+                  })
+                }
+              />
+              <small>填寫結果與照片上傳將在後續版本提供。</small>
+            </Card>
+          </section>
           <SectionHeader
             className="field-section-head"
             title="查核需求"
@@ -244,24 +261,6 @@ export default function TaskDetail({
               </Card>
             </article>
           ))}
-          <section className="field-action-panel" aria-label="任務操作">
-            <Card className="field-action-card">
-              <SectionHeader title="任務操作" />
-              <StartAction
-                task={task}
-                title={heading}
-                back={back}
-                onTask={setTask}
-                onListChange={onListChange}
-                onUnauthorized={() =>
-                  navigate(ROUTES.login.path, {
-                    state: { from: location.pathname + location.search },
-                  })
-                }
-              />
-              <p>填寫結果與照片上傳將在後續版本提供。</p>
-            </Card>
-          </section>
         </>
       )}
     </>

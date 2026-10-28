@@ -587,6 +587,8 @@ function PlanningContent({
   const [cancelReason, setCancelReason] = useState('')
   const [confirmation, setConfirmation] = useState<{
     title: string
+    details?: React.ReactNode
+    confirmLabel: string
     action: () => Promise<unknown>
     success: { area: NoticeArea; text: string }
     danger?: { label: string }
@@ -1137,7 +1139,10 @@ function PlanningContent({
   function renderDispatchBlockers(task: InspectionTask) {
     if (task.status !== 'DRAFT') return null
     const blockers = dispatchBlockers(task)
-    if (!blockers.unassigned && !blockers.noLocation && !blockers.noItems) {
+    // 詳情已在派出鈕旁說明，避免舊警示與改派入口重複。
+    const showUnassigned =
+      blockers.unassigned && !(view === 'task' && canModify)
+    if (!showUnassigned && !blockers.noLocation && !blockers.noItems) {
       return null
     }
     return (
@@ -1148,7 +1153,7 @@ function PlanningContent({
         role="list"
         style={{ listStyle: 'none' }}
       >
-        {blockers.unassigned && (
+        {showUnassigned && (
           <li>
             {canModify && canAssignTask
               ? '尚未指派：'
@@ -1210,12 +1215,29 @@ function PlanningContent({
     action: () => Promise<unknown>,
     success: { area: NoticeArea; text: string },
     danger?: { label: string },
+    details?: React.ReactNode,
   ): void {
     setError('')
     setNotice(null)
     setErrorContext('dialog')
     confirmationTrigger.current = document.activeElement as HTMLElement
-    setConfirmation({ title, action, success, danger })
+    const confirmLabel = title.startsWith('派出')
+      ? '確認派出'
+      : title.startsWith('刪除')
+        ? '確認刪除'
+        : title.startsWith('取消封存')
+          ? '確認取消封存'
+          : title.startsWith('封存')
+            ? '確認封存'
+            : '確認恢復'
+    setConfirmation({
+      title,
+      action,
+      success,
+      danger,
+      details,
+      confirmLabel,
+    })
   }
 
   function closeDialogs(): void {
@@ -1588,13 +1610,20 @@ function PlanningContent({
   }
 
   // ADM-R28：列出分區與指派資訊，並讓改名後仍能辨認任務項目。
-  function dispatchConfirmation(task: InspectionTask): string {
-    const zoneName = task.zone?.name ?? '未設定分區'
-    const assigneeName =
-      task.assignee?.name_zh ?? task.assignee?.username ?? '未指派'
+  function dispatchConfirmation(task: InspectionTask) {
     return (
-      `派出任務「${task.name}」？查核項目：${taskItemsSummary(task)}；` +
-      `分區：${zoneName}；建議指派人：${assigneeName}。派出後現場即可查看。`
+      <>
+        <ul>
+          <li>任務：{task.name}</li>
+          <li>查核項目：{taskItemsSummary(task)}</li>
+          <li>分區：{task.zone?.name ?? '未設定分區'}</li>
+          <li>
+            建議指派人：
+            {task.assignee?.name_zh ?? task.assignee?.username ?? '未指派'}
+          </li>
+        </ul>
+        <p>派出後現場即可查看</p>
+      </>
     )
   }
 
@@ -1760,10 +1789,9 @@ function PlanningContent({
         </p>
       )}
       <UnsavedLeaveBox guard={leaveGuard} />
-      {projects[0] &&
-        (view === 'list' || view === 'plan' || view === 'task') && (
-          <p>專案：{projects[0].name}</p>
-        )}
+      {projects[0] && (view === 'list' || view === 'plan') && (
+        <p>專案：{projects[0].name}</p>
+      )}
       {readOnly && !(view === 'plan' && selectedPlanDetail) && (
         <p className="notice-info" role="status">
           {READ_ONLY_NOTICE}
@@ -2095,7 +2123,8 @@ function PlanningContent({
                   </div>
                 )}
                 {noticeFor('tasks')}
-                {!planPending &&
+                {view === 'plan' &&
+                !planPending &&
                 (selectedPlanDetail.tasks ?? []).length === 0 ? (
                   <p>尚未建立任務。</p>
                 ) : null}
@@ -2182,8 +2211,8 @@ function PlanningContent({
                               />
                             </h2>
                           )}
-                          {(view === 'task' ||
-                            (view === 'task-edit' && readOnly)) &&
+                          {((view === 'task-edit' && readOnly) ||
+                            (view === 'task' && !canModify)) &&
                             renderDispatchBlockers(task)}
                           {(view === 'task' || editSection === 'location') &&
                             task.zone && <p>分區：{task.zone.name}</p>}
@@ -2224,11 +2253,52 @@ function PlanningContent({
                             </p>
                           )}
                           {view === 'task' && canModify && (
+                            <>
+                              {task.status === 'DRAFT' && (
+                                <div id={`dispatch-needs-${task.id}`}>
+                                  {Object.values(dispatchBlockers(task)).some(
+                                    Boolean,
+                                  ) && (
+                                    <p>
+                                      派出前還需要：
+                                      {[
+                                        dispatchBlockers(task).unassigned
+                                          ? '指定建議指派人'
+                                          : '',
+                                        dispatchBlockers(task).noLocation
+                                          ? '填寫地點'
+                                          : '',
+                                        dispatchBlockers(task).noItems
+                                          ? '選擇查核項目'
+                                          : '',
+                                      ]
+                                        .filter(Boolean)
+                                        .join('、')}
+                                    </p>
+                                  )}
+                                  {dispatchBlockers(task).unassigned &&
+                                    canDispatchTask &&
+                                    !canAssignTask && (
+                                      <p>請洽有指派權限的專案管理者</p>
+                                    )}
+                                  {renderDispatchBlockers(task)}
+                                </div>
+                              )}
+                            </>
+                          )}
+                          {view === 'task' && canModify && (
                             <div className="planning-task-actions">
                               <div className="named-row-actions">
                                 {task.status === 'DRAFT' &&
                                   canDispatchTask && (
                                     <button
+                                      aria-describedby={
+                                        Object.values(
+                                          dispatchBlockers(task),
+                                        ).some(Boolean)
+                                          ? `dispatch-needs-${task.id}`
+                                          : undefined
+                                      }
                                       className={
                                         editingName ? undefined : 'btn-primary'
                                       }
@@ -2240,12 +2310,14 @@ function PlanningContent({
                                       }
                                       onClick={() =>
                                         confirm(
-                                          dispatchConfirmation(task),
+                                          '派出這個任務？',
                                           () => client.dispatchTask(task.id),
                                           {
                                             area: 'tasks',
                                             text: '已派出任務，現場可以查看了。',
                                           },
+                                          undefined,
+                                          dispatchConfirmation(task),
                                         )
                                       }
                                       type="button"
@@ -2371,16 +2443,17 @@ function PlanningContent({
                                     disabled={busy}
                                     onClick={() =>
                                       confirm(
-                                        [
-                                          `永久刪除草稿任務${draftTaskSummary(task)}？`,
-                                          '刪除後無法復原。',
-                                        ].join(''),
+                                        '刪除這個草稿？',
                                         () => client.deleteDraftTask(task.id),
                                         {
                                           area: 'tasks',
                                           text: '已刪除草稿任務。',
                                         },
-                                        { label: '刪除' },
+                                        { label: '確認刪除' },
+                                        <p>
+                                          任務{draftTaskSummary(task)}。
+                                          刪除後無法復原。
+                                        </p>,
                                       )
                                     }
                                     type="button"
@@ -3278,17 +3351,17 @@ function PlanningContent({
         <ConfirmBox
           busy={busy}
           confirmDisabled={readOnly}
-          confirmLabel={confirmation.danger?.label ?? '確認'}
+          confirmLabel={confirmation.confirmLabel}
           headingRef={confirmationHeading}
           initialFocus="none"
           modal
           onCancel={closeDialogs}
           onConfirm={() => act(confirmation.action, confirmation.success)}
           role="dialog"
-          title="請確認操作"
+          title={confirmation.title}
           variant={confirmation.danger ? 'danger' : 'neutral'}
         >
-          <p>{confirmation.title}</p>
+          {confirmation.details ?? <p>{confirmation.title}</p>}
           {error && errorContext === 'dialog' && (
             <p ref={errorMessage} role="alert" tabIndex={-1}>
               {error}

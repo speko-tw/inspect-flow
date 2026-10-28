@@ -101,6 +101,12 @@ describe('現場任務詳情', () => {
     const fetcher = vi.fn(async () => Response.json(detail))
     vi.stubGlobal('fetch', fetcher)
     renderDetail()
+    const action = await screen.findByRole('region', { name: '任務操作' })
+    const requirements = screen.getByRole('heading', { name: '查核需求' })
+    expect(action.compareDocumentPosition(requirements) & 4).toBe(4)
+    expect(
+      within(action).getByText('填寫結果與照片上傳將在後續版本提供。').tagName,
+    ).toBe('SMALL')
     expect(await screen.findByText('依圖面查核')).toBeInTheDocument()
     expect(
       screen.getByRole('heading', {

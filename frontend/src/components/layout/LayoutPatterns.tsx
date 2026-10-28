@@ -175,7 +175,7 @@ export function ConfirmationPanel({
 }: {
   tone: 'neutral' | 'danger'
   title: string
-  subject: string
+  subject?: string
   impact: string
   cancelLabel: string
   confirmLabel: string
@@ -249,10 +249,12 @@ export function ConfirmationPanel({
       </p>
       <h2 id={titleId}>{title}</h2>
       <div id={descriptionId}>
-        <p>
-          <strong>對象：</strong>
-          {subject}
-        </p>
+        {subject && (
+          <p>
+            <strong>對象：</strong>
+            {subject}
+          </p>
+        )}
         <p>
           <strong>影響：</strong>
           {impact}

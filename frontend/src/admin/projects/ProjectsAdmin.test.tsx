@@ -1280,10 +1280,10 @@ describe('admin projects page', () => {
       within(role as HTMLElement)
         .getAllByRole('option')
         .map((option) => option.textContent),
-    ).toEqual(['承攬施工方', '監造方'])
-    expect(within(form).getByText(/會決定報表種類/)).toBeVisible()
+    ).toEqual(['承攬施工方（一級自主檢查）', '監造方（二級抽查（驗））'])
+    expect(within(form).getByText(/選您公司在這個工地的身分/)).toBeVisible()
     expect(
-      within(form).getByText(/同工地的另一種角色請另開專案/),
+      within(form).getByText(/同一工地要用另一種身分，請另開專案/),
     ).toBeVisible()
 
     fillProjectForm()
@@ -2766,7 +2766,13 @@ describe('admin project members', () => {
     })
     expect(link).toHaveAttribute('aria-disabled', 'true')
     expect(link).toHaveAttribute('tabindex', '-1')
+    const checkbox = screen.getByRole('checkbox', {
+      name: /選取.*鄧安娜.*的角色/,
+    })
+    expect(checkbox.closest('label')).toHaveTextContent(/^選取$/)
     const warning = screen.getByText('不能修改自己的專案角色。')
+    expect(warning).toHaveClass('field-hint')
+    expect(warning.parentElement).not.toBe(link.parentElement)
     expect(warning).toHaveAttribute('id', `self-role-warning-${selfMember.id}`)
     expect(link).toHaveAttribute(
       'aria-describedby',
@@ -3942,7 +3948,9 @@ describe('project members forms guard (#507)', () => {
       'edit-company-role-description',
     )
     expect(
-      screen.getByText('會決定報表種類。同工地的另一種角色請另開專案。'),
+      screen.getByText(
+        '選您公司在這個工地的身分，系統會依此提供對應的檢查表單。同一工地要用另一種身分，請另開專案。',
+      ),
     ).toBeVisible()
   })
 
