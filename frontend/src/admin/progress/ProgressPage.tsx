@@ -65,7 +65,7 @@ function taskLocation(task: InspectionTask): string {
 }
 
 function needsReinspection(task: InspectionTask): boolean {
-  // IP-R18 與 IP-R11 的待重查口徑相同；
+  // IP-R18 與 IP-R30 的待重查口徑相同；
   // 排除封存與已完成任務。
   return (
     !task.plan.archived &&

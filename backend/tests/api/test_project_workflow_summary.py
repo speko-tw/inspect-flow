@@ -52,7 +52,7 @@ def _grant_permission(db_session, world, user, permission: str) -> None:
 def test_summary_reports_company_role_without_a_detail_call(
     db_session, make_client
 ):
-    # IP-R11、ADM-R41：專案首頁的角色取自流程摘要，兩種角色各驗一次。
+    # IP-R30、ADM-R41：專案首頁的角色取自流程摘要，兩種角色各驗一次。
     world = _planning_world(db_session, make_client)
     admin = world["admin_user"]
     projects = [

@@ -67,7 +67,7 @@ const STEP_PERMISSION: Partial<Record<WorkflowStepCode, string>> = {
 }
 
 /**
- * 依 ADM-R16、IP-R11（流程摘要）呈現下一步與可見的關鍵數字。
+ * 依 ADM-R16、IP-R30（流程摘要）呈現下一步與可見的關鍵數字。
  * 純現場權限者導向自身落點，拒絕或不存在的專案不顯示空首頁。
  */
 export default function ProjectHomePage() {
@@ -289,7 +289,7 @@ export default function ProjectHomePage() {
               </section>
             )}
             {/* 草稿、未指派與待重查的數字依 ADM-R16 對能讀任務者都顯示
-                （後端以 inspection_task.read 決定可見性，IP-R11）；
+                （後端以 inspection_task.read 決定可見性，IP-R30）；
                 寫入入口與規劃頁連結由 canActOnPrimary 把關（ADM-R49）。 */}
             <dl aria-label="專案關鍵數字" className="project-key-numbers">
               <div>
