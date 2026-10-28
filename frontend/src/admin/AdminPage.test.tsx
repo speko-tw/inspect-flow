@@ -1792,9 +1792,9 @@ describe('admin user and company pages', () => {
       has_field_access: false,
     })
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
-    const permissionNotice = screen.getByText('你沒有使用這個頁面的權限', {
-      selector: 'p',
-    })
+    const permissionNotice = screen
+      .getByText('你沒有使用這個頁面的權限', { exact: true })
+      .closest('p[role="status"]')
     expect(permissionNotice).toHaveTextContent(
       '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
     )
@@ -1817,7 +1817,9 @@ describe('admin user and company pages', () => {
         screen.getByRole('heading', { name: '無權限' }),
       ).toBeInTheDocument()
       expect(
-        screen.getByText('你沒有使用這個頁面的權限', { selector: 'p' }),
+        screen
+          .getByText('你沒有使用這個頁面的權限', { exact: true })
+          .closest('p[role="status"]'),
       ).toHaveAttribute('role', 'status')
       expect(screen.queryByRole('alert')).toBeNull()
       expect(
@@ -2123,10 +2125,14 @@ describe('admin user and company pages', () => {
 
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
     expect(
-      screen.getByText('你沒有使用這個頁面的權限', { selector: 'p' }),
+      screen
+        .getByText('你沒有使用這個頁面的權限', { exact: true })
+        .closest('p[role="status"]'),
     ).toHaveAttribute('role', 'status')
     expect(
-      screen.getByText('你沒有使用這個頁面的權限', { selector: 'p' }),
+      screen
+        .getByText('你沒有使用這個頁面的權限', { exact: true })
+        .closest('p[role="status"]'),
     ).toHaveTextContent('你沒有使用這個頁面的權限。如需使用，請洽系統管理者。')
     expect(screen.queryByRole('link', { name: '範本' })).toBeNull()
     expect(
@@ -2402,10 +2408,14 @@ describe('admin user and company pages', () => {
       })
 
       expect(
-        screen.getByText('你沒有使用這個頁面的權限', { selector: 'p' }),
+        screen
+          .getByText('你沒有使用這個頁面的權限', { exact: true })
+          .closest('p[role="status"]'),
       ).toHaveAttribute('role', 'status')
       expect(
-        screen.getByText('你沒有使用這個頁面的權限', { selector: 'p' }),
+        screen
+          .getByText('你沒有使用這個頁面的權限', { exact: true })
+          .closest('p[role="status"]'),
       ).toHaveTextContent(
         '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
       )
@@ -2809,9 +2819,9 @@ it.each([{ delegated_modules: [] }, { delegated_modules: ['project'] }])(
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
     expect(
-      screen.getByText('新增帳號只有系統管理者能操作。', {
-        selector: 'p[role="status"]',
-      }),
+      screen
+        .getByText('新增帳號只有系統管理者能操作。', { exact: true })
+        .closest('p[role="status"]'),
     ).toBeVisible()
     expect(screen.queryByText(/如需使用，請洽系統管理者/)).toBeNull()
     expect(screen.queryByLabelText('帳號名稱')).toBeNull()

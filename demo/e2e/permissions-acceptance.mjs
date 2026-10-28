@@ -191,8 +191,16 @@ try {
   await signIn('demo-template-manager', 'DemoTemplate2026', '/templates')
   await page.getByRole('heading', { name: '查核範本' }).waitFor()
   await page.getByRole('link', { name: '範本', exact: true }).waitFor()
-  await page.goto(`${base}/projects`)
-  await page.waitForURL((url) => url.pathname === '/templates')
+  // ADM-R50：範本管理權限不包含專案入口；由無權限頁提供返回落點。
+  await assertDenied('/projects')
+  await page.getByText('你沒有使用這個頁面的權限', {
+    exact: true,
+  }).waitFor()
+  assert.equal(new URL(page.url()).pathname, '/projects')
+  assert.equal(
+    await page.getByRole('link', { name: '回到我的首頁' }).getAttribute('href'),
+    '/templates',
+  )
   assert.equal((await api('/users')).status, 403)
 
   await signIn('demo-template-delegate', 'DemoDelegate2026', '/accounts')
@@ -320,7 +328,9 @@ try {
   await page.getByRole('heading', {
     name: '林以安', level: 1, exact: true,
   }).waitFor()
-  await page.getByRole('status').filter({ hasText: '已新增林以安的帳號' }).waitFor()
+  await page.getByRole('heading', {
+    name: '已建立帳號：林以安', exact: true,
+  }).waitFor()
   assert.match(new URL(page.url()).pathname, /^\/accounts\/[0-9a-f-]+$/)
   const temporaryPassword = await page
     .getByLabel('臨時密碼', { exact: true }).textContent()
@@ -378,7 +388,9 @@ try {
   await page.getByRole('heading', {
     name: '林以安', level: 1, exact: true,
   }).waitFor()
-  await page.getByRole('status').filter({ hasText: '已新增林以安的帳號' }).waitFor()
+  await page.getByRole('heading', {
+    name: '已建立帳號：林以安', exact: true,
+  }).waitFor()
   assert.match(new URL(page.url()).pathname, /^\/accounts\/[0-9a-f-]+$/)
   assert.ok(
     await temporaryPasswordOutputs.evaluateAll(
@@ -431,8 +443,11 @@ try {
     diagnostic.diagnostics.find((item) => item.action === 'task_list').allowed,
     true,
   )
-  const participation = page.locator('li').filter({
-    hasText: '示範廠擴建機電工程',
+  // 診斷提示也有專案與角色名稱；用成員連結區分真正的參與清單列。
+  const participation = page.getByRole('listitem').filter({
+    has: page.getByRole('link', {
+      name: 'DEMO-B／示範廠擴建機電工程', exact: true,
+    }),
   })
   await participation.filter({ hasText: '示範僅查閱專案角色' }).waitFor()
   assert.equal(

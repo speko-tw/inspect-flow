@@ -2317,7 +2317,7 @@ function ModulePermissionsPageContent({
                             projects.find((item) => item.id === projectId)
                               ?.name
                           }
-                          」 擁有「
+                          」擁有「
                           {profileRoleLabel(roles, profile, creatorRoleId)}
                           」角色
                         </li>

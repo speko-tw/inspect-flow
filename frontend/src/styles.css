@@ -2541,6 +2541,7 @@ output.temporary-password {
   text-wrap: balance;
 }
 
+/* 讓每段提示保持完整，窄螢幕換行時不拆開句子。 */
 .settings-no-access span {
   display: inline-block;
 }
@@ -2555,10 +2556,6 @@ output.temporary-password {
   margin-block-start: var(--space-8);
   padding-block-start: var(--space-4);
   border-block-start: 1px solid var(--border);
-}
-
-.settings-logout .btn {
-  width: auto;
 }
 
 .settings-logout button {

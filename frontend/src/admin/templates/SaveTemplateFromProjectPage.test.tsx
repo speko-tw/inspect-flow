@@ -112,13 +112,13 @@ describe('SaveTemplateFromProjectPage', () => {
       value: scrollIntoView,
     })
     renderPage(true)
-    expect(scrollIntoView).not.toHaveBeenCalled()
     expect(
       await screen.findByRole('heading', { name: '步驟 1：選擇專案' }),
     ).toBeVisible()
     const projectButton = await screen.findByRole('button', {
       name: 'P-1 · 工程一',
     })
+    expect(scrollIntoView).not.toHaveBeenCalled()
     fireEvent.click(projectButton)
     expect(projectButton).toHaveTextContent('✓ 已選取')
     expect(screen.getByText(/目前在步驟/)).toHaveTextContent(

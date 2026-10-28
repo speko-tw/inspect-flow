@@ -2442,6 +2442,9 @@ describe('ModulePermissionsPage', () => {
     expect(screen.getByRole('region', { name: '可以做' })).toHaveTextContent(
       '建立專案',
     )
+    expect(screen.getByRole('region', { name: '可以做' })).toHaveTextContent(
+      '在「示範工程」擁有「專案工程師」角色',
+    )
     expect(screen.getByRole('region', { name: '不能做' })).toHaveTextContent(
       '查看未授權的專案',
     )

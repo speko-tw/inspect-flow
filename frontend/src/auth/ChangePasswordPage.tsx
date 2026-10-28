@@ -196,6 +196,7 @@ export default function ChangePasswordPage() {
     >
       {!hasFeatureAccess && (
         <p className="notice-info settings-no-access" role="status">
+          {/* 分成兩段語意完整的文字，讓窄螢幕優先在逗號處換行。 */}
           <span>你的帳號尚未開通任何功能，</span>
           <span>請洽系統管理者開通。</span>
         </p>
