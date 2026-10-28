@@ -60,7 +60,7 @@
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| DBF-R11 | `User`、`Project` **必須**以 UUIDv7 作為主鍵；**不得**以自增整數作為主鍵或對外識別 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-03](../../intents/02-principles.md#pr-03)；API 表示法見 API-R06 |
+| DBF-R11 | `User`、`Project` **必須**以 UUID 作為主鍵；**不得**以自增整數作為主鍵或對外識別。現行實作採 UUIDv7（`backend/app/db/base.py`） | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-03](../../intents/02-principles.md#pr-03)；API 表示法見 API-R06 |
 | DBF-R12 | `Project` **必須**有與 UUID 分開保存的業務編號 `project_code`；`User` **得**有與 UUID 分開保存的業務編號 `employee_no`：可為空值，只有連結公司時才填（DOM-R47）。兩者不得互相取代。長度上限由 `domain-model` 定義，本規格不另定：`employee_no` 見 DOM-R28，`project_code` 見 DOM-R40（暫定、待確認） | 必須（`project_code`）；得（`employee_no`） | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)；`employee_no` 改為可為空值：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29），見 [KD-46](../../intents/03-decisions-and-stack.md#kd-46)；[04-glossary](../../intents/04-glossary.md)「專案」「業務編號」（依據：架構基準 §11、§12.1–12.2） |
 | DBF-R13 | `employee_no` 在同一家公司內**必須**唯一（`company_id` 與 `employee_no` 合併唯一，`company_id` 由 `domain-model` 定義），由資料庫約束保證；不同公司得有相同工號，沒有公司的人沒有工號，不受這條約束（DOM-R47）。`project_code` **得**在多筆 `Project` 之間重複，資料庫**不得**對它加唯一約束；重複時的處理見 [DOM-R42](../domain-model/spec.md#project-business-fields) | 必須（`employee_no` 同公司內唯一）；不得（`project_code` 加唯一約束） | [KD-39](../../intents/03-decisions-and-stack.md#kd-39)；原「`project_code` 必須唯一」為負責人決定（#51，2026-09-26），已由負責人補充裁定（[#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5872016815)，2026-09-28）取代，見 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)；`employee_no` 由全體唯一改為同公司內唯一：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29），見 [KD-46](../../intents/03-decisions-and-stack.md#kd-46) |
 | DBF-R14 | `User`、`Project` **必須**保留建立與最後修改的時間與操作者；欄位**應**命名為 `created_at`、`updated_at`、`created_by`、`updated_by`。`created_at`、`updated_at` 由後端自動填寫。`created_by`、`updated_by` **不得**為空值，**必須**是指向 `User` 主鍵的外鍵，由資料庫約束保證；外鍵**必須**允許指向同一筆 `User` 自己（內建 `admin` 的 `created_by` 指向自己）。建立初始帳號的初始化指令，以及 `is_admin`、`is_system` 欄位，由 `domain-model` 定義 | 必須（保留、不得為空、外鍵）；應（欄位名） | [PR-08](../../intents/02-principles.md#pr-08)；[DBF-Q2](#dbf-q2) 裁定（負責人，[#54](https://github.com/speko-tw/inspect-flow/issues/54)，2026-09-26；決策見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)）；架構基準無對應章節 |
@@ -168,7 +168,7 @@
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
 
-- DBF-R11：UUID 主鍵固定採 UUIDv7，與主要實體 ID 產生方式一致 — [#760](https://github.com/speko-tw/inspect-flow/issues/760)
+- DBF-R11：保留 UUID 主鍵的必須規則；另註現行實作採 UUIDv7，不將 UUID 版本升為必須 — [#760](https://github.com/speko-tw/inspect-flow/issues/760)
 
 - DBF-R14、DBF-AC11：依 DBF-Q2 裁定，`created_by`、`updated_by` 改為不得為空值、外鍵指向 `User`，並補上對應的驗收條件 — [#65](https://github.com/speko-tw/inspect-flow/issues/65)
 - DBF-R10、DBF-AC08：依 DBF-Q1 裁定，PostgreSQL 相容性測試的範圍從只跑 migration 擴大為加上 `backend/tests/db/` 的測試，並定下每個 PR 執行、經由 `make check` 在設定 PostgreSQL 連線時執行、版本固定寫在 CI 設定 — [#53](https://github.com/speko-tw/inspect-flow/issues/53)

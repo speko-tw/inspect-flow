@@ -398,3 +398,5 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 - 範圍變更（負責人指示，#717）：事件目錄新增專案查核項目停用及恢復；與來源項目狀態同交易，before／after 記錄 is_active、title，帶 project_id 與操作者，紀錄頁顯示白話名稱；細節為規格設計（非負責人裁定）。來源：[負責人指示（#717）](https://github.com/speko-tw/inspect-flow/issues/717)；[實作細節](https://github.com/speko-tw/inspect-flow/issues/717#issuecomment-6397735011)，細節為規格設計（非負責人裁定）。
 
 - 規格澄清（#728）：ALG-R22、ALG-AC17 與查詢 API 契約補上操作者快照及帳號副行規則，並明定舊紀錄在改名、換公司及人員清單載入失敗時仍呈現寫入當時的操作者資訊；對象僅有帶 `name_zh` 的事件使用快照，其他查目前名稱。依[負責人裁定 B（#728）](https://github.com/speko-tw/inspect-flow/issues/728#issuecomment-6416038172)。
+
+- 規格澄清（[#760](https://github.com/speko-tw/inspect-flow/issues/760)）：資料模型補明稽核事件 ID 現行實作使用 UUIDv4（`uuid4`），與 KD-07 的主要實體 UUIDv7 分開描述。
