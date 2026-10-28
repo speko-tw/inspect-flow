@@ -282,7 +282,7 @@
 | 方法與路徑 | 行為 | 存取層級 |
 |---|---|---|
 | `GET /api/v1/projects/{project_id}` | 專案成員讀取基本欄位（含 `company_role`）；Admin 與持 `project.update` 者取得完整欄位；Project 不設狀態欄位（DOM-R43） | **過渡期**需專案權限 `inspection_plan.read`；**正式行為**需專案權限 `project.read`（DOM-R35、DOM-R69）；Admin 依 AUT-R19 放行 |
-| `GET /api/v1/projects?q=&cursor=&limit=` | `{items: [既有 Project 欄位, member_count], next_cursor}`；`member_count` 依 DOM-R77 計算有效啟用成員；依 `(name,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；`q` 省略或空白時不篩選，否則以不分大小寫子字串搜尋 `name`、`project_code`；無效 cursor、超長 `q` 或超出範圍的 `limit` 回 422 | **過渡期**（程式完成前）沿用 Admin 或 `template_admin` 系統角色（AUT-R20、AUT-R19）；**正式行為**（規格設計，非負責人裁定）：Admin，或具模組權限 `all_project_progress.read`、`template.manage` 其一者可列出全部專案的基本欄位（前者供看全部專案進度、後者供跨專案存成範本），其他人回 403，僅看自己參與的專案請用 `GET /me/projects` |
+| `GET /api/v1/projects?q=&cursor=&limit=` | `{items: [既有 Project 欄位, member_count], next_cursor}`；`member_count` 依 DOM-R77 計算有效啟用成員；依 `(name,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；`q` 省略或空白時不篩選，否則以不分大小寫子字串搜尋 `name`、`project_code`；無效 cursor、超長 `q` 或超出範圍的 `limit` 回 422 | Admin，或具模組權限 `all_project_progress.read`、`template.manage` 其一者可列出全部專案的基本欄位（前者供看全部專案進度、後者供跨專案存成範本），其他人回 403，僅看自己參與的專案請用 `GET /me/projects`（規格設計，非負責人裁定） |
 | `POST /api/v1/projects` | 新增專案；非管理者呼叫時，同一交易為操作者建立 `ProjectMember` 並指派建立者角色（DOM-R65）；Admin 呼叫時不自動成為成員，得選填 `creator_role_user_id`（建立者角色人選：一位啟用、非系統帳號、非外部協作人員，以建立者角色加入）；非管理者帶 `creator_role_user_id` 回 422；可帶 `company_role`，省略為 `contractor`（DOM-R76）；寫 `project.created` | **過渡期**需 Admin（AUT-R20），不自動加入任何成員；**正式行為**需模組權限 `project.create`，Admin 放行（AUT-R18 的「需模組權限」層級） |
 | `PATCH /api/v1/projects/{project_id}` | 修改專案；可帶 `company_role` 與 `company_role_change_reason`，改角色時缺原因或原因為空白回 422 專用錯誤碼 `project.company_role_reason_required`，原因超過上限回共用驗證錯誤（DOM-R76） | **過渡期**需 Admin（AUT-R20）；**正式行為**需專案權限 `project.update`（DOM-R66），Admin 依 AUT-R19 放行；`project.create` 與 `all_project_progress.read` 都不放行；成功寫 `project.updated` |
 | `GET /api/v1/project-company-roles` | 回 `{items: [{value, label, inspection_level}]}`：登記表中的本公司角色，依登記順序（`contractor` 承攬施工方、`supervisor` 監造方），`label` 為中文標籤、`inspection_level` 為 `self_inspection` 或 `spot_check`；唯讀、不分頁，供開案與設定畫面取得選項（DOM-R76、`admin-dashboard` ADM-R40）。端點路徑與回應形狀為規格設計（非負責人裁定） | 需登入（AUT-R18）；未登入回 401 |
@@ -603,3 +603,5 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 範圍變更（負責人裁定，#534，2026-10-26）：#635 第 5 批的角色／公司管理路徑與確認依 ADM-R55／ADM-AC55；沿用 DOM-R32／R33／R55 及既有角色保護，不新增 DOM 編號 — [負責人裁定](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)。
 
 - 範圍變更（負責人裁定，#534，2026-10-26）：`User` 管理 UI 依 ADM-R56／ADM-AC56 改用新增帳號獨立頁並於詳情承接結果；沿用既有欄位、API、授權與首次設定，不新增 DOM 編號 — [負責人裁定](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)。
+
+- 規格澄清（#728）：`GET /projects` 移除已結束的系統角色過渡描述；Admin、`all_project_progress.read` 或 `template.manage` 可列全部專案基本欄位，其他人回 403 並使用 `GET /me/projects`，不附帶專案詳情、成員或修改權限 — [#728](https://github.com/speko-tw/inspect-flow/issues/728)

@@ -180,6 +180,14 @@ def test_inspection_permission_entry_points_do_not_recompute_membership():
     assert not assignee_names.intersection({"ProjectMember", "User"})
 
 
+def test_project_list_uses_the_effective_access_entry_point():
+    path = "app/api/v1/projects.py"
+    assert "calculate_effective_access" in _function_names(
+        path, "list_projects"
+    )
+    assert "query_person_access" not in _function_names(path, "list_projects")
+
+
 def test_project_authorization_decisions_use_central_permission_entries():
     access_path = "app/auth/access.py"
     assert "calculate_effective_access" in _function_names(
