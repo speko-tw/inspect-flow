@@ -450,7 +450,11 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
     )
   }
   function describeImpact(item: Role) {
-    return `會影響 ${item.project_count} 個專案中的 ${item.user_count} 個帳號`
+    const inactive =
+      item.inactive_user_count > 0
+        ? `（含 ${item.inactive_user_count} 個已停用）`
+        : ''
+    return `會影響 ${item.project_count} 個專案中的 ${item.user_count} 個帳號${inactive}`
   }
 
   if (forbidden) return <AccessDeniedPage />

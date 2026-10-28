@@ -62,6 +62,7 @@ export default function StartAction({
     if (failure) errorRef.current?.focus()
   }, [failure])
   useEffect(() => {
+    // 依 UDS-R18 例外：成功後觸發按鈕會消失，焦點移到結果狀態區。
     if (started) startedRef.current?.focus()
   }, [started])
 

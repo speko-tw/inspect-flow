@@ -105,7 +105,7 @@ flowchart LR
 - **Phase 7 — Completion Validation（完成驗證）**：必要證據 vs. 已上傳證據的伺服器端驗證；查核項次結果分符合、不符合、不適用，各結果的必填內容見 [KD-54](03-decisions-and-stack.md#kd-54)。完成驗證上線後，管理後台完成數與完成率改採伺服器驗證結果（依 [KD-66](03-decisions-and-stack.md#kd-66)），不另增儀表板指標。
 - **Phase 8 — Formal Report Delivery**：Report View Model、DOCX 範本、DOCX／PDF 與版次資料。MVP **必須**保存報告範本（報告版面）版本、文件編號、版次、產製者與時間、兩種檔案鍵、資料快照與 SHA-256；已核發檔案**不得**覆蓋（依據：架構基準 §20.22、§30 Phase 9）。完整簽核流程**得**先用空白簽名欄簡化；正式流程見 [OQ-07](05-open-questions.md#oq-07)（依據：架構基準 §15、§20.12）。
 
-- **Phase 9 — Pilot Deployment**：單一 Linux 伺服器、Docker Compose、HTTPS、持久化儲存。
+- **Phase 9 — Pilot Deployment**：正式部署與維運（#109），涵蓋正式憑證管理、自動備份、監控與完整部署 DoD。Docker 試用部署已提前在 0.6.x（#758）落地：單一 Linux 主機、Docker Compose、持久化儲存；瀏覽器經主機反向代理 HTTPS 連入，代理以 HTTP 轉送同時提供前端與 API 的單一容器（見 [KD-09](03-decisions-and-stack.md#kd-09)）。
 - **Phase 10 — Pilot Hardening & Release Readiness（試營運強化與發布整備）**：依試營運回饋修正問題，強化效能、資安與維運，驗證相容性、備份／還原及報告正確性，完成發布整備。
 
 各 Phase 對應哪份規格、目前狀態與被擋議題，見 [docs/specs/README.md 規格索引](../specs/README.md#index)。
@@ -291,16 +291,15 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  Client["Client 瀏覽器"] -->|HTTPS| Proxy["Reverse Proxy（Caddy/Nginx）"]
-  Proxy --> Web["Frontend（Web）"]
-  Proxy --> API["Backend API"]
+  Client["Client 瀏覽器"] -->|HTTPS| Proxy["主機反向代理（例：Nginx）"]
+  Proxy -->|HTTP，主機 127.0.0.1 發布埠| API["單一容器：FastAPI 前端靜態檔與 API"]
   API --> DB[("SQLite")]
   API --> Storage["本機 Storage"]
 ```
 
-依據：架構基準 §22.5–22.7
+依據：架構基準 §22.5–22.7；[pilot-install](../specs/pilot-install/spec.md)、#758／#759 實作
 
-- 第一階段標準部署單位是 Docker Compose；SQLite 與 Storage 用 persistent volume／bind mount 掛載到 Backend，不是獨立 container（見 [KD-09](03-decisions-and-stack.md#kd-09)）。
+- 第一階段標準部署單位是 Docker Compose；單一 `python:3.12-slim` image 提供前端與 API，容器內只跑 HTTP。HTTPS、網域與子路徑分流由主機反向代理負責；同一 image 以執行期 `INSPECTFLOW_BASE_PATH` 支援根目錄與子路徑。SQLite 與 Storage 用 persistent volume／bind mount 掛載到 Backend，不是獨立 container（見 [KD-09](03-decisions-and-stack.md#kd-09)）。
 - 升級到 PostgreSQL 後，Compose 會多一個 db service；API 對外呼叫路徑不變。
 - 部署基準見 [03-decisions-and-stack.md](03-decisions-and-stack.md) （[KD-09](03-decisions-and-stack.md#kd-09)）；環境細節與待決事項見 [OQ-18](05-open-questions.md#oq-18)。
 

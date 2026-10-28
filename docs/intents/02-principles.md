@@ -353,7 +353,7 @@ graph LR
 
 **為什麼**：§22.16 的 `up -d` → migration 範例可能讓尚未遷移的 API 先接收流量（初次部署可能缺資料表，升級部署可能遇到舊 Schema）；即使是初次部署，也不能假定啟動後沒有請求或啟動相依問題；同一套順序也不必維護兩份部署腳本。
 
-**怎麼做**：`DEPLOYMENT.md` 記錄備份、遷移、服務開放流量、健康檢查與回滾閘點；初次與升級部署採同一套順序，不採用 §22.16 先 `up -d` 再 migration 的範例；`pilot-deployment` 規格依此順序撰寫部署步驟。
+**怎麼做**：已落地的試用安裝步驟見 [docs/deployment/pilot-install.md](../deployment/pilot-install.md)，記錄停寫備份、遷移、服務開放流量、健康檢查與回滾閘點；初次與升級部署採同一套順序，不採用 §22.16 先 `up -d` 再 migration 的範例。正式部署與維運由 `pilot-deployment`（[#109](https://github.com/speko-tw/inspect-flow/issues/109)）補齊正式憑證管理、自動備份與完整部署 DoD。
 
 **不要做**：在 migration 完成前讓新版 API 接受請求；未隔離舊版寫入就執行不相容遷移。
 

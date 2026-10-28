@@ -142,4 +142,5 @@ stays on plain HTTP.
 
 ## Documentation
 
+- [Pilot Docker installation](docs/deployment/pilot-install.md)
 - [Design Intents](docs/intents/README.md) (Traditional Chinese): why InspectFlow is designed the way it is — overview and architecture diagrams, design principles, key decisions and tech stack, glossary, and open questions.

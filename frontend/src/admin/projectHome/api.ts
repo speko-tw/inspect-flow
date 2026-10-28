@@ -1,7 +1,7 @@
 import { request } from '../api'
 
 /**
- * IP-R11（流程摘要）的下一步代碼、待辦數與是否待處理；首頁主要
+ * IP-R30（流程摘要）的下一步代碼、待辦數與是否待處理；首頁主要
  * 動作取後端的 primary_step，不自行由 count 推導（ADM-R16）。
  */
 export interface WorkflowStep {
@@ -19,7 +19,7 @@ export interface WorkflowStep {
 export type WorkflowStepCode = WorkflowStep['code']
 
 /**
- * IP-R11（流程摘要）的摘要與有效權限；task_counts_visible 為
+ * IP-R30（流程摘要）的摘要與有效權限；task_counts_visible 為
  * false 時任務數字固定回 0，畫面不得當成真的 0 顯示（ADM-R16）。
  */
 export interface WorkflowSummary {

@@ -1,0 +1,79 @@
+name: Publish Docker image
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag to publish for a test build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate image tag
+        id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+
+          if os.environ["EVENT_NAME"] == "push":
+              value = os.environ["REF_NAME"]
+              if not value.startswith("v"):
+                  raise SystemExit("tag pushes must start with v")
+              stable = bool(re.fullmatch(r"v\d+\.\d+\.\d+", value))
+              value = value[1:]
+          else:
+              value = os.environ["INPUT_TAG"]
+              stable = False
+              if value == "latest" or re.match(r"\d+\.\d+\.\d+", value):
+                  raise SystemExit("manual tag cannot replace release tags")
+
+          if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", value):
+              raise SystemExit("invalid Docker image tag")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"commit={os.environ['GITHUB_SHA'][:7]}\n")
+              output.write(f"value={value}\n")
+              output.write(f"stable={str(stable).lower()}\n")
+          PY
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        id: metadata
+        with:
+          images: ghcr.io/speko-tw/inspect-flow
+          tags: |
+            type=raw,value=${{ steps.tag.outputs.value }}
+            type=raw,value=latest,enable=${{ steps.tag.outputs.stable == 'true' }}
+
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64
+          build-args: INSPECTFLOW_COMMIT=${{ steps.tag.outputs.commit }}
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}

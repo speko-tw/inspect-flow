@@ -1,3 +1,5 @@
+import { withBasePath } from '../basePath'
+
 // 首次設定 API 的 fetch 包裝（AUT-R44）。兩條路由都是公開路由，
 // 不需要登入；成功設定密碼後，後端以 `Set-Cookie` 回傳 admin 的
 // 登入 Cookie，由瀏覽器依同源規則處理，前端不讀取也不轉存
@@ -14,7 +16,7 @@ const SETUP_BASE = '/api/v1/setup'
  * `ApiError`，呼叫端自行決定狀態不明時怎麼處理。
  */
 export async function fetchSetupRequired(): Promise<boolean> {
-  const response = await fetch(`${SETUP_BASE}/status`, {
+  const response = await fetch(withBasePath(`${SETUP_BASE}/status`), {
     credentials: 'same-origin',
   })
 
@@ -37,7 +39,7 @@ export async function setAdminPassword(
   code: string,
   password: string,
 ): Promise<void> {
-  const response = await fetch(`${SETUP_BASE}/admin-password`, {
+  const response = await fetch(withBasePath(`${SETUP_BASE}/admin-password`), {
     method: 'POST',
     credentials: 'same-origin',
     headers: {

@@ -88,7 +88,7 @@
 
 ### OQ-18：正式伺服器規格、Staging 環境是否建置、磁碟門檻告警比例、正式環境是否允許建立測試資料？
 
-**為什麼要先決定**：影響 Pilot／Production 部署文件（`DEPLOYMENT.md`）的具體內容，但不影響本資料夾所述的架構原則。
+**為什麼要先決定**：影響正式部署與維運（[#109](https://github.com/speko-tw/inspect-flow/issues/109)）的具體內容；已落地的試用安裝見 [docs/deployment/pilot-install.md](../deployment/pilot-install.md)。這些待決事項不影響本資料夾所述的架構原則。
 
 **選項**：各子題各自的方案（伺服器規格層級／是否建置 Staging／磁碟告警比例／是否允許測試資料）。
 
