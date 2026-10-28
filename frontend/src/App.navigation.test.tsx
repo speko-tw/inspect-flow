@@ -371,10 +371,7 @@ async function signIn() {
 /**
  * 斷言落在今日任務頁的「我的任務」；呼叫端的替身須有 ASSIGNED_FIELD_TASK。
  *
- * 標題在查詢指派前就會以「我的任務」掛上，FUI-R02 再依查詢結果決定預設
- * 範圍：沒有指派時改成「全部」並重掛清單，先抓到的標題節點會被換掉，
- * CI 較慢時才偶發 not in the document。等指派資料出現代表範圍已定，
- * 此時的標題才是穩定狀態。
+ * 範圍查詢完成後再等待標題與資料，避免把中性載入標題當成頁面已就緒。
  */
 async function expectMyTasksLanding() {
   await screen.findByText(ASSIGNED_FIELD_TASK.name)
@@ -522,11 +519,11 @@ describe('依後端存取摘要決定落點（#480）', () => {
   const identities = [
     ['系統管理者', ADMIN, '專案進度總覽'],
     ['純內業', OFFICE, '我的專案'],
-    ['純現場', MEMBER, '我的任務'],
+    ['純現場', MEMBER, '全部任務'],
     ['具專案管理與現場權限', BOTH, '我的專案'],
     ['兩者皆無', NOBODY, '個人設定'],
     ['只有範本管理員', TEMPLATE_ONLY, '查核範本'],
-    ['範本管理員兼現場', TEMPLATE_FIELD, '我的任務'],
+    ['範本管理員兼現場', TEMPLATE_FIELD, '全部任務'],
   ] as const
 
   async function changePassword() {
@@ -609,7 +606,7 @@ describe('依後端存取摘要決定落點（#480）', () => {
     stubBackend(TEMPLATE_FIELD)
     renderApp('/')
 
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByRole('heading', { name: '全部任務' })
     expect(screen.queryByRole('link', { name: '專案' })).toBeNull()
     expect(screen.getByRole('link', { name: '範本' })).toHaveAttribute(
       'href',
@@ -862,7 +859,12 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()
     expect(screen.getByText('已收回你的管理者權限。')).toBeVisible()
-    expect(screen.queryByRole('heading', { name: '我的任務' })).toBeNull()
+    expect(
+      screen.queryByRole('heading', {
+        level: 1,
+        name: /^(我的|全部)?任務$/,
+      }),
+    ).toBeNull()
   })
 
   it('收回自己失敗時留在管理頁並顯示錯誤', async () => {
@@ -1008,7 +1010,7 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
   it('現場帳號登出後換內業帳號登入，落在我的專案', async () => {
     stubWithLogout(MEMBER, OFFICE)
     renderApp('/tasks')
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByRole('heading', { name: '全部任務' })
 
     await logOut()
     await signIn()
@@ -1016,7 +1018,12 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     expect(
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()
-    expect(screen.queryByRole('heading', { name: '我的任務' })).toBeNull()
+    expect(
+      screen.queryByRole('heading', {
+        level: 1,
+        name: /^(我的|全部)?任務$/,
+      }),
+    ).toBeNull()
   })
 
   it('內業帳號登出後換現場帳號登入，落在今日任務', async () => {
@@ -1062,14 +1069,17 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     })
     renderApp('/login', { from: '/tasks?scope=all' })
     await signIn()
-    await screen.findByRole('heading', { name: '我的任務' })
     await waitFor(() => expect(fieldScopes(backend)[0]).toBe('true'))
     if (delayed) {
       expect(fieldScopes(backend)).toEqual(['true'])
+      expect(screen.getByRole('heading', { name: '任務' })).toBeVisible()
+      expect(screen.queryByRole('heading', { name: '我的任務' })).toBeNull()
       expect(scopeAll()).toHaveAttribute('aria-pressed', 'false')
       expect(screen.queryByRole('region', { name: '我的任務提醒' })).toBeNull()
     }
     gate.resolve()
+    if (tasks.length > 0) await expectMyTasksLanding()
+    else await screen.findByRole('heading', { name: '全部任務' })
     return { backend, requestedUsers }
   }
 
@@ -1122,7 +1132,7 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     const backend = stubWithLogout(MEMBER, next)
     backend.assignedTasks = [ASSIGNED_FIELD_TASK]
     renderAppWithHistory(['/tasks?scope=all', '/tasks'])
-    await screen.findByRole('heading', { name: '我的任務' })
+    await expectMyTasksLanding()
 
     await logOut()
     fireEvent.click(screen.getByRole('button', { name: '測試用上一頁' }))
@@ -1168,7 +1178,7 @@ describe('我的專案入口依專案存取權限顯示（ADM-R23、ADM-R24）',
     renderApp('/login')
     await signIn()
 
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByRole('heading', { name: '全部任務' })
     const bar = screen.getByRole('navigation', { name: '我的功能' })
     expect(within(bar).queryByRole('link', { name: '專案' })).toBeNull()
     expect(within(bar).queryByRole('link', { name: '設定' })).toBeNull()

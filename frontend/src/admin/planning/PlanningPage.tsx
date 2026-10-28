@@ -238,7 +238,7 @@ function draftTaskSummary(task: InspectionTask): string {
 
 /**
  * 依 ADM-R17、IP-R02、IP-R10 呈現專案計畫與任務管理。
- * #727：依專案 viewer 權限隱藏修改入口；後端仍覆核實際寫入。
+ * #727：依 ADM-R17、IP-R01 與 viewer 權限隱藏入口；後端仍覆核寫入。
  */
 type PlanningPageProps = {
   client?: PlanningPageClient
@@ -1750,7 +1750,7 @@ function PlanningContent({
                   : '計畫與任務'}
         </h2>
       )}
-      {(view === 'list' || view === 'plan' || view === 'task') && (
+      {(view === 'list' || view === 'plan') && (
         <p>計畫的狀態會跟著任務自動更新；任務派出後，現場才看得到。</p>
       )}
       {(view === 'task-new' || view === 'task-edit') && selectedPlan && (
@@ -1764,7 +1764,7 @@ function PlanningContent({
         (view === 'list' || view === 'plan' || view === 'task') && (
           <p>專案：{projects[0].name}</p>
         )}
-      {readOnly && (
+      {readOnly && !(view === 'plan' && selectedPlanDetail) && (
         <p className="notice-info" role="status">
           {READ_ONLY_NOTICE}
         </p>
@@ -1898,16 +1898,33 @@ function PlanningContent({
                     : 'planning-heading'
                 }
               >
-                {(view === 'plan' || view === 'task') && (
+                {view === 'plan' && (
                   <p>
                     計畫狀態：
                     <StatusBadge status={selectedPlanDetail.status} />
                   </p>
                 )}
-                {selectedPlanDetail.status === 'ARCHIVED' && (
-                  <p className="notice notice-info">
-                    計畫已封存。取消封存後才能新增、修改或派出任務。
+                {/* IP-R01：封存時只有取消封存可用；未封存時排除建立別的
+                    計畫與取消封存，避免把不適用的權限當成此計畫可用操作。
+                    合併封存與權限說明，避免兩個提示框上下重複。 */}
+                {selectedPlanDetail.status === 'ARCHIVED' ? (
+                  <p className="notice notice-info" role="status">
+                    {view === 'plan' && !canToggleArchive
+                      ? '這個計畫已封存。你沒有取消封存的權限，如需取消封存，請洽有權限的專案管理者。'
+                      : '計畫已封存。取消封存後才能新增、修改或派出任務。'}
                   </p>
+                ) : (
+                  view === 'plan' &&
+                  !writeCodes.some(
+                    (code) =>
+                      code !== 'inspection_plan.create' &&
+                      code !== 'inspection_plan.unarchive' &&
+                      canWrite(code),
+                  ) && (
+                    <p className="notice notice-info" role="status">
+                      你目前沒有可以對這個計畫執行的操作。
+                    </p>
+                  )
                 )}
                 {noticeFor('plan-detail')}
                 {view === 'plan' &&
@@ -2050,12 +2067,10 @@ function PlanningContent({
                     </form>
                   )}
 
-                {/* 按鈕與標題之間只靠標題的上邊距隔開，按鈕維持同一列。 */}
+                {/* 標題列負責區隔計畫操作與任務區段，按鈕維持同一列。 */}
                 {view === 'plan' && (
                   <div className="planning-section-title">
-                    <h3 style={{ marginBlockStart: 'var(--space-3)' }}>
-                      任務
-                    </h3>
+                    <h3>任務</h3>
                     {view === 'plan' &&
                       canModify &&
                       canCreateTask &&
@@ -2105,7 +2120,9 @@ function PlanningContent({
                               ].join(' ')}
                             >
                               <h4>
-                                {task.name}{' '}
+                                <span className="planning-task-name">
+                                  {task.name}
+                                </span>{' '}
                                 <span id={`task-${task.id}-state`}>
                                   <StatusBadge
                                     parenthesized
@@ -2113,7 +2130,10 @@ function PlanningContent({
                                   />
                                 </span>
                               </h4>
-                              <p id={`task-${task.id}-summary`}>
+                              <p
+                                className="planning-task-summary"
+                                id={`task-${task.id}-summary`}
+                              >
                                 {taskItemsSummary(task)}｜
                                 {task.zone?.name ??
                                   task.location_text ??
@@ -2140,6 +2160,14 @@ function PlanningContent({
                     return (
                       <li key={task.id}>
                         <article>
+                          {view === 'task' && (
+                            <p className="planning-parent-plan">
+                              所屬計畫：
+                              <Link to={planPath}>
+                                {selectedPlanDetail.name}
+                              </Link>
+                            </p>
+                          )}
                           {view === 'task' && (
                             <h2
                               ref={pageHeading}

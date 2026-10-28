@@ -12,3 +12,6 @@
 .roles-permission-group legend {
   font-weight: 650;
 }
+.default-role-delete-hint {
+  margin-block-start: var(--space-3);
+}

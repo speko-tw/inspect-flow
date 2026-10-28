@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -89,6 +90,42 @@ function renderPage(
 afterEach(() => vi.unstubAllGlobals())
 
 describe('今日任務首頁', () => {
+  it('無指派任務時，範圍決定前先顯示中性標題', async () => {
+    const resolveTasks: Array<(response: Response) => void> = []
+    const fetcher = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveTasks.push(resolve)
+        }),
+    )
+    vi.stubGlobal('fetch', fetcher)
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: '任務' })).toBeVisible()
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
+    expect(
+      screen.queryByRole('heading', { name: '我的任務' }),
+    ).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveTasks[0](Response.json({ items: [], next_cursor: null }))
+    })
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('heading', { name: '全部任務' })).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: '我的任務' }),
+    ).not.toBeInTheDocument()
+    await act(async () => {
+      resolveTasks[1](Response.json({ items: [], next_cursor: null }))
+    })
+    expect(
+      await screen.findByRole('heading', { name: '全部任務' }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: '我的任務' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('顯示任務入口，個人資料改由設定頁管理', async () => {
     vi.stubGlobal(
       'fetch',
@@ -102,7 +139,7 @@ describe('今日任務首頁', () => {
     renderPage()
 
     expect(
-      await screen.findByRole('heading', { name: '我的任務' }),
+      await screen.findByRole('heading', { name: '全部任務' }),
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: '變更密碼' }),
@@ -117,7 +154,7 @@ describe('今日任務首頁', () => {
       vi.fn(async () => Response.json({ items: [], next_cursor: null })),
     )
     renderPage({ user: { has_project_access: true } })
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByRole('heading', { name: '全部任務' })
     const banner = screen.getByRole('banner')
     expect(
       within(banner).getByRole('link', { name: 'InspectFlow 工程查核系統' }),
@@ -144,7 +181,7 @@ describe('今日任務首頁', () => {
     )
     mixed.unmount()
     renderPage()
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByRole('heading', { name: '全部任務' })
     expect(screen.queryByRole('link', { name: '專案' })).toBeNull()
   })
 
@@ -739,6 +776,9 @@ it('有指派的人維持預設我的任務，明確切換不被自動覆蓋', a
   vi.stubGlobal('fetch', fetcher)
   renderPage()
   await screen.findByText(TASK.name)
+  expect(
+    screen.getByRole('heading', { level: 1, name: '我的任務' }),
+  ).toBeVisible()
   const scope = screen.getByLabelText('任務範圍')
   expect(
     within(scope).getByRole('button', { name: '我的任務' }),

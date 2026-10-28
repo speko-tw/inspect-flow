@@ -225,3 +225,27 @@ describe('TemplateLibraryNav item selection', () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 })
+
+describe('TemplateLibraryNav selected marker', () => {
+  it('預設隱藏選取標記，只有明確啟用才顯示', () => {
+    const props = {
+      categories: [{ id: 'category-1', name: '土木工程' }],
+      systems: [{ id: 'system-1', category_id: 'category-1', name: '護欄' }],
+      items: [],
+      loadedCategoryIds: new Set(['category-1']),
+      loadedSystemIds: new Set(['system-1']),
+      selected: { type: 'system' as const, id: 'system-1' },
+      expanded: new Set(['category-1']),
+      onSelect: vi.fn(),
+      onToggle: vi.fn(),
+      onAddCategory: vi.fn(),
+      readOnly: true,
+      mobile: false,
+      mode: 'select' as const,
+    }
+    const { rerender } = render(<TemplateLibraryNav {...props} />)
+    expect(screen.queryByText('✓ 已選取')).toBeNull()
+    rerender(<TemplateLibraryNav {...props} showSelectedMarker />)
+    expect(screen.getByText('✓ 已選取')).toBeVisible()
+  })
+})
