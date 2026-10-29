@@ -40,6 +40,7 @@ type HeaderUser = Pick<
   | 'module_permissions'
   | 'can_manage_template_library'
   | 'delegated_modules'
+  | 'must_change_password'
 >
 
 /** T16：各外殼共用管理入口，任務頁不再遺漏管理選單。 */
@@ -255,7 +256,7 @@ export default function AppHeader({
             )}
           </div>
         </div>
-        {locked ? (
+        {user.must_change_password ? null : locked ? (
           <div className="app-header-nav app-header-nav-locked">
             <span
               aria-hidden="true"

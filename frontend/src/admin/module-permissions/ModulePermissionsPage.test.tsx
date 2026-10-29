@@ -69,6 +69,7 @@ interface FixtureOptions {
   bundleApplyResponse?: (path: string) => Promise<Response>
   projectCatalogResponse?: () => Promise<Response>
   bundleCatalogResponse?: () => Promise<Response>
+  zeroRevokeImpact?: boolean
 }
 
 function permissionPage(options: FixtureOptions = {}) {
@@ -381,7 +382,13 @@ function permissionPage(options: FixtureOptions = {}) {
         if (options.projectCatalogResponse)
           return options.projectCatalogResponse()
         return Response.json({
-          items: [{ id: 'project-1', name: '示範工程' }],
+          items: [
+            {
+              id: 'project-1',
+              project_code: 'DEMO-B',
+              name: '示範工程',
+            },
+          ],
           next_cursor: null,
         })
       }
@@ -513,8 +520,10 @@ function permissionPage(options: FixtureOptions = {}) {
       }
       if (method === 'GET' && path.endsWith('/revoke-impact')) {
         return Response.json({
-          membership_count: 1,
-          projects: [{ id: 'project-1', name: '示範工程' }],
+          membership_count: options.zeroRevokeImpact ? 0 : 1,
+          projects: options.zeroRevokeImpact
+            ? []
+            : [{ id: 'project-1', name: '示範工程' }],
           projects_becoming_unmanaged: [],
         })
       }
@@ -700,7 +709,9 @@ async function chooseProfile(profile: string, projectId?: string) {
   fireEvent.click(screen.getByRole('button', { name: '下一步' }))
   if (projectId) {
     const projectSelect = screen.getByLabelText('加入專案（可略過）')
-    await within(projectSelect).findByRole('option', { name: '示範工程' })
+    await within(projectSelect).findByRole('option', {
+      name: 'DEMO-B／示範工程',
+    })
     fireEvent.change(projectSelect, {
       target: { value: projectId },
     })
@@ -1287,7 +1298,9 @@ describe('ModulePermissionsPage', () => {
     fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
     const projectSelect = screen.getByLabelText('加入專案（可略過）')
-    await within(projectSelect).findByRole('option', { name: '示範工程' })
+    await within(projectSelect).findByRole('option', {
+      name: 'DEMO-B／示範工程',
+    })
     fireEvent.change(projectSelect, {
       target: { value: 'project-1' },
     })
@@ -2172,6 +2185,12 @@ describe('ModulePermissionsPage', () => {
     const capabilitySummary = await screen.findByText(summaryText)
     expect(capabilitySummary).toBeVisible()
     const advancedSummary = screen.getByText('進階設定')
+    expect(
+      screen
+        .getByRole('heading', { name: '能做什麼' })
+        .compareDocumentPosition(advancedSummary) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
     expect(advancedSummary.closest('details')).not.toHaveAttribute('open')
     const permissionsPanel = screen.getByRole('heading', {
       name: '已設定的權限',
@@ -2705,7 +2724,9 @@ describe('ModulePermissionsPage', () => {
     })
     const projectSelect = await screen.findByLabelText('專案')
     fireEvent.focus(projectSelect)
-    await within(projectSelect).findByRole('option', { name: '示範工程' })
+    await within(projectSelect).findByRole('option', {
+      name: 'DEMO-B／示範工程',
+    })
     fireEvent.change(projectSelect, {
       target: { value: 'project-1' },
     })
@@ -2752,7 +2773,7 @@ describe('ModulePermissionsPage', () => {
     )
   })
 
-  it('orders advanced settings before the capability summary', async () => {
+  it('orders capability summary before advanced settings', async () => {
     permissionPage({
       openWizard: false,
       embedded: true,
@@ -2766,7 +2787,7 @@ describe('ModulePermissionsPage', () => {
     expect(advanced).not.toBeNull()
     expect(capabilities).not.toBeNull()
     expect(advanced!.compareDocumentPosition(capabilities!)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
+      Node.DOCUMENT_POSITION_PRECEDING,
     )
   })
 
@@ -2811,7 +2832,9 @@ describe('帳號審查修正（#414）', () => {
     await waitFor(() => expect(summary).not.toHaveTextContent('載入中'))
     expect(summary).toHaveTextContent('可使用功能：專案功能')
     const select = within(summary).getByLabelText('專案')
-    await within(select).findByRole('option', { name: '示範工程' })
+    await within(select).findByRole('option', {
+      name: 'DEMO-B／示範工程',
+    })
     fireEvent.change(select, { target: { value: 'project-1' } })
     expect(within(summary).getByRole('button', { name: '檢查' })).toBeEnabled()
     expect(accessCalls()).toBe(beforeView + 1)
@@ -2853,13 +2876,21 @@ describe('帳號審查修正（#414）', () => {
     await act(async () =>
       projects.resolve(
         Response.json({
-          items: [{ id: 'project-1', name: '示範工程' }],
+          items: [
+            {
+              id: 'project-1',
+              project_code: 'DEMO-B',
+              name: '示範工程',
+            },
+          ],
           next_cursor: null,
         }),
       ),
     )
     expect(
-      await within(select).findByRole('option', { name: '示範工程' }),
+      await within(select).findByRole('option', {
+        name: 'DEMO-B／示範工程',
+      }),
     ).toBeVisible()
     expect(select).toBeEnabled()
     fireEvent.focus(select)
@@ -2929,7 +2960,13 @@ describe('第二輪審查的區塊錯誤恢復（#414）', () => {
           return attempts <= failures
             ? Response.json({ error: { code: 'x' } }, { status: 500 })
             : Response.json({
-                items: [{ id: 'project-1', name: '示範工程' }],
+                items: [
+                  {
+                    id: 'project-1',
+                    project_code: 'DEMO-B',
+                    name: '示範工程',
+                  },
+                ],
                 next_cursor: null,
               })
         },
@@ -2950,7 +2987,7 @@ describe('第二輪審查的區塊錯誤恢復（#414）', () => {
       }
       expect(
         await within(summary).findByRole('option', {
-          name: '示範工程',
+          name: 'DEMO-B／示範工程',
         }),
       ).toBeVisible()
       expect(screen.queryByRole('alert')).toBeNull()
@@ -3534,12 +3571,32 @@ it('收回失敗取消後重開清舊錯誤，成功後回到區塊標題', asyn
   fireEvent.click(within(box).getByRole('button', { name: '確認收回' }))
   const heading = within(area).getByRole('heading', { name: '已設定的權限' })
   await waitFor(() => expect(heading).toHaveFocus())
+  expect(await screen.findByText('已收回林沐青的使用專案功能。')).toBeVisible()
   expect(trigger).not.toBeInTheDocument()
   expect(
     calls.filter(
       (call) => call.method === 'DELETE' && call.path.endsWith('/project.use'),
     ),
   ).toHaveLength(2)
+})
+
+it('沒有影響成員或管理權專案時不顯示影響行', async () => {
+  permissionPage({
+    openWizard: false,
+    permissionCodes: ['project.use'],
+    zeroRevokeImpact: true,
+  })
+  await screen.findByText(/可使用功能：/)
+  fireEvent.click(screen.getByText('進階設定'))
+  const area = screen.getByRole('region', { name: '已設定的權限' })
+  const assigned = within(area).getByRole('checkbox', { name: '使用專案功能' })
+  await waitFor(() => expect(assigned).toBeChecked())
+  fireEvent.click(assigned)
+  fireEvent.click(within(area).getByRole('button', { name: '收回所選權限' }))
+  const box = await within(area).findByRole('region', {
+    name: '確認收回權限',
+  })
+  expect(within(box).queryByText(/影響 .* 位專案成員/)).toBeNull()
 })
 
 it('收回成功仍有其他未送出草稿時，焦點回到原觸發鈕', async () => {

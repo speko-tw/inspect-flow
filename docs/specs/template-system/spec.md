@@ -235,3 +235,5 @@
 - 規格澄清（#742）：TPL-R27、TPL-AC30 的 `task_count` 只對 Admin 與同時具 `inspection.use`、`project_inspection_item.edit` 權限者回傳數字，其他讀取者回 `null` 且不執行引用聚合，與刪除操作的授權一致 — [#742](https://github.com/speko-tw/inspect-flow/issues/742)
 
 - 規格澄清（#728）：TPL-AC29 補上新序號為目標系統最大序號加 1，空系統從 1 開始。
+
+- 規格澄清（#779）：從專案存為範本的名稱欄位顯示必填標記，缺值提示緊鄰欄位；建立帳號精靈的專案選項使用「代碼／名稱」。

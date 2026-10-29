@@ -1164,7 +1164,7 @@ function ProjectMembersSection({
                       <button
                         aria-label={memberRemoveLabel(member)}
                         className="btn-danger-outline"
-                        disabled={busy}
+                        disabled={busy || member.user_id === currentUser.id}
                         onClick={() => {
                           clearMessages()
                           setRemoving(member)
@@ -1181,7 +1181,7 @@ function ProjectMembersSection({
                       style={{ flexBasis: '100%', margin: 0 }}
                       id={`self-role-warning-${member.id}`}
                     >
-                      不能修改自己的專案角色。
+                      不能修改自己的角色或把自己移出專案。
                     </p>
                   )}
                 </li>

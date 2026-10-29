@@ -1798,7 +1798,9 @@ function PlanningContent({
                 ? `${
                     {
                       location: '修改地點',
-                      assignee: '修改建議指派',
+                      assignee: routeTask?.assignee_id
+                        ? '修改建議指派'
+                        : '指定建議指派人',
                       items: '修改查核項目',
                     }[editSection]
                   }｜${routeTask?.name ?? '載入中…'}`
@@ -2337,7 +2339,7 @@ function PlanningContent({
                                   task.status,
                                 ) && (
                                   <>
-                                    {canAssignTask && (
+                                    {canAssignTask && task.assignee && (
                                       <button
                                         disabled={busy}
                                         onClick={(event) => {
@@ -2674,12 +2676,14 @@ function PlanningContent({
                                               取消勾選後無法再加回。
                                             </p>
                                           )}
-                                          <details>
-                                            <summary style={{ minHeight: 44 }}>
-                                              本計畫已有 {existingTasks.length}{' '}
-                                              筆任務
-                                            </summary>
-                                            {existingTasks.length > 0 ? (
+                                          {existingTasks.length > 0 && (
+                                            <details>
+                                              <summary
+                                                style={{ minHeight: 44 }}
+                                              >
+                                                本計畫已有{' '}
+                                                {existingTasks.length} 筆任務
+                                              </summary>
                                               <ul>
                                                 {existingTasks.map(
                                                   (existing) => (
@@ -2697,10 +2701,8 @@ function PlanningContent({
                                                   ),
                                                 )}
                                               </ul>
-                                            ) : (
-                                              <p>目前沒有使用此項目的任務。</p>
-                                            )}
-                                          </details>
+                                            </details>
+                                          )}
                                         </div>
                                       )
                                     })}
@@ -2890,7 +2892,9 @@ function PlanningContent({
                                       ),
                                     {
                                       area: 'tasks',
-                                      text: '已更新建議指派。',
+                                      text: editingAssignee.task.assignee_id
+                                        ? '已更新建議指派。'
+                                        : '已指定建議指派人。',
                                     },
                                     'assignee',
                                     TASK_ASSIGNEE_BINDINGS,
@@ -3004,7 +3008,9 @@ function PlanningContent({
                                   disabled={busy}
                                   type="submit"
                                 >
-                                  儲存建議指派
+                                  {editingAssignee.task.assignee_id
+                                    ? '修改建議指派'
+                                    : '指定建議指派人'}
                                 </button>
                               </form>
                             )}
@@ -3128,11 +3134,11 @@ function PlanningContent({
                                 </label>
                                 {/* IP-R02 允許同項目建立多筆任務，所以只標示已有
                               幾筆、不擋選擇，讓使用者自己避開重複任務。 */}
-                                <details>
-                                  <summary style={{ minHeight: 44 }}>
-                                    本計畫已有 {existingTasks.length} 筆任務
-                                  </summary>
-                                  {existingTasks.length > 0 ? (
+                                {existingTasks.length > 0 && (
+                                  <details>
+                                    <summary style={{ minHeight: 44 }}>
+                                      本計畫已有 {existingTasks.length} 筆任務
+                                    </summary>
                                     <ul>
                                       {existingTasks.map((task) => (
                                         <li key={task.id}>
@@ -3143,10 +3149,8 @@ function PlanningContent({
                                         </li>
                                       ))}
                                     </ul>
-                                  ) : (
-                                    <p>目前沒有使用此項目的任務。</p>
-                                  )}
-                                </details>
+                                  </details>
+                                )}
                                 {selected && existingTasks.length > 0 && (
                                   <p className="field-hint">
                                     此項目已在本計畫任務中使用；仍可建立另一筆任務。

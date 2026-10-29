@@ -700,7 +700,7 @@ describe('動作與表單一致性', () => {
   it.each([
     ['new-task', '建立草稿任務'],
     ['location', '儲存地點'],
-    ['assignee', '儲存建議指派'],
+    ['assignee', '指定建議指派人'],
     ['items', '儲存查核項目'],
     ['name', '儲存名稱'],
     ['plan-name', '儲存計畫名稱'],
@@ -744,16 +744,15 @@ describe('動作與表單一致性', () => {
       const buttons = within(actions as HTMLElement).getAllByRole('button')
       expect(buttons.map((b) => b.textContent?.trim())).toEqual([
         '派出任務',
-        '修改建議指派',
         '修改地點',
         '修改查核項目',
         '修改名稱',
         '刪除草稿',
       ])
       expect(buttons[0]).toHaveClass('btn-primary')
-      expect(buttons[5]).toHaveClass('btn-danger-outline')
-      expect(buttons[5]).not.toHaveClass('btn-danger')
-      expect(buttons[5].parentElement).toHaveClass('planning-task-delete')
+      expect(buttons[4]).toHaveClass('btn-danger-outline')
+      expect(buttons[4]).not.toHaveClass('btn-danger')
+      expect(buttons[4].parentElement).toHaveClass('planning-task-delete')
     },
   )
 

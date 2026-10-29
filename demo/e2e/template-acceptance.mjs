@@ -590,7 +590,7 @@ try {
     await page.getByText('已更新任務地點。', { exact: true }).waitFor()
     assert.equal((await api(taskPath)).data.location_text, `北側 ${width}`)
     await page
-      .getByRole('button', { name: '修改建議指派', exact: true })
+      .getByRole('button', { name: '指定建議指派人', exact: true })
       .click()
     await page.locator('[data-error-context="assignee"]').waitFor()
     await planningShot('task-edit-assignee')

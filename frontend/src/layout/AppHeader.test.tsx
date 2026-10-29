@@ -95,6 +95,15 @@ describe('範本瀏覽導覽（TPL-R09）', () => {
   })
 })
 
+it('強制改密碼時隱藏主導覽但保留登出', () => {
+  const user = currentUserFixture({ must_change_password: true })
+  renderHeader(user)
+
+  expect(screen.queryByRole('navigation', { name: '管理功能' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: /示範使用者/ }))
+  expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
+})
+
 describe('AppHeader 窄螢幕導覽（#500）', () => {
   it('導覽是單列可滑動的一個 nav，目前的分頁被捲進可見範圍', () => {
     // jsdom 不做版面：用假的尺寸模擬「目前分頁在可視範圍右側之外」。
