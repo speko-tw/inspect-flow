@@ -447,7 +447,7 @@ function AdminPageContent() {
               tabIndex={-1}
             >
               {temporaryPassword.source === 'created'
-                ? `已新增${passwordRecipient}的帳號`
+                ? `已建立帳號：${passwordRecipient}`
                 : `已重設${passwordRecipient}的臨時密碼`}
             </h1>
             <p>帳號：{temporaryPassword.username}</p>
@@ -647,7 +647,7 @@ function MemberAdminShell({
               canAccessRoute(user, ROUTES.adminProjects) ? (
                 <MyProjectsPage canCreateProject={user.can_create_project} />
               ) : (
-                <Navigate replace to={indexTarget} />
+                <AccessDeniedPage />
               )
             }
           />

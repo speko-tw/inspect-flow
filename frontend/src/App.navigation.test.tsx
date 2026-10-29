@@ -621,11 +621,9 @@ describe('依後端存取摘要決定落點（#480）', () => {
     expect(
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
-    expect(
-      await screen.findByText('你沒有使用這個頁面的權限', {
-        selector: 'p[role="status"]',
-      }),
-    ).toBeVisible()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
     expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/templates',
@@ -644,11 +642,9 @@ describe('依後端存取摘要決定落點（#480）', () => {
     expect(
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
-    expect(
-      await screen.findByText('你沒有使用這個頁面的權限', {
-        selector: 'p[role="status"]',
-      }),
-    ).toBeVisible()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
     expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/settings',
@@ -678,7 +674,9 @@ describe('出路與 404（#480）', () => {
     renderApp('/settings')
 
     await screen.findByRole('heading', { name: '個人設定' })
-    expect(screen.getByText('尚未開通任何功能，請洽系統管理者')).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '你的帳號尚未開通任何功能，請洽系統管理者開通。',
+    )
     expect(screen.queryByRole('link', { name: /^返回/ })).toBeNull()
   })
 
@@ -697,7 +695,7 @@ describe('出路與 404（#480）', () => {
     expect(
       await screen.findByRole('heading', { name: '找不到這個頁面' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/projects',
     )
@@ -715,7 +713,7 @@ describe('出路與 404（#480）', () => {
     expect(
       await screen.findByRole('heading', { name: '找不到這個頁面' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/',
     )
@@ -1192,12 +1190,18 @@ describe('我的專案入口依專案存取權限顯示（ADM-R23、ADM-R24）',
     expect(screen.getByRole('link', { name: '設定' })).toBeVisible()
   })
 
-  it('現場開專案清單導回任務，不顯示我的專案', async () => {
+  it('現場開專案清單顯示無權限，可返回任務', async () => {
     const backend = stubBackend(MEMBER)
     backend.assignedTasks = [ASSIGNED_FIELD_TASK]
     renderApp('/projects')
 
-    await expectMyTasksLanding()
+    expect(
+      await screen.findByRole('heading', { name: '無權限' }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/tasks',
+    )
     const projectsHeading = screen.queryByRole('heading', {
       name: '我的專案',
     })
@@ -1232,13 +1236,17 @@ describe('我的專案入口依專案存取權限顯示（ADM-R23、ADM-R24）',
     expect(screen.queryByRole('link', { name: '套用範本' })).toBeNull()
   })
 
-  it('範本管理員直接開專案清單：導回範本管理', async () => {
+  it('範本管理員直接開專案清單：顯示無權限', async () => {
     stubBackend(TEMPLATE_ONLY)
     renderApp('/projects')
 
     expect(
-      await screen.findByRole('heading', { name: '查核範本' }),
+      await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/templates',
+    )
     expect(screen.queryByRole('link', { name: '專案' })).toBeNull()
   })
 

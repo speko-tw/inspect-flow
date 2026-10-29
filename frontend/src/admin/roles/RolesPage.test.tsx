@@ -539,7 +539,7 @@ describe('admin role management page', () => {
 
     const row = await screen.findByRole('row', { name: /示範內業/ })
     const button = within(row).getByRole('button', {
-      name: '「示範內業」完整權限',
+      name: '查看完整權限（示範內業）',
     })
     expect(button).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(button)

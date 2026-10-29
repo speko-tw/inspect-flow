@@ -54,6 +54,21 @@ export default function SaveTemplateFromProjectPage() {
   const [busy, setBusy] = useState(false)
   const projectItemsRequest = useRef(0)
   const errorRef = useRef<HTMLParagraphElement>(null)
+  const itemsHeadingRef = useRef<HTMLHeadingElement>(null)
+  const targetHeadingRef = useRef<HTMLHeadingElement>(null)
+  const currentStep = !project ? 1 : !source ? 2 : 3
+
+  useEffect(() => {
+    const heading =
+      currentStep === 2
+        ? itemsHeadingRef.current
+        : currentStep === 3
+          ? targetHeadingRef.current
+          : null
+    // 新步驟展開時同步移動視窗與焦點，讓鍵盤及手機使用者接續操作。
+    heading?.scrollIntoView?.({ block: 'start' })
+    heading?.focus({ preventScroll: true })
+  }, [currentStep])
 
   useEffect(() => {
     return () => {
@@ -197,7 +212,10 @@ export default function SaveTemplateFromProjectPage() {
   const saveAllowed = Boolean(
     source && selected?.type === 'system' && name.trim(),
   )
-  const currentStep = !project ? 1 : !source ? 2 : 3
+  const targetSystem = systems.find((row) => row.id === selected?.id)
+  const targetCategory = categories.find(
+    (row) => row.id === targetSystem?.category_id,
+  )
 
   return (
     <section
@@ -209,12 +227,22 @@ export default function SaveTemplateFromProjectPage() {
       </BackButton>
       <header>
         <h1 id="save-template-heading">從專案存為範本</h1>
-        <p role="status">步驟 {currentStep}／3</p>
-        <p>選擇專案、查核項目與範本庫位置。</p>
+        <p className="visually-hidden" role="status">
+          目前在步驟 {currentStep}，共 3 步
+        </p>
+        <p>完成一步，下一步會出現在下方。</p>
       </header>
-      <ol className="save-template-steps">
-        <li>
-          <h2>選擇專案</h2>
+      <ol className="save-template-steps" role="list">
+        <li aria-current={currentStep === 1 ? 'step' : undefined}>
+          <h2>
+            步驟 1：選擇專案
+            {project && (
+              <span>
+                {' 已選：'}
+                {project.name}
+              </span>
+            )}
+          </h2>
           {stepError('projects')}
           <label htmlFor="save-template-project-search">搜尋專案</label>
           <input
@@ -249,8 +277,16 @@ export default function SaveTemplateFromProjectPage() {
           </ul>
         </li>
         {project && (
-          <li>
-            <h2>選擇查核項目</h2>
+          <li aria-current={currentStep === 2 ? 'step' : undefined}>
+            <h2 ref={itemsHeadingRef} tabIndex={-1}>
+              步驟 2：選擇查核項目
+              {source && (
+                <span>
+                  {' 已選：'}
+                  {source.title}
+                </span>
+              )}
+            </h2>
             {stepError('items')}
             {loading ? <p role="status">載入中…</p> : null}
             {/* TPL-R28：存為範本不列停用來源，須先到專案恢復。 */}
@@ -267,8 +303,14 @@ export default function SaveTemplateFromProjectPage() {
                         onClick={() => void chooseSource(item)}
                         type="button"
                       >
-                        {item.title}（{item.inspection_points.length}{' '}
-                        個查核項次； 來源範本：{item.source_template_name}）
+                        <span className="save-template-item-label">
+                          <span>{item.title}</span>
+                          <span className="muted-text">
+                            {item.inspection_points.length}
+                            {' 個查核項次・來源範本：'}
+                            {item.source_template_name}
+                          </span>
+                        </span>
                         {/* 選取狀態已由 aria-pressed 朗讀，標記只補視覺線索，
                             避免重複報讀。 */}
                         {source?.id === item.id && (
@@ -291,8 +333,11 @@ export default function SaveTemplateFromProjectPage() {
           </li>
         )}
         {source && (
-          <li>
-            <h2>選擇範本庫位置</h2>
+          <li aria-current={currentStep === 3 ? 'step' : undefined}>
+            <h2 ref={targetHeadingRef} tabIndex={-1}>
+              步驟 3：選擇存入位置並命名
+            </h2>
+            <p>先點工程類別，再選要存入的系統。</p>
             <div className="save-template-target">
               {stepError('target')}
               <div aria-disabled={busy} inert={busy}>
@@ -335,6 +380,12 @@ export default function SaveTemplateFromProjectPage() {
                 <p>
                   來源：{project?.name} / {source.title}
                 </p>
+                <p>
+                  存入位置：
+                  {targetSystem && targetCategory
+                    ? `範本庫 / ${targetCategory.name} / ${targetSystem.name}`
+                    : '尚未選擇'}
+                </p>
                 <button
                   className="btn-primary"
                   disabled={!saveAllowed || busy}
@@ -343,6 +394,8 @@ export default function SaveTemplateFromProjectPage() {
                 >
                   {busy ? '儲存中…' : '存入這個系統'}
                 </button>
+                {!name.trim() && <p>請輸入範本名稱</p>}
+                {selected?.type !== 'system' && <p>請先選好存入的系統</p>}
                 {stepError('save')}
               </div>
             </div>

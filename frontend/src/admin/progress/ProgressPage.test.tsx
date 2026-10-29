@@ -313,7 +313,7 @@ it('does not render a task from a different project', async () => {
       name: '找不到這筆任務',
     }),
   ).toBeVisible()
-  expect(screen.getByRole('link', { name: '回首頁' })).toBeVisible()
+  expect(screen.getByRole('link', { name: '回到我的首頁' })).toBeVisible()
 })
 
 it.each([404, 422])(

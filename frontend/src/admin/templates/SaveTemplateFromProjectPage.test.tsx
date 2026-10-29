@@ -7,7 +7,7 @@ import {
   within,
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { currentUserFixture } from '../../testing/contractFixtures'
@@ -30,6 +30,10 @@ vi.mock('./api', () => ({
   listTemplateCategories: vi.fn(),
   listTemplateSystems: vi.fn(),
 }))
+
+afterEach(() => {
+  Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+})
 
 function LocationState() {
   const location = useLocation()
@@ -76,6 +80,7 @@ describe('SaveTemplateFromProjectPage', () => {
   it('讓非成員範本管理員完成專案項目複製並保留選取結果', async () => {
     vi.mocked(listAllProjects).mockResolvedValue([
       { id: 'p1', project_code: 'P-1', name: '工程一' },
+      { id: 'p2', project_code: 'P-2', name: '工程二' },
     ])
     vi.mocked(listTemplateCategories).mockResolvedValue([
       { id: 'c1', name: '土木' },
@@ -101,31 +106,96 @@ describe('SaveTemplateFromProjectPage', () => {
       title: '鋼筋查核',
     })
 
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
     renderPage(true)
     expect(
-      await screen.findByRole('heading', { name: '選擇專案' }),
+      await screen.findByRole('heading', { name: '步驟 1：選擇專案' }),
     ).toBeVisible()
     const projectButton = await screen.findByRole('button', {
       name: 'P-1 · 工程一',
     })
+    expect(scrollIntoView).not.toHaveBeenCalled()
     fireEvent.click(projectButton)
     expect(projectButton).toHaveTextContent('✓ 已選取')
-    expect(await screen.findByText('步驟 2／3')).toBeVisible()
+    expect(screen.getByText(/目前在步驟/)).toHaveTextContent(
+      '目前在步驟 2，共 3 步',
+    )
+    const itemsHeading = screen.getByRole('heading', {
+      name: '步驟 2：選擇查核項目',
+    })
+    await waitFor(() => expect(itemsHeading).toHaveFocus())
+    expect(scrollIntoView).toHaveBeenCalled()
+    expect(itemsHeading.closest('li')).toHaveAttribute('aria-current', 'step')
+    expect(
+      screen.getByRole('heading', {
+        name: /步驟 1：選擇專案\s*已選：工程一/,
+      }),
+    ).toBeVisible()
     const sourceButton = await screen.findByRole('button', {
       name: /鋼筋查核/,
     })
     fireEvent.click(sourceButton)
     expect(sourceButton).toHaveTextContent('✓ 已選取')
-    expect(await screen.findByText('步驟 3／3')).toBeVisible()
+    expect(screen.getByText(/目前在步驟/)).toHaveTextContent(
+      '目前在步驟 3，共 3 步',
+    )
+    const targetHeading = screen.getByRole('heading', {
+      name: '步驟 3：選擇存入位置並命名',
+    })
+    await waitFor(() => expect(targetHeading).toHaveFocus())
+    expect(targetHeading.closest('li')).toHaveAttribute('aria-current', 'step')
+    fireEvent.click(screen.getByRole('button', { name: 'P-2 · 工程二' }))
+    const returnedHeading = screen.getByRole('heading', {
+      name: '步驟 2：選擇查核項目',
+    })
+    await waitFor(() => expect(returnedHeading).toHaveFocus())
+    expect(returnedHeading.closest('li')).toHaveAttribute(
+      'aria-current',
+      'step',
+    )
+    expect(
+      screen.queryByRole('heading', { name: '步驟 3：選擇存入位置並命名' }),
+    ).toBeNull()
+    expect(
+      screen.getByRole('heading', { name: /步驟 1：選擇專案/ }).closest('li'),
+    ).not.toHaveAttribute('aria-current')
+    fireEvent.click(await screen.findByRole('button', { name: /鋼筋查核/ }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', {
+          name: '步驟 3：選擇存入位置並命名',
+        }),
+      ).toHaveFocus(),
+    )
+    expect(screen.getByText('存入位置：尚未選擇')).toBeVisible()
+    expect(screen.getByText('請先選好存入的系統')).toBeVisible()
+    expect(screen.getByRole('button', { name: '存入這個系統' })).toBeDisabled()
+    expect(screen.getByText('1 個查核項次・來源範本：原範本')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: '土木' }))
     const systemButton = await screen.findByRole('button', { name: '結構' })
     fireEvent.click(systemButton)
     expect(systemButton).toHaveTextContent('✓ 已選取')
+    expect(screen.getByText('存入位置：範本庫 / 土木 / 結構')).toBeVisible()
+    expect(screen.queryByText('請先選好存入的系統')).toBeNull()
+    fireEvent.change(screen.getByLabelText('範本名稱'), {
+      target: { value: '  ' },
+    })
+    expect(screen.getByRole('button', { name: '存入這個系統' })).toBeDisabled()
+    expect(screen.getByText('請輸入範本名稱')).toBeVisible()
+    fireEvent.change(screen.getByLabelText('範本名稱'), {
+      target: { value: '鋼筋查核' },
+    })
+    expect(screen.queryByText('請輸入範本名稱')).toBeNull()
+    expect(screen.getByRole('button', { name: '存入這個系統' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
 
     await waitFor(() =>
       expect(saveProjectItemAsTemplate).toHaveBeenCalledWith(
-        'p1',
+        'p2',
         'i1',
         's1',
         '鋼筋查核',
@@ -307,7 +377,7 @@ describe('SaveTemplateFromProjectPage', () => {
 
     const targetStep = screen
       .getByRole('heading', {
-        name: '選擇範本庫位置',
+        name: '步驟 3：選擇存入位置並命名',
       })
       .closest('li')
     expect(targetStep).not.toBeNull()

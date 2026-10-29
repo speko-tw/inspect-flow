@@ -20,15 +20,15 @@ describe('RolePermissionSummary', () => {
 
     expect(screen.getByText(/等共 5 項/)).toBeVisible()
     const button = screen.getByRole('button', {
-      name: '「示範內業」完整權限',
+      name: '查看完整權限（示範內業）',
     })
-    expect(button).toHaveTextContent('完整權限')
+    expect(button).toHaveTextContent('查看完整權限')
     expect(button).toHaveAttribute('aria-expanded', 'false')
     const list = document.getElementById(button.getAttribute('aria-controls')!)
     expect(list).toHaveAttribute('hidden')
 
     fireEvent.click(button)
-    expect(button).toHaveAttribute('aria-label', '「示範內業」完整權限')
+    expect(button).toHaveAttribute('aria-label', '查看完整權限（示範內業）')
     expect(button).toHaveAttribute('aria-expanded', 'true')
     expect(list).not.toHaveAttribute('hidden')
     expect(within(list!).getAllByRole('listitem')).toHaveLength(5)
@@ -52,10 +52,10 @@ describe('RolePermissionSummary', () => {
     )
 
     const inspectorButton = screen.getByRole('button', {
-      name: '「查核員」完整權限',
+      name: '查看完整權限（查核員）',
     })
     const viewerButton = screen.getByRole('button', {
-      name: '「檢視者」完整權限',
+      name: '查看完整權限（檢視者）',
     })
     fireEvent.click(inspectorButton)
 
@@ -75,7 +75,9 @@ describe('RolePermissionSummary', () => {
     )
 
     expect(screen.getAllByText('可使用部分功能')).toHaveLength(2)
-    fireEvent.click(screen.getByRole('button', { name: '「舊角色」完整權限' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: '查看完整權限（舊角色）' }),
+    )
     expect(screen.getAllByText('可使用部分功能')).toHaveLength(2)
     expect(document.body.textContent).not.toContain('future.unknown_code')
   })

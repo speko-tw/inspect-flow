@@ -1,4 +1,4 @@
-// 找不到頁面（#480、#493）：不留白，附「回首頁」連結。
+// 找不到頁面（#480、#493）：不留白，附「回到我的首頁」連結。
 //
 // 最外層的 404（路徑不存在）沒有登入狀態可用，`/` 會依登入狀態與
 // 存取摘要導向該去的落點（未登入到登入頁）。在登入後的畫面裡
@@ -10,7 +10,7 @@ import { Link } from 'react-router'
 export interface NotFoundPageProps {
   title?: string
   message?: string
-  /** 「回首頁」的目的地；預設 `/`。 */
+  /** 「回到我的首頁」的目的地；預設 `/`。 */
   homeTo?: string
   /** 已在別的 `<main>` 或專案頁框裡：不再包一層 `<main>`。 */
   embedded?: boolean
@@ -31,7 +31,7 @@ export default function NotFoundPage({
       <Heading>{title}</Heading>
       <p>{message}</p>
       <Link className="btn" to={homeTo}>
-        回首頁
+        回到我的首頁
       </Link>
     </>
   )

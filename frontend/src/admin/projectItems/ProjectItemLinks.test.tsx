@@ -63,9 +63,9 @@ describe('ProjectItemLinks', () => {
       await screen.findByRole('heading', { name: '無權限', level: 2 }),
     ).toBeVisible()
     expect(
-      await screen.findByText('你沒有使用這個頁面的權限', {
-        selector: 'p[role="status"]',
-      }),
+      (
+        await screen.findByText('你沒有使用這個頁面的權限', { exact: true })
+      ).closest('p[role="status"]'),
     ).toBeVisible()
     expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',

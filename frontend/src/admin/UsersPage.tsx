@@ -842,8 +842,8 @@ export default function UsersPage({
   }
 
   // 確認框的顏色看動作的效果：立刻拿掉他人權限或登入（停用、收回管理者）
-  // 用紅色；授予或恢復（啟用、指派管理者）用一般主色。管理者身分只影響
-  // 「管理者」動作，不影響啟用與停用。
+  // 用紅色；授予或恢復（啟用、設為系統管理者）用一般主色。管理者身分
+  // 只影響「設為／收回管理者」這個切換動作，不影響啟用與停用。
   function confirmVariant({ user, kind }: PendingAction) {
     if (kind === 'deactivate' || kind === 'reset') return 'danger'
     if (kind === 'admin' && user.is_admin) return 'danger'
@@ -947,7 +947,7 @@ export default function UsersPage({
                   onClick={() => toggleAdmin(detail)}
                   type="button"
                 >
-                  {detail.is_admin ? '收回管理者' : '指派管理者'}
+                  {detail.is_admin ? '收回管理者' : '設為系統管理者'}
                 </button>
                 <button
                   className={

@@ -34,11 +34,11 @@ export default function RolePermissionSummary({
             className={buttonClassName}
             aria-controls={listId}
             aria-expanded={expanded}
-            aria-label={`「${name}」完整權限`}
+            aria-label={`查看完整權限（${name}）`}
             onClick={() => setExpanded((value) => !value)}
             type="button"
           >
-            完整權限
+            查看完整權限
           </button>
           <ul hidden={!expanded} id={listId}>
             {details.map(({ code, label }) => (

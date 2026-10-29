@@ -190,13 +190,7 @@ function PeopleRoute({
 
   // ADM-R56：委派不包含建立帳號，直接開網址也不能載入精靈選項。
   if (isCreateRoute && !user.is_admin) {
-    return (
-      <section>
-        <h1>無權限</h1>
-        <p>新增帳號只有系統管理者能操作。</p>
-        <Link to={listPath}>回到帳號清單</Link>
-      </section>
-    )
+    return <AccessDeniedPage message="新增帳號只有系統管理者能操作。" />
   }
   // ADM-R56：只有載入遭拒才整頁提示；寫入失敗保留密碼與重試流程。
   if (accessDenied) return <AccessDeniedPage />
@@ -270,11 +264,13 @@ function PeopleRoute({
       {created && (
         <section aria-label="建立完成" className="account-created-result">
           <Notice>
-            <h2>已新增{created.name_zh || created.username}的帳號</h2>
+            <h2>已建立帳號：{created.name_zh || created.username}</h2>
           </Notice>
           <p>帳號：{created.username}</p>
           <div className="notice notice-warning" role="status">
             請複製這組密碼交給{created.name_zh || created.username}。
+            {/* 吃掉 JSX 換行空白，避免全形句號後多出半形空白。 */}
+            {''}
             對方第一次登入時必須改成自己的密碼。這組密碼只顯示這一次，離開這頁後就無法再查看。
           </div>
           <TemporaryPassword password={created.temporary_password} />
@@ -484,6 +480,7 @@ function DelegatedPeopleList({
   return (
     <section aria-label="可管理權限的帳號">
       <form
+        className="people-account-search"
         onSubmit={(event) => {
           event.preventDefault()
           updateQuery(input.trim())
@@ -492,6 +489,7 @@ function DelegatedPeopleList({
         <label>
           搜尋帳號
           <input
+            placeholder="輸入姓名或帳號"
             onChange={(event) => setInput(event.target.value)}
             value={input}
           />

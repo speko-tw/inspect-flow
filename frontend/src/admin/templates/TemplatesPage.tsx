@@ -1133,7 +1133,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
       return (
         <>
           <p className="tpl-crumb muted-text">
-            範本庫 / {selectedCategory?.name} /{selectedSystem.name}
+            範本庫 / {selectedCategory?.name} / {selectedSystem.name}
           </p>
           <h2 tabIndex={-1}>{selectedSystem.name}</h2>
           <div className="tpl-actions">
@@ -1219,7 +1219,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
       return (
         <>
           <p className="tpl-crumb muted-text">
-            範本庫 / {selectedCategory?.name} /{selectedSystem?.name} /{' '}
+            範本庫 / {selectedCategory?.name} / {selectedSystem?.name} /{' '}
             {selectedItem.title}
           </p>
           <h2 tabIndex={-1}>{selectedItem.title}</h2>

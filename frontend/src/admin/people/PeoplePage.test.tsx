@@ -131,6 +131,7 @@ describe('PeoplePage', () => {
 
     expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
     expect(screen.queryByText('林沐青')).toBeNull()
+    expect(await screen.findByPlaceholderText('輸入姓名或帳號')).toBeVisible()
     fireEvent.click(await screen.findByRole('link', { name: '其他帳號' }))
 
     expect(await screen.findByText('模組授權')).toBeInTheDocument()
@@ -290,7 +291,7 @@ describe('PeoplePage', () => {
       '/accounts/person-1?q=anna',
     )
     expect(
-      screen.getByRole('heading', { name: '已新增新帳號的帳號' }),
+      screen.getByRole('heading', { name: '已建立帳號：新帳號' }),
     ).toBeVisible()
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
       'once-only-password',

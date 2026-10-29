@@ -231,7 +231,7 @@ export function TemplateItemEditor({
         <div>
           <p className="tpl-crumb muted-text">
             {contextLabel ??
-              `範本庫 / ${selectedCategory?.name} /${selectedSystem?.name}`}
+              `範本庫 / ${selectedCategory?.name} / ${selectedSystem?.name}`}
           </p>
           <h2>
             {mode === 'create-item'
