@@ -184,9 +184,10 @@ describe('SaveTemplateFromProjectPage', () => {
     fireEvent.change(screen.getByLabelText('範本名稱'), {
       target: { value: '  ' },
     })
-    const nameInput = screen.getByLabelText('範本名稱')
-    const nameLabel = nameInput.closest('label')
-    expect(nameLabel?.querySelector('.required-mark')).not.toBeNull()
+    const nameInput = screen.getByLabelText<HTMLInputElement>('範本名稱')
+    const nameLabel = nameInput.labels?.[0]
+    expect(nameLabel).toBeInTheDocument()
+    expect(nameLabel?.querySelector('.required-mark')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '存入這個系統' })).toBeDisabled()
     const missingName = screen.getByText('請輸入範本名稱')
     expect(missingName).toBeVisible()

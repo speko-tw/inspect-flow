@@ -1135,6 +1135,17 @@ function PlanningContent({
     editTask(task, 'items')
   }
 
+  // 只有草稿的派出阻擋捷徑能取代下排指派入口，避免去重後無法指派。
+  function showsAssigneeShortcut(task: InspectionTask): boolean {
+    return (
+      task.status === 'DRAFT' &&
+      dispatchBlockers(task).unassigned &&
+      canModify &&
+      canDispatchTask &&
+      canAssignTask
+    )
+  }
+
   // 派出鈕的描述只包含原因與欄位捷徑，不包含額外的權限提示。
   function renderDispatchBlockers(task: InspectionTask) {
     if (task.status !== 'DRAFT') return null
@@ -1145,7 +1156,7 @@ function PlanningContent({
         {
           blocked: blockers.unassigned,
           label: '指定建議指派人',
-          allowed: canAssignTask,
+          allowed: showsAssigneeShortcut(task),
           section: 'assignee' as const,
         },
         {
@@ -1206,26 +1217,7 @@ function PlanningContent({
         role="list"
         style={{ listStyle: 'none' }}
       >
-        {blockers.unassigned && (
-          <li>
-            {canModify && canAssignTask
-              ? '尚未指派：'
-              : '尚未指派建議指派人。'}
-            {canModify && canAssignTask && (
-              <button
-                onClick={(event) => {
-                  clearFieldError()
-                  setNotice(null)
-                  assigneeTrigger.current = event.currentTarget
-                  editTask(task, 'assignee', '指定建議指派人')
-                }}
-                type="button"
-              >
-                指定建議指派人
-              </button>
-            )}
-          </li>
-        )}
+        {blockers.unassigned && <li>尚未指派建議指派人。</li>}
         {blockers.noLocation && (
           <li>
             {canModify && canManageTask ? '尚未填寫地點：' : '尚未填寫地點。'}
@@ -2339,27 +2331,34 @@ function PlanningContent({
                                   task.status,
                                 ) && (
                                   <>
-                                    {canAssignTask && task.assignee && (
-                                      <button
-                                        disabled={busy}
-                                        onClick={(event) => {
-                                          clearFieldError()
-                                          setNotice(null)
-                                          const trigger = event.currentTarget
-                                          assigneeTrigger.current = trigger
-                                          editTask(task, 'assignee')
-                                        }}
-                                        type="button"
-                                      >
-                                        修改建議指派
-                                        {task.assignee?.is_active === false
-                                          ? inactiveAssigneeNotice(
-                                              task.status,
-                                              selectedPlanDetail.archived,
+                                    {canAssignTask &&
+                                      !showsAssigneeShortcut(task) && (
+                                        <button
+                                          disabled={busy}
+                                          onClick={(event) => {
+                                            clearFieldError()
+                                            setNotice(null)
+                                            const trigger = event.currentTarget
+                                            assigneeTrigger.current = trigger
+                                            editTask(
+                                              task,
+                                              'assignee',
+                                              trigger.textContent?.trim(),
                                             )
-                                          : ''}
-                                      </button>
-                                    )}
+                                          }}
+                                          type="button"
+                                        >
+                                          {task.assignee
+                                            ? '修改建議指派'
+                                            : '指定建議指派人'}
+                                          {task.assignee?.is_active === false
+                                            ? inactiveAssigneeNotice(
+                                                task.status,
+                                                selectedPlanDetail.archived,
+                                              )
+                                            : ''}
+                                        </button>
+                                      )}
                                     {canManageTask && (
                                       <button
                                         disabled={busy}

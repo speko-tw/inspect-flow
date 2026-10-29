@@ -110,6 +110,56 @@ async function openTaskCreationForm(): Promise<void> {
 }
 
 describe('planning management page', () => {
+  it.each([
+    ['PENDING', true],
+    ['IN_PROGRESS', true],
+    ['DRAFT', true],
+    ['DRAFT', false],
+  ] as const)(
+    '#779 未指派 %s、派出權限 %s：保留單一指定入口並開啟表單',
+    async (status, canDispatch) => {
+      const client = createMockPlanningClient()
+      const plan = await client.createPlan('project-demo-1', {
+        name: '指派入口回歸',
+      })
+      const [item] = await client.listProjectItems('project-demo-1')
+      const task = await client.createTask(plan.id, {
+        name: '未指派任務',
+        item_ids: [item.id],
+        zone_id: null,
+        location_text: '工地',
+        suggested_assignee_id: null,
+      })
+      if (status !== 'DRAFT') await client.dispatchTask(task.id)
+      if (status === 'IN_PROGRESS') await client.startTask(task.id)
+      render(
+        <PlanningPage
+          client={client}
+          initialProjectId="project-demo-1"
+          viewerPermissions={[
+            'inspection_task.assign',
+            ...(canDispatch ? ['inspection_task.dispatch'] : []),
+          ]}
+        />,
+      )
+      await click(await screen.findByRole('link', { name: /指派入口回歸/ }))
+      await click(await screen.findByRole('link', { name: '未指派任務' }))
+
+      const button = screen.getByRole('button', {
+        name: '指定建議指派人',
+      })
+      expect(button).toBeVisible()
+      const actions = button.closest('.named-row-actions')
+      if (status === 'DRAFT' && canDispatch) expect(actions).toBeNull()
+      else expect(actions).toBeInTheDocument()
+      await click(button)
+      expect(
+        screen.getByRole('form', { name: /^指定建議指派人｜/ }),
+      ).toBeVisible()
+      expect(screen.getByLabelText('建議指派人')).toBeVisible()
+    },
+  )
+
   it('任務詳情以所屬計畫連結取代計畫層介紹與狀態', async () => {
     const client = createMockPlanningClient()
     const plan = await client.createPlan('project-demo-1', {
@@ -2267,7 +2317,7 @@ describe('planning forms guard (#507)', () => {
       { assign: false, manage: true },
       { assign: true, manage: true },
     ])(
-      'keeps permitted shortcuts without dispatch: %j',
+      'keeps assignment action and permitted shortcuts without dispatch: %j',
       async ({ assign, manage }) => {
         const client = await seededComplete()
         reshapeTasks(client, (task) => ({
@@ -2296,9 +2346,12 @@ describe('planning forms guard (#507)', () => {
         let article = await screen.findByRole('article')
         let list = within(article).getByRole('list', { name: BLOCKERS })
         expect(within(list).getAllByRole('listitem')).toHaveLength(3)
-        expect(within(list).getAllByRole('button')).toHaveLength(
-          Number(assign) + Number(manage) * 2,
+        expect(within(list).queryAllByRole('button')).toHaveLength(
+          Number(manage) * 2,
         )
+        expect(
+          within(list).queryByRole('button', { name: '指定建議指派人' }),
+        ).toBeNull()
         expect(within(article).queryByText(/派出前還需要/)).toBeNull()
         expect(
           within(article).queryByRole('button', { name: '派出任務' }),
@@ -2309,11 +2362,11 @@ describe('planning forms guard (#507)', () => {
         ] as const) {
           if (!allowed) {
             expect(
-              within(list).queryByRole('button', { name: label }),
+              within(article).queryByRole('button', { name: label }),
             ).toBeNull()
             continue
           }
-          const shortcut = within(list).getByRole('button', { name: label })
+          const shortcut = within(article).getByRole('button', { name: label })
           await click(shortcut)
           await waitFor(() =>
             expect(within(article).getByLabelText(field)).toHaveFocus(),
@@ -2323,7 +2376,7 @@ describe('planning forms guard (#507)', () => {
           list = within(article).getByRole('list', { name: BLOCKERS })
           await waitFor(() =>
             expect(
-              within(list).getByRole('button', { name: label }),
+              within(article).getByRole('button', { name: label }),
             ).toHaveFocus(),
           )
         }
