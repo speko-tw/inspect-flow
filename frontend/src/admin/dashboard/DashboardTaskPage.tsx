@@ -223,8 +223,7 @@ export default function DashboardTaskPage() {
         <Tag className="dashboard-task-scope">全部進度・唯讀</Tag>
       </header>
       <p className="dashboard-task-notice">
-        {'顯示任務、狀態、地點與建議指派。 ' +
-          '照片與查核結果不在此權限範圍。'}
+        {'顯示任務、狀態、地點與建議指派。' + '照片與查核結果不在此權限範圍。'}
       </p>
       <ListDetailLayout
         detail={

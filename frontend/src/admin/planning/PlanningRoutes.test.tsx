@@ -770,7 +770,7 @@ describe('動作與表單一致性', () => {
       await click(trigger)
       expect(
         within(screen.getByRole('dialog')).getByRole('button', {
-          name: '刪除',
+          name: '確認刪除',
         }),
       ).toHaveClass('btn-danger')
     },
@@ -788,7 +788,7 @@ describe('動作與表單一致性', () => {
       await click(trigger)
       expect(
         within(screen.getByRole('dialog')).getByRole('button', {
-          name: '確認',
+          name: '確認封存',
         }),
       ).toHaveClass('btn-danger')
     },

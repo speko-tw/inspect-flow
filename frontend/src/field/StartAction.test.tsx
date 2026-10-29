@@ -126,6 +126,7 @@ describe('開始查核：確認步驟', () => {
     expect(
       screen.getByText('開始後會改為進行中，並記錄你是實際開始者。'),
     ).toBeInTheDocument()
+    expect(screen.queryByText('對象：')).not.toBeInTheDocument()
     expect(posts()).toHaveLength(0)
     // [取消][確認]：只有確認是主要按鈕（#500）。
     const panel = screen.getByRole('heading', {

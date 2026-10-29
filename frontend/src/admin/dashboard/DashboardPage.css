@@ -95,7 +95,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   padding: var(--space-5);
 }
 
@@ -114,12 +114,6 @@
   font-size: 1.875rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
-}
-
-.dashboard-summary-hint {
-  margin-top: var(--space-1);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-small);
 }
 
 .dashboard-summary-card.is-completion strong {
@@ -221,12 +215,6 @@
 
 .dashboard-project-name {
   min-width: 0;
-}
-
-.dashboard-project-name small {
-  display: block;
-  margin-top: 2px;
-  color: var(--color-text-secondary);
 }
 
 .dashboard-project-link {
