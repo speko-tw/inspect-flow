@@ -175,7 +175,8 @@ export function ConfirmationPanel({
 }: {
   tone: 'neutral' | 'danger'
   title: string
-  subject: string
+  /** 省略時 title 必須已含受影響對象（UDS-R09）。 */
+  subject?: string
   impact: string
   cancelLabel: string
   confirmLabel: string
@@ -249,10 +250,12 @@ export function ConfirmationPanel({
       </p>
       <h2 id={titleId}>{title}</h2>
       <div id={descriptionId}>
-        <p>
-          <strong>對象：</strong>
-          {subject}
-        </p>
+        {subject && (
+          <p>
+            <strong>對象：</strong>
+            {subject}
+          </p>
+        )}
         <p>
           <strong>影響：</strong>
           {impact}

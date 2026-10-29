@@ -241,7 +241,6 @@ export default function StartAction({
           confirmLabel="確認開始查核"
           cancelLabel="取消"
           impact="開始後會改為進行中，並記錄你是實際開始者。"
-          subject={title}
           onCancel={() => {
             setConfirming(false)
             setFailure(null)
@@ -258,7 +257,7 @@ export default function StartAction({
         />
       ) : (
         <>
-          <p>看完需求後開始查核。</p>
+          <p>開始前請先看下方查核需求。</p>
           <Button
             id="field-start-task"
             variant="primary"

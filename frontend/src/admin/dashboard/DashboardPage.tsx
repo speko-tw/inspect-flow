@@ -289,11 +289,6 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
     setRetryKey((key) => key + 1)
   }
 
-  const scopeLabel =
-    globalAccess && !selectedProject
-      ? '全部可查看專案'
-      : (selectedProjectRow?.name ?? '專案進度')
-
   return (
     <section aria-labelledby="dashboard-heading" className="dashboard-page">
       <div className="dashboard-heading">
@@ -373,11 +368,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
           </article>
           <Metric label="待開始" value={summary.pending_count} />
           <Metric label="進行中" value={summary.in_progress_count} />
-          <Metric
-            hint="狀態為完成的任務"
-            label="已完成"
-            value={summary.completed_count}
-          />
+          <Metric label="已完成" value={summary.completed_count} />
         </div>
       )}
 
@@ -443,7 +434,6 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
                   )
                 }}
                 projects={visibleProjects}
-                scopeLabel={scopeLabel}
               />
             )}
           {globalAccess &&
@@ -544,20 +534,11 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
   )
 }
 
-function Metric({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: number
-  hint?: string
-}) {
+function Metric({ label, value }: { label: string; value: number }) {
   return (
     <article className="dashboard-summary-card">
       <span>{label}</span>
       <strong>{value.toLocaleString('zh-TW')}</strong>
-      {hint && <small className="dashboard-summary-hint">{hint}</small>}
     </article>
   )
 }
@@ -565,11 +546,9 @@ function Metric({
 function ProjectList({
   onSelect,
   projects,
-  scopeLabel,
 }: {
   onSelect: (projectId: string) => void
   projects: DashboardProject[]
-  scopeLabel: string
 }) {
   return (
     <div
@@ -582,7 +561,7 @@ function ProjectList({
         <span role="columnheader">待開始</span>
         <span role="columnheader">進行中</span>
         <span role="columnheader">已完成</span>
-        <span role="columnheader">已派出</span>
+        <span role="columnheader">派出總數</span>
         <span role="columnheader">完成率</span>
       </div>
       {projects.map((project) => (
@@ -599,7 +578,6 @@ function ProjectList({
             >
               {project.name}
             </button>
-            <small>{scopeLabel}</small>
           </span>
           <span
             aria-label={`待開始：${project.pending_count}`}
@@ -626,9 +604,9 @@ function ProjectList({
             {project.completed_count.toLocaleString('zh-TW')}
           </span>
           <span
-            aria-label={`已派出：${project.completion_denominator_count}`}
+            aria-label={`派出總數：${project.completion_denominator_count}`}
             className="dashboard-count"
-            data-label="已派出"
+            data-label="派出總數"
             role="cell"
           >
             {project.completion_denominator_count.toLocaleString('zh-TW')}
