@@ -538,6 +538,12 @@ describe('admin role management page', () => {
     renderRoles()
 
     const row = await screen.findByRole('row', { name: /示範內業/ })
+    expect(
+      within(row).getByRole('link', { name: '示範內業' }),
+    ).toHaveAttribute('href', '/roles/r1')
+    expect(
+      within(row).queryByRole('link', { name: '查看角色 示範內業' }),
+    ).toBeNull()
     const button = within(row).getByRole('button', {
       name: '查看完整權限（示範內業）',
     })

@@ -2764,7 +2764,7 @@ describe('admin project members', () => {
     const selfMember = { ...memberAnna }
     projectFetch({ members: [selfMember] })
     renderAt('/projects/project-1/members', selfUser)
-    await screen.findByText('不能修改自己的專案角色。')
+    await screen.findByText('不能修改自己的角色或把自己移出專案。')
 
     const link = screen.getByRole('link', {
       name: /修改「鄧安娜.*」的角色/,
@@ -2775,7 +2775,8 @@ describe('admin project members', () => {
       name: /選取.*鄧安娜.*的角色/,
     })
     expect(checkbox.closest('label')).toHaveTextContent(/^選取$/)
-    const warning = screen.getByText('不能修改自己的專案角色。')
+    const warning = screen.getByText('不能修改自己的角色或把自己移出專案。')
+    expect(screen.getByRole('button', { name: /移出專案/ })).toBeDisabled()
     expect(warning).toHaveClass('field-hint')
     expect(warning.parentElement).not.toBe(link.parentElement)
     expect(warning).toHaveAttribute('id', `self-role-warning-${selfMember.id}`)

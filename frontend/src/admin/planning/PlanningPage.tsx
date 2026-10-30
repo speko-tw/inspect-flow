@@ -1135,6 +1135,17 @@ function PlanningContent({
     editTask(task, 'items')
   }
 
+  // 只有草稿的派出阻擋捷徑能取代下排指派入口，避免去重後無法指派。
+  function showsAssigneeShortcut(task: InspectionTask): boolean {
+    return (
+      task.status === 'DRAFT' &&
+      dispatchBlockers(task).unassigned &&
+      canModify &&
+      canDispatchTask &&
+      canAssignTask
+    )
+  }
+
   // 派出鈕的描述只包含原因與欄位捷徑，不包含額外的權限提示。
   function renderDispatchBlockers(task: InspectionTask) {
     if (task.status !== 'DRAFT') return null
@@ -1145,7 +1156,7 @@ function PlanningContent({
         {
           blocked: blockers.unassigned,
           label: '指定建議指派人',
-          allowed: canAssignTask,
+          allowed: showsAssigneeShortcut(task),
           section: 'assignee' as const,
         },
         {
@@ -1206,26 +1217,7 @@ function PlanningContent({
         role="list"
         style={{ listStyle: 'none' }}
       >
-        {blockers.unassigned && (
-          <li>
-            {canModify && canAssignTask
-              ? '尚未指派：'
-              : '尚未指派建議指派人。'}
-            {canModify && canAssignTask && (
-              <button
-                onClick={(event) => {
-                  clearFieldError()
-                  setNotice(null)
-                  assigneeTrigger.current = event.currentTarget
-                  editTask(task, 'assignee', '指定建議指派人')
-                }}
-                type="button"
-              >
-                指定建議指派人
-              </button>
-            )}
-          </li>
-        )}
+        {blockers.unassigned && <li>尚未指派建議指派人。</li>}
         {blockers.noLocation && (
           <li>
             {canModify && canManageTask ? '尚未填寫地點：' : '尚未填寫地點。'}
@@ -1798,7 +1790,9 @@ function PlanningContent({
                 ? `${
                     {
                       location: '修改地點',
-                      assignee: '修改建議指派',
+                      assignee: routeTask?.assignee_id
+                        ? '修改建議指派'
+                        : '指定建議指派人',
                       items: '修改查核項目',
                     }[editSection]
                   }｜${routeTask?.name ?? '載入中…'}`
@@ -2337,27 +2331,34 @@ function PlanningContent({
                                   task.status,
                                 ) && (
                                   <>
-                                    {canAssignTask && (
-                                      <button
-                                        disabled={busy}
-                                        onClick={(event) => {
-                                          clearFieldError()
-                                          setNotice(null)
-                                          const trigger = event.currentTarget
-                                          assigneeTrigger.current = trigger
-                                          editTask(task, 'assignee')
-                                        }}
-                                        type="button"
-                                      >
-                                        修改建議指派
-                                        {task.assignee?.is_active === false
-                                          ? inactiveAssigneeNotice(
-                                              task.status,
-                                              selectedPlanDetail.archived,
+                                    {canAssignTask &&
+                                      !showsAssigneeShortcut(task) && (
+                                        <button
+                                          disabled={busy}
+                                          onClick={(event) => {
+                                            clearFieldError()
+                                            setNotice(null)
+                                            const trigger = event.currentTarget
+                                            assigneeTrigger.current = trigger
+                                            editTask(
+                                              task,
+                                              'assignee',
+                                              trigger.textContent?.trim(),
                                             )
-                                          : ''}
-                                      </button>
-                                    )}
+                                          }}
+                                          type="button"
+                                        >
+                                          {task.assignee
+                                            ? '修改建議指派'
+                                            : '指定建議指派人'}
+                                          {task.assignee?.is_active === false
+                                            ? inactiveAssigneeNotice(
+                                                task.status,
+                                                selectedPlanDetail.archived,
+                                              )
+                                            : ''}
+                                        </button>
+                                      )}
                                     {canManageTask && (
                                       <button
                                         disabled={busy}
@@ -2674,12 +2675,14 @@ function PlanningContent({
                                               取消勾選後無法再加回。
                                             </p>
                                           )}
-                                          <details>
-                                            <summary style={{ minHeight: 44 }}>
-                                              本計畫已有 {existingTasks.length}{' '}
-                                              筆任務
-                                            </summary>
-                                            {existingTasks.length > 0 ? (
+                                          {existingTasks.length > 0 && (
+                                            <details>
+                                              <summary
+                                                style={{ minHeight: 44 }}
+                                              >
+                                                本計畫已有{' '}
+                                                {existingTasks.length} 筆任務
+                                              </summary>
                                               <ul>
                                                 {existingTasks.map(
                                                   (existing) => (
@@ -2697,10 +2700,8 @@ function PlanningContent({
                                                   ),
                                                 )}
                                               </ul>
-                                            ) : (
-                                              <p>目前沒有使用此項目的任務。</p>
-                                            )}
-                                          </details>
+                                            </details>
+                                          )}
                                         </div>
                                       )
                                     })}
@@ -2890,7 +2891,9 @@ function PlanningContent({
                                       ),
                                     {
                                       area: 'tasks',
-                                      text: '已更新建議指派。',
+                                      text: editingAssignee.task.assignee_id
+                                        ? '已更新建議指派。'
+                                        : '已指定建議指派人。',
                                     },
                                     'assignee',
                                     TASK_ASSIGNEE_BINDINGS,
@@ -3004,7 +3007,9 @@ function PlanningContent({
                                   disabled={busy}
                                   type="submit"
                                 >
-                                  儲存建議指派
+                                  {editingAssignee.task.assignee_id
+                                    ? '修改建議指派'
+                                    : '指定建議指派人'}
                                 </button>
                               </form>
                             )}
@@ -3128,11 +3133,11 @@ function PlanningContent({
                                 </label>
                                 {/* IP-R02 允許同項目建立多筆任務，所以只標示已有
                               幾筆、不擋選擇，讓使用者自己避開重複任務。 */}
-                                <details>
-                                  <summary style={{ minHeight: 44 }}>
-                                    本計畫已有 {existingTasks.length} 筆任務
-                                  </summary>
-                                  {existingTasks.length > 0 ? (
+                                {existingTasks.length > 0 && (
+                                  <details>
+                                    <summary style={{ minHeight: 44 }}>
+                                      本計畫已有 {existingTasks.length} 筆任務
+                                    </summary>
                                     <ul>
                                       {existingTasks.map((task) => (
                                         <li key={task.id}>
@@ -3143,10 +3148,8 @@ function PlanningContent({
                                         </li>
                                       ))}
                                     </ul>
-                                  ) : (
-                                    <p>目前沒有使用此項目的任務。</p>
-                                  )}
-                                </details>
+                                  </details>
+                                )}
                                 {selected && existingTasks.length > 0 && (
                                   <p className="field-hint">
                                     此項目已在本計畫任務中使用；仍可建立另一筆任務。

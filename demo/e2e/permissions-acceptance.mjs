@@ -321,7 +321,7 @@ try {
   await page.getByRole('radio', { name: /現場查核/ }).check()
   await page.getByRole('button', { name: '下一步' }).click()
   await page.getByLabel('加入專案（可略過）').selectOption({
-    label: '示範廠擴建機電工程',
+    label: 'DEMO-B／示範廠擴建機電工程',
   })
   await page.getByRole('button', { name: '下一步' }).click()
   await page.getByRole('button', { name: '建立帳號' }).click()
@@ -423,10 +423,10 @@ try {
   const projectSelector = page.getByRole('combobox').nth(1)
   await projectSelector.focus()
   await page.getByRole('option', {
-    name: '示範廠擴建機電工程', exact: true,
+    name: 'DEMO-B／示範廠擴建機電工程', exact: true,
   }).waitFor({state: 'attached'})
   await projectSelector.selectOption({
-    label: '示範廠擴建機電工程',
+    label: 'DEMO-B／示範廠擴建機電工程',
   })
   const diagnosticResponse = page.waitForResponse(
     (response) => response.url().includes('/effective-access'),

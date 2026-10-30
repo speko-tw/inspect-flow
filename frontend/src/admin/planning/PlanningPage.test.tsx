@@ -110,6 +110,56 @@ async function openTaskCreationForm(): Promise<void> {
 }
 
 describe('planning management page', () => {
+  it.each([
+    ['PENDING', true],
+    ['IN_PROGRESS', true],
+    ['DRAFT', true],
+    ['DRAFT', false],
+  ] as const)(
+    '#779 未指派 %s、派出權限 %s：保留單一指定入口並開啟表單',
+    async (status, canDispatch) => {
+      const client = createMockPlanningClient()
+      const plan = await client.createPlan('project-demo-1', {
+        name: '指派入口回歸',
+      })
+      const [item] = await client.listProjectItems('project-demo-1')
+      const task = await client.createTask(plan.id, {
+        name: '未指派任務',
+        item_ids: [item.id],
+        zone_id: null,
+        location_text: '工地',
+        suggested_assignee_id: null,
+      })
+      if (status !== 'DRAFT') await client.dispatchTask(task.id)
+      if (status === 'IN_PROGRESS') await client.startTask(task.id)
+      render(
+        <PlanningPage
+          client={client}
+          initialProjectId="project-demo-1"
+          viewerPermissions={[
+            'inspection_task.assign',
+            ...(canDispatch ? ['inspection_task.dispatch'] : []),
+          ]}
+        />,
+      )
+      await click(await screen.findByRole('link', { name: /指派入口回歸/ }))
+      await click(await screen.findByRole('link', { name: '未指派任務' }))
+
+      const button = screen.getByRole('button', {
+        name: '指定建議指派人',
+      })
+      expect(button).toBeVisible()
+      const actions = button.closest('.named-row-actions')
+      if (status === 'DRAFT' && canDispatch) expect(actions).toBeNull()
+      else expect(actions).toBeInTheDocument()
+      await click(button)
+      expect(
+        screen.getByRole('form', { name: /^指定建議指派人｜/ }),
+      ).toBeVisible()
+      expect(screen.getByLabelText('建議指派人')).toBeVisible()
+    },
+  )
+
   it('任務詳情以所屬計畫連結取代計畫層介紹與狀態', async () => {
     const client = createMockPlanningClient()
     const plan = await client.createPlan('project-demo-1', {
@@ -1461,6 +1511,24 @@ describe('planning forms guard (#507)', () => {
       `[data-error-context="${context}"]`,
     ) as HTMLFormElement
 
+  async function openAssigneeForm(article: HTMLElement) {
+    const modify = within(article).queryByRole('button', {
+      name: '修改建議指派',
+    })
+    await click(
+      modify ??
+        within(article).getByRole('button', {
+          name: '指定建議指派人',
+        }),
+    )
+  }
+
+  function assigneeSubmitButton(form: HTMLElement) {
+    return within(form).getByRole('button', {
+      name: /^(儲存建議指派|修改建議指派|指定建議指派人)$/,
+    })
+  }
+
   it('preserves assignments when assignee lookup fails', async () => {
     const { client, task } = await seeded()
     await client.setSuggestedAssignee(task.id, 'project-a-member-1')
@@ -1469,7 +1537,7 @@ describe('planning forms guard (#507)', () => {
       throw new ManagementApiError(503, 'inspection_task.unavailable')
     }
     const article = await openPlan(client)
-    await click(within(article).getByRole('button', { name: '修改建議指派' }))
+    await openAssigneeForm(article)
 
     const form = formByContext('assignee')
     const selector = within(form).getByLabelText('建議指派人')
@@ -1477,6 +1545,9 @@ describe('planning forms guard (#507)', () => {
       name: /^修改建議指派｜/,
       level: 2,
     })
+    expect(
+      within(form).getByRole('button', { name: '修改建議指派' }),
+    ).toBeVisible()
     await waitFor(() => expect(formHeading).toHaveFocus())
     expect(selector).toBeDisabled()
     expect(selector).toHaveValue('project-a-member-1')
@@ -1486,7 +1557,7 @@ describe('planning forms guard (#507)', () => {
     )
     expect(saveAssignee).not.toHaveBeenCalled()
 
-    await click(within(form).getByRole('button', { name: '儲存建議指派' }))
+    await click(assigneeSubmitButton(form))
 
     await expectNotice('已更新建議指派。')
     expect(saveAssignee).toHaveBeenCalledOnce()
@@ -1696,12 +1767,14 @@ describe('planning forms guard (#507)', () => {
       .fn()
       .mockRejectedValue(validationError(taskAssigneeValidation))
     const article = await openPlan(client)
-    await click(within(article).getByRole('button', { name: '修改建議指派' }))
+    await click(
+      within(article).getByRole('button', { name: '指定建議指派人' }),
+    )
     const form = formByContext('assignee')
     fireEvent.change(within(form).getByLabelText('建議指派人'), {
       target: { value: 'project-a-member-1' },
     })
-    await click(within(form).getByRole('button', { name: '儲存建議指派' }))
+    await click(assigneeSubmitButton(form))
 
     expect(
       await within(form).findByText('欄位格式不正確，請檢查輸入內容。'),
@@ -1724,9 +1797,9 @@ describe('planning forms guard (#507)', () => {
         new ManagementApiError(500, 'inspection_task.unavailable'),
       )
     const article = await openPlan(client)
-    await click(within(article).getByRole('button', { name: '修改建議指派' }))
+    await openAssigneeForm(article)
     const form = formByContext('assignee')
-    await click(within(form).getByRole('button', { name: '儲存建議指派' }))
+    await click(assigneeSubmitButton(form))
 
     const alert = await within(form).findByRole('alert')
     expect(alert).toHaveTextContent('伺服器暫時無法處理')
@@ -1742,10 +1815,10 @@ describe('planning forms guard (#507)', () => {
     unknownField.fields = [{ path: '/unexpected', code: 'field.invalid' }]
     client.setSuggestedAssignee = vi.fn().mockRejectedValue(unknownField)
     const article = await openPlan(client)
-    await click(within(article).getByRole('button', { name: '修改建議指派' }))
+    await openAssigneeForm(article)
     const form = formByContext('assignee')
     const selector = within(form).getByLabelText('建議指派人')
-    await click(within(form).getByRole('button', { name: '儲存建議指派' }))
+    await click(assigneeSubmitButton(form))
 
     const alert = await within(form).findByRole('alert')
     expect(alert).toHaveTextContent('輸入資料不符合規格')
@@ -1985,7 +2058,7 @@ describe('planning forms guard (#507)', () => {
       ).toHaveFocus(),
     )
 
-    await click(within(article).getByRole('button', { name: '修改建議指派' }))
+    await openAssigneeForm(article)
     fireEvent.change(within(article).getByLabelText('建議指派人'), {
       target: { value: 'project-a-member-1' },
     })
@@ -1997,7 +2070,7 @@ describe('planning forms guard (#507)', () => {
     expect(within(article).queryByLabelText('建議指派人')).toBeNull()
     await waitFor(() =>
       expect(
-        within(article).getByRole('button', { name: '修改建議指派' }),
+        within(article).getByRole('button', { name: '指定建議指派人' }),
       ).toHaveFocus(),
     )
   })
@@ -2049,16 +2122,18 @@ describe('planning forms guard (#507)', () => {
     const { client } = await seeded()
     const { gate, spy } = hold(client, 'setSuggestedAssignee')
     const article = await openPlan(client)
-    await click(within(article).getByRole('button', { name: '修改建議指派' }))
+    await openAssigneeForm(article)
     const form = within(article)
-      .getByRole('button', { name: '儲存建議指派' })
+      .getByRole('button', {
+        name: /^(儲存建議指派|修改建議指派|指定建議指派人)$/,
+      })
       .closest('form') as HTMLFormElement
 
     fireEvent.submit(form)
     fireEvent.submit(form)
     gate.resolve()
 
-    await expectNotice('已更新建議指派。')
+    await expectNotice('已指定建議指派人。')
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
@@ -2066,7 +2141,9 @@ describe('planning forms guard (#507)', () => {
     const { client } = await seeded()
     const spy = watch(client, 'setSuggestedAssignee')
     const article = await openPlan(client)
-    await click(within(article).getByRole('button', { name: '修改建議指派' }))
+    await click(
+      within(article).getByRole('button', { name: '指定建議指派人' }),
+    )
 
     expectImeEnterIgnored(within(article).getByLabelText('建議指派人'))
 
@@ -2092,15 +2169,28 @@ describe('planning forms guard (#507)', () => {
         name: '指定建議指派人',
       }),
     )
+    expect(
+      screen.getByRole('heading', {
+        name: /^指定建議指派人｜/,
+        level: 2,
+      }),
+    ).toBeVisible()
+    expect(
+      within(article).queryByRole('button', { name: '修改建議指派' }),
+    ).toBeNull()
+    expect(
+      assigneeSubmitButton(formByContext('assignee')),
+    ).toHaveAccessibleName('指定建議指派人')
     fireEvent.change(within(article).getByLabelText('建議指派人'), {
       target: { value: 'project-a-member-1' },
     })
-    await click(within(article).getByRole('button', { name: '儲存建議指派' }))
+    await click(assigneeSubmitButton(formByContext('assignee')))
     await waitFor(() => {
       expect(
         within(article).queryByText(/派出前還需要/),
       ).not.toBeInTheDocument()
     })
+    await expectNotice('已指定建議指派人。')
 
     await click(within(article).getByRole('button', { name: '派出任務' }))
     expect(screen.getByRole('dialog')).toHaveTextContent('派出後現場即可查看')
@@ -2227,7 +2317,7 @@ describe('planning forms guard (#507)', () => {
       { assign: false, manage: true },
       { assign: true, manage: true },
     ])(
-      'keeps permitted shortcuts without dispatch: %j',
+      'keeps assignment action and permitted shortcuts without dispatch: %j',
       async ({ assign, manage }) => {
         const client = await seededComplete()
         reshapeTasks(client, (task) => ({
@@ -2256,9 +2346,12 @@ describe('planning forms guard (#507)', () => {
         let article = await screen.findByRole('article')
         let list = within(article).getByRole('list', { name: BLOCKERS })
         expect(within(list).getAllByRole('listitem')).toHaveLength(3)
-        expect(within(list).getAllByRole('button')).toHaveLength(
-          Number(assign) + Number(manage) * 2,
+        expect(within(list).queryAllByRole('button')).toHaveLength(
+          Number(manage) * 2,
         )
+        expect(
+          within(list).queryByRole('button', { name: '指定建議指派人' }),
+        ).toBeNull()
         expect(within(article).queryByText(/派出前還需要/)).toBeNull()
         expect(
           within(article).queryByRole('button', { name: '派出任務' }),
@@ -2269,11 +2362,11 @@ describe('planning forms guard (#507)', () => {
         ] as const) {
           if (!allowed) {
             expect(
-              within(list).queryByRole('button', { name: label }),
+              within(article).queryByRole('button', { name: label }),
             ).toBeNull()
             continue
           }
-          const shortcut = within(list).getByRole('button', { name: label })
+          const shortcut = within(article).getByRole('button', { name: label })
           await click(shortcut)
           await waitFor(() =>
             expect(within(article).getByLabelText(field)).toHaveFocus(),
@@ -2283,7 +2376,7 @@ describe('planning forms guard (#507)', () => {
           list = within(article).getByRole('list', { name: BLOCKERS })
           await waitFor(() =>
             expect(
-              within(list).getByRole('button', { name: label }),
+              within(article).getByRole('button', { name: label }),
             ).toHaveFocus(),
           )
         }
@@ -2430,7 +2523,7 @@ describe('planning forms guard (#507)', () => {
         name: /^修改查核項目｜/,
       })
       expect(within(form).queryByText(/本計畫已有 1 筆任務/)).toBeNull()
-      expect(within(form).getAllByText(/本計畫已有 0 筆任務/)).toHaveLength(3)
+      expect(within(form).queryByText(/本計畫已有 0 筆任務/)).toBeNull()
 
       const secondItem = within(form).getByLabelText(/鋼筋保護層/)
       await click(secondItem)
@@ -2923,14 +3016,12 @@ describe('planning forms guard (#507)', () => {
         .fn()
         .mockRejectedValue(businessError('inspection_task.invalid_assignee'))
       const article = await openPlan(client)
-      await click(
-        within(article).getByRole('button', { name: '修改建議指派' }),
-      )
+      await openAssigneeForm(article)
       const form = formByContext('assignee')
       fireEvent.change(within(form).getByLabelText('建議指派人'), {
         target: { value: 'project-a-member-1' },
       })
-      await click(within(form).getByRole('button', { name: '儲存建議指派' }))
+      await click(assigneeSubmitButton(form))
 
       const selector = within(form).getByLabelText('建議指派人')
       expect(
@@ -3005,7 +3096,9 @@ describe('planning trial fixes (#634)', () => {
   it('focuses the first field on open and returns focus on cancel', async () => {
     const { article } = await setup()
     await openTaskDetail()
-    await click(within(article).getByRole('button', { name: '修改建議指派' }))
+    await click(
+      within(article).getByRole('button', { name: '指定建議指派人' }),
+    )
     await click(screen.getByRole('button', { name: '取消' }))
     await click(screen.getByRole('link', { name: '返回計畫詳情' }))
     await click(screen.getByRole('button', { name: '＋ 新增任務' }))
@@ -3019,7 +3112,9 @@ describe('planning trial fixes (#634)', () => {
 
     expect(creationForm()).toBeNull()
     expect(
-      within(article).queryByRole('form', { name: /^修改建議指派｜/ }),
+      within(article).queryByRole('form', {
+        name: /^指定建議指派人｜/,
+      }),
     ).not.toBeInTheDocument()
     await waitFor(() =>
       expect(
@@ -3076,7 +3171,7 @@ describe('planning trial fixes (#634)', () => {
     await click(shortcut)
     expect(screen.queryByText('已更新計畫名稱。')).toBeNull()
     const form = within(article).getByRole('form', {
-      name: /^修改建議指派｜/,
+      name: /^指定建議指派人｜/,
     })
     expect(form).toBeVisible()
     await waitFor(() =>
@@ -3121,7 +3216,7 @@ describe('planning trial fixes (#634)', () => {
     await click(screen.getByRole('button', { name: '＋ 新增任務' }))
 
     expect(screen.getAllByText('本計畫已有 1 筆任務')).toHaveLength(1)
-    expect(screen.getAllByText('本計畫已有 0 筆任務')).toHaveLength(2)
+    expect(screen.queryByText('本計畫已有 0 筆任務')).toBeNull()
   })
 
   it('resets the creation form when another plan is opened', async () => {

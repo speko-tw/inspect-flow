@@ -578,7 +578,7 @@ it.each(['roles', 'companies'])('清單到 %s 詳情保留瀏覽歷史', async (
   mount(`/${kind}`)
   fireEvent.click(
     await screen.findByRole('link', {
-      name: kind === 'roles' ? '查看角色 角色1' : '查看公司 甲公司',
+      name: kind === 'roles' ? '角色1' : '查看公司 甲公司',
     }),
   )
   await screen.findByRole('heading', {
@@ -591,12 +591,13 @@ it.each(['roles', 'companies'])('清單到 %s 詳情保留瀏覽歷史', async (
   )
 })
 
-it('角色清單強調查看，完整權限使用一般次按鈕', async () => {
+it('角色名稱連結強調進入詳情，完整權限使用一般次按鈕', async () => {
   backend()
   mount('/roles')
-  expect(
-    await screen.findByRole('link', { name: '查看角色 角色1' }),
-  ).toHaveClass('btn-emphasis')
+  expect(await screen.findByRole('link', { name: '角色1' })).toHaveAttribute(
+    'href',
+    '/roles/r1',
+  )
   const summary = screen.getByRole('button', {
     name: '查看完整權限（角色1）',
   })

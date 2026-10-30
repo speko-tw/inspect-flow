@@ -62,6 +62,7 @@
 
 .project-item-delete-blocked p {
   color: var(--warning-text);
+  white-space: pre-line;
 }
 
 .project-item-template-hint {

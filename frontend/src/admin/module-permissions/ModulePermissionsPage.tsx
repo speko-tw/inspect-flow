@@ -1148,7 +1148,18 @@ function ModulePermissionsPageContent({
       )
       revokeFocusPending.current = revoke.scope
       setRevoke(null)
-      setOperationNotice(revoke.scope, '權限已收回。')
+      const targetName =
+        users.find((user) => user.id === selectedUser)?.name_zh ||
+        users.find((user) => user.id === selectedUser)?.username ||
+        '此帳號'
+      const permissionName =
+        permissions
+          .find((item) => item.code === revoke.code)
+          ?.description.replace('模組', '功能') ?? revoke.code
+      setOperationNotice(
+        revoke.scope,
+        `已收回${targetName}的${permissionName}。`,
+      )
       await diagnose()
     } catch (caught) {
       setOperationError('revoke', message(caught))
@@ -1764,13 +1775,16 @@ function ModulePermissionsPageContent({
           .find((item) => item.code === revoke.code)
           ?.description.replace('模組', '功能') ?? revoke.code}
       </p>
-      <p>
-        影響 {revoke.impact.membership_count}{' '}
-        位專案成員；可能失去管理權的專案：
-        {revoke.impact.projects_becoming_unmanaged
-          .map((item) => item.name)
-          .join('、') || '無'}
-      </p>
+      {(revoke.impact.membership_count > 0 ||
+        revoke.impact.projects_becoming_unmanaged.length > 0) && (
+        <p>
+          影響 {revoke.impact.membership_count}{' '}
+          位專案成員；可能失去管理權的專案：
+          {revoke.impact.projects_becoming_unmanaged
+            .map((item) => item.name)
+            .join('、') || '無'}
+        </p>
+      )}
       {operationFeedback('revoke')}
     </ConfirmBox>
   )
@@ -2253,7 +2267,7 @@ function ModulePermissionsPageContent({
                     </option>
                     {projects.map((project) => (
                       <option key={project.id} value={project.id}>
-                        {project.name}
+                        {project.project_code}／{project.name}
                       </option>
                     ))}
                   </select>
@@ -2442,130 +2456,6 @@ function ModulePermissionsPageContent({
           )}
         </Card>
       )}
-      {selectedUserId &&
-        currentUser.is_admin &&
-        !(wizardOpen && step === 4) && (
-          <details
-            className="permission-advanced-settings"
-            onToggle={(event) => {
-              // #712：展開進階設定時才載入組合、角色與其他管理選項。
-              // 原生 toggle 可能早於 React 提交 ready，成功快取以 ref 同步判斷。
-              if (!event.currentTarget.open || advancedLoaded.current) return
-              void refresh().catch(() => undefined)
-            }}
-          >
-            <summary>進階設定</summary>
-            {advancedStatus === 'loading' && <p role="status">載入中…</p>}
-            {advancedStatus === 'error' && (
-              <div>
-                <p role="alert">進階設定載入失敗：{advancedError}</p>
-                <Button onClick={() => void refresh().catch(() => undefined)}>
-                  重新載入進階設定
-                </Button>
-              </div>
-            )}
-            <Card aria-label="已設定的權限" role="region">
-              <h2 ref={accessHeadingRef} tabIndex={-1}>
-                已設定的權限
-              </h2>
-              <p>
-                這裡顯示帳號已開通的權限；專案內能力請查看「參與專案與角色」。
-              </p>
-              {selectedUser && (
-                <>
-                  <fieldset
-                    disabled={busy || accessLoadedFor !== selectedUser}
-                  >
-                    <legend>
-                      {'權限（已選取 '}
-                      {userAccess.length}
-                      {' 項）'}
-                    </legend>
-                    {visiblePermissions.map((item) => (
-                      <label key={item.code}>
-                        <input
-                          checked={accessDraft.includes(item.code)}
-                          type="checkbox"
-                          onChange={(event) => {
-                            setAccessDraft((current) =>
-                              event.target.checked
-                                ? [...new Set([...current, item.code])]
-                                : current.filter((code) => code !== item.code),
-                            )
-                          }}
-                        />{' '}
-                        {item.description.replace('模組', '功能')}
-                      </label>
-                    ))}
-                  </fieldset>
-                  {JSON.stringify([...accessDraft].sort()) !==
-                    JSON.stringify([...userAccess].sort()) && (
-                    <Button
-                      disabled={busy}
-                      onClick={(event) => {
-                        revokeTrigger.current = event.currentTarget
-                        void submitAccessDraft()
-                      }}
-                    >
-                      {accessChangeLabel}
-                    </Button>
-                  )}
-                </>
-              )}
-              {operationFeedback('access')}
-              {revoke?.scope === 'access' && revokePanel}
-            </Card>
-            {embedded && currentUser.is_admin && (
-              <Card>
-                <h2>套用權限組合</h2>
-                <ul>
-                  {bundles.map((bundle) => (
-                    <li className="permission-bundle-row" key={bundle.id}>
-                      <span>{bundle.name}</span>{' '}
-                      <Button
-                        disabled={!selectedUser || busy}
-                        onClick={() => void applyBundle(bundle)}
-                      >
-                        套用
-                      </Button>
-                      {operationFeedback(`bundle:${bundle.id}`)}
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            )}
-            {currentUser.is_admin && (
-              <Card>
-                <h2>委派管理</h2>
-                <p>收回委派不會移除對方已授予帳號的權限。</p>
-                {selectedUser &&
-                  ['project', 'inspection', 'template'].map((module) => (
-                    <div key={module}>
-                      <label>
-                        <input
-                          disabled={accessLoadedFor !== selectedUser}
-                          checked={delegatedModules.includes(module)}
-                          type="checkbox"
-                          onChange={(event) => {
-                            const enabled = event.target.checked
-                            void changeDelegation(module, enabled)
-                          }}
-                        />
-                        可管理
-                        {{
-                          project: '專案',
-                          inspection: '查核',
-                          template: '範本',
-                        }[module] ?? module}
-                        權限
-                      </label>
-                      {operationFeedback(`delegation:${module}`)}
-                    </div>
-                  ))}
-              </Card>
-            )}
-          </details>
-        )}
       {/* 完成頁只放臨時密碼與下一步；剛建好的帳號沒有可看的能力。 */}
       {selectedUser && currentUser.is_admin && !(wizardOpen && step === 4) && (
         <Card className="permission-capabilities">
@@ -2713,7 +2603,7 @@ function ModulePermissionsPageContent({
                     </option>
                     {projects.map((project) => (
                       <option key={project.id} value={project.id}>
-                        {project.name}
+                        {project.project_code}／{project.name}
                       </option>
                     ))}
                   </select>
@@ -2796,6 +2686,130 @@ function ModulePermissionsPageContent({
           </div>
         </Card>
       )}
+      {selectedUserId &&
+        currentUser.is_admin &&
+        !(wizardOpen && step === 4) && (
+          <details
+            className="permission-advanced-settings"
+            onToggle={(event) => {
+              // #712：展開進階設定時才載入組合、角色與其他管理選項。
+              // 原生 toggle 可能早於 React 提交 ready，成功快取以 ref 同步判斷。
+              if (!event.currentTarget.open || advancedLoaded.current) return
+              void refresh().catch(() => undefined)
+            }}
+          >
+            <summary>進階設定</summary>
+            {advancedStatus === 'loading' && <p role="status">載入中…</p>}
+            {advancedStatus === 'error' && (
+              <div>
+                <p role="alert">進階設定載入失敗：{advancedError}</p>
+                <Button onClick={() => void refresh().catch(() => undefined)}>
+                  重新載入進階設定
+                </Button>
+              </div>
+            )}
+            <Card aria-label="已設定的權限" role="region">
+              <h2 ref={accessHeadingRef} tabIndex={-1}>
+                已設定的權限
+              </h2>
+              <p>
+                這裡顯示帳號已開通的權限；專案內能力請查看「參與專案與角色」。
+              </p>
+              {selectedUser && (
+                <>
+                  <fieldset
+                    disabled={busy || accessLoadedFor !== selectedUser}
+                  >
+                    <legend>
+                      {'權限（已選取 '}
+                      {userAccess.length}
+                      {' 項）'}
+                    </legend>
+                    {visiblePermissions.map((item) => (
+                      <label key={item.code}>
+                        <input
+                          checked={accessDraft.includes(item.code)}
+                          type="checkbox"
+                          onChange={(event) => {
+                            setAccessDraft((current) =>
+                              event.target.checked
+                                ? [...new Set([...current, item.code])]
+                                : current.filter((code) => code !== item.code),
+                            )
+                          }}
+                        />{' '}
+                        {item.description.replace('模組', '功能')}
+                      </label>
+                    ))}
+                  </fieldset>
+                  {JSON.stringify([...accessDraft].sort()) !==
+                    JSON.stringify([...userAccess].sort()) && (
+                    <Button
+                      disabled={busy}
+                      onClick={(event) => {
+                        revokeTrigger.current = event.currentTarget
+                        void submitAccessDraft()
+                      }}
+                    >
+                      {accessChangeLabel}
+                    </Button>
+                  )}
+                </>
+              )}
+              {operationFeedback('access')}
+              {revoke?.scope === 'access' && revokePanel}
+            </Card>
+            {embedded && currentUser.is_admin && (
+              <Card>
+                <h2>套用權限組合</h2>
+                <ul>
+                  {bundles.map((bundle) => (
+                    <li className="permission-bundle-row" key={bundle.id}>
+                      <span>{bundle.name}</span>{' '}
+                      <Button
+                        disabled={!selectedUser || busy}
+                        onClick={() => void applyBundle(bundle)}
+                      >
+                        套用
+                      </Button>
+                      {operationFeedback(`bundle:${bundle.id}`)}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+            {currentUser.is_admin && (
+              <Card>
+                <h2>委派管理</h2>
+                <p>收回委派不會移除對方已授予帳號的權限。</p>
+                {selectedUser &&
+                  ['project', 'inspection', 'template'].map((module) => (
+                    <div key={module}>
+                      <label>
+                        <input
+                          disabled={accessLoadedFor !== selectedUser}
+                          checked={delegatedModules.includes(module)}
+                          type="checkbox"
+                          onChange={(event) => {
+                            const enabled = event.target.checked
+                            void changeDelegation(module, enabled)
+                          }}
+                        />
+                        可管理
+                        {{
+                          project: '專案',
+                          inspection: '查核',
+                          template: '範本',
+                        }[module] ?? module}
+                        權限
+                      </label>
+                      {operationFeedback(`delegation:${module}`)}
+                    </div>
+                  ))}
+              </Card>
+            )}
+          </details>
+        )}
     </div>
   )
 }

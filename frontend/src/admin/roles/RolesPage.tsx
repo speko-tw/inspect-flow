@@ -524,7 +524,6 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
                     <th scope="col">角色名稱</th>
                     <th scope="col">持有人數</th>
                     <th scope="col">權限</th>
-                    <th scope="col">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -545,15 +544,6 @@ function RoleScreen({ mode, roleId }: { mode: RoleMode; roleId: string }) {
                           descriptions={descriptions}
                           name={item.name}
                         />
-                      </td>
-                      <td data-label="操作">
-                        <Link
-                          className="btn btn-emphasis"
-                          aria-label={`查看角色 ${item.name}`}
-                          to={detailPath(item.id)}
-                        >
-                          查看
-                        </Link>
                       </td>
                     </tr>
                   ))}

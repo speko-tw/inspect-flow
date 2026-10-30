@@ -5,6 +5,7 @@ import { canManageTemplateLibrary } from '../../auth/landing'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { BackButton } from '../../layout/BackLink'
+import { RequiredMark } from '../../ui/Form'
 import {
   listProjectItems,
   type ProjectItemListData,
@@ -367,7 +368,11 @@ export default function SaveTemplateFromProjectPage() {
                 />
               </div>
               <div>
-                <label htmlFor="save-template-name">範本名稱</label>
+                <label htmlFor="save-template-name">
+                  <span className="required-label">
+                    範本名稱 <RequiredMark />
+                  </span>
+                </label>
                 <input
                   disabled={busy}
                   id="save-template-name"
@@ -377,6 +382,7 @@ export default function SaveTemplateFromProjectPage() {
                   }}
                   value={name}
                 />
+                {!name.trim() && <p>請輸入範本名稱</p>}
                 <p>
                   來源：{project?.name} / {source.title}
                 </p>
@@ -394,7 +400,6 @@ export default function SaveTemplateFromProjectPage() {
                 >
                   {busy ? '儲存中…' : '存入這個系統'}
                 </button>
-                {!name.trim() && <p>請輸入範本名稱</p>}
                 {selected?.type !== 'system' && <p>請先選好存入的系統</p>}
                 {stepError('save')}
               </div>
