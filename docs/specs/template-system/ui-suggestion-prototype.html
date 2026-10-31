@@ -875,8 +875,9 @@
       </p>
       <p>
         林小姐可編輯示範專案查核項目，沒有範本管理權；吳經理具範本管理權，
-        沒有來源專案編輯權。範本頁另有吳經理過去提出的兩件待審假資料，
-        用來比較全體待審數與林小姐在本專案的本人件數。
+        沒有來源專案編輯權，只擔任審核者。另兩件待審資料由內業陳先生提出；
+        他負責 B、C 案，能修改該兩案的查核項目，用來比較全體待審數
+        與林小姐在本專案的本人件數。陳先生僅作跨案提議人示例。
       </p>
       <label class="check"
         ><input id="lost-access" type="checkbox" />
@@ -923,7 +924,7 @@
               "'": "&#39;",
             })[char],
         );
-      const names = { lin: "林小姐", wu: "吳經理" };
+      const names = { lin: "林小姐", wu: "吳經理", chen: "陳先生" };
       const statusText = {
         PENDING: "待審",
         RETURNED: "退回",
@@ -1048,7 +1049,7 @@
       function seed(id, title, project) {
         const s = {
           id,
-          proposer: "wu",
+          proposer: "chen",
           project,
           sourceName: title,
           status: "PENDING",
@@ -1056,13 +1057,13 @@
           events: [],
           target: null,
         };
-        revision(s, { ...clone(second), title }, "吳經理");
-        transition(s, "PENDING", "吳經理");
+        revision(s, { ...clone(second), title }, "陳先生");
+        transition(s, "PENDING", "陳先生");
         return s;
       }
       state.suggestions = [
-        seed(1, "模板支撐檢查", "示範西區工程"),
-        seed(2, "防水收邊檢查", "示範東區工程"),
+        seed(1, "模板支撐檢查", "B 案 FP-2026-02／示範辦公大樓消防改善工程"),
+        seed(2, "防水收邊檢查", "C 案 FP-2026-03／示範廠房消防設備更新工程"),
       ];
       let screen = "project",
         selectedId = null,
@@ -2207,7 +2208,9 @@
             no +
             " 版「" +
             latest(s).content.title +
-            "」。林小姐將看到原因：" +
+            "」。" +
+            names[s.proposer] +
+            "將看到原因：" +
             reason +
             "。原版及本次原因會保留，可修改後重送。",
           () => {
