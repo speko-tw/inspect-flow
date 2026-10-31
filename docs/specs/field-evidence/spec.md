@@ -3,7 +3,7 @@
 **代碼**：`FEV`　**Phase**：P6　**狀態**：已凍結
 **前置規格**：`field-ui`、`inspection-planning`、`state-machines`、`template-system`、`authentication`、`audit-log`、`domain-model`、`api-conventions`
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-02](../../intents/02-principles.md#pr-02)、[PR-05](../../intents/02-principles.md#pr-05)、[PR-07](../../intents/02-principles.md#pr-07)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-10](../../intents/02-principles.md#pr-10)、[PR-17](../../intents/02-principles.md#pr-17)、[PR-19](../../intents/02-principles.md#pr-19)、[KD-32](../../intents/03-decisions-and-stack.md#kd-32)、[KD-34](../../intents/03-decisions-and-stack.md#kd-34)、[KD-35](../../intents/03-decisions-and-stack.md#kd-35)、[KD-38](../../intents/03-decisions-and-stack.md#kd-38)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-50](../../intents/03-decisions-and-stack.md#kd-50)、[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-61](../../intents/03-decisions-and-stack.md#kd-61)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[KD-63](../../intents/03-decisions-and-stack.md#kd-63)、[KD-64](../../intents/03-decisions-and-stack.md#kd-64)、[KD-51](../../intents/03-decisions-and-stack.md#kd-51)、[KD-69](../../intents/03-decisions-and-stack.md#kd-69)
-**被擋議題**：無。原六項待負責人裁定（[FEV-Q1](#fev-q1)、[FEV-Q6](#fev-q6)、[FEV-Q12](#fev-q12)～[FEV-Q15](#fev-q15)）已於 2026-10-10 裁定，見[裁定紀錄](#裁定紀錄)；仍未定的只有工程標示的欄位內容（[#588](https://github.com/speko-tw/inspect-flow/issues/588)）與已被核發報告引用的照片鎖定細節（0.8.x，隨 [G-06](../../intents/05-open-questions.md#g-06)、[G-07](../../intents/05-open-questions.md#g-07)），都不擋本規格。[KD-61](../../intents/03-decisions-and-stack.md#kd-61)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[KD-63](../../intents/03-decisions-and-stack.md#kd-63) 已由負責人裁定（#542，2026-10-13 確認），見 [KD-61](../../intents/03-decisions-and-stack.md#kd-61)～[KD-63](../../intents/03-decisions-and-stack.md#kd-63)；[KD-32](../../intents/03-decisions-and-stack.md#kd-32)、[KD-64](../../intents/03-decisions-and-stack.md#kd-64) 亦已裁定。[KD-34](../../intents/03-decisions-and-stack.md#kd-34) 的未定餘項（缺圖能否出報表、圖片選用細節）與 [OQ-19](../../intents/05-open-questions.md#oq-19)（報告是否標示「照片已調整」）屬 0.8.x `report-delivery`，只寫成依賴，不擋本規格；逐項比對見[開工門檻比對](#開工門檻比對)。
+**被擋議題**：無。原六項待負責人裁定（[FEV-Q1](#fev-q1)、[FEV-Q6](#fev-q6)、[FEV-Q12](#fev-q12)～[FEV-Q15](#fev-q15)）已於 2026-10-10 裁定，見[裁定紀錄](#裁定紀錄)；工程標示五欄已依 [#588 修正裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6231300749) 定案；仍待定的是已被核發報告引用的照片鎖定細節（0.8.x，隨 [G-06](../../intents/05-open-questions.md#g-06)、[G-07](../../intents/05-open-questions.md#g-07)），都不擋本規格。[KD-61](../../intents/03-decisions-and-stack.md#kd-61)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[KD-63](../../intents/03-decisions-and-stack.md#kd-63) 已由負責人裁定（#542，2026-10-13 確認），見 [KD-61](../../intents/03-decisions-and-stack.md#kd-61)～[KD-63](../../intents/03-decisions-and-stack.md#kd-63)；[KD-32](../../intents/03-decisions-and-stack.md#kd-32)、[KD-64](../../intents/03-decisions-and-stack.md#kd-64) 亦已裁定。[KD-34](../../intents/03-decisions-and-stack.md#kd-34) 的未定餘項（缺圖能否出報表、圖片選用細節）與 [OQ-19](../../intents/05-open-questions.md#oq-19)（報告是否標示「照片已調整」）屬 0.8.x `report-delivery`，只寫成依賴，不擋本規格；逐項比對見[開工門檻比對](#開工門檻比對)。
 
 ## 目的
 
@@ -16,7 +16,7 @@
 - 現場拍照、前端有限度編修（裁切、旋轉、亮度、縮放／平移預覽、重設）、前端壓縮，確認後上傳現場版。
 - 後端驗證與保存現場版，同一請求產生初版內業版；內業人員再編修內業版，直接更新內業版本身。
 - `Evidence`（MVP 只收照片，一筆就是一張照片）、現場版與內業版的檔案記錄、照片與查核項目／查核項次的對應、照片註記。
-- 內業版的工程標示：產生內業版時，把工程標示寫進影像像素（FEV-R22）；標示欄位內容待 [#588](https://github.com/speko-tw/inspect-flow/issues/588)。
+- 內業版的工程標示：產生內業版時，把工程標示寫進影像像素（FEV-R22）；五欄內容與來源依 [#588 修正裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6231300749)，見[工程標示內容與版面](#工程標示內容與版面588)。
 - 每個查核項次的照片覆蓋計算（供現場提示與 0.7.x 完成驗證共用），總覽照片選拍。
 - 上傳契約：單檔大小上限、完整性雜湊、冪等鍵、前端自動重試與手動重送；Online-first。
 - 照片刪除政策（軟刪除、稽核、完成後與報告引用的限制）、KD-55 標準變更作廢的照片處理。
@@ -32,7 +32,7 @@
 - 離線佇列、重新連線同步、背景上傳、快取型 Service Worker：MVP 不做（[KD-61](../../intents/03-decisions-and-stack.md#kd-61)、[KD-63](../../intents/03-decisions-and-stack.md#kd-63)、[FUI-R09](../field-ui/spec.md#需求)）。
 - 對比調整、照片上畫標註、物件移除／新增、生成式修圖、內容替換：不做（[KD-64](../../intents/03-decisions-and-stack.md#kd-64)、[PR-05](../../intents/02-principles.md#pr-05)）。
 - 非照片佐證（文字、數值、簽名、影片、文件原檔）：[KD-53](../../intents/03-decisions-and-stack.md#kd-53)。
-- 工程標示的欄位內容：待 [#588](https://github.com/speko-tw/inspect-flow/issues/588) 決定。報表上照片（含標示）在一側、查核項目與填寫內容在另一側的版面：移至 `report-delivery`（0.8.x）。
+- 報表上照片（含標示）在一側、查核項目與填寫內容在另一側的版面：移至 `report-delivery`（0.8.x）。
 - 範本端的照片需求定義：[`template-system`](../template-system/spec.md) TPL-R07；內業 Plan／Task 管理頁本身：`inspection-planning` 與 `admin-dashboard`。本規格只要求內業任務頁能進入照片頁。
 - 人員模組權限、委派與專案角色管理畫面：依 [#538](https://github.com/speko-tw/inspect-flow/issues/538) 的權限模型（[KD-69](../../intents/03-decisions-and-stack.md#kd-69)）；本規格只登記自己用到的專案範圍動作代碼，並要求兩層都通過（FEV-R12）。
 - 照片自動清除與保存期限：MVP 不做，保存期限隨專案（[KD-62](../../intents/03-decisions-and-stack.md#kd-62)）。資料庫與照片的配對備份、還原與容量規劃：移至 `pilot-deployment`（[PR-12](../../intents/02-principles.md#pr-12)）。
@@ -42,7 +42,7 @@
 - 現場查核人員開始查核後，在任務詳情看到每個查核項次「已有幾張／還缺幾張」，點項次拍照，編修並確認後上傳；網路不穩時畫面保留這張照片，自動重試三次，之後可手動重送。
 - 同一張照片同時佐證兩個項次時，現場人員在確認時一次勾選；每個項次都有至少一張照片後，現場看得出已經齊全。
 - 現場人員為查核項目選拍總覽照片，並可替任何一張照片加文字註記。
-- 內業人員從任務頁進入照片頁，依查核項目看每張照片的現場版與內業版（內業版的底部或旁邊帶工程標示），必要時裁切、旋轉或調整內業版亮度，套用後直接更新內業版。
+- 內業人員從任務頁進入照片頁，依查核項目看每張照片的現場版與內業版（內業版底部延伸的白底表格帶工程標示），必要時裁切、旋轉或調整內業版亮度，套用後直接更新內業版。
 - 內業修改專案查核項目並選「要」重新查核後，被修改項目的舊照片標示「標準變更作廢」並保留，內業找得到，現場補拍新照片。
 - 任務完成前，拍照者或內業可刪除不要的照片；完成後不可刪除。
 
@@ -64,7 +64,7 @@
 | FEV-R10 | 任務完成前，拍照者或具照片管理權限的內業**得**刪除未完成任務的照片；刪除為軟刪除並寫稽核事件，檔案與記錄保留。任務完成後、照片已標「標準變更作廢」，或照片已被核發報告引用時，**不得**刪除。被刪除的照片不計入覆蓋數與一般清單。MVP 不做自動清除，保存期限隨專案。「已被核發報告引用」由 `report-delivery` 提供的檢查註冊進來；該規格上線前視為未被引用。被報告引用的照片先一律鎖定（刪除、內業版編修與重新產生），0.8.x 隨 [G-06](../../intents/05-open-questions.md#g-06)、[G-07](../../intents/05-open-questions.md#g-07) 再定是否放寬（[FEV-Q13](#fev-q13)，[負責人裁定（2026-10-10，第 5 題）](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6094452625)；與 `completion-validation` 的 CMV-R11 一致）。 | 得／必須／不得 | [KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)；引用檢查的接合方式為規格設計 |
 | FEV-R11 | 專案查核項目修改且選「要」重新查核時，作廢對象**必須**是被修改的項目（Task 項目明細層）：該項目的照片（含總覽）在同一交易內標示「標準變更作廢」並保留，並將該項目標記待重查；同一任務其他項目不受影響。「已有結果」是指項目有未作廢的結果**或**有效照片（未刪除、未作廢）：因此只有照片、尚無結果的項目選「要」時，照片同樣作廢並標待重查；已有結果時照片隨結果作廢（結果的作廢隨 0.7.x，與 [IP-R04](../inspection-planning/spec.md#需求) 一致）。Task 層的 `has_result` 只用於判斷是否標待重查與說明文字，不決定作廢範圍。作廢照片不計入覆蓋數、不得用於報告、不得刪除或再編修，現場清單不顯示，內業**必須**找得到。選「不要」時照片與其對應不變。已取消的 Task 在修改當下不作廢，維持原樣並唯讀；恢復的同一交易才作廢並標待重查（[IP-R07](../inspection-planning/spec.md#需求)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)）。以上對 IP-R04、IP-AC04、IP-AC09 的修改，依負責人直接指示隨 `completion-validation` 規格一併落地，已修改 `inspection-planning`。 | 必須 | [KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[STM-R04](../state-machines/spec.md#需求)、[STM-R05](../state-machines/spec.md#需求)、[IP-R04](../inspection-planning/spec.md#需求)、[負責人裁定（2026-10-10，第 2、3 題）](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6094452625)、[負責人直接指示（2026-10-10）](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135)；裁定 [FEV-Q6](#fev-q6)、[FEV-Q15](#fev-q15)；同一交易與現場隱藏為規格設計 |
 | FEV-R12 | 後端**必須**對每個照片端點覆核權限，預設拒絕，採兩層模型（[KD-69](../../intents/03-decisions-and-stack.md#kd-69)、[AUT-R19](../authentication/spec.md#權限檢查)）：（1）人員模組：具查核模組「可使用」`inspection.use`；（2）專案：是專案成員且專案角色含該動作碼。兩層都通過才放行，Admin 依既有規則放行。動作碼：上傳與現場讀取要求 `inspection_task.inspect`（現場查核含拍照）；修改註記與對應、刪除要求「拍照者且具 `inspection_task.inspect`」或 `evidence.manage`；內業讀取兩個版本要求 `evidence.read`；內業版編修要求 `evidence.manage`。本規格登記 `evidence.read`、`evidence.manage` 兩個專案範圍代碼（屬查核模組；依 [DOM-R35](../domain-model/spec.md#需求)，`evidence.read` 為讀取碼、`external_allowed = true`，`evidence.manage` 為管理類、`external_allowed = false`）；人員模組權限的授予與委派不在本規格重複定義，見 [07-permission-model](../../intents/07-permission-model.md)。三個預建專案角色的初始內容以計畫 T1 明列的代碼為準：專案工程師含本規格與 `completion-validation` 的新代碼；現場工程師含 `inspection_task.inspect`、`inspection_task.correct`，不含兩個 `read`（`evidence.read`、`inspection_result.read`）；專案查閱人員含兩個 `read`；DOM-R68 的「讀取類代碼」只指建立當時已登記的代碼。`evidence.read`（`inspection_result.read` 同理）是讀取碼，依 DOM-R35 `external_allowed = true`，這是所有 read 代碼的統一規則，不是本規格另訂。外部協作人員持唯讀角色時可以讀全案，符合 07 外部協作人員第 5 點。#550 開放任何外部寫入角色之前，內業讀取端點與圖片串流**必須**只回該人員被指派任務的內容，驗收由 #550 負責。 | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[權限表](../../intents/07-permission-model.md#permission-table)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[KD-69](../../intents/03-decisions-and-stack.md#kd-69)、[DOM-R35](../domain-model/spec.md#需求)；`evidence.read`、`evidence.manage` 代碼為規格設計 |
-| FEV-R13 | 每張照片**必須**能追溯：內業版 → 現場版 → `Evidence` → Task 項目明細與 Snapshot 修訂 → Task → Plan → Project，並記錄拍照者（上傳者的身分快照：姓名、單位、是否外部協作人員，寫入當下保存，日後人員資料變更不影響）、上傳時間（伺服器時間）、拍攝時間（手機提供、用戶端回報，得為空，**不一定可信**，見 [FEV-Q16](#fev-q16)）。照片只經需要登入的 API 串流，**不得**提供公開網址；現場使用者只能讀現場版，內業版需要 `evidence.read`。已刪除與已作廢的照片：具 `evidence.read` 者可讀單張詳情與圖片（含標示），現場端點一律回 404。現場端點回傳 `item_id`、`point_ids` 是對 [FUI-R08](../field-ui/spec.md#需求) 與 inspection-planning Field 詳情「不回傳其他關聯 ID」的延伸，僅限本規格的照片端點，畫面不顯示，須在計畫 T0 於 `field-ui` 宣告。 | 必須／不得 | [PR-07](../../intents/02-principles.md#pr-07)、[PR-02](../../intents/02-principles.md#pr-02)、[PR-08](../../intents/02-principles.md#pr-08)、[KD-51](../../intents/03-decisions-and-stack.md#kd-51)、[07-permission-model](../../intents/07-permission-model.md) 第 6 點（紀錄身分快照，格式與寫入函式依 [#550](https://github.com/speko-tw/inspect-flow/issues/550)）；API 形式為規格設計 |
+| FEV-R13 | 每張照片**必須**能追溯：內業版 → 現場版 → `Evidence` → Task 項目明細與 Snapshot 修訂 → Task → Plan → Project，並記錄拍照者（上傳者的身分快照：姓名、單位、是否外部協作人員，寫入當下保存，日後人員資料變更不影響）、上傳時間（伺服器時間）、拍攝時間（手機提供、用戶端回報，得為空，**不一定可信**，見 [FEV-Q16](#fev-q16)）。照片只經需要登入的 API 串流，**不得**提供公開網址；現場使用者只能讀現場版，內業版需要 `evidence.read`。已刪除與已作廢的照片：具 `evidence.read` 者可讀單張詳情與圖片（含標示），現場端點一律回 404。現場端點回傳 `item_id`、`point_ids` 是對 [FUI-R08](../field-ui/spec.md#需求) 與 inspection-planning Field 詳情「不回傳其他關聯 ID」的延伸，僅限本規格的照片端點，畫面不顯示，已在 `field-ui` FUI-R08 宣告；T0 僅核對既有責任，不重做此宣告。 | 必須／不得 | [PR-07](../../intents/02-principles.md#pr-07)、[PR-02](../../intents/02-principles.md#pr-02)、[PR-08](../../intents/02-principles.md#pr-08)、[KD-51](../../intents/03-decisions-and-stack.md#kd-51)、[07-permission-model](../../intents/07-permission-model.md) 第 6 點（紀錄身分快照，格式與寫入函式依 [#550](https://github.com/speko-tw/inspect-flow/issues/550)）；API 形式為規格設計 |
 | FEV-R14 | 照片刪除、註記與對應修改、內業版編修**必須**各寫稽核事件，與資料變更同一交易寫入，事件代碼與欄位登記到 `audit-log` 事件目錄。`evidence.photo_deleted`、`evidence.office_version_edited` 標為「每次都寫」（ALG-R16；同參數重送仍是一次操作）；`evidence.photo_updated` 只記有變動的欄位，無變動不寫（ALG-R09）。三者都**必須**填 `AuditLog.project_id`（ALG-R24）。 | 必須 | [KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[PR-08](../../intents/02-principles.md#pr-08)、[ALG-R07](../audit-log/spec.md)、ALG-R09、ALG-R16、ALG-R24（同在 [audit-log](../audit-log/spec.md)）；事件代碼、欄位與標註為規格設計 |
 | FEV-R15 | 現場拍照與編修畫面**必須**可在 360px、390px、768px 寬度以觸控完成，主要觸控目標至少 44×44 CSS px，內容不需水平捲動；**不得**顯示資料庫 ID、儲存鍵、雜湊、metadata 等技術資訊；並遵守 PR-19：新增與修改分開入口、對應項次這類有依賴的輸入先列出可選項再讓使用者選、必填標示且錯誤顯示在欄位旁並聚焦、刪除與放棄上傳等破壞性操作先說明對象與後果再於頁內確認、離開有未儲存編修或待上傳照片的畫面前提示、全部功能有鍵盤操作路徑。 | 必須／不得 | [PR-10](../../intents/02-principles.md#pr-10)、[PR-19](../../intents/02-principles.md#pr-19)、[FUI-R08](../field-ui/spec.md#需求)；畫面細節為規格設計，實作前須經原型關卡 |
 | FEV-R16 | 內業照片頁**必須**依查核項目呈現照片（總覽在前），顯示現場版與內業版、註記、拍照者、時間與「標準變更作廢」「已刪除」標示，可依作廢與刪除狀態篩選；具 `evidence.manage` 者可編修內業版（旋轉、裁切、亮度、重設）並於頁內確認後套用，套用前說明「直接更新內業版、現場版不變、不保留舊內業版」；不得提供對比調整或標註。畫面同樣遵守 FEV-R15 的 PR-19 要求與 360px、觸控、鍵盤。 | 必須／不得 | [KD-32](../../intents/03-decisions-and-stack.md#kd-32)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-64](../../intents/03-decisions-and-stack.md#kd-64)、[PR-19](../../intents/02-principles.md#pr-19)；畫面細節為規格設計，實作前須經原型關卡 |
@@ -73,7 +73,26 @@
 | FEV-R19 | 任務「已完成」狀態標籤**必須**在現場任務詳情、現場任務清單的「近期已完成」區與內業計畫頁一致使用綠色成功樣式（`badge-success`）。「近期已完成」區（預設 14 天、可展開）的清單契約由 [FUI-R05](../field-ui/spec.md#需求) 定義（負責人裁定 [FEV-Q14](#fev-q14)，由本規格的 PR 同步修改 `field-ui`）。 | 必須 | v0.3.1 走查補充（[#105 留言](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6074723784)）、[負責人裁定（2026-10-10，第 6 題）](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6094452625)、[負責人直接指示（2026-10-10）](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135)；v0.3.1 現場還不能填結果，測不到已完成狀態，故列入本規格驗收 |
 | FEV-R20 | 內業在專案查核項目選「要」重新查核時，若受影響任務已有結果或有效照片，說明文字**必須**以白話寫出舊結果與照片如何保留（保留可查、標示「標準變更作廢」、需補查）；尚無結果與照片時維持「任務尚未填寫結果，直接改用新標準」。「已有結果」把有效照片納入（[FEV-Q6](#fev-q6)，已裁定）。 | 必須 | v0.3.1 走查補充（[#105 留言](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6074723784)）、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[IP-R04](../inspection-planning/spec.md#需求)、[負責人裁定（2026-10-10，第 2 題）](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6094452625)、[負責人直接指示（2026-10-10）](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135) |
 | FEV-R21 | 上傳與 KD-55 作廢並行時不得留下有效照片指到舊需求：上傳交易**必須**鎖定 Task 項目明細，並重新驗證 `item_id` 的目前快照修訂與 `point_ids`；作廢交易**必須**鎖定同一筆明細。需求已在上傳過程中改變時，上傳回 409 `evidence.requirement_changed`，不留記錄與檔案，現場重新整理後再拍。 | 必須 | [KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[PR-04](../../intents/02-principles.md#pr-04)；鎖定與重驗方式為規格設計 |
-| FEV-R22 | 內業版**必須**能包含工程標示：依設定檔的標示規則，在產生或重新產生內業版時，後端在後處理把標示寫進影像像素，位置在照片底部或旁邊（像工程照片上的標示牌，不是報表上另外排版的文字）；現場版**不得**加標示。規則啟用前（欄位內容待 [#588](https://github.com/speko-tw/inspect-flow/issues/588) 決定，應於 0.6.x 發版前定案），內業版不加標示、與現場版內容相同；這是暫行設定，不改變 [KD-32](../../intents/03-decisions-and-stack.md#kd-32) 的方向。標示規則在設定檔裡只有一份，啟用後內業版一律依規則產生。規則改變時，系統**必須**能從現場版重新產生內業版（內業編修參數沿用）；已作廢、已刪除、取消中 Task 與封存 Plan 下的照片，以及已被核發報告引用的照片，都不重新產生；觸發方式為維運指令。標示中的「拍攝者」取上傳者的身分快照；「拍攝時間」由手機提供、不一定可信，是否採用與來源待 #588。伺服器端**必須**用隨後端打包的中文字型繪製標示，不得依賴主機剛好安裝的字型。標示**不得**取代資料關聯：專案、地點、項次、查核結果與填寫內容仍以資料關聯保存；報表（0.8.x）上照片（含標示）在一側、查核項目與內容在另一側。 | 必須／不得 | [負責人裁定（2026-10-10，第 4 題）](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6094452625)、負責人補充（[#105 FEV-Q1，2026-10-10](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093900115)）；標示疊在照片上或延伸畫布另加標示區屬規格設計，原型時給負責人看；規則啟用前不加標示、規則存放、重新產生的觸發方式與範圍、字型為規格設計 |
+| FEV-R22 | 產生或重新產生內業版時，後端**必須**把「工程名稱、檢驗項目、檢驗位置、檢驗人員、檢驗時間」五欄寫進影像像素，採左欄名、右內容的標示板表格；承攬與監造使用同一組欄位，**不得**加入檢驗現況、公司名稱或查核項次編號。檢驗人員取上傳者身分快照，檢驗時間取伺服器上傳時間到時、分，**不得**採手機拍攝時間。欄位來源、缺值、時區與版面依下節。0.6.x 交付預設啟用，現場版不加標示；未啟用只限明確設定的相容／測試情境，不再以欄位未定為理由停用。標示規則在設定檔只有一份。規則變更由維運指令從現場版重新產生內業版，沿用內業編修參數；已作廢、已刪除、取消中 Task、封存 Plan 下與已被核發報告引用的照片不重新產生。使用隨後端打包的中文字型，不依賴主機字型。標示**不得**取代資料關聯；報表並排呈現照片與查核內容仍由 0.8.x 定義。 | 必須／不得 | [#588 最終修正裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6231300749)、[承攬與監造同欄裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6227875723)；寫進像素與重產依 [FEV-Q1 補充](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093900115)；來源快照、缺值、時區、版面、預設啟用及字型為規格設計，原型給負責人看後可調 |
+
+### 工程標示內容與版面（#588）
+
+欄位與用詞依[負責人修正裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6231300749)；[承攬／監造同欄](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6227875723)不變。下列精確取值、缺值、格式與版面屬**規格設計（非負責人另行裁定）**；**原型給負責人看後可調**。這是內業版照片標示，不是工程告示牌，也不決定正式報表版面。
+
+| 標示欄位 | 資料來源（上傳被接受時） | 缺值顯示 |
+|---|---|---|
+| 工程名稱 | Evidence 所屬 Project 的 `name`，不取代號、分類或公司名稱 | `未記錄` |
+| 檢驗項目 | Evidence 所屬 Task 項目明細目前 `Task Requirement Snapshot` 的查核項目 `title`，不取範本庫的即時名稱；一張照片對應多個項次時仍只印該查核項目名稱 | `未記錄` |
+| 檢驗位置 | 該 Task 的分區名稱與補充 `location_text`；兩者皆有時以 `／` 串接，只一者有值時只印該值 | `未填寫`（兩者皆空） |
+| 檢驗人員 | FEV-R13 上傳者身分快照中的姓名，不取目前 User 名稱、不把公司或代登實際檢查人誤印為上傳者 | `未記錄` |
+| 檢驗時間 | FEV-R13 記錄的伺服器上傳時間，轉為設定檔提供的時區（預設 `Asia/Taipei`，UTC+08:00），西元格式 `YYYY/MM/DD HH:mm`、24 小時制、不四捨五入秒數；API／資料庫仍沿用 UTC | `未記錄`（只可能是缺少來源的舊資料，不以重產時間補造） |
+
+- 上述五個來源值（時間保留 UTC 原值）以 `Evidence.label_source` metadata 在接受該次現場版上傳的同一交易固定，與 FIELD／OFFICE 兩版一起成功或回滾；內業編修、維運重產均讀此來源，不回查日後改名的專案、分區、人員或範本。舊資料無來源時依各欄缺值規則，不推測歷史值。實際套用的時區納入標示規則摘要，時區設定改變視同規則變更。這是標示來源快照，不增加第三張圖片或照片版本；下列完成後更正取代則建立新照片來源，不能誤用舊上傳者／時間。
+- 完成後「取代現場版」（[CMV-R11](../completion-validation/spec.md#需求)）：取代後的照片是新照片，標示來源重新固定，檢驗人員取**更正上傳者的身分快照**、檢驗時間取**更正上傳的伺服器時間**，不再沿用原上傳者／時間；工程名稱、檢驗項目、檢驗位置依同一所屬任務與項目的取值規則，在更正上傳時擷取，任務關聯不變。替換來源與兩版重產在同一交易成功或回滾；後續一般內業編修／維運重產仍固定使用這份新 `label_source`。這是來源規格設計，不放寬 CMV-R11 的報告引用鎖定或「完成後不得補拍／刪除」限制。
+- 改善照片（[CMV-R13](../completion-validation/spec.md#需求)）：由改善照片的 `result_id` 取得目前有效的不符合結果，再以該結果的 `task_inspection_item_id` 與 `snapshot_revision` 定位其項目需求快照；工程名稱取該結果所屬 Task 的 Project，檢驗項目取該結果對應快照的查核項目 `title`，檢驗位置取同一結果所屬 Task 的分區／補充 `location_text`，依五欄表的格式組合。改善上傳端點帶 `point_id` 並依 CMV-R13 綁定有效結果；照片不另建項次覆蓋對應，不代表缺少結果的項目關聯。不得因照片未直接填項目識別而改印任務名稱；缺少有效結果關聯不屬於合法改善照片上傳，不以任務名稱補造標示。檢驗人員及時間取該次改善照片上傳者身分快照與伺服器時間；同交易固定來源。這是來源規格設計，改善照片仍不計入項次覆蓋、不另加檢驗現況欄。
+- 設照片本體經旋轉／裁切／亮度後寬為 W：底部標示區及整張延伸畫布寬為 `C = max(W, 480)` px；W 小於 480 時照片本體保持原尺寸、在白色畫布水平置中，不拉寬、不遮蓋。表格左欄占 C 的 22%、右欄占 78%，依上述順序五列；黑字、黑框、左對齊、垂直置中。字級為 `max(14, round(0.022 × C))` px，行高 1.4 倍；框線 `max(1, round(0.001 × C))` px、儲存格內距 `max(1, round(0.01 × C))` px，取整採正數四捨五入。同一列兩格同高，長內容依字元邊界換行並增高，不省略、不截字；左欄必要時同樣換行。下限與延伸畫布是可讀性規格設計；**原型給負責人看後可調**。
+- 字型固定為隨後端打包的 Noto Sans CJK TC Regular，附上游授權；字型版本與繪製套件在實作時固定並寫入規則摘要。不得以作業系統 fallback 偷換字型；字型缺少字形時，以替代符號 `?`（U+003F）繪製該字，並寫應用程式 WARNING 警示紀錄，至少含 Evidence ID、字型版本及缺字 Unicode 碼位（例如 U+0378），不記整段人名或內容。**不得因缺字讓上傳失敗**；圖片與交易照常完成。替代符號、碼位記錄與不阻斷理由為規格設計：標示字型涵蓋不足不能阻擋現場保存證據；警示供後續補齊字型，不新增業務稽核事件。字型分發來源見[上游專案](https://github.com/notofonts/noto-cjk)，規格不在本單加入字型檔。
+- 編修順序最後才加表格，重設與重新產生不裁到標示；不放檢驗現況、實測值、公司名稱或項次編號。理由：沿用檢驗標示板的欄名／內容閱讀方式、白黑對比適合列印，底部延伸保留照片細節；比例與長文字換行避免直橫照片使用固定像素而失衡。
 
 ## 資料
 
@@ -81,9 +100,9 @@
 
 | 實體 | 重點欄位與規則 |
 |---|---|
-| `Evidence`（資料表 `evidence`） | `project_id`、`task_id`、`task_inspection_item_id`（所屬查核項目，總覽與佐證照片都有）、`is_overview`、`caption`（可空，500 字元內）、`snapshot_revision`（拍攝時的需求快照修訂）、`upload_key`（冪等鍵 UUID，與 `task_id` 組成唯一約束）、`captured_at`（用戶端回報，可空）、上傳者與上傳時間（沿用建立者與建立時間）、上傳者身分快照（姓名、單位、是否外部協作人員，寫入當下保存；格式與寫入函式依 [#550](https://github.com/speko-tw/inspect-flow/issues/550)）、`deleted_at`／`deleted_by`、`voided_at`／`void_reason`（目前只有 `STANDARD_CHANGED`）。沒有任何存放圖片位元組的欄位。 |
+| `Evidence`（資料表 `evidence`） | `project_id`、`task_id`、`task_inspection_item_id`（所屬查核項目，總覽與佐證照片都有）、`is_overview`、`caption`（可空，500 字元內）、`snapshot_revision`（拍攝時的需求快照修訂）、`upload_key`（冪等鍵 UUID，與 `task_id` 組成唯一約束）、`captured_at`（用戶端回報，可空）、上傳者與上傳時間（沿用建立者與建立時間）、上傳者身分快照（姓名、單位、是否外部協作人員，寫入當下保存；格式與寫入函式依 [#550](https://github.com/speko-tw/inspect-flow/issues/550)）、`deleted_at`／`deleted_by`、`voided_at`／`void_reason`（目前只有 `STANDARD_CHANGED`）。另有 `label_source` metadata，固定 FEV-R22 該次上傳的五個標示來源值，時間保存 UTC 原值；CMV-R11 更正取代時同交易更新為新來源，其他重產不回查即時名稱。沒有任何存放圖片位元組的欄位。 |
 | `Evidence Variant`（資料表 `evidence_variants`） | 每張照片剛好兩列，`variant_type` 為 `FIELD` 或 `OFFICE`，`(evidence_id, variant_type)` 唯一。欄位：`storage_key`（後端依 UUID 產生）、`content_type`（`image/jpeg`）、`byte_size`、`sha256`、`width`、`height`、`edit_params`（可空；`FIELD` 為前端回報的編修摘要，`OFFICE` 為後端實際套用、相對於現場版的參數）、`OFFICE` 另記最近一次編修者與時間，以及實際套用的工程標示規則摘要（可空；無標示時為空）。 |
-| 照片與項次對應（資料表 `evidence_point_links`） | `evidence_id` 與項次穩定識別 `source_point_id`；非總覽照片至少一列，總覽照片沒有列。對應的項次必須屬於 `task_inspection_item_id` 的目前快照。專案查核項目 PATCH 的點位與實測欄位帶 `id` 以保留身分（[IP-R13](../inspection-planning/spec.md#需求)），文字更正與重排後對應不變；選「要」時被刪除的點位隨項目一併作廢。現行實作的 PATCH 會刪除全部舊點位再以新 UUID 重建（`PointBody` 沒有 `id`），須先依 IP-R13 改為保留 `id`，見計畫 T5。 |
+| 照片與項次對應（資料表 `evidence_point_links`） | `evidence_id` 與項次穩定識別 `source_point_id`；非總覽照片至少一列，總覽照片沒有列。對應的項次必須屬於 `task_inspection_item_id` 的目前快照。專案查核項目 PATCH 的點位與實測欄位帶 `id` 以保留身分（[IP-R13](../inspection-planning/spec.md#需求)），文字更正與重排後對應不變；選「要」時被刪除的點位隨項目一併作廢。v0.5.2 的 PATCH 已依 #595 保留點位與實測欄位 `id`；本規格沿用此穩定身分，不重做結構編輯契約。T5 只接續照片對應、作廢與覆蓋計算。 |
 
 規則：
 
@@ -180,7 +199,7 @@
 | `evidence.read` | 專案 | 內業讀取照片兩版、作廢與已刪除紀錄 | 專案工程師、專案查閱人員 |
 | `evidence.manage` | 專案 | 編修內業版、修改或刪除他人上傳的照片 | 專案工程師 |
 
-三個代碼都屬查核模組：專案內動作要先通過 `inspection.use`，再看專案角色（FEV-R12）。`evidence.read` 是讀取碼，`evidence.manage` 是內業碼（依 [AUT-R08](../authentication/spec.md#需求) 的存取分類，`evidence.manage` 不需新增例外；`evidence.read` 在 [#576](https://github.com/speko-tw/inspect-flow/issues/576) 合併前的暫行分類見計畫 T1）。預建角色的初始內容見 FEV-R12 與計畫 T1（規格設計）；既有資料庫的預建角色依 [DOM-R68](../domain-model/spec.md#需求) 不被覆寫，由 Admin 於角色編輯勾選。
+三個代碼都屬查核模組：專案內動作要先通過 `inspection.use`，再看專案角色（FEV-R12）。`evidence.read` 是讀取碼，`evidence.manage` 是內業碼（依 [AUT-R08](../authentication/spec.md#需求) 的存取分類，`evidence.manage` 不需新增例外；[#576](https://github.com/speko-tw/inspect-flow/issues/576) 已落地依 `.read` 尾碼分類為唯讀碼，T1 沿用現行分類，不新增暫行例外）。預建角色的初始內容見 FEV-R12 與計畫 T1（規格設計）；既有資料庫的預建角色依 [DOM-R68](../domain-model/spec.md#需求) 不被覆寫，由 Admin 於角色編輯勾選。
 
 **稽核事件**（登記到 `audit-log` 事件目錄，規格設計）：`evidence.photo_deleted`（照片、Task、項目、刪除者、時間）、`evidence.photo_updated`（註記與對應的前後值）、`evidence.office_version_edited`（編修前後參數、編修者、時間）。作廢不另寫新事件，沿用 `project_inspection_item.updated`。
 
@@ -188,7 +207,7 @@
 
 - 現場：在 `/tasks/{task_id}` 詳情內，每個查核項次顯示「已有 n／需要 m 張」與「拍照」，查核項目另有「拍總覽照（選拍）」。拍照用裝置相機（網頁檔案選擇的相機擷取），進入全螢幕編修畫面：縮放與平移預覽、旋轉（每次 90°）、裁切框與常用比例、亮度、重設；「確認」後選擇這張照片佐證的項次（預選從哪個項次進入，只列同一查核項目的項次）、是否為總覽、註記；上傳狀態清單顯示上傳中、已上傳、失敗並提供重送與放棄。已上傳照片有獨立的「修改說明與項次」與「刪除」入口。
 - 前端壓縮：長邊不超過 2560 px、JPEG 品質 0.85，常數集中、可於試用後調整。
-- 工程標示的版面（疊在照片上，或延伸畫布另加標示區，暫定底部延伸、不蓋住照片內容）是規格設計，內容待 [#588](https://github.com/speko-tw/inspect-flow/issues/588)；原型時做出兩種版面給負責人看，核可後定案（FEV-R22）。
+- 工程標示採 FEV-R22 的底部延伸白底黑字五欄表格，欄位與來源已定案；比例、字型與換行是規格設計，原型給負責人看後可調，不再以欄位未定預設關閉。
 - 內業：任務頁的照片頁籤，依查核項目分組；每張可開啟詳情比較現場版與內業版（桌面並排、手機切換；內業版帶工程標示），編修面板含旋轉、裁切、亮度、重設與預覽。
 
 ## 驗收條件
@@ -226,8 +245,11 @@
 | FEV-AC27 | 已取消的 Task 有照片，取消期間內業修改專案查核項目 X 並選「要」 | 修改當下檢視照片與 Task；之後恢復 Task | 修改當下取消中 Task 的照片維持原樣並唯讀、Task 維持取消；恢復的同一交易才作廢 X 的照片並標待重查，其他項目不變（對齊 IP-AC04(4)）；Task 在恢復前不離開取消狀態；恢復請求失敗時照片作廢一併回滾 | FEV-R09、R11 |
 | FEV-AC28 | 同一項目：一個上傳請求與一個 KD-55 選「要」的修改並行；另有修訂已變更後才送達的上傳 | 兩者並行，並另送一個舊修訂的上傳 | 不論先後，只有兩種結果：上傳先完成則該照片隨後被作廢（FEV-R11）；修改先完成則上傳回 409 `evidence.requirement_changed` 且不留記錄與檔案；不會出現指向舊修訂卻仍有效的照片 | FEV-R21 |
 | FEV-AC29 | 上傳帶不合法的 `captured_at`；圖片請求的 `max_edge` 不同值；已刪除與已作廢的照片；`PATCH` 只送部分欄位；內業編修 | 各呼叫一次並讀取清單 | `captured_at` 格式錯誤或晚於伺服器時間超過 5 分鐘回 422；`max_edge` 超出 64～4096 回 422、大於原圖長邊時不放大且不落地；已刪除與已作廢照片對具 `evidence.read` 者回 200 並含標示、對現場端點回 404；`PATCH` 省略的欄位不變；`PATCH` 與編修回應依呼叫者權限回內業或現場視圖；清單跨項目與項目內排序固定 | FEV-R04、R06、R13 |
-| FEV-AC30 | 設定一份測試用的標示規則（含中文欄位內容）；`IN_PROGRESS` Task | 上傳照片；以旋轉與裁切編修內業版；讀取兩個版本；規則未啟用時另上傳一張 | 內業版影像的底部或旁邊有工程標示，且在影像像素內（下載圖片即可看到），中文字沒有缺字方塊；現場版沒有標示、雜湊與上傳內容一致；編修後標示仍在、沒有被裁切；標示的拍攝者是上傳者的身分快照；規則未啟用時內業版與現場版內容相同；儲存仍只有兩個檔案 | FEV-R03、R22 |
+| FEV-AC30 | 定案五欄與含中文的測試資料；`IN_PROGRESS` Task | 上傳照片；以旋轉與裁切編修內業版；讀取兩個版本；規則未啟用時另上傳一張 | 內業版影像的底部延伸區有工程標示，且在影像像素內（下載圖片即可看到），中文字沒有缺字方塊；現場版沒有標示、雜湊與上傳內容一致；編修後標示仍在、沒有被裁切；標示的檢驗人員是上傳者的身分快照，檢驗時間取伺服器上傳時間而非手機拍攝時間；規則未啟用時內業版與現場版內容相同；儲存仍只有兩個檔案 | FEV-R03、R22 |
 | FEV-AC31 | 已有多張照片（含一張被測試替身註冊為已被核發報告引用、一張已作廢、一張已刪除、一張在取消中 Task、一張在封存 Plan 下）；標示規則已改變 | 執行維運指令重新產生內業版；重複執行 | 其餘有效照片由現場版依新規則重新產生內業版，編修參數沿用，現場版與檔案數不變；被引用、已作廢、已刪除、取消中 Task 與封存 Plan 下的照片都跳過且資料與檔案不變；每張重新產生的照片寫稽核事件，操作者為內建 `admin`，內容含原因與規則摘要；重複執行結果相同；舊內業版檔案已移除 | FEV-R03、R10、R22 |
+| FEV-AC32 | 承攬、監造各一張照片；上傳者與編修者不同，手機時間與伺服器跨日；含分區＋補充地點、只有一者、皆空、舊來源缺值、長中文與英文混合內容 | 上傳、改專案／人員／分區名稱、編修及重新產生內業版；下載圖片核對 | 兩種案型都只有定案五欄，資料與缺值逐欄符合來源表；時間依設定檔時區顯示到分鐘，預設 Asia/Taipei，另設 UTC 時依 UTC 顯示，不採手機時間或重產時間；多項次照片不把項次編號印入標示；後續改名不改寫來源。表格位於底部、不蓋本體，長字換行無截斷，中文無缺字；與 AC30／AC31 一起驗證兩版及排除重產範圍 | FEV-R13、R22 |
+| FEV-AC33 | 定案五欄、W 分別為 320 與 1200 px 的照片；字型可顯示的中文與刻意無字形的 U+0378 | 上傳、編修及維運重產內業版 | 標示字級至少 14 px；窄圖畫布／標示區至少 480 px、照片不放大且水平置中，寬圖沿比例排版、表格不遮照片；缺字位置繪製 `?`，警示含 Evidence ID、字型版本與 U+0378 碼位，不含整段內容；缺字不使上傳或交易失敗，兩版正常保存，重產可完成 | FEV-R03、R22 |
+| FEV-AC34 | 已完成 Task 的照片由另一人依 CMV-R11 更正取代；另有 CMV-R13 改善照片，透過 `result_id` 關聯目前有效的不符合結果，結果帶項目識別與快照修訂 | 更正／改善上傳、讀取標示，再一般內業編修與維運重產；另注入替換失敗 | 更正後人員／時間是更正上傳者身分快照與該次伺服器時間，工程／項目／位置依同一任務取值；改善照片沿 `result_id` 取得結果，以該結果的項目識別與快照修訂取得標題，位置取同一結果所屬任務；即使照片未直接填項目識別仍顯示該項目標題，不改印任務名稱，缺少有效不符合結果不得當正常改善上傳驗收；來源同交易固定，後續重產不回到舊上傳者／時間、不改用重產時間；替換失敗保留原來源與兩版，不放寬既有完成後限制 | FEV-R13、R22；CMV-R11、R13 |
 
 ## 規格設計清單
 
@@ -238,7 +260,7 @@
 | D1 | 編修操作：旋轉每次 90°；亮度 -50 到 +50；裁切為自由框加常用比例預設；縮放與平移只用來預覽與定位裁切框，不單獨保存。處理順序為旋轉、裁切、亮度 | 90° 步進與固定順序讓前後端結果可預期，避免任意角度旋轉帶來的空白邊 |
 | D2 | 前端壓縮為 JPEG，長邊不超過 2560 px、品質 0.85；後端只收 JPEG；不保存 EXIF 與原始檔名 | 手機照片通常數 MB，壓縮後遠低於 30 MB 上限；瀏覽器的畫布輸出本來就不帶 EXIF |
 | D3 | 擷取方式用裝置相機的網頁檔案選擇（相機擷取），不自建即時取景 | iOS Safari 最可靠、實作最小；日後可換成即時取景 |
-| D4 | 後端在同一請求內產生初版內業版：現場版套預設參數後，依標示規則把工程標示寫進影像像素（FEV-R22）；規則啟用前（欄位待 #588，應於 0.6.x 發版前定案）內業版不加標示、與現場版內容相同（現場版的位元組複本，仍是獨立檔案與記錄），這是暫行設定，不改變 KD-32 的方向。專案、地點、項次、拍攝者、時間、註記仍以資料關聯保存，供報表（0.8.x）在文件上與照片並排呈現。標示疊在照片上或延伸畫布另加標示區屬規格設計，暫定底部延伸畫布、不蓋住照片內容，原型時給負責人看 | 同步產生讓一筆照片永遠是完整的兩版，不需要「產製中」「產製失敗」狀態；標示寫進像素是負責人裁定（FEV-Q1），內容未定前先不加，避免猜錯欄位 |
+| D4 | 上傳同一請求同步產生兩版；預設內業版依 FEV-R22 加入定案五欄。底部延伸白底黑字表格，不蓋照片本體；來源在該次上傳交易固定，一般重產用同一份來源，更正取代依 FEV-R22 更新為新來源 | 同步產生避免半套照片；延伸畫布保留查核細節，來源固定避免人員改名或重產日期改寫照片脈絡；原型給負責人看後可調 |
 | D5 | 內業編修由現場版重新產生，參數相對於現場版，每次覆蓋內業版；處理順序為旋轉、裁切、亮度、標示；預設參數且無標示時直接複製現場版位元組，其餘（含只有標示）重新編碼為品質 90 的 JPEG；新檔寫入後才切換記錄並刪舊檔 | 避免反覆壓縮累積畫質損失；失敗時舊內業版保持不變 |
 | D6 | 資料表為 `evidence`、`evidence_variants`、`evidence_point_links`；項次以穩定識別（`source_point_id`）對應，專案查核項目 PATCH 保留點位 `id`；`snapshot_revision` 記拍攝時修訂 | 兩版各一列符合 PR-05「兩筆檔案記錄」的檢查；穩定識別使文字更正不影響對應 |
 | D7 | 一張照片的對應項次限同一查核項目；`min_count` 為達標數；覆蓋以目前快照計算 | 查核項目是報告分組與總覽照的單位；`min_count` 沿用範本已凍結的欄位 |
@@ -254,7 +276,7 @@
 | D17 | 畫面配置、文案與互動細節 | 實作前依原型關卡由負責人核可後定案 |
 | D18 | 檢查順序固定為權限、可見性、冪等重放、Plan 封存、Task 狀態、需求變更、照片層級、欄位驗證；`evidence.photo_locked` 只用於照片本身的狀態 | 避免同一情境出現兩種錯誤碼，前端只需對應一種說明 |
 | D19 | 上傳與作廢以鎖定 Task 項目明細並重驗快照修訂處理並行 | 避免上傳與重查交錯後留下指向舊需求的有效照片 |
-| D20 | 工程標示以後端打包的開源授權中文字型繪製（字型檔隨後端提交並註明授權）；字級、邊距、換行與截斷規則集中為常數；同一輸入與規則輸出相同位元組 | 不依賴主機字型才能在不同環境得到相同影像；位元組一致才能用雜湊驗收與判斷是否需要重新產生 |
+| D20 | 以隨後端打包、附原始授權的 Noto Sans CJK TC Regular 繪製；字級、邊距、換行依工程標示版面公式，字型檔與規則版本固定並記摘要 | 不依賴主機字型；固定輸入、來源、字型與規則時輸出相同位元組，方便雜湊驗收；字型與比例為規格設計，原型給負責人看後可調 |
 | D21 | 標示規則改變後的重新產生由維運指令觸發（不在 HTTP 請求中執行，操作者依 [AUT-R09](../authentication/spec.md#需求) 記為內建 `admin`）；每張寫既有的 `evidence.office_version_edited` 事件，內容記錄原因（標示規則變更）與規則摘要；已作廢、已刪除、取消中 Task、封存 Plan 下的照片，以及被核發報告引用的照片都不重新產生 | 規則變更不常發生，指令比畫面入口單純；沿用既有事件不新增代碼；不改動唯讀或鎖定中的照片 |
 
 ## 待釐清
@@ -274,7 +296,7 @@
 
 | 編號 | 題目 | 裁定 | 落在 |
 |---|---|---|---|
-| FEV-Q1 | 內業版影像要不要加資訊？ | 要：產生內業版時，把工程標示寫進影像像素（照片底部或旁邊，像標示牌）；現場版不加標示；規則改變時從現場版重新產生內業版；查核資訊仍以資料關聯保存，報表上照片（含標示）與查核項目內容並排（0.8.x）。**仍待定**：標示欄位內容（[#588](https://github.com/speko-tw/inspect-flow/issues/588)）；疊在照片上或延伸畫布屬規格設計，原型時給負責人看 | FEV-R03、R22、D4、AC30、AC31；`docs/intents/04-glossary.md` 內業版條目 |
+| FEV-Q1 | 內業版影像要不要加資訊？ | 要：工程標示寫進內業版像素、現場版不加；五欄依 [#588 修正裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6231300749)，承攬與監造相同。規則改變可由現場版重產，報表並排版面留 0.8.x；底部延伸表格為規格設計，原型給負責人看後可調 | FEV-R03、R22、D4、D20、AC30～AC32；`docs/intents/04-glossary.md` 內業版條目 |
 | FEV-Q6 | 只有照片、尚無結果的項目選「要」，是否作廢照片並標待重查？ | 作廢並標待重查；`has_result` 納入有效照片，恢復時的旗標條件改為「有結果或有效照片」 | FEV-R11、R20、AC16、AC26；IP-R04 等已同步修改 |
 | FEV-Q12 | 照片如何在專案查核項目修改後仍指到同一個項次？ | PATCH 的點位與實測欄位帶 `id` 保留身分：有 `id` 更新、無 `id` 新增、缺席刪除 | FEV-R04、AC17；IP-R13 |
 | FEV-Q13 | 已被核發報告引用的照片還能編修內業版嗎？ | 先鎖定（刪除、編修、重新產生都不行），0.8.x 隨 G-06、G-07 再定；與 CMV-R11 一致 | FEV-R03、R10、AC15 |
@@ -284,7 +306,7 @@
 ### 其他待釐清
 
 <a id="fev-q16"></a>
-- **FEV-Q16**：拍攝時間由手機提供，不一定可信（裝置時間可能被改、時區可能錯）。本規格只保存用戶端回報值並擋下晚於伺服器時間超過 5 分鐘的值（FEV-R13、FEV-AC29）。工程標示是否印拍攝日期、改用上傳日期或兩者並列，待 [#588](https://github.com/speko-tw/inspect-flow/issues/588) 決定。
+- **FEV-Q16（已裁定）**：手機回報的 `captured_at` 仍依 FEV-R13／AC29 保存與驗證，但不印入工程標示；檢驗時間只採伺服器上傳時間，到時、分（[#588 修正裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6231300749)）。
 <a id="fev-q17"></a>
 - **FEV-Q17**：已被核發報告引用的照片是否在 0.8.x 放寬編修，隨 [G-06](../../intents/05-open-questions.md#g-06)、[G-07](../../intents/05-open-questions.md#g-07) 再定；0.8.x 前沒有核發報告，不影響本規格實作。
 <a id="fev-q2"></a>
@@ -312,6 +334,12 @@
 
 - 建立規格草稿：現場版與內業版、覆蓋規則、上傳契約、刪除與作廢、權限與 UI 驗收；並納入 v0.3.1 走查補充 — [#105](https://github.com/speko-tw/inspect-flow/issues/105)
 - 第 1 輪審查後修訂（規格澄清與待裁定標註，行為與範圍的定案仍待負責人）：統一錯誤檢查順序並拿掉 `evidence.photo_locked` 的「已完成」；AC01 改為回應不含儲存鍵且 schema 無 BLOB；冪等納入請求指紋；新增上傳與作廢並行的鎖定與重驗（FEV-R21）；現場端 `item_id`、`point_ids` 宣告為延伸；FEV-R19 縮為現場詳情與內業計畫頁；補已取消 Task 情境；稽核標註 ALG-R16／R24；補 API 缺口；列出六項待負責人裁定（FEV-Q1、Q6、Q12～Q15）— [#105](https://github.com/speko-tw/inspect-flow/issues/105)
-- 依負責人裁定定案六項待裁定（FEV-Q1、Q6、Q12～Q15），並對齊權限模型與 KD-51：新增 FEV-R22 內業版工程標示（寫進影像像素，欄位內容待 #588）、改寫 FEV-R03、D4、D5、D20、D21、AC30、AC31；FEV-R04、R11、R20 與 AC16、AC17、AC26、AC27 改為定案內容（點位帶 `id`、有效照片算已有結果、已取消 Task 恢復時才作廢）；FEV-R10 補報告引用先鎖定；FEV-R12 改為兩層權限（`inspection.use` 加專案動作碼）；FEV-R13 拍照者取上傳者身分快照，新增 FEV-Q16（拍攝時間不可信）；FEV-R19 納入「近期已完成」區，同步修改 `field-ui` FUI-R05、FUI-AC01。範圍變更（負責人指示，#105）— [負責人直接指示](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135)、[FEV-Q1 補充](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093900115)
+- 依負責人裁定定案六項待裁定（FEV-Q1、Q6、Q12～Q15），並對齊權限模型與 KD-51：新增 FEV-R22 內業版工程標示（寫進影像像素；欄位已依 #588 補齊，見本次澄清）、改寫 FEV-R03、D4、D5、D20、D21、AC30、AC31；FEV-R04、R11、R20 與 AC16、AC17、AC26、AC27 改為定案內容（點位帶 `id`、有效照片算已有結果、已取消 Task 恢復時才作廢）；FEV-R10 補報告引用先鎖定；FEV-R12 改為兩層權限（`inspection.use` 加專案動作碼）；FEV-R13 拍照者取上傳者身分快照，新增 FEV-Q16（拍攝時間不可信）；FEV-R19 納入「近期已完成」區，同步修改 `field-ui` FUI-R05、FUI-AC01。範圍變更（負責人指示，#105）— [負責人直接指示](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135)、[FEV-Q1 補充](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093900115)
 - 第 2 輪審查後修訂（規格澄清，行為與裁定不變）：FEV-R22、D4 改為「必須能包含工程標示，規則啟用前不加標示」；D21、AC31 寫明維運指令的操作者與範圍；FEV-R12 寫明預建角色初始內容與讀取碼的外部可用規則；FEV-R03、R04、R09 與資料規則補與 `completion-validation` 對齊的例外句；裁定依據連結改指[裁定紀錄留言](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6094452625)；刪除不存在的 KD-60 引用；狀態改為已凍結 — [#105](https://github.com/speko-tw/inspect-flow/issues/105)
 - 規格澄清（[#542](https://github.com/speko-tw/inspect-flow/issues/542)）：intents 整併後，已裁定的 OQ／G 與被取代的 KD 引用改指新位置，開工門檻比對改列仍擋門檻的 G-06、G-07 與已併入決策的原門檻項目；只改引用與依據欄，不改需求、驗收條件與狀態 — [#542](https://github.com/speko-tw/inspect-flow/issues/542)
+
+- 範圍變更（負責人裁定，#588）：依[最終修正裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6231300749)與[承攬／監造同欄裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6227875723)定案五欄、來源、到分鐘時間與同欄規則，清除待決文字；新增 FEV-AC32 及來源／版面設計。第 2 輪依負責人裁定補 CMV-R11 更正取代與 CMV-R13 改善照片來源、設定檔時區（預設 Asia/Taipei）、14 px／480 px 可讀性下限與缺字替代符號＋碼位警示，不因缺字阻斷證據上傳；新增 FEV-AC33～AC34，同步 T1／T2／T4／T6／T10 與驗收表。來源分支、字級與缺字處理屬規格設計，理由見工程標示節；原型給負責人看後可調。
+
+- 規格澄清（#588，整合 v0.5.2 main）：保留 #765 對兩版照片、唯讀／現場導覽的最新意圖；Point／Field 穩定 ID 已由 #595 落地，唯讀碼分類已由 #576 落地，本規格只接續照片關聯與標示，不重做既有契約。#550 仍為後續依賴，未宣稱外部寫入角色範圍已完成。
+
+- 規格澄清（#588，PR #788 第 1 輪審查）：依 CMV-R13 與改善上傳端點的 `point_id` 契約，改善照片標示沿 `result_id` 追溯有效不符合結果、其項目需求快照與所屬 Task；移除「無對應項目時印任務名稱」備援及其正常驗收情境。同步既有 FEV-AC34 與計畫，不新增、刪除或重用 R／AC 編號。依據：[審查意見](https://github.com/speko-tw/inspect-flow/pull/788#discussion_r4430631524)。
