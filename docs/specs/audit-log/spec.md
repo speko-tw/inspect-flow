@@ -390,8 +390,6 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 
 ## 變更紀錄
 
-- [#795 本輪審查決定](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6541659296)：照片圖層事件移至事件區；具名完整 layer／labels 一律記錄、檢驗時間保存 UTC；其餘三事件由 T5 登記，專案內照片歷程與 Admin 全域查詢分開。
-
 - 維護者決定（#624，2026-10-16）：新增操作者與事件類型複合索引及 migration 驗收。
 
 - 範圍變更（負責人指示，#411）：依 ALG-Q2 選項 C 納入 Admin 唯讀稽核查詢頁、API、需求與驗收；`project_id` 可空欄位、索引及篩選語意為規格設計（非負責人裁定） — [#107 裁定](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)、[#411](https://github.com/speko-tw/inspect-flow/issues/411)
@@ -438,4 +436,6 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 
 - 第 2 輪 #314 審查修正：建立即送審、移除 created；五種建議事件補 entity_type／project_scoped 與 ALG-R24 分類理由，revised／submitted 只列變更；既有 template_item.created 形狀與空 project_id 保持不變，關聯只記 approved。依據：[負責人版本留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)及本輪定案。
 
-- 範圍變更（負責人裁定，#795）：登記照片圖層實際變更事件與完整前後值，同交易與權限沿用既有規則。[負責人裁定 #795](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540663667)、[現場簡化追加](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540752753)。
+- 範圍變更（負責人裁定，#795）：登記照片圖層實際變更事件與完整前後值，同交易與權限沿用既有規則。[負責人裁定 #795](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540663667)、[現場簡化追加](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540746073)。
+
+- 規格澄清（#795）：照片圖層事件移至事件區；具名完整 layer／labels 一律記錄、檢驗時間保存 UTC；其餘三事件由 T5 登記，專案內照片歷程與 Admin 全域查詢分開。依據：[#795 審查決定](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6541659296)。
