@@ -243,6 +243,20 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 
 `inspection_task.location_updated` 的 `zone_id` 與 `location_text` 可為空值，以表達移除分區或補充文字。`inspection_task.items_updated` 的 `items` 用 `{項目 ID: 名稱}` 對照而非陣列，因為 ALG-R10 會把陣列排序，元素為物件時無法比較；對照表同時保留 ID 與名稱且不依賴順序。Task 刪除、取消、恢復、地點修改、名稱修改、草稿 Task 查核項目替換及專案查核項目修改、刪除、停用與恢復事件，均須與對應資料變更在同一交易內寫入；草稿 Task 查核項目替換失敗或回滾時不留事件。`project_inspection_item.updated` 每次都記錄重新查核選擇；未改變的標準文字欄位不重複記錄。
 
+<a id="field-evidence-事件"></a>
+## `field-evidence` 照片圖層事件
+
+由 [FEV-R24／AC36](../field-evidence/spec.md#需求) 的 T5 實作驗收；目錄登記不宣稱產品事件已實作。其餘三個照片事件 `evidence.photo_deleted`、`evidence.photo_updated`、`evidence.office_version_edited` 由 T5 在本事件區登記，寫入時機沿用 FEV-R14。
+
+| 事件代碼 | 什麼時候寫 | `entity_type`／`entity_id` | 標記 | `before` | `after` |
+|---|---|---|---|---|---|
+| `evidence.layer_updated` | 實際圖層顯示設定或三欄覆寫變動時；無變動不寫 | `evidence`／照片 UUID | `project_scoped`；`project_id` 取照片所屬專案 | `layer: {enabled, corner, offset_x, offset_y, size, style, overrides: {project_name, item_name, inspection_location}}`；`labels: {project_name, item_title, location, uploader_name, uploaded_at}`，保存修改前完整值 | 同名 `layer` 與 `labels`，保存修改後完整值 |
+
+- 依 ALG-R09 的事件欄位例外，實際圖層異動事件的 `before`／`after` **一律記錄**完整 `layer`（含三欄覆寫）與解析後五欄 `labels`，即使其中個別欄位未改也保留，不只記影像顯示文字或取整後數值。未覆寫的鍵依 FEV 契約省略，明確空字串保留；不改來源快照，姓名／時間不可覆寫。
+- `labels.uploaded_at` **必須**是原始 UTC ISO 8601 時間（舊資料無來源為 `null`），遵守 API-R09，**不得**存照片上的時區／分鐘顯示字串。事件時間沿用 `AuditLog.created_at`，照片詳情的 `occurred_at` 亦回 UTC；操作者及寫入當下身分快照沿用共用入口與 ALG-R29。
+- 與圖層資料及 OFFICE 重產同一交易；失敗回滾。既有 `evidence.office_version_edited` 每次套用仍寫入，不因 layer 無變動而省略。依 ALG-R24 必填 `project_id`。
+- 專案內照片詳情可按 FEV 的 evidence.read 權限回傳此照片的圖層歷程，含非 Admin；這不放寬 ALG-R22 的 Admin 全域稽核查詢。詳情 API 的分頁與照片／Task／專案隔離由 FEV 規格定義。
+
 <a id="authentication-事件"></a>
 ## `authentication` 事件
 
@@ -374,17 +388,9 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 <a id="alg-q6"></a>
 - **ALG-Q6：本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）的判讀**（已裁定，負責人確認（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））。負責人裁定了「哪些事要寫稽核」，事件的做法是本規格的判讀，已由負責人確認：（1）`user.password_set` 標為「得為系統事件」由呼叫端宣告，而不是整個事件固定為系統事件，理由是它另有需要登入者的來源（本人變更、Admin 設臨時密碼）；（2）`user.company_changed` 只在 `company_id` 改變時寫，並一律記錄四個欄位；（3）事件代碼取名 `user.username_changed`、`user.company_changed`，沿用 `user.admin_changed` 的形式；（4）首次設定與 `admin` 重設指令共用 `user.password_set`，紀錄本身分不出兩者，只看得出操作者是系統事件的 `admin`，需要區分時再加欄位。都不影響資料表。
 
-## 照片圖層事件（field-evidence）
-
-由 FEV-R24／AC36 的後續 T5 實作驗收；此目錄登記不宣稱產品事件已實作。
-
-| 事件代碼 | 什麼時候寫 | `entity_type`／`entity_id` | 標記 | `before` | `after` |
-|---|---|---|---|---|---|
-| `evidence.layer_updated` | 每次實際圖層設定或三欄覆寫變動；無變動不寫 | `evidence`／照片 UUID | `project_scoped`；`project_id` 取照片所屬專案 | 完整 `layer` 設定與解析後五欄 | 同左，保存修改後完整值 |
-
-與圖層資料及 OFFICE 重產同一交易；失敗回滾。操作者、伺服器時間及身分快照沿用共用寫入入口。`layer` 作為一個變更欄位保留完整設定與覆寫，不能只比較影像文字或四捨五入的顯示值；五欄解析結果一併保留供閱讀。來源快照不改，姓名／時間不可覆寫；既有 `office_version_edited` 仍每次套用寫入。事件具有專案脈絡，依 ALG-R24 必填 `AuditLog.project_id`。
-
 ## 變更紀錄
+
+- [#795 本輪審查決定](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6541659296)：照片圖層事件移至事件區；具名完整 layer／labels 一律記錄、檢驗時間保存 UTC；其餘三事件由 T5 登記，專案內照片歷程與 Admin 全域查詢分開。
 
 - 維護者決定（#624，2026-10-16）：新增操作者與事件類型複合索引及 migration 驗收。
 
