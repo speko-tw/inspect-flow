@@ -908,7 +908,7 @@
       </div>
     </header>
     <main id="app"></main>
-    <footer>本原型供 T18 設計試用；負責人核可前，不開始 T19。</footer>
+    <footer>T18 已由負責人核可，依建議調整；T19 須等 T17 完成。</footer>
     <script>
       const $ = (selector) => document.querySelector(selector);
       const clone = (value) => structuredClone(value);
@@ -1068,7 +1068,9 @@
       let screen = "project",
         selectedId = null,
         selectedVersion = null,
-        detailKind = "mine";
+        detailKind = "mine",
+        mineOrigin = "settings",
+        nameOnly = false;
       let draft = null,
         draftBaseline = "",
         editorOrigin = null,
@@ -1123,15 +1125,23 @@
         reveal(el);
         if (focus) el.focus({ preventScroll: true });
       }
-      function confirmAt(host, title, text, callback, danger = false) {
+      function confirmAt(
+        host,
+        title,
+        text,
+        callback,
+        danger = false,
+        labels = {},
+      ) {
         const trigger = document.activeElement;
         document.querySelectorAll(".confirm").forEach((el) => el.remove());
         host.innerHTML = `<section class="confirm" role="group"
     aria-label="${escapeHtml(title)}"><h2>${escapeHtml(title)}</h2>
     <p>${escapeHtml(text)}</p><div class="actions">
-    <button type="button" data-confirm-cancel>取消</button>
+    <button type="button" data-confirm-cancel>
+      ${escapeHtml(labels.cancel || "取消")}</button>
     <button type="button" class="${danger ? "danger-confirm" : "primary"}"
-      data-confirm-ok>${escapeHtml(title)}</button></div>
+      data-confirm-ok>${escapeHtml(labels.ok || title)}</button></div>
     <div class="confirm-error"></div></section>`;
         const box = host.firstElementChild,
           cancel = host.querySelector("[data-confirm-cancel]");
@@ -1172,13 +1182,13 @@
         confirmAt(
           host,
           "放棄未儲存變更",
-          "本次修改尚未保存為新版本；放棄後，" +
-            "原有修訂與審核紀錄仍會保留。",
+          "本次未儲存的改動會遺失；原有修訂與審核紀錄仍會保留。",
           () => {
             draft = null;
             proceed();
           },
           true,
+          { cancel: "繼續編輯", ok: "放棄修改" },
         );
       }
       function go(next) {
@@ -1202,13 +1212,18 @@
           }` + (p.tolerance ? ` ± ${p.tolerance}` : "")
         );
       }
-      function contentMarkup(content) {
+      function contentMarkup(content, prefix = "") {
         return (
-          `<h3>${escapeHtml(content.title) || "（未填名稱）"}</h3>
-    <p>${escapeHtml(content.instruction) || "未填寫檢查說明"}</p>` +
+          `<div ${prefix ? `id="${prefix}-item" tabindex="-1"` : ""}>
+    <h3>${escapeHtml(content.title) || "（未填名稱）"}</h3>
+    <p>${escapeHtml(content.instruction) || "未填寫檢查說明"}</p></div>` +
           content.points
             .map(
-              (p, i) => `<section class="point">
+              (p, i) => `<section class="point" ${
+                prefix
+                  ? `id="${prefix}-point-${escapeHtml(p.key)}" tabindex="-1"`
+                  : ""
+              }>
       <h3>項次 ${i + 1}：${escapeHtml(p.title) || "（未填標題）"}</h3>
       <p>${escapeHtml(p.instruction) || "未填寫項次說明"}</p>
       <dl><dt>檢查標準</dt><dd>${escapeHtml(standard(p))}</dd></dl>
@@ -1277,7 +1292,7 @@
     ${
       can
         ? button(
-            "我的範本建議（" + projectCount() + "）",
+            "我的範本建議（本案共 " + projectCount() + " 件）",
             "my-project",
             "link",
           )
@@ -1309,7 +1324,7 @@
       <h2>我的範本建議</h2><p>共 ${mine().length} 件。查看審核結果、
       退回原因與每一版內容。</p>${button(
         "開啟我的範本建議",
-        "mine",
+        "mine-settings",
         "outline",
       )}
       </section>`
@@ -1341,8 +1356,15 @@
       function listPage(kind) {
         const f = filters[kind],
           source = (kind === "mine" ? mine() : state.suggestions).toSorted(
-            (a, b) => b.id - a.id,
+            (a, b) =>
+              kind === "review"
+                ? lastSubmitted(b).localeCompare(lastSubmitted(a)) ||
+                  b.id - a.id
+                : b.id - a.id,
           );
+        const scoped = source.filter(
+          (s) => !f.project || s.project === f.project,
+        );
         const filtered = source.filter(
           (s) =>
             (f.status === "all" || s.status === f.status) &&
@@ -1359,15 +1381,32 @@
         const shown = filtered.slice(f.page * size, f.page * size + size);
         const title = kind === "mine" ? "我的範本建議" : "範本建議審核";
         return `<section class="panel">${button(
-          kind === "mine" ? "返回個人設定" : "返回範本庫",
-          kind === "mine" ? "settings" : "library",
+          kind === "mine"
+            ? mineOrigin === "project"
+              ? "返回專案頁"
+              : "返回個人設定"
+            : "返回範本庫",
+          kind === "mine" ? mineOrigin : "library",
           "link",
         )}<h1>${title}</h1>
     ${
       kind === "review"
         ? `<p><strong>待審建議（${pendingCount()}）</strong>
       <span class="muted">全體待審件數，不受下方搜尋與頁次影響。</span></p>`
-        : `<p>只顯示${names[state.role]}提出的建議；件數包含所有狀態。</p>`
+        : `<p>只顯示${names[state.role]}提出的建議；
+          ${f.project ? "本案共" : "共"} ${
+            scoped.length
+          } 件，包含所有狀態。</p>
+          <p class="status-counts" aria-label="各狀態件數">${Object.entries(
+            statusText,
+          )
+            .map(
+              ([status, label]) =>
+                `${label} ${
+                  scoped.filter((s) => s.status === status).length
+                } 件`,
+            )
+            .join("／")}</p>`
     }
     <div id="feedback"></div><form id="list-filter" class="filter-grid">
     <div><label for="filter-status">狀態</label><select id="filter-status">
@@ -1397,7 +1436,8 @@
           return `<li data-suggestion="${s.id}"><div class="list-row"><div>
       ${badge(s.status)}<h2>${escapeHtml(r.content.title)}</h2>
       <p>${escapeHtml(s.project)}／${escapeHtml(s.sourceName)}</p>
-      <p>提議人：${names[s.proposer]} · 最新第 ${r.no} 版</p>
+      <p>提議人：${names[s.proposer]} · 最新第 ${r.no} 版${managerMark(r)}</p>
+      ${kind === "review" ? `<p>最近送審：${lastSubmitted(s)}</p>` : ""}
       ${
         s.status === "RETURNED"
           ? `<p class="notice warning">退回原因：
@@ -1418,7 +1458,9 @@
       </div></li>`;
         })
         .join("") ||
-      '<li class="empty">沒有符合條件的建議。請調整搜尋條件。</li>'
+      (kind === "mine" && !scoped.length
+        ? '<li class="empty">本案尚未提出範本建議。可返回專案頁，從查核項目提出。</li>'
+        : '<li class="empty">沒有符合條件的建議。請調整搜尋條件。</li>')
     }
     </ul><div class="actions">${button(
       "上一頁",
@@ -1434,6 +1476,14 @@
     )}
     </div></section>`;
       }
+      const managerMark = (r) =>
+        r.actor === "吳經理" ? "（吳經理修改）" : "";
+      const lastSubmitted = (s) =>
+        s.events.findLast((e) => e.status === "PENDING")?.time || "";
+      const revisedAfterReturn = (s) =>
+        latest(s).no >
+        (s.events.findLast((e) => e.status === "RETURNED")?.revision || 0);
+      const pendingWarning = "待審期間不能修改，只能撤回；撤回後不能再重送。";
       function versionEvents(s, no) {
         const events = s.events.filter((e) => e.revision === no);
         return (
@@ -1450,7 +1500,7 @@
           `<section><h2>各版歷程</h2><div class="history">` +
           s.revisions
             .map(
-              (r) => `<article><h3>第 ${r.no} 版</h3>
+              (r) => `<article><h3>第 ${r.no} 版${managerMark(r)}</h3>
       <p>編輯者：${r.actor} · ${r.time}</p>${versionEvents(s, r.no)}
       ${button(
         "查看第 " + r.no + " 版",
@@ -1527,26 +1577,27 @@
     }
     ${
       s.status === "RETURNED" && state.role === s.proposer
-        ? `<div class="actions">
-      ${button(
+        ? `<section id="resubmit-area"><div id="submit-feedback"></div>
+      ${
+        !canEditSource()
+          ? "<p>來源專案編輯權已失效，不能重新送審。</p>"
+          : !revisedAfterReturn(s)
+            ? '<p id="resubmit-hint">請先修改退回內容並保存新版本，才能重新送審。</p>'
+            : "<p>此版尚未送審，確認完整後可重新送審。</p>"
+      }
+      <div class="actions">${button(
         "重新送審",
         "resubmit",
         "primary",
-        !canEditSource() ? "disabled" : "",
-      )}
-      </div><div id="submit-error"></div><div id="submit-confirm"></div>`
+        !canEditSource() || !revisedAfterReturn(s) ? "disabled" : "",
+      )}</div><div id="submit-error"></div><div id="submit-confirm"></div>
+      </section>`
         : ""
     }
     ${
       canReview
-        ? `<section><h2>審核最新第 ${latest(s).no} 版</h2>
-      ${
-        !current
-          ? '<p class="notice warning">目前正在看歷史版本；下方核准對象仍是最新第 ' +
-            latest(s).no +
-            " 版，請先查看最新內容。</p>"
-          : ""
-      }
+        ? `<section id="approval-area"><h2>審核最新第 ${latest(s).no} 版</h2>
+      <div id="approval-feedback"></div>
       <form id="approve-form" novalidate>
       <label for="approval-title">入庫名稱（第 ${latest(s).no} 版）</label>
       <input id="approval-title" readonly value="${escapeHtml(
@@ -1554,7 +1605,7 @@
       )}"
         aria-describedby="title-hint"><p id="title-hint" class="muted">
       名稱要修改時，先按「修改建議內容」並儲存新版本，不會直接覆蓋既有範本。</p>
-      <p id="name-conflict" class="field-error" role="alert"></p>
+      <div id="name-conflict" class="field-error" role="status"></div>
       <div class="inline-fields"><div><label for="category">目標工程類別
       <span class="required">＊</span></label><select id="category" required>
       <option value="">請選擇工程類別</option><option value="building"
@@ -1571,7 +1622,14 @@
       ${button("附原因退回", "show-return", "danger")}</div>
       <div id="approve-confirm"></div></form><div id="return-host"></div>
       </section>`
-        : ""
+        : state.role === "wu" && s.status === "PENDING" && !current
+          ? `<section id="approval-area"><p class="notice warning">
+            請切回最新版才能核准</p>${button(
+              "切回最新第 " + latest(s).no + " 版",
+              "latest-version",
+              "outline",
+            )}</section>`
+          : ""
     }
     ${
       state.role === s.proposer && ["PENDING", "RETURNED"].includes(s.status)
@@ -1664,9 +1722,9 @@
             .map((p, i) => {
               const prefix = "points." + i;
               const numeric = p.fields.filter((f) => f.type === "number");
-              return `<details open class="point-editor"><summary>項次 ${
-                i + 1
-              }：
+              return `<details ${
+                nameOnly ? "" : "open"
+              } class="point-editor"><summary>項次 ${i + 1}：
       ${escapeHtml(p.title) || "未填標題"}</summary>
       ${field(prefix + ".title", "項次標題", p.title, {
         required: true,
@@ -1813,14 +1871,36 @@
         : "審核中修改須通過欄位檢查；保存之後再回詳情選目的地核准。"
     }</p>
     <div class="actions">${button("取消修改", "cancel-edit")}
-    <button class="primary" type="submit">儲存新版本</button></div>
+    <button class="${
+      returned ? "" : "primary"
+    }" type="submit">儲存新版本</button>
+    ${
+      returned
+        ? button(
+            "儲存並重新送審",
+            "save-submit",
+            "primary",
+            !dirty() && !revisedAfterReturn(s) ? "disabled" : "",
+          )
+        : ""
+    }</div>
+    ${
+      returned
+        ? `<p id="editor-submit-hint" class="muted">${
+            !dirty() && !revisedAfterReturn(s)
+              ? "請先修改退回內容，才能重新送審。"
+              : "重新送審前會檢查所有欄位；只儲存可保留未完成內容。"
+          }</p>`
+        : ""
+    }
     <div id="leave-confirm"></div></form></section>`
         );
       }
       function differences(a, b) {
         const out = [];
+        let pointKey = "";
         const add = (kind, label, before, after) =>
-          out.push({ kind, label, before, after });
+          out.push({ kind, label, before, after, pointKey });
         const changed = (label, x, y) => {
           if (x !== y) add("修改", label, String(x), String(y));
         };
@@ -1842,8 +1922,15 @@
           );
         for (const p of a.points)
           if (!b.points.some((q) => q.key === p.key))
-            add("刪除", "查核項次", p.title, "（已移除）");
+            out.push({
+              kind: "刪除",
+              label: "查核項次",
+              before: p.title,
+              after: "（已移除）",
+              pointKey: p.key,
+            });
         for (const p of b.points) {
+          pointKey = p.key;
           const old = a.points.find((q) => q.key === p.key);
           if (!old) {
             add("新增", "查核項次", "（無）", p.title);
@@ -1852,6 +1939,13 @@
           changed(p.title + "／標題", old.title, p.title);
           changed(p.title + "／說明", old.instruction, p.instruction);
           changed(p.title + "／標準", standard(old), standard(p));
+          if (old.bound !== p.bound)
+            add(
+              "修改",
+              p.title + "／綁定欄位",
+              old.fields.find((f) => f.key === old.bound)?.name || "未綁定",
+              p.fields.find((f) => f.key === p.bound)?.name || "未綁定",
+            );
           changed(p.title + "／照片張數", old.photoCount, p.photoCount);
           const af = old.fields.filter((f) =>
             p.fields.some((q) => q.key === f.key),
@@ -1913,28 +2007,41 @@
       } 版／第 ${y.no} 版
       </option>`,
       )
-      .join("")}</select><h2>差異摘要</h2>
+      .join(
+        "",
+      )}</select><h2 id="comparison-summary" tabindex="-1">差異摘要</h2>
     ${
       diff.length
         ? '<ul class="change-list">' +
           diff
             .map(
-              (d) => `<li>
+              (d, i) => `<li data-difference="${i}">
       <span class="badge">${d.kind}</span> <strong>${escapeHtml(
         d.label,
       )}</strong>
-      <p>前：${escapeHtml(d.before)}<br>後：${escapeHtml(d.after)}</p></li>`,
+      <p>前：${escapeHtml(d.before)}<br>後：${escapeHtml(d.after)}</p>
+      <div class="actions">${button("看前版", "jump-before:" + i, "link")}
+      ${button("看後版", "jump-after:" + i, "link")}</div></li>`,
             )
             .join("") +
           "</ul>"
         : "<p>這兩版內容相同。</p>"
     }
-    <div class="compare-grid"><section class="compare-side">
-    <h2>前版：第 ${a.no} 版</h2><p>${a.actor} · ${a.time}</p>
-    ${versionEvents(s, a.no)}${contentMarkup(a.content)}</section>
-    <section class="compare-side"><h2>後版：第 ${b.no} 版</h2>
-    <p>${b.actor} · ${b.time}</p>${versionEvents(s, b.no)}
-    ${contentMarkup(b.content)}</section></div></section>`;
+    <div class="compare-grid">${[
+      ["before", a],
+      ["after", b],
+    ]
+      .map(
+        ([side, r]) => `<details class="compare-side" id="compare-${side}"
+        ${matchMedia("(max-width: 640px)").matches ? "" : "open"}>
+        <summary>${side === "before" ? "前版" : "後版"}：第 ${
+          r.no
+        } 版完整內容</summary>
+        <p>${r.actor} · ${r.time}</p>${versionEvents(s, r.no)}
+        ${contentMarkup(r.content, "compare-" + side)}
+        ${button("返回差異摘要", "jump-summary", "link")}</details>`,
+      )
+      .join("")}</div></section>`;
       }
       function validate(content) {
         const out = {};
@@ -2024,7 +2131,7 @@
         reveal(el);
         el.focus({ preventScroll: true });
       }
-      function openEditor() {
+      function openEditor(onlyName = false) {
         const s = chosen();
         if (!(
           (state.role === "wu" && s.status === "PENDING") ||
@@ -2033,6 +2140,7 @@
             s.status === "RETURNED")
         ))
           return;
+        nameOnly = onlyName;
         draft = clone(latest(s).content);
         draftBaseline = JSON.stringify(draft);
         editorOrigin = {
@@ -2043,8 +2151,12 @@
         errors = {};
         screen = "editor";
         render();
+        if (nameOnly) {
+          reveal($("#f-title"));
+          $("#f-title").focus({ preventScroll: true });
+        }
       }
-      function saveRevision() {
+      function saveRevision(submitForReview = false) {
         const s = chosen();
         if (
           editorOrigin.role !== state.role ||
@@ -2055,7 +2167,7 @@
         }
         if (s.status === "RETURNED" && !canEditSource())
           return notify("沒有來源專案編輯權，不能保存修改。");
-        errors = state.role === "wu" ? validate(draft) : {};
+        errors = state.role === "wu" || submitForReview ? validate(draft) : {};
         if (Object.keys(errors).length) {
           render(false);
           return showEditorErrors();
@@ -2067,13 +2179,52 @@
         draft = null;
         screen = "detail";
         render();
+        const message =
+          state.role === "wu"
+            ? "已存第 " + latest(s).no + " 版，目的地已保留，可再按核准"
+            : changed
+              ? "已保存第 " + latest(s).no + " 版，尚未送審。"
+              : "內容沒有變更，沿用原版本；尚未送審。";
         notify(
-          changed
-            ? "已保存第 " + latest(s).no + " 版，前版內容保留。"
-            : "內容沒有變更，沿用原版本。",
-          $("#feedback"),
+          message,
+          $(state.role === "wu" ? "#approval-feedback" : "#submit-feedback"),
           true,
         );
+        if (submitForReview) resubmit();
+      }
+      function checkNameConflict(failed = false) {
+        const s = chosen(),
+          target = targets[s.id];
+        const normalize = (value) =>
+          value.trim().toLowerCase().replaceAll("ß", "ss");
+        const conflict =
+          target?.system &&
+          state.library.some(
+            (t) =>
+              t.system === target.system &&
+              normalize(t.title) === normalize(latest(s).content.title),
+          );
+        const host = $("#name-conflict"),
+          title = $("#approval-title");
+        host.setAttribute("role", failed ? "alert" : "status");
+        host.innerHTML = conflict
+          ? `<p>此系統已有同名範本「${escapeHtml(
+              latest(s).content.title,
+            )}」。${
+              failed ? "本次沒有新增。" : "核准前請修改名稱或改選系統。"
+            }</p>${button("修改名稱", "rename", "link")}`
+          : "";
+        title.removeAttribute("aria-invalid");
+        title.setAttribute(
+          "aria-describedby",
+          conflict ? "title-hint name-conflict" : "title-hint",
+        );
+        if (conflict && failed) {
+          title.setAttribute("aria-invalid", "true");
+          reveal(title);
+          title.focus({ preventScroll: true });
+        }
+        return Boolean(conflict);
       }
       function approval() {
         const s = chosen();
@@ -2096,26 +2247,7 @@
           render(false);
           return showEditorErrors();
         }
-        // TPL-R33：同名錯誤不保存範本、不換狀態，也不清掉目的地。
-        const normalize = (value) =>
-          value.trim().toLowerCase().replaceAll("ß", "ss");
-        const conflict = state.library.some(
-          (t) =>
-            t.system === target.system &&
-            normalize(t.title) === normalize(latest(s).content.title),
-        );
-        if (conflict) {
-          $("#name-conflict").textContent =
-            "此系統已有同名範本「" +
-            latest(s).content.title +
-            "」，本次沒有新增。請修改建議名稱或改選系統後再試。";
-          const el = $("#approval-title");
-          el.setAttribute("aria-invalid", "true");
-          el.setAttribute("aria-describedby", "title-hint name-conflict");
-          reveal(el);
-          el.focus({ preventScroll: true });
-          return;
-        }
+        if (checkNameConflict(true)) return;
         const no = latest(s).no,
           content = clone(latest(s).content);
         const categoryName = { building: "建築工程", road: "道路工程" }[
@@ -2236,17 +2368,23 @@
           return;
         const ret = s.events.findLast((e) => e.status === "RETURNED");
         const issues = validate(latest(s).content);
-        if (latest(s).no <= ret.revision || Object.keys(issues).length) {
-          const text =
-            latest(s).no <= ret.revision
-              ? "請先修改退回內容並保存新版本，再重新送審。"
-              : "此版還有未完成欄位，請修改後再重新送審。";
+        if (latest(s).no <= ret.revision)
+          return notify(
+            "請先修改退回內容並保存新版本，再重新送審。",
+            $("#submit-error"),
+            true,
+          );
+        if (Object.keys(issues).length) {
           $("#submit-error").innerHTML =
-            '<p role="alert" tabindex="-1" class="field-error">' +
-            text +
-            "</p>";
+            `<section class="error-summary" role="alert" tabindex="-1">
+              <h2>此版尚未送審，請完成以下欄位</h2><ul>${Object.entries(issues)
+                .map(
+                  ([path, text]) =>
+                    `<li>${button(text, "fix-submit:" + path, "link")}</li>`,
+                )
+                .join("")}</ul></section>`;
           reveal($("#submit-error"));
-          $("#submit-error p").focus({ preventScroll: true });
+          $("#submit-error section").focus({ preventScroll: true });
           return;
         }
         const no = latest(s).no;
@@ -2256,7 +2394,8 @@
           "將本件第 " +
             no +
             " 版重新交給範本管理者審核；" +
-            "沿用同一件建議，先前內容與退回原因繼續保留。",
+            "沿用同一件建議，先前內容與退回原因繼續保留。" +
+            pendingWarning,
           () => {
             if (s.status !== "RETURNED" || latest(s).no !== no)
               throw Error("版本或狀態已改變，請重新讀取。");
@@ -2300,17 +2439,20 @@
           ["project", "settings", "library", "mine", "review"].includes(name)
         )
           return go(name);
+        if (name === "mine-settings") {
+          mineOrigin = "settings";
+          filters.mine = { status: "all", query: "", page: 0 };
+          return go("mine");
+        }
         if (name === "my-project") {
+          mineOrigin = "project";
           filters.mine = {
             status: "all",
             query: "",
             page: 0,
             project: projectName,
           };
-          go("settings");
-          const section = $("#template-suggestions");
-          if (section) reveal(section);
-          return;
+          return go("mine");
         }
         if (name === "clear-project") {
           delete filters.mine.project;
@@ -2319,17 +2461,28 @@
         if (name === "propose") {
           if (state.role !== "lin" || !state.canEdit) return;
           const content = clone(state.sources[i]);
+          const duplicate = state.suggestions.some(
+            (s) =>
+              s.project === projectName &&
+              s.sourceIndex === i &&
+              ["PENDING", "RETURNED"].includes(s.status),
+          );
           return confirmAt(
             $("#source-confirm-" + i),
             "確認提出建議",
             "將「" +
               content.title +
               "」目前的項目、標準、實測欄位定義及照片需求複製成一件待審建議；" +
-              "不改來源、不複製查核結果或照片，送出即進入待審。",
+              "不改來源、不複製查核結果或照片，送出即進入待審。" +
+              pendingWarning +
+              (duplicate
+                ? "提醒：同一來源項目已有待審或退回件；仍可繼續提出另一件建議。"
+                : ""),
             () => {
               const s = {
                 id: state.nextId++,
                 proposer: "lin",
+                sourceIndex: i,
                 project: projectName,
                 sourceName: content.title,
                 status: "PENDING",
@@ -2347,6 +2500,10 @@
                   "」已送審。可由「我的範本建議」查看結果。",
                 $("#feedback"),
                 true,
+              );
+              $("#feedback .notice").insertAdjacentHTML(
+                "beforeend",
+                button("查看我的範本建議", "my-project", "link"),
               );
             },
           );
@@ -2368,6 +2525,43 @@
           return render();
         }
         if (name === "edit") return openEditor();
+        if (name === "rename") return openEditor(true);
+        if (name === "latest-version") {
+          selectedVersion = latest(chosen()).no;
+          render();
+          reveal($("#approval-area"));
+          return $("#approval-title").focus({ preventScroll: true });
+        }
+        if (name === "save-submit") return saveRevision(true);
+        if (name === "fix-submit") {
+          const path = parts.join(":");
+          openEditor();
+          errors = validate(draft);
+          render(false);
+          showEditorErrors();
+          return action("focus:" + path);
+        }
+        if (name === "jump-summary") {
+          const el = $("#comparison-summary");
+          reveal(el);
+          return el.focus({ preventScroll: true });
+        }
+        if (name === "jump-before" || name === "jump-after") {
+          const side = name === "jump-before" ? "before" : "after";
+          const [a, b] = comparePair.split(":").map(Number);
+          const s = chosen();
+          const first = s.revisions.find((r) => r.no === a).content;
+          const second = s.revisions.find((r) => r.no === b).content;
+          const d = differences(first, second)[i];
+          const host = $("#compare-" + side);
+          host.open = true;
+          const el =
+            document.getElementById(
+              "compare-" + side + "-point-" + d.pointKey,
+            ) || $("#compare-" + side + "-item");
+          el.focus({ preventScroll: true });
+          return el.scrollIntoView({ block: "start" });
+        }
         if (name === "cancel-edit")
           return guard(() => {
             screen = "detail";
@@ -2485,6 +2679,13 @@
           el.removeAttribute("aria-invalid");
           $("#" + el.id + "-error").textContent = "";
         }
+        const submit = $("[data-action=save-submit]");
+        if (submit) {
+          submit.disabled = !dirty() && !revisedAfterReturn(chosen());
+          $("#editor-submit-hint").textContent = submit.disabled
+            ? "請先修改退回內容，才能重新送審。"
+            : "重新送審前會檢查所有欄位；只儲存可保留未完成內容。";
+        }
       });
       document.addEventListener("change", (event) => {
         const el = event.target;
@@ -2517,12 +2718,14 @@
           $("#system").disabled = !el.value;
           el.removeAttribute("aria-invalid");
           $("#category-error").textContent = "";
+          checkNameConflict();
           return;
         }
         if (el.id === "system") {
           targets[selectedId].system = el.value;
           el.removeAttribute("aria-invalid");
           $("#system-error").textContent = "";
+          checkNameConflict();
           return;
         }
         if (el.dataset.path && draft && el.tagName === "SELECT") {
