@@ -21,6 +21,13 @@ from app.db import clock
 from app.db.base import TimestampedBase, UTCDateTime
 from app.models._audit import AuditMixin
 
+# TPL-R32：明列 Python Unicode 空白集合，讓模型與兩種 DB 的長度判斷一致。
+_REASON_WHITESPACE = (
+    " \t\n\r\v\f\x1c\x1d\x1e\x1f\x85\xa0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007"
+    "\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
+)
+
 
 def _snapshot_content(value: dict) -> dict:
     # TPL-R30：只接受結構定義；不可把來源子表主鍵、照片或現場值帶入。
@@ -285,7 +292,8 @@ class TemplateSuggestionReview(AuditMixin, TimestampedBase):
         ),
         CheckConstraint(
             "(decision = 'RETURNED' AND reason IS NOT NULL "
-            "AND length(trim(reason)) BETWEEN 1 AND 1000 "
+            f"AND length(trim(reason, '{_REASON_WHITESPACE}')) "
+            "BETWEEN 1 AND 1000 "
             "AND approved_template_id IS NULL "
             "AND approved_template_title IS NULL "
             "AND target_category_id IS NULL AND target_category_name IS NULL "
@@ -300,6 +308,11 @@ class TemplateSuggestionReview(AuditMixin, TimestampedBase):
             name="decision_snapshot_consistent",
         ),
     )
+
+    @validates("reason")
+    def normalize_reason(self, key: str, value: str | None) -> str | None:
+        """TPL-R32：只去除原因兩端空白；長度與決策一致性由 CHECK 把關。"""
+        return None if value is None else value.strip(_REASON_WHITESPACE)
 
 
 class TemplateSuggestionTransition(AuditMixin, TimestampedBase):

@@ -7,7 +7,16 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import JSON, Engine, delete, inspect, select, text, update
+from sqlalchemy import (
+    JSON,
+    Engine,
+    delete,
+    insert,
+    inspect,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -785,3 +794,58 @@ def test_three_revisions_keep_reviewed_content(engine: Engine, records: dict):
             ]
             == original["inspection_points"]
         )
+
+
+@pytest.mark.parametrize("path", ["orm", "core"])
+@pytest.mark.parametrize(
+    "whitespace",
+    ["\t", "\n", "\r", "\u3000", "\t\n\r\u3000", "\u00a0\u2003\u202f"],
+    ids=["tab", "lf", "cr", "ideographic", "mixed", "unicode"],
+)
+@pytest.mark.parametrize("size", [0, 1000, 1001])
+def test_return_reason_unicode_boundaries(
+    engine: Engine, records: dict, path: str, whitespace: str, size: int
+):
+    """TPL-R32：ORM 與繞過模型的 DB 寫入均以去空白後字元數判斷。"""
+    content = "字" * size
+    raw = whitespace + content + whitespace
+    with Session(engine) as session:
+        sid, rid = _suggestion(session, records)
+        session.commit()
+
+        def persist() -> None:
+            if path == "orm":
+                session.add(_review(records, sid, rid, reason=raw))
+            else:
+                session.connection().execute(
+                    insert(TemplateSuggestionReview).values(
+                        suggestion_id=sid,
+                        revision_id=rid,
+                        decision="RETURNED",
+                        reason=raw,
+                        created_by=records["actor"],
+                        updated_by=records["actor"],
+                    )
+                )
+            session.commit()
+
+        if size == 1000:
+            persist()
+            stored = session.scalars(select(TemplateSuggestionReview)).one()
+            # DB CHECK 驗證正規化長度；原生寫入不負責改寫儲存值。
+            assert stored.reason == (content if path == "orm" else raw)
+        else:
+            with pytest.raises(IntegrityError):
+                persist()
+            session.rollback()
+            assert session.scalar(select(TemplateSuggestionReview)) is None
+
+
+def test_return_reason_normalizes_only_outer_whitespace():
+    """TPL-R32：保存可讀原因，保留內文空白並允許核准的空值。"""
+    review = TemplateSuggestionReview(
+        reason="\t\n\r\u3000 原因\t內文 \u3000\r\n"
+    )
+    assert review.reason == "原因\t內文"
+    review.reason = None
+    assert review.reason is None

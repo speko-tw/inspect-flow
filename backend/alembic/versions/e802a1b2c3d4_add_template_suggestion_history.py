@@ -20,6 +20,14 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+# TPL-R32：凍結與模型相同的 Unicode 空白集合，歷史 migration 不匯入模型。
+_REASON_WHITESPACE = (
+    " \t\n\r\v\f\x1c\x1d\x1e\x1f\x85\xa0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007"
+    "\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
+)
+
+
 def upgrade() -> None:
     """TPL-R30～R33：建立建議快照與不可變歷程。"""
     op.create_table(
@@ -249,7 +257,8 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "(decision = 'RETURNED' AND reason IS NOT NULL AND "
-            "length(trim(reason)) BETWEEN 1 AND 1000 AND "
+            f"length(trim(reason, '{_REASON_WHITESPACE}')) "
+            "BETWEEN 1 AND 1000 AND "
             "approved_template_id IS NULL AND approved_template_title "
             "IS NULL AND target_category_id IS NULL AND "
             "target_category_name IS NULL AND target_system_id IS NULL "
