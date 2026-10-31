@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from alembic.config import Config
 from sqlalchemy import LargeBinary, func, inspect, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
 from alembic import command
@@ -290,7 +290,15 @@ def test_two_versions_trace_to_original_snapshot_and_stable_metadata(world):
     ],
 )
 def test_photo_constraints(world, changes):
-    with pytest.raises(IntegrityError):
+    # PostgreSQL 的 VARCHAR 先拒收超長值；SQLite 由 CHECK 保證同一上限。
+    # FEV-AC01 要求兩者皆拒收，不把不同引擎的例外分類當成業務差異。
+    expected = (
+        DataError
+        if "caption" in changes
+        and world[0].get_bind().dialect.name == "postgresql"
+        else IntegrityError
+    )
+    with pytest.raises(expected):
         _photo(world, **changes)
     world[0].rollback()
 
