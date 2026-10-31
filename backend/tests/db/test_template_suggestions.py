@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, delete, inspect, select, text, update
+from sqlalchemy import JSON, Engine, delete, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -265,6 +265,14 @@ def test_populated_upgrade_downgrade_reupgrade(engine: Engine, records: dict):
         )
         session.commit()
     assert set(_TABLES) <= set(inspect(engine).get_table_names())
+    content_column = next(
+        column
+        for column in inspect(engine).get_columns(
+            "template_suggestion_revisions"
+        )
+        if column["name"] == "content"
+    )
+    assert isinstance(content_column["type"], JSON)
     assert not any("version" in name for name in _TABLES)
     command.downgrade(Config(str(_CONFIG)), _PREVIOUS)
     assert set(_TABLES).isdisjoint(inspect(engine).get_table_names())
