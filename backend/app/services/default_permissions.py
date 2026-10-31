@@ -51,7 +51,13 @@ def _role_presets() -> tuple[tuple[str, tuple[str, ...], bool, bool], ...]:
         ),
         (
             "現場工程師",
-            tuple(sorted(set(read_codes) | {"inspection_task.inspect"})),
+            # FEV-R12：現場角色只能讀現場版，不授予內業照片讀取碼。
+            tuple(
+                sorted(
+                    (set(read_codes) - {"evidence.read"})
+                    | {"inspection_task.inspect"}
+                )
+            ),
             True,
             False,
         ),
