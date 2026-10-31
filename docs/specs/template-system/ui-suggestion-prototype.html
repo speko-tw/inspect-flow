@@ -1,0 +1,2869 @@
+<!doctype html>
+<html lang="zh-Hant" data-theme="system">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none';
+  style-src 'unsafe-inline'; script-src 'unsafe-inline';
+  connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>範本建議與審核｜InspectFlow 互動原型</title>
+    <style>
+      :root,
+      :root[data-theme="light"] {
+        color-scheme: light;
+
+        --color-brand-primary: #002060;
+        --color-brand-accent: #ffc200;
+        --color-header-nav-hover: rgba(255, 255, 255, 0.11);
+        --color-header-nav-pressed: rgba(255, 255, 255, 0.19);
+        --color-header-nav-current: rgba(255, 255, 255, 0.15);
+        --color-bg-page: #f3f6fa;
+        --color-bg-surface: #ffffff;
+        --color-bg-raised: #ffffff;
+        --color-bg-muted: #eaf0f7;
+        --color-text-primary: #101828;
+        --color-text-secondary: #536174;
+        --color-text-inverse: #ffffff;
+        --color-text-disabled: #536174;
+        --color-text-on-accent: #202b3b;
+        --color-border: #d4dce7;
+        /* UDS-AC09：核可原型 #8492a6 對 #f3f6fa 為 2.92:1，低於
+     控制邊界 3:1；改用 #7d8a9a，對比為 3.24:1。 */
+        --color-border-control: #7d8a9a;
+        --color-border-strong: #7d8a9a;
+        --color-focus: #1670a6;
+        --color-selection: #002060;
+        /* 選取中的分段／晶片底色：深淺主題都比軌道（--color-bg-muted）更亮。 */
+        --color-selected-bg: #ffffff;
+        --color-link: #174f9b;
+        --color-action-primary: #002060;
+        --color-action-primary-hover: #123b79;
+        --color-text-on-primary: #ffffff;
+        --color-action-danger-hover: #8f1d17;
+        --color-text-on-danger: #ffffff;
+        --color-status-success: #176b3a;
+        --color-status-success-bg: #e6f5eb;
+        --color-status-success-border: #176b3a;
+        --color-status-warning: #765000;
+        --color-status-warning-bg: #fff3cf;
+        --color-status-warning-border: #765000;
+        --color-status-danger: #a12b25;
+        --color-status-danger-bg: #fff0ed;
+        --color-status-danger-border: #a12b25;
+        --color-status-info: #00577d;
+        --color-status-info-bg: #e5f4fb;
+        --color-status-info-border: #00577d;
+        --color-status-neutral: #46566b;
+        --color-status-neutral-bg: #edf1f5;
+        --color-status-neutral-border: #46566b;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-10: 40px;
+        --space-12: 48px;
+
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-xl: 16px;
+        --shadow-header: 0 1px 0 rgb(16 24 40 / 6%);
+        --shadow-panel:
+          0 2px 6px rgb(20 38 66 / 5%), 0 12px 28px rgb(20 38 66 / 4%);
+        --shadow-focus: 0 0 0 3px
+          color-mix(in srgb, var(--color-focus) 24%, transparent);
+
+        --font-family-sans:
+          "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui,
+          sans-serif;
+        --font-size-small: 0.875rem;
+        --font-size-body: 0.9375rem;
+        --font-size-heading: 1.5rem;
+        --line-height-body: 1.58;
+        --line-height-heading: 1.3;
+        --motion-fast: 130ms;
+        --motion-medium: 190ms;
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+
+        --color-bg-page: #0b1422;
+        --color-bg-surface: #111f32;
+        --color-bg-raised: #172941;
+        --color-bg-muted: #1c3049;
+        --color-text-primary: #eff4fb;
+        --color-text-secondary: #b8c5d6;
+        --color-text-inverse: #ffffff;
+        --color-text-disabled: #8298b2;
+        --color-text-on-accent: #202b3b;
+        --color-border: #344960;
+        --color-border-control: #8298b2;
+        --color-border-strong: #8298b2;
+        --color-focus: #82c9f2;
+        --color-selection: #8cc4ff;
+        --color-selected-bg: #2a4666;
+        --color-link: #aad0ff;
+        --color-action-primary: #8cc4ff;
+        --color-action-primary-hover: #a8d2ff;
+        --color-text-on-primary: #0b1422;
+        --color-action-danger-hover: #ffb9b2;
+        --color-text-on-danger: #24100e;
+        --color-status-success: #8de1aa;
+        --color-status-success-bg: #153b2a;
+        --color-status-success-border: #8de1aa;
+        --color-status-warning: #ffda82;
+        --color-status-warning-bg: #45371a;
+        --color-status-warning-border: #ffda82;
+        --color-status-danger: #ffaaa0;
+        --color-status-danger-bg: #482722;
+        --color-status-danger-border: #ffaaa0;
+        --color-status-info: #9cddf3;
+        --color-status-info-bg: #15384b;
+        --color-status-info-border: #9cddf3;
+        --color-status-neutral: #c2cfdd;
+        --color-status-neutral-bg: #283a4e;
+        --color-status-neutral-border: #c2cfdd;
+        --shadow-header: 0 1px 0 rgb(255 255 255 / 7%);
+        --shadow-panel: 0 8px 28px rgb(0 0 0 / 18%);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]),
+        :root[data-theme="system"] {
+          color-scheme: dark;
+
+          --color-bg-page: #0b1422;
+          --color-bg-surface: #111f32;
+          --color-bg-raised: #172941;
+          --color-bg-muted: #1c3049;
+          --color-text-primary: #eff4fb;
+          --color-text-secondary: #b8c5d6;
+          --color-text-inverse: #ffffff;
+          --color-text-disabled: #8298b2;
+          --color-text-on-accent: #202b3b;
+          --color-border: #344960;
+          --color-border-control: #8298b2;
+          --color-border-strong: #8298b2;
+          --color-focus: #82c9f2;
+          --color-selection: #8cc4ff;
+          --color-selected-bg: #2a4666;
+          --color-link: #aad0ff;
+          --color-action-primary: #8cc4ff;
+          --color-action-primary-hover: #a8d2ff;
+          --color-text-on-primary: #0b1422;
+          --color-action-danger-hover: #ffb9b2;
+          --color-text-on-danger: #24100e;
+          --color-status-success: #8de1aa;
+          --color-status-success-bg: #153b2a;
+          --color-status-success-border: #8de1aa;
+          --color-status-warning: #ffda82;
+          --color-status-warning-bg: #45371a;
+          --color-status-warning-border: #ffda82;
+          --color-status-danger: #ffaaa0;
+          --color-status-danger-bg: #482722;
+          --color-status-danger-border: #ffaaa0;
+          --color-status-info: #9cddf3;
+          --color-status-info-bg: #15384b;
+          --color-status-info-border: #9cddf3;
+          --color-status-neutral: #c2cfdd;
+          --color-status-neutral-bg: #283a4e;
+          --color-status-neutral-border: #c2cfdd;
+          --shadow-header: 0 1px 0 rgb(255 255 255 / 7%);
+          --shadow-panel: 0 8px 28px rgb(0 0 0 / 18%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        :root:not([data-theme]),
+        :root[data-theme="system"],
+        :root[data-theme="light"],
+        :root[data-theme="dark"] {
+          --motion-fast: 0ms;
+          --motion-medium: 0ms;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-padding-top: 56px;
+      }
+      body {
+        margin: 0;
+        background: var(--color-bg-page);
+        color: var(--color-text-primary);
+        font-family: var(--font-family-sans);
+        font-size: var(--font-size-body);
+        line-height: var(--line-height-body);
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      input,
+      select,
+      textarea,
+      summary {
+        touch-action: manipulation;
+      }
+      button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        gap: 8px;
+        padding: 8px 16px;
+        border: 1px solid var(--color-border-control);
+        border-radius: var(--radius-sm);
+        background: var(--color-bg-surface);
+        cursor: pointer;
+        font-weight: 500;
+        line-height: 1.4;
+        text-align: center;
+      }
+      button:active {
+        background: var(--color-bg-muted);
+      }
+      button.primary {
+        min-height: 48px;
+        padding-inline: 24px;
+        min-width: 128px;
+        background: var(--color-action-primary);
+        color: var(--color-text-on-primary);
+        border-color: var(--color-action-primary);
+        font-weight: 700;
+      }
+      button.outline {
+        border: 2px solid var(--color-action-primary);
+        color: var(--color-action-primary);
+        font-weight: 700;
+      }
+      button.danger {
+        color: var(--color-status-danger);
+        border-color: var(--color-status-danger);
+      }
+      button.danger-confirm {
+        color: var(--color-text-on-danger);
+        background: var(--color-action-danger-hover);
+        border-color: var(--color-action-danger-hover);
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+      button.link {
+        border-color: transparent;
+        background: transparent;
+        color: var(--color-link);
+        text-decoration: underline;
+        padding-inline: 4px;
+      }
+      :focus-visible {
+        outline: 3px solid var(--color-focus);
+        outline-offset: 3px;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        max-width: 100%;
+        min-height: 44px;
+        border: 1px solid var(--color-border-control);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px;
+        background: var(--color-bg-surface);
+      }
+      textarea {
+        resize: vertical;
+        min-height: 92px;
+      }
+      input[readonly] {
+        background: var(--color-bg-muted);
+      }
+      input[type="checkbox"] {
+        width: 22px;
+        min-height: 22px;
+        height: 22px;
+        accent-color: var(--color-action-primary);
+      }
+      [aria-invalid="true"] {
+        border: 2px solid var(--color-status-danger);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+      h1 {
+        font-size: 24px;
+        line-height: 1.3;
+        margin-bottom: 16px;
+      }
+      h1:focus {
+        outline: none;
+      }
+      h2 {
+        font-size: 20px;
+        margin-bottom: 12px;
+      }
+      h3 {
+        font-size: 17px;
+        margin-bottom: 8px;
+      }
+      p {
+        margin-bottom: 12px;
+      }
+      small,
+      .muted {
+        color: var(--color-text-secondary);
+      }
+      label,
+      .label {
+        display: block;
+        font-weight: 700;
+        margin: 16px 0 6px;
+      }
+      .required {
+        color: var(--color-status-danger);
+      }
+      fieldset {
+        min-width: 0;
+        margin: 16px 0;
+        padding: 16px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+      }
+      legend {
+        padding-inline: 6px;
+        font-weight: 700;
+      }
+      summary {
+        cursor: pointer;
+        min-height: 44px;
+        padding: 10px 0;
+      }
+      details {
+        min-width: 0;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
+      .prototype-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        height: 40px;
+        background: var(--color-bg-muted);
+        border-bottom: 1px solid var(--color-border);
+        padding: 4px 12px;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .prototype-toolbar strong {
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1;
+        border: 1px solid var(--color-border-control);
+        padding: 3px;
+        border-radius: 2px;
+      }
+      .prototype-toolbar select,
+      .prototype-toolbar button {
+        width: auto;
+        min-height: 30px;
+        height: 30px;
+        padding: 3px 6px;
+        font-size: 12px;
+      }
+      #theme {
+        width: 72px;
+      }
+      #role {
+        width: 130px;
+      }
+      .prototype-help {
+        padding: 16px;
+        margin: 12px auto;
+        max-width: 1120px;
+        border: 1px solid var(--color-border);
+        background: var(--color-bg-surface);
+      }
+      .check {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        font-weight: 500;
+        min-height: 44px;
+        margin: 8px 0;
+      }
+      .brand-header {
+        background: var(--color-brand-primary);
+        color: var(--color-text-inverse);
+        border-bottom: 3px solid var(--color-brand-accent);
+      }
+      .header-inner {
+        max-width: 1168px;
+        margin: auto;
+        padding: 16px 24px 0;
+      }
+      .brand-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .brand {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .account {
+        position: relative;
+        flex: 0 0 auto;
+      }
+      .account-trigger {
+        background: transparent;
+        color: var(--color-text-inverse);
+        border-color: var(--color-brand-accent);
+      }
+      .person-menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 6px);
+        width: 160px;
+        z-index: 25;
+        padding: 8px;
+        border: 1px solid var(--color-border-control);
+        border-radius: var(--radius-sm);
+        background: var(--color-bg-raised);
+        color: var(--color-text-primary);
+        box-shadow: var(--shadow-panel);
+      }
+      .person-menu button {
+        width: 100%;
+        justify-content: flex-start;
+        border: 0;
+      }
+      .header-nav {
+        display: flex;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .header-nav button {
+        background: transparent;
+        color: var(--color-text-inverse);
+        border: 0;
+        border-bottom: 4px solid transparent;
+        border-radius: 0;
+        min-width: 64px;
+      }
+      .header-nav button[aria-current="page"] {
+        border-color: var(--color-brand-accent);
+        color: var(--color-brand-accent);
+        background: var(--color-header-nav-current);
+        font-weight: 700;
+      }
+      main {
+        max-width: 1168px;
+        padding: 24px;
+        margin: auto;
+        min-height: 60vh;
+      }
+      main * {
+        overflow-wrap: anywhere;
+      }
+      .breadcrumb {
+        color: var(--color-text-secondary);
+        font-size: 14px;
+        margin-bottom: 8px;
+      }
+      .panel {
+        background: var(--color-bg-surface);
+        border: 1px solid var(--color-border);
+        padding: 24px;
+        border-radius: var(--radius-md);
+        margin-bottom: 20px;
+      }
+      .section-heading {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .section-heading h1,
+      .section-heading h2 {
+        margin: 0;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin: 16px 0;
+      }
+      .actions button {
+        max-width: 100%;
+      }
+      .list {
+        padding: 0;
+        margin: 0;
+        list-style: none;
+      }
+      .list > li {
+        padding: 20px 0;
+        border-top: 1px solid var(--color-border);
+      }
+      .list > li:first-child {
+        border-top: 0;
+      }
+      .list-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+      }
+      .list-row > div {
+        min-width: 0;
+        flex: 1;
+      }
+      .list-row h3 {
+        margin: 8px 0;
+      }
+      .list-row > button {
+        flex: 0 0 auto;
+      }
+      .badge {
+        display: inline-block;
+        border: 1px solid var(--color-status-neutral-border);
+        background: var(--color-status-neutral-bg);
+        color: var(--color-status-neutral);
+        padding: 2px 8px;
+        font-size: 14px;
+        border-radius: var(--radius-sm);
+        white-space: nowrap;
+        font-weight: 500;
+      }
+      .badge.pending {
+        color: var(--color-status-info);
+        background: var(--color-status-info-bg);
+        border-color: var(--color-status-info-border);
+      }
+      .badge.returned {
+        color: var(--color-status-warning);
+        background: var(--color-status-warning-bg);
+        border-color: var(--color-status-warning-border);
+      }
+      .badge.approved {
+        color: var(--color-status-success);
+        background: var(--color-status-success-bg);
+        border-color: var(--color-status-success-border);
+      }
+      .notice,
+      .confirm,
+      .error-summary {
+        padding: 16px;
+        margin: 16px 0;
+        border: 1px solid var(--color-status-info-border);
+        border-radius: var(--radius-sm);
+        background: var(--color-status-info-bg);
+        color: var(--color-status-info);
+      }
+      .notice.success {
+        background: var(--color-status-success-bg);
+        border-color: var(--color-status-success-border);
+        color: var(--color-status-success);
+      }
+      .notice.warning {
+        background: var(--color-status-warning-bg);
+        border-color: var(--color-status-warning-border);
+        color: var(--color-status-warning);
+      }
+      .confirm {
+        color: var(--color-text-primary);
+        background: var(--color-bg-muted);
+        border-color: var(--color-border-control);
+        scroll-margin-block: 64px;
+      }
+      .confirm h2 {
+        font-size: 18px;
+      }
+      .field-error,
+      .error-summary {
+        color: var(--color-status-danger);
+      }
+      .field-error {
+        margin: 4px 0;
+        font-size: 14px;
+      }
+      .error-summary {
+        background: var(--color-status-danger-bg);
+        border-color: var(--color-status-danger-border);
+      }
+      .error-summary button {
+        justify-content: flex-start;
+        text-align: left;
+        color: var(--color-status-danger);
+      }
+      .content-grid,
+      .compare-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        align-items: start;
+      }
+      .content-grid > *,
+      .compare-grid > * {
+        min-width: 0;
+      }
+      .compare-side {
+        border: 1px solid var(--color-border-control);
+        padding: 16px;
+        border-radius: var(--radius-sm);
+      }
+      .point {
+        border-top: 1px solid var(--color-border);
+        padding: 16px 0;
+      }
+      .point:last-child {
+        padding-bottom: 0;
+      }
+      dl {
+        margin: 0;
+      }
+      dt {
+        font-weight: 700;
+        margin: 12px 0 2px;
+      }
+      dd {
+        margin: 0 0 8px;
+        white-space: pre-wrap;
+      }
+      .structure-meta {
+        padding: 12px;
+        background: var(--color-bg-muted);
+        border-radius: var(--radius-sm);
+      }
+      .structure-meta ul {
+        padding-left: 20px;
+        margin-bottom: 0;
+      }
+      .history {
+        border-left: 2px solid var(--color-border-control);
+        margin-left: 6px;
+        padding-left: 20px;
+      }
+      .history article {
+        padding: 0 0 20px;
+      }
+      .history h3 {
+        margin-bottom: 4px;
+      }
+      .filter-grid {
+        display: grid;
+        grid-template-columns: 160px 1fr auto;
+        gap: 12px;
+        align-items: end;
+        margin-bottom: 16px;
+      }
+      .filter-grid label {
+        margin-top: 0;
+      }
+      .filter-grid button {
+        margin-bottom: 0;
+      }
+      .inline-fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .field-group {
+        min-width: 0;
+      }
+      .point-editor {
+        border: 1px solid var(--color-border);
+        margin: 16px 0;
+        padding: 0 16px;
+        border-radius: var(--radius-sm);
+      }
+      .point-editor > summary {
+        font-size: 17px;
+        font-weight: 700;
+      }
+      .point-editor .actions {
+        margin-bottom: 20px;
+      }
+      .measurement {
+        margin: 16px 0;
+        border-left: 3px solid var(--color-border-control);
+        padding-left: 12px;
+      }
+      .version-picker {
+        max-width: 440px;
+      }
+      .change-list {
+        padding-left: 20px;
+      }
+      .change-list > li {
+        padding: 12px 0;
+        border-bottom: 1px solid var(--color-border);
+      }
+      .change-list p {
+        margin: 6px 0 0;
+      }
+      .library-layout {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 24px;
+      }
+      .library-tree {
+        background: var(--color-bg-muted);
+        padding: 16px;
+        border-radius: var(--radius-sm);
+      }
+      .library-tree p {
+        padding: 8px;
+        margin: 0;
+      }
+      .library-tree .selected {
+        border-left: 3px solid var(--color-selection);
+        background: var(--color-selected-bg);
+        font-weight: 700;
+      }
+      footer {
+        max-width: 1168px;
+        padding: 8px 24px 32px;
+        margin: auto;
+        color: var(--color-text-secondary);
+      }
+      .empty {
+        padding: 24px 0;
+      }
+      @media (hover: hover) {
+        button:not(:disabled):hover {
+          background: var(--color-bg-muted);
+        }
+        button.primary:not(:disabled):hover {
+          background: var(--color-action-primary-hover);
+        }
+        button.danger-confirm:not(:disabled):hover {
+          background: var(--color-action-danger-hover);
+        }
+        .account-trigger:hover {
+          background: var(--color-header-nav-hover) !important;
+        }
+        .header-nav button:hover {
+          background: var(--color-header-nav-hover);
+        }
+      }
+      @media (max-width: 640px) {
+        .prototype-toolbar {
+          padding-inline: 8px;
+          gap: 4px;
+        }
+        .header-inner {
+          padding-inline: 16px;
+        }
+        .brand {
+          font-size: 16px;
+        }
+        .brand-row {
+          gap: 8px;
+        }
+        .account-trigger {
+          padding-inline: 12px;
+        }
+        main {
+          padding: 16px;
+        }
+        .panel {
+          padding: 16px;
+        }
+        .content-grid,
+        .compare-grid,
+        .inline-fields,
+        .library-layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .filter-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .list-row {
+          align-items: stretch;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .list-row > button {
+          align-self: stretch;
+        }
+        .actions > button {
+          flex: 1 1 130px;
+        }
+        .actions > button.primary {
+          flex-basis: 100%;
+        }
+        .compare-side {
+          padding: 12px;
+        }
+        .library-tree {
+          display: none;
+        }
+        .point-editor {
+          padding-inline: 12px;
+        }
+      }
+      @media (forced-colors: active) {
+        button.primary,
+        button.outline {
+          border: 2px solid ButtonText;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside class="prototype-toolbar" aria-label="原型工具列">
+      <strong>原型</strong>
+      <label class="sr-only" for="theme">原型外觀</label>
+      <select id="theme">
+        <option value="system">跟隨裝置</option>
+        <option value="light">淺色</option>
+        <option value="dark">深色</option>
+      </select>
+      <label class="sr-only" for="role">試用角色</label>
+      <select id="role">
+        <option value="lin">內業 林小姐</option>
+        <option value="wu">範本管理 吳經理</option>
+      </select>
+      <button
+        type="button"
+        id="help-toggle"
+        aria-expanded="false"
+        aria-controls="prototype-help"
+      >
+        說明
+      </button>
+    </aside>
+    <section id="prototype-help" class="prototype-help" hidden>
+      <h2>範本建議與審核互動原型</h2>
+      <p>
+        離線假資料，操作只保留在本頁記憶體，重新載入可重置。
+        未連接正式系統；時間、權限與入庫結果均為示意，不是產品驗收。
+      </p>
+      <p>
+        林小姐可編輯示範專案查核項目，沒有範本管理權；吳經理具範本管理權，
+        沒有來源專案編輯權，只擔任審核者。另兩件待審資料由內業陳先生提出；
+        他負責 B、C 案，能修改該兩案的查核項目，用來比較全體待審數
+        與林小姐在本專案的本人件數。陳先生僅作跨案提議人示例。
+      </p>
+      <label class="check"
+        ><input id="lost-access" type="checkbox" />
+        模擬林小姐失去來源專案編輯權（仍可讀本人歷程、撤回）</label
+      >
+      <button type="button" id="help-close">收合說明</button>
+    </section>
+    <header class="brand-header">
+      <div class="header-inner">
+        <div class="brand-row">
+          <div class="brand">InspectFlow 工程查核系統</div>
+          <div class="account">
+            <button
+              type="button"
+              id="person-trigger"
+              class="account-trigger"
+              aria-expanded="false"
+              aria-controls="person-menu"
+            >
+              林小姐 ▾
+            </button>
+            <div id="person-menu" class="person-menu" hidden>
+              <button type="button" data-action="settings">設定</button>
+            </div>
+          </div>
+        </div>
+        <nav class="header-nav" aria-label="主導覽" id="header-nav"></nav>
+      </div>
+    </header>
+    <main id="app"></main>
+    <footer>T18 已由負責人核可，依建議調整；T19 須等 T17 完成。</footer>
+    <script>
+      const $ = (selector) => document.querySelector(selector);
+      const clone = (value) => structuredClone(value);
+      const escapeHtml = (value) =>
+        String(value ?? "").replace(
+          /[&<>"']/g,
+          (char) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[char],
+        );
+      const names = { lin: "林小姐", wu: "吳經理", chen: "陳先生" };
+      const statusText = {
+        PENDING: "待審",
+        RETURNED: "退回",
+        APPROVED: "已核准",
+        WITHDRAWN: "已撤回",
+      };
+      const sample = {
+        title: "鋼筋綁紮",
+        instruction: "依核定施工圖檢查，澆置前完成查核。",
+        points: [
+          {
+            key: "p-spacing",
+            title: "鋼筋間距",
+            instruction: "檢查梁柱接頭與箍筋。",
+            standardType: "number",
+            operator: "lte",
+            value: "200",
+            tolerance: "",
+            rangeForm: "interval",
+            lower: "150",
+            upper: "200",
+            bound: "f-spacing",
+            text: "",
+            photoCount: "1",
+            fields: [
+              { key: "f-spacing", name: "間距", type: "number", unit: "mm" },
+              { key: "f-notes", name: "備註", type: "text", unit: "" },
+            ],
+          },
+          {
+            key: "p-coupler",
+            title: "續接器檢查",
+            instruction: "逐一檢視鎖固與外露螺紋。",
+            standardType: "text",
+            text: "續接器鎖固完成，外露螺紋符合施工圖規定。",
+            operator: "eq",
+            value: "1",
+            tolerance: "",
+            rangeForm: "interval",
+            lower: "0",
+            upper: "1",
+            bound: "",
+            photoCount: "2",
+            fields: [
+              { key: "f-condition", name: "外觀說明", type: "text", unit: "" },
+            ],
+          },
+        ],
+      };
+      const second = {
+        title: "混凝土外觀",
+        instruction: "拆模後檢查表面與修補情形。",
+        points: [
+          {
+            ...clone(sample.points[1]),
+            key: "p-surface",
+            title: "表面檢查",
+            text: "表面不得有蜂窩、孔洞及露筋。",
+            photoCount: "1",
+          },
+        ],
+      };
+      const state = {
+        role: "lin",
+        canEdit: true,
+        sources: [sample, second],
+        suggestions: [],
+        nextId: 3,
+        minute: 0,
+        key: 10,
+        library: [
+          {
+            title: "鋼筋綁紮",
+            category: "building",
+            system: "structure",
+            sequence: 7,
+            content: clone(sample),
+          },
+        ],
+      };
+      // TPL-R32：修訂只追加，歷程不回寫，避免修改草稿污染已送審的版本。
+      function freeze(value) {
+        if (value && typeof value === "object") {
+          Object.values(value).forEach(freeze);
+          Object.freeze(value);
+        }
+        return value;
+      }
+      function stamp() {
+        const minute = state.minute++;
+        return (
+          "2026/10/31 " +
+          String(9 + Math.floor(minute / 60)).padStart(2, "0") +
+          ":" +
+          String(minute % 60).padStart(2, "0") +
+          "（示意）"
+        );
+      }
+      function revision(s, content, actor) {
+        const record = freeze({
+          no: s.revisions.length + 1,
+          content: clone(content),
+          actor,
+          time: stamp(),
+          basedOn: s.revisions.length || null,
+        });
+        s.revisions.push(record);
+        return record;
+      }
+      function transition(s, status, actor, reason = "") {
+        s.status = status;
+        s.events.push(
+          freeze({
+            status,
+            revision: latest(s).no,
+            actor,
+            reason,
+            time: stamp(),
+          }),
+        );
+      }
+      function seed(id, title, project) {
+        const s = {
+          id,
+          proposer: "chen",
+          project,
+          sourceName: title,
+          status: "PENDING",
+          revisions: [],
+          events: [],
+          target: null,
+        };
+        revision(s, { ...clone(second), title }, "陳先生");
+        transition(s, "PENDING", "陳先生");
+        return s;
+      }
+      state.suggestions = [
+        seed(1, "模板支撐檢查", "B 案 FP-2026-02／示範辦公大樓消防改善工程"),
+        seed(2, "防水收邊檢查", "C 案 FP-2026-03／示範廠房消防設備更新工程"),
+      ];
+      let screen = "project",
+        selectedId = null,
+        selectedVersion = null,
+        detailKind = "mine",
+        mineOrigin = "settings",
+        nameOnly = false;
+      let draft = null,
+        draftBaseline = "",
+        editorOrigin = null,
+        errors = {},
+        notice = "";
+      let comparePair = "";
+      const targets = {};
+      const filters = {
+        mine: { status: "all", query: "", page: 0 },
+        review: { status: "PENDING", query: "", page: 0 },
+      };
+      const projectName = "C-105／示範綜合大樓工程";
+      function latest(s) {
+        return s.revisions.at(-1);
+      }
+      const chosen = () => state.suggestions.find((s) => s.id === selectedId);
+      const pendingCount = () =>
+        state.suggestions.filter((s) => s.status === "PENDING").length;
+      const mine = () =>
+        state.suggestions.filter((s) => s.proposer === state.role);
+      const projectCount = () =>
+        mine().filter((s) => s.project === projectName).length;
+      const canEditSource = () => state.role === "lin" && state.canEdit;
+      const dirty = () => draft && JSON.stringify(draft) !== draftBaseline;
+      function button(text, action, style = "", attrs = "") {
+        return `<button type="button" class="${style}" data-action="${action}"
+    ${attrs}>${escapeHtml(text)}</button>`;
+      }
+      function badge(status) {
+        return `<span class="badge ${status.toLowerCase()}">
+    ${statusText[status]}</span>`;
+      }
+      function reveal(el) {
+        el.scrollIntoView({
+          block:
+            el.getBoundingClientRect().height > innerHeight * 0.8
+              ? "start"
+              : "nearest",
+        });
+      }
+      function focusHeading() {
+        const el = $("#app h1");
+        el.tabIndex = -1;
+        el.focus({ preventScroll: true });
+        scrollTo(0, 0);
+      }
+      function notify(text, host = $("#feedback"), focus = false) {
+        host.innerHTML = `<p class="notice success" role="status"
+        tabindex="-1">
+    ${escapeHtml(text)}</p>`;
+        const el = host.firstElementChild;
+        reveal(el);
+        if (focus) el.focus({ preventScroll: true });
+      }
+      function confirmAt(
+        host,
+        title,
+        text,
+        callback,
+        danger = false,
+        labels = {},
+      ) {
+        const trigger = document.activeElement;
+        document.querySelectorAll(".confirm").forEach((el) => el.remove());
+        host.innerHTML = `<section class="confirm" role="group"
+    aria-label="${escapeHtml(title)}"><h2>${escapeHtml(title)}</h2>
+    <p>${escapeHtml(text)}</p><div class="actions">
+    <button type="button" data-confirm-cancel>
+      ${escapeHtml(labels.cancel || "取消")}</button>
+    <button type="button" class="${danger ? "danger-confirm" : "primary"}"
+      data-confirm-ok>${escapeHtml(labels.ok || title)}</button></div>
+    <div class="confirm-error"></div></section>`;
+        const box = host.firstElementChild,
+          cancel = host.querySelector("[data-confirm-cancel]");
+        cancel.onclick = () => {
+          host.innerHTML = "";
+          if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+        };
+        host.querySelector("[data-confirm-ok]").onclick = async (e) => {
+          const buttons = box.querySelectorAll("button");
+          buttons.forEach((el) => {
+            el.disabled = true;
+          });
+          e.target.setAttribute("aria-busy", "true");
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 120));
+            await callback();
+          } catch (error) {
+            const errorHost = box.querySelector(".confirm-error");
+            errorHost.innerHTML =
+              '<p class="field-error" role="alert" tabindex="-1">' +
+              escapeHtml(error.message) +
+              "</p>";
+            reveal(errorHost);
+            errorHost.firstElementChild.focus({ preventScroll: true });
+            buttons.forEach((el) => {
+              el.disabled = false;
+            });
+          }
+        };
+        reveal(box);
+        cancel.focus({ preventScroll: true });
+      }
+      function guard(proceed, host = $("#leave-confirm")) {
+        if (!dirty()) {
+          draft = null;
+          return proceed();
+        }
+        confirmAt(
+          host,
+          "放棄未儲存變更",
+          "本次未儲存的改動會遺失；原有修訂與審核紀錄仍會保留。",
+          () => {
+            draft = null;
+            proceed();
+          },
+          true,
+          { cancel: "繼續編輯", ok: "放棄修改" },
+        );
+      }
+      function go(next) {
+        guard(() => {
+          screen = next;
+          notice = "";
+          render();
+        });
+      }
+      function standard(p) {
+        if (p.standardType === "text") return p.text || "標準未設定";
+        if (p.standardType !== "number") return "標準未設定";
+        const unit = p.fields.find((f) => f.key === p.bound)?.unit || "";
+        if (p.operator === "range")
+          return p.rangeForm === "interval"
+            ? `${p.lower}～${p.upper} ${unit}`
+            : `${p.value} ± ${p.tolerance} ${unit}`;
+        return (
+          `${{ lte: "≤", gte: "≥", eq: "＝" }[p.operator]} ${p.value} ${
+            unit
+          }` + (p.tolerance ? ` ± ${p.tolerance}` : "")
+        );
+      }
+      function contentMarkup(content, prefix = "") {
+        return (
+          `<div ${prefix ? `id="${prefix}-item" tabindex="-1"` : ""}>
+    <h3>${escapeHtml(content.title) || "（未填名稱）"}</h3>
+    <p>${escapeHtml(content.instruction) || "未填寫檢查說明"}</p></div>` +
+          content.points
+            .map(
+              (p, i) => `<section class="point" ${
+                prefix
+                  ? `id="${prefix}-point-${escapeHtml(p.key)}" tabindex="-1"`
+                  : ""
+              }>
+      <h3>項次 ${i + 1}：${escapeHtml(p.title) || "（未填標題）"}</h3>
+      <p>${escapeHtml(p.instruction) || "未填寫項次說明"}</p>
+      <dl><dt>檢查標準</dt><dd>${escapeHtml(standard(p))}</dd></dl>
+      <div class="structure-meta"><strong>實測欄位定義</strong>
+      ${
+        p.fields.length
+          ? "<ul>" +
+            p.fields
+              .map(
+                (f) => `<li>${escapeHtml(f.name)}：
+        ${
+          f.type === "number"
+            ? "數字（" + escapeHtml(f.unit || "未填單位") + "）"
+            : "文字"
+        }
+        ${
+          f.key === p.bound && p.standardType === "number"
+            ? "，用於標準判定"
+            : ""
+        }</li>`,
+              )
+              .join("") +
+            "</ul>"
+          : "<p>沒有實測欄位</p>"
+      }
+      <p>必填照片：至少 ${escapeHtml(p.photoCount)} 張</p></div></section>`,
+            )
+            .join("")
+        );
+      }
+      function shell() {
+        $("#person-trigger").textContent = names[state.role] + " ▾";
+        const active =
+          screen === "project"
+            ? "project"
+            : ["library", "review", "compare"].includes(screen) ||
+                (screen === "detail" && detailKind === "review")
+              ? "library"
+              : "";
+        $("#header-nav").innerHTML =
+          button(
+            "專案",
+            "project",
+            "",
+            active === "project" ? 'aria-current="page"' : "",
+          ) +
+          (state.role === "wu"
+            ? button(
+                "範本",
+                "library",
+                "",
+                active === "library" ? 'aria-current="page"' : "",
+              )
+            : "");
+        $("#role").value = state.role;
+        $("#lost-access").checked = !state.canEdit;
+        $("#person-menu").hidden = true;
+        $("#person-trigger").setAttribute("aria-expanded", "false");
+      }
+      function projectPage() {
+        const can = state.role === "lin" && state.canEdit;
+        return (
+          `<p class="breadcrumb">專案／${projectName}</p>
+    <section class="panel"><h1>專案查核項目</h1>
+    <p>先從專案項目整理可共用的內容，再建議加入範本庫。</p>
+    ${
+      can
+        ? button(
+            "我的範本建議（本案共 " + projectCount() + " 件）",
+            "my-project",
+            "link",
+          )
+        : '<p class="muted">目前沒有此專案的查核項目編輯權限，不能提出建議。</p>'
+    }
+    <div id="feedback"></div><ul class="list">` +
+          state.sources
+            .map(
+              (s, i) => `<li data-source="${i}"><h2>${escapeHtml(s.title)}</h2>
+      <p>${s.points.length} 個查核項次 · 來源分類／系統：建築工程／結構工程</p>
+      <details><summary>檢視項目內容</summary>${contentMarkup(s)}</details>
+      <div class="actions">${
+        can ? button("建議加入範本庫", "propose:" + i, "outline") : ""
+      }
+      </div><div id="source-confirm-${i}"></div></li>`,
+            )
+            .join("") +
+          "</ul></section>"
+        );
+      }
+      function settingsPage() {
+        return `<section class="panel"><h1>個人設定</h1>
+    <h2>外觀</h2><label for="settings-theme">顯示主題</label>
+    <select id="settings-theme"><option value="system">跟隨裝置</option>
+    <option value="light">淺色</option><option value="dark">深色</option></select>
+    </section>${
+      mine().length
+        ? `<section class="panel" id="template-suggestions">
+      <h2>我的範本建議</h2><p>共 ${mine().length} 件。查看審核結果、
+      退回原因與每一版內容。</p>${button(
+        "開啟我的範本建議",
+        "mine-settings",
+        "outline",
+      )}
+      </section>`
+        : ""
+    }`;
+      }
+      function libraryPage() {
+        return `<section class="panel"><div class="section-heading">
+    <h1>查核範本</h1>${button(
+      "待審建議（" + pendingCount() + "）",
+      "review",
+      "outline",
+    )}
+    </div><div id="feedback"></div><div class="library-layout">
+    <aside class="library-tree" aria-label="範本分類">
+    <p>▾ 建築工程</p><p class="selected">　結構工程</p><p>　防水工程</p>
+    <p>▸ 道路工程</p></aside><section><p class="breadcrumb">建築工程／結構工程</p>
+    <h2>查核項目</h2><ul class="list">${state.library
+      .map(
+        (t) => `<li>
+      <h3>${t.sequence}. ${escapeHtml(t.title)}</h3>
+      <details><summary>檢視範本內容</summary>${contentMarkup(
+        t.content,
+      )}</details>
+      </li>`,
+      )
+      .join("")}</ul></section></div></section>`;
+      }
+      function listPage(kind) {
+        const f = filters[kind],
+          source = (kind === "mine" ? mine() : state.suggestions).toSorted(
+            (a, b) =>
+              kind === "review"
+                ? lastSubmitted(b).localeCompare(lastSubmitted(a)) ||
+                  b.id - a.id
+                : b.id - a.id,
+          );
+        const scoped = source.filter(
+          (s) => !f.project || s.project === f.project,
+        );
+        const filtered = source.filter(
+          (s) =>
+            (f.status === "all" || s.status === f.status) &&
+            (!f.project || s.project === f.project) &&
+            (latest(s).content.title + s.project)
+              .toLowerCase()
+              .includes(f.query.toLowerCase()),
+        );
+        const size = 2;
+        f.page = Math.min(
+          f.page,
+          Math.max(0, Math.ceil(filtered.length / size) - 1),
+        );
+        const shown = filtered.slice(f.page * size, f.page * size + size);
+        const title = kind === "mine" ? "我的範本建議" : "範本建議審核";
+        return `<section class="panel">${button(
+          kind === "mine"
+            ? mineOrigin === "project"
+              ? "返回專案頁"
+              : "返回個人設定"
+            : "返回範本庫",
+          kind === "mine" ? mineOrigin : "library",
+          "link",
+        )}<h1>${title}</h1>
+    ${
+      kind === "review"
+        ? `<p><strong>待審建議（${pendingCount()}）</strong>
+      <span class="muted">全體待審件數，不受下方搜尋與頁次影響。</span></p>`
+        : `<p>只顯示${names[state.role]}提出的建議；
+          ${f.project ? "本案共" : "共"} ${
+            scoped.length
+          } 件，包含所有狀態。</p>
+          <p class="status-counts" aria-label="各狀態件數">${Object.entries(
+            statusText,
+          )
+            .map(
+              ([status, label]) =>
+                `${label} ${
+                  scoped.filter((s) => s.status === status).length
+                } 件`,
+            )
+            .join("／")}</p>`
+    }
+    <div id="feedback"></div><form id="list-filter" class="filter-grid">
+    <div><label for="filter-status">狀態</label><select id="filter-status">
+    ${["all", ...Object.keys(statusText)]
+      .map(
+        (s) => `<option value="${s}"
+      ${s === f.status ? "selected" : ""}>${
+        s === "all" ? "全部狀態" : statusText[s]
+      }</option>`,
+      )
+      .join("")}
+    </select></div><div><label for="search">名稱或來源專案</label>
+    <input type="search" id="search" value="${escapeHtml(f.query)}"></div>
+    <button type="submit">搜尋</button></form>
+    ${
+      f.project
+        ? `<p>目前專案：${escapeHtml(f.project)}
+      ${button("顯示全部專案", "clear-project", "link")}</p>`
+        : ""
+    }
+    <p role="status">符合條件 ${filtered.length} 件；第 ${f.page + 1} 頁</p>
+    <ul class="list">${
+      shown
+        .map((s) => {
+          const r = latest(s),
+            ret = s.events.findLast((e) => e.status === "RETURNED");
+          return `<li data-suggestion="${s.id}"><div class="list-row"><div>
+      ${badge(s.status)}<h2>${
+        escapeHtml(r.content.title) || "（未填名稱）"
+      }</h2>
+      <p>${escapeHtml(s.project)}／${escapeHtml(s.sourceName)}</p>
+      <p>提議人：${names[s.proposer]} · 最新第 ${r.no} 版${managerMark(r)}</p>
+      ${kind === "review" ? `<p>最近送審：${lastSubmitted(s)}</p>` : ""}
+      ${
+        s.status === "RETURNED"
+          ? `<p class="notice warning">退回原因：
+        ${escapeHtml(ret.reason)}</p>`
+          : ""
+      }
+      ${
+        s.target
+          ? `<p>已入庫：${escapeHtml(s.target.path)}／
+        ${escapeHtml(s.target.title)}</p>`
+          : ""
+      }</div>
+      ${button(
+        kind === "mine" ? "查看建議與歷程" : "開啟審核",
+        "open:" + s.id,
+        "outline",
+      )}
+      </div></li>`;
+        })
+        .join("") ||
+      (kind === "mine" && !scoped.length
+        ? '<li class="empty">本案尚未提出範本建議。可返回專案頁，從查核項目提出。</li>'
+        : '<li class="empty">沒有符合條件的建議。請調整搜尋條件。</li>')
+    }
+    </ul><div class="actions">${button(
+      "上一頁",
+      "prev",
+      "",
+      f.page === 0 ? "disabled" : "",
+    )}
+    ${button(
+      "下一頁",
+      "next-page",
+      "",
+      (f.page + 1) * size >= filtered.length ? "disabled" : "",
+    )}
+    </div></section>`;
+      }
+      const managerMark = (r) =>
+        r.actor === "吳經理" ? "（吳經理修改）" : "";
+      const lastSubmitted = (s) =>
+        s.events.findLast((e) => e.status === "PENDING")?.time || "";
+      const revisedAfterReturn = (s) =>
+        latest(s).no >
+        (s.events.findLast((e) => e.status === "RETURNED")?.revision || 0);
+      const pendingWarning = "待審期間不能修改，只能撤回；撤回後不能再重送。";
+      function versionEvents(s, no) {
+        const events = s.events.filter((e) => e.revision === no);
+        return (
+          events
+            .map(
+              (e) => `<p>${statusText[e.status]} · ${e.actor} · ${e.time}
+    ${e.reason ? "<br>退回原因：" + escapeHtml(e.reason) : ""}</p>`,
+            )
+            .join("") || "<p>修訂已保存，尚無此版的審核決定。</p>"
+        );
+      }
+      function historyMarkup(s) {
+        return (
+          `<section><h2>各版歷程</h2><div class="history">` +
+          s.revisions
+            .map(
+              (r) => `<article><h3>第 ${r.no} 版${managerMark(r)}</h3>
+      <p>編輯者：${r.actor} · ${r.time}</p>${versionEvents(s, r.no)}
+      ${button(
+        "查看第 " + r.no + " 版",
+        "version:" + r.no,
+        "link",
+      )}</article>`,
+            )
+            .join("") +
+          "</div></section>"
+        );
+      }
+      function detailPage() {
+        const s = chosen();
+        if (!s || (state.role !== "wu" && s.proposer !== state.role))
+          return '<section class="panel"><h1>無法檢視此建議</h1></section>';
+        const r =
+          s.revisions.find((r) => r.no === selectedVersion) || latest(s);
+        const current = r.no === latest(s).no;
+        const canReview =
+          state.role === "wu" && s.status === "PENDING" && current;
+        const canRevise =
+          s.proposer === state.role &&
+          canEditSource() &&
+          s.status === "RETURNED";
+        const target = targets[s.id] || { category: "", system: "" };
+        const lastReturn = s.events.findLast((e) => e.status === "RETURNED");
+        return `<section class="panel">${button(
+          "返回建議清單",
+          detailKind,
+          "link",
+        )}
+    <h1>${escapeHtml(latest(s).content.title) || "（未填名稱）"}</h1>${badge(
+      s.status,
+    )}
+    <p>提議人：${names[s.proposer]} · 來源：${escapeHtml(s.project)}／
+    ${escapeHtml(s.sourceName)}</p><p class="muted">建議保存提出時的項目結構，
+    不會因來源後續修改而改變。</p><div id="feedback"></div>
+    ${
+      lastReturn
+        ? `<p class="notice warning">第 ${lastReturn.revision} 版退回原因：
+      ${escapeHtml(lastReturn.reason)}<br>${lastReturn.actor} · ${
+        lastReturn.time
+      }</p>`
+        : ""
+    }
+    ${
+      s.target
+        ? `<p class="notice success">已核准第 ${s.target.revision} 版，
+      入庫：${escapeHtml(s.target.path)}／${escapeHtml(s.target.title)}，
+      序號 ${s.target.sequence}。<br>審核人：吳經理 · ${s.target.time}</p>`
+        : ""
+    }
+    <div class="version-picker"><label for="version">檢視版本</label>
+    <select id="version">${s.revisions
+      .map(
+        (v) => `<option value="${v.no}"
+      ${v.no === r.no ? "selected" : ""}>第 ${v.no} 版 · ${v.actor}</option>`,
+      )
+      .join("")}
+    </select></div><h2>第 ${r.no} 版內容${
+      current ? "（最新）" : "（歷史唯讀）"
+    }</h2>
+    <p>編輯者：${r.actor} · ${r.time}</p>${contentMarkup(r.content)}
+    <div class="actions">
+    ${
+      state.role === "wu" && s.revisions.length > 1
+        ? button("比較前後兩版", "compare", "outline")
+        : ""
+    }
+    ${canReview ? button("修改建議內容", "edit", "outline") : ""}
+    ${canRevise ? button("修改退回件", "edit", "outline") : ""}</div>
+    ${
+      state.role === s.proposer && s.status === "RETURNED" && !canEditSource()
+        ? '<p class="notice">來源專案編輯權已失效，仍可查看歷程及撤回；不能修改或重送。</p>'
+        : ""
+    }
+    ${
+      s.status === "RETURNED" && state.role === s.proposer
+        ? `<section id="resubmit-area"><div id="submit-feedback"></div>
+      ${
+        !canEditSource()
+          ? "<p>來源專案編輯權已失效，不能重新送審。</p>"
+          : !revisedAfterReturn(s)
+            ? '<p id="resubmit-hint">請先修改退回內容並保存新版本，才能重新送審。</p>'
+            : "<p>此版尚未送審，確認完整後可重新送審。</p>"
+      }
+      <div class="actions">${button(
+        "重新送審",
+        "resubmit",
+        "primary",
+        !canEditSource() || !revisedAfterReturn(s) ? "disabled" : "",
+      )}</div><div id="submit-error"></div><div id="submit-confirm"></div>
+      </section>`
+        : ""
+    }
+    ${
+      canReview
+        ? `<section id="approval-area"><h2>審核最新第 ${latest(s).no} 版</h2>
+      <div id="approval-feedback"></div>
+      <form id="approve-form" novalidate>
+      <label for="approval-title">入庫名稱（第 ${latest(s).no} 版）</label>
+      <input id="approval-title" readonly value="${escapeHtml(
+        latest(s).content.title,
+      )}"
+        aria-describedby="title-hint"><p id="title-hint" class="muted">
+      名稱要修改時，先按「修改建議內容」並儲存新版本，不會直接覆蓋既有範本。</p>
+      <div id="name-conflict" class="field-error" role="status"></div>
+      <div class="inline-fields"><div><label for="category">目標工程類別
+      <span class="required">＊</span></label><select id="category" required>
+      <option value="">請選擇工程類別</option><option value="building"
+      ${target.category === "building" ? "selected" : ""}>建築工程</option>
+      <option value="road" ${
+        target.category === "road" ? "selected" : ""
+      }>道路工程</option>
+      </select><p id="category-error" class="field-error"></p></div>
+      <div><label for="system">目標系統 <span class="required">＊</span></label>
+      <select id="system" ${!target.category ? "disabled" : ""} required>
+      ${systemOptions(target.category, target.system)}</select>
+      <p id="system-error" class="field-error"></p></div></div>
+      <div class="actions"><button type="submit" class="primary">核准入庫</button>
+      ${button("附原因退回", "show-return", "danger")}</div>
+      <div id="approve-confirm"></div></form><div id="return-host"></div>
+      </section>`
+        : state.role === "wu" && s.status === "PENDING" && !current
+          ? `<section id="approval-area"><p class="notice warning">
+            請切回最新版才能核准</p>${button(
+              "切回最新第 " + latest(s).no + " 版",
+              "latest-version",
+              "outline",
+            )}</section>`
+          : ""
+    }
+    ${
+      state.role === s.proposer && ["PENDING", "RETURNED"].includes(s.status)
+        ? `
+      <div class="actions">${button("撤回建議", "withdraw", "danger")}</div>
+      <div id="withdraw-confirm"></div>`
+        : ""
+    }
+    ${historyMarkup(s)}</section>`;
+      }
+      function systemOptions(category, selected = "") {
+        const choices = {
+          building: [
+            ["structure", "結構工程"],
+            ["waterproof", "防水工程"],
+          ],
+          road: [["pavement", "路面工程"]],
+        };
+        return (
+          '<option value="">請選擇系統</option>' +
+          (choices[category] || [])
+            .map(
+              ([id, name]) => `<option value="${id}" ${
+                id === selected ? "selected" : ""
+              }>
+      ${name}</option>`,
+            )
+            .join("")
+        );
+      }
+      function fieldId(path) {
+        return "f-" + path.replaceAll(".", "-");
+      }
+      function field(path, label, value, options = {}) {
+        const id = fieldId(path),
+          error = errors[path];
+        const attrs = `id="${id}" data-path="${path}" ${
+          error ? 'aria-invalid="true"' : ""
+        }
+    aria-describedby="${id}-error" ${options.required ? "required" : ""}`;
+        let control;
+        if (options.choices)
+          control =
+            `<select ${attrs}>` +
+            options.choices
+              .map(
+                ([v, t]) =>
+                  `<option value="${v}" ${
+                    v === value ? "selected" : ""
+                  }>${escapeHtml(t)}</option>`,
+              )
+              .join("") +
+            "</select>";
+        else if (options.area)
+          control = `<textarea ${attrs}>${escapeHtml(value)}</textarea>`;
+        else
+          control = `<input ${attrs} value="${escapeHtml(value)}"
+    ${options.number ? 'inputmode="decimal"' : ""}
+    ${options.max ? 'maxlength="' + options.max + '"' : ""}>`;
+        return `<div class="field-group"><label for="${id}">${escapeHtml(
+          label,
+        )}
+    ${options.required ? '<span class="required">＊</span>' : ""}</label>${
+      control
+    }
+    <p id="${id}-error" class="field-error">${escapeHtml(
+      error || "",
+    )}</p></div>`;
+      }
+      function editorPage() {
+        const s = chosen();
+        const returned = state.role === "lin";
+        return (
+          `<section class="panel"><h1>${
+            returned ? "修改退回件" : "修改待審內容"
+          }</h1>
+    <p>目前已存第 ${
+      latest(s).no
+    } 版；本次修改另存新版本，前版與審核紀錄保留。</p>
+    <div id="feedback"></div><div id="error-summary"></div>
+    <form id="editor-form" novalidate>
+    ${field("title", "查核項目名稱", draft.title, {
+      required: true,
+      max: 256,
+    })}
+    ${field("instruction", "檢查說明", draft.instruction, { area: true })}
+    <h2>查核項次</h2><div id="points-error" class="field-error">
+    ${escapeHtml(errors.points || "")}</div>` +
+          draft.points
+            .map((p, i) => {
+              const prefix = "points." + i;
+              const numeric = p.fields.filter((f) => f.type === "number");
+              return `<details ${
+                nameOnly ? "" : "open"
+              } class="point-editor"><summary>項次 ${i + 1}：
+      ${escapeHtml(p.title) || "未填標題"}</summary>
+      ${field(prefix + ".title", "項次標題", p.title, {
+        required: true,
+        max: 256,
+      })}
+      ${field(prefix + ".instruction", "項次說明", p.instruction, {
+        area: true,
+      })}
+      <fieldset><legend>檢查標準</legend>
+      ${field(prefix + ".standardType", "標準形式", p.standardType, {
+        choices: [
+          ["none", "不設定"],
+          ["text", "文字標準"],
+          ["number", "數值標準"],
+        ],
+      })}
+      ${
+        p.standardType === "text"
+          ? field(prefix + ".text", "標準文字", p.text, {
+              area: true,
+              required: true,
+            })
+          : ""
+      }
+      ${
+        p.standardType === "number"
+          ? `
+        ${field(prefix + ".bound", "用來判定的數字欄位", p.bound, {
+          required: true,
+          choices: [
+            ["", "請選擇數字欄位"],
+            ...numeric.map((f) => [f.key, f.name]),
+          ],
+        })}
+        <p class="muted">單位由綁定欄位帶入：
+        ${escapeHtml(
+          p.fields.find((f) => f.key === p.bound)?.unit || "尚未選擇",
+        )}</p>
+        ${field(prefix + ".operator", "條件", p.operator, {
+          choices: [
+            ["lte", "≤"],
+            ["gte", "≥"],
+            ["eq", "＝"],
+            ["range", "範圍"],
+          ],
+        })}
+        ${
+          p.operator === "range"
+            ? field(prefix + ".rangeForm", "範圍形式", p.rangeForm, {
+                choices: [
+                  ["interval", "上下限區間"],
+                  ["tolerance", "標準值加減誤差"],
+                ],
+              })
+            : ""
+        }
+        ${
+          p.operator === "range" && p.rangeForm === "interval"
+            ? '<div class="inline-fields">' +
+              field(prefix + ".lower", "下限", p.lower, {
+                required: true,
+                number: true,
+              }) +
+              field(prefix + ".upper", "上限", p.upper, {
+                required: true,
+                number: true,
+              }) +
+              "</div>"
+            : '<div class="inline-fields">' +
+              field(prefix + ".value", "標準值", p.value, {
+                required: true,
+                number: true,
+              }) +
+              field(prefix + ".tolerance", "容許誤差", p.tolerance, {
+                required: p.operator === "range",
+                number: true,
+              }) +
+              "</div>"
+        }`
+          : ""
+      }
+      </fieldset><fieldset><legend>實測欄位定義</legend>
+      ${p.fields
+        .map(
+          (f, j) => `<div class="measurement">
+        ${field(prefix + ".fields." + j + ".name", "欄位名稱", f.name, {
+          required: true,
+        })}
+        ${field(prefix + ".fields." + j + ".type", "欄位類型", f.type, {
+          choices: [
+            ["text", "文字"],
+            ["number", "數字"],
+          ],
+        })}
+        ${
+          f.type === "number"
+            ? field(prefix + ".fields." + j + ".unit", "單位", f.unit, {
+                required: true,
+              })
+            : ""
+        }<div class="actions">
+        ${button(
+          "欄位上移",
+          "field-up:" + i + ":" + j,
+          "",
+          j === 0 ? "disabled" : "",
+        )}
+        ${button(
+          "欄位下移",
+          "field-down:" + i + ":" + j,
+          "",
+          j === p.fields.length - 1 ? "disabled" : "",
+        )}
+        ${button(
+          "移除欄位",
+          "remove-field:" + i + ":" + j,
+          "danger",
+          p.standardType === "number" && p.bound === f.key ? "disabled" : "",
+        )}
+        </div></div>`,
+        )
+        .join("")}
+      ${button("新增實測欄位", "add-field:" + i)}
+      <p class="muted">綁定數值標準的欄位須先解除綁定，才能移除。</p></fieldset>
+      ${field(prefix + ".photoCount", "最低必填照片張數", p.photoCount, {
+        required: true,
+        number: true,
+      })}<div class="actions">
+      ${button("項次上移", "point-up:" + i, "", i === 0 ? "disabled" : "")}
+      ${button(
+        "項次下移",
+        "point-down:" + i,
+        "",
+        i === draft.points.length - 1 ? "disabled" : "",
+      )}
+      ${button("移除項次", "remove-point:" + i, "danger")}</div>
+      <div id="point-confirm-${i}"></div></details>`;
+            })
+            .join("") +
+          `<div class="actions">${button("新增查核項次", "add-point")}</div>
+    <p class="muted">${
+      returned
+        ? "退回件可先保存未完成內容，重新送審時再檢查完整性。"
+        : "審核中修改須通過欄位檢查；保存之後再回詳情選目的地核准。"
+    }</p>
+    <div class="actions">${button("取消修改", "cancel-edit")}
+    <button class="${
+      returned ? "" : "primary"
+    }" type="submit">儲存新版本</button>
+    ${
+      returned
+        ? button(
+            "儲存並重新送審",
+            "save-submit",
+            "primary",
+            !dirty() && !revisedAfterReturn(s) ? "disabled" : "",
+          )
+        : ""
+    }</div>
+    ${
+      returned
+        ? `<p id="editor-submit-hint" class="muted">${
+            !dirty() && !revisedAfterReturn(s)
+              ? "請先修改退回內容，才能重新送審。"
+              : "重新送審前會檢查所有欄位；只儲存可保留未完成內容。"
+          }</p>`
+        : ""
+    }
+    <div id="leave-confirm"></div></form></section>`
+        );
+      }
+      function differences(a, b) {
+        const out = [];
+        let pointKey = "";
+        const add = (kind, label, before, after) =>
+          out.push({ kind, label, before, after, pointKey });
+        const changed = (label, x, y) => {
+          if (x !== y) add("修改", label, String(x), String(y));
+        };
+        changed("查核項目名稱", a.title, b.title);
+        changed("檢查說明", a.instruction, b.instruction);
+        const order = (arr) => arr.map((p) => p.key).join(",");
+        const shared = a.points.filter((p) =>
+          b.points.some((q) => q.key === p.key),
+        );
+        const newer = b.points.filter((p) =>
+          a.points.some((q) => q.key === p.key),
+        );
+        if (order(shared) !== order(newer))
+          add(
+            "重排",
+            "查核項次",
+            shared.map((p) => p.title).join("／"),
+            newer.map((p) => p.title).join("／"),
+          );
+        for (const p of a.points)
+          if (!b.points.some((q) => q.key === p.key))
+            out.push({
+              kind: "刪除",
+              label: "查核項次",
+              before: p.title,
+              after: "（已移除）",
+              pointKey: p.key,
+            });
+        for (const p of b.points) {
+          pointKey = p.key;
+          const old = a.points.find((q) => q.key === p.key);
+          if (!old) {
+            add("新增", "查核項次", "（無）", p.title);
+            continue;
+          }
+          changed(p.title + "／標題", old.title, p.title);
+          changed(p.title + "／說明", old.instruction, p.instruction);
+          changed(p.title + "／標準", standard(old), standard(p));
+          if (old.bound !== p.bound)
+            add(
+              "修改",
+              p.title + "／綁定欄位",
+              old.fields.find((f) => f.key === old.bound)?.name || "未綁定",
+              p.fields.find((f) => f.key === p.bound)?.name || "未綁定",
+            );
+          changed(p.title + "／照片張數", old.photoCount, p.photoCount);
+          const af = old.fields.filter((f) =>
+            p.fields.some((q) => q.key === f.key),
+          );
+          const bf = p.fields.filter((f) =>
+            old.fields.some((q) => q.key === f.key),
+          );
+          if (order(af) !== order(bf))
+            add(
+              "重排",
+              p.title + "／實測欄位",
+              af.map((f) => f.name).join("／"),
+              bf.map((f) => f.name).join("／"),
+            );
+          for (const f of old.fields)
+            if (!p.fields.some((q) => q.key === f.key))
+              add("刪除", p.title + "／欄位", f.name, "（已移除）");
+          for (const f of p.fields) {
+            const original = old.fields.find((q) => q.key === f.key);
+            const description = (x) =>
+              x.name +
+              "（" +
+              (x.type === "number" ? "數字，" + x.unit : "文字") +
+              "）";
+            if (!original) add("新增", p.title + "／欄位", "（無）", f.name);
+            else if (JSON.stringify(original) !== JSON.stringify(f))
+              changed(
+                p.title + "／欄位",
+                description(original),
+                description(f),
+              );
+          }
+        }
+        return out;
+      }
+      function comparePage() {
+        const s = chosen();
+        const pairs = s.revisions.slice(1).map((r, i) => [s.revisions[i], r]);
+        const pair =
+          pairs.find(([a, b]) => a.no + ":" + b.no === comparePair) ||
+          pairs.at(-1);
+        if (!pair)
+          return '<section class="panel"><h1>尚無可比較的前後兩版</h1></section>';
+        const [a, b] = pair;
+        comparePair = a.no + ":" + b.no;
+        const diff = differences(a.content, b.content);
+        return `<section class="panel">${button(
+          "返回建議詳情",
+          "detail",
+          "link",
+        )}
+    <h1>比較前後兩版</h1><p>${
+      escapeHtml(latest(s).content.title) || "（未填名稱）"
+    }</p>
+    <label for="compare-pair">相鄰版本</label><select id="compare-pair">
+    ${pairs
+      .map(
+        ([x, y]) => `<option value="${x.no}:${y.no}"
+      ${comparePair === x.no + ":" + y.no ? "selected" : ""}>第 ${
+        x.no
+      } 版／第 ${y.no} 版
+      </option>`,
+      )
+      .join(
+        "",
+      )}</select><h2 id="comparison-summary" tabindex="-1">差異摘要</h2>
+    ${
+      diff.length
+        ? '<ul class="change-list">' +
+          diff
+            .map(
+              (d, i) => `<li data-difference="${i}">
+      <span class="badge">${d.kind}</span> <strong>${escapeHtml(
+        d.label,
+      )}</strong>
+      <p>前：${escapeHtml(d.before)}<br>後：${escapeHtml(d.after)}</p>
+      <div class="actions">${button("看前版", "jump-before:" + i, "link")}
+      ${button("看後版", "jump-after:" + i, "link")}</div></li>`,
+            )
+            .join("") +
+          "</ul>"
+        : "<p>這兩版內容相同。</p>"
+    }
+    <div class="compare-grid">${[
+      ["before", a],
+      ["after", b],
+    ]
+      .map(
+        ([side, r]) => `<details class="compare-side" id="compare-${side}"
+        ${matchMedia("(max-width: 640px)").matches ? "" : "open"}>
+        <summary>${side === "before" ? "前版" : "後版"}：第 ${
+          r.no
+        } 版完整內容</summary>
+        <p>${r.actor} · ${r.time}</p>${versionEvents(s, r.no)}
+        ${contentMarkup(r.content, "compare-" + side)}
+        ${button("返回差異摘要", "jump-summary", "link")}</details>`,
+      )
+      .join("")}</div></section>`;
+      }
+      function validate(content) {
+        const out = {};
+        const check = (path, value, label) => {
+          if (!String(value ?? "").trim()) out[path] = "請填寫" + label;
+        };
+        check("title", content.title, "查核項目名稱");
+        if (content.title.trim().length > 256)
+          out.title = "名稱不得超過 256 字元";
+        if (!content.points.length) out.points = "請至少新增一個查核項次";
+        content.points.forEach((p, i) => {
+          const k = "points." + i;
+          check(k + ".title", p.title, "項次標題");
+          p.fields.forEach((f, j) => {
+            const key = k + ".fields." + j;
+            check(key + ".name", f.name, "欄位名稱");
+            if (f.type === "number") check(key + ".unit", f.unit, "單位");
+          });
+          if (p.standardType === "text")
+            check(k + ".text", p.text, "標準文字");
+          const number = (key, value, label) => {
+            if (!String(value ?? "").trim() || !Number.isFinite(Number(value)))
+              out[key] = "請填寫有效的" + label;
+          };
+          if (p.standardType === "number") {
+            if (
+              !p.fields.some((f) => f.key === p.bound && f.type === "number")
+            )
+              out[k + ".bound"] = "請選擇用來判定的數字欄位";
+            if (p.operator === "range" && p.rangeForm === "interval") {
+              number(k + ".lower", p.lower, "下限");
+              number(k + ".upper", p.upper, "上限");
+              if (
+                !out[k + ".lower"] &&
+                !out[k + ".upper"] &&
+                Number(p.lower) > Number(p.upper)
+              )
+                out[k + ".lower"] = "下限不能大於上限";
+            } else {
+              number(k + ".value", p.value, "標準值");
+              if (p.operator === "range" || String(p.tolerance).trim()) {
+                number(k + ".tolerance", p.tolerance, "容許誤差");
+                if (Number(p.tolerance) < 0)
+                  out[k + ".tolerance"] = "容許誤差不能小於 0";
+              }
+            }
+          }
+          if (
+            !String(p.photoCount).trim() ||
+            !Number.isInteger(Number(p.photoCount)) ||
+            Number(p.photoCount) < 1
+          )
+            out[k + ".photoCount"] = "照片至少需要 1 張";
+        });
+        return out;
+      }
+      function clean(content) {
+        const next = clone(content);
+        next.title = next.title.trim();
+        next.points.forEach((p) => {
+          p.title = p.title.trim();
+          p.fields.forEach((f) => {
+            f.name = f.name.trim();
+            f.unit = f.type === "number" ? f.unit.trim() : "";
+          });
+        });
+        return next;
+      }
+      function showEditorErrors() {
+        const entries = Object.entries(errors);
+        if (!entries.length) return;
+        $("#error-summary").innerHTML =
+          `<section class="error-summary" role="alert">
+    <h2>請修正 ${entries.length} 個欄位</h2><ul>` +
+          entries
+            .map(
+              ([path, text]) =>
+                `<li>${button(text, "focus:" + path, "link")}</li>`,
+            )
+            .join("") +
+          "</ul></section>";
+        const path = entries[0][0];
+        const el =
+          path === "points" ? $("#points-error") : $("#" + fieldId(path));
+        if (path === "points") el.tabIndex = -1;
+        el.closest("details")?.setAttribute("open", "");
+        reveal(el);
+        el.focus({ preventScroll: true });
+      }
+      function openEditor(onlyName = false) {
+        const s = chosen();
+        if (!(
+          (state.role === "wu" && s.status === "PENDING") ||
+          (state.role === s.proposer &&
+            canEditSource() &&
+            s.status === "RETURNED")
+        ))
+          return;
+        nameOnly = onlyName;
+        draft = clone(latest(s).content);
+        draftBaseline = JSON.stringify(draft);
+        editorOrigin = {
+          revision: latest(s).no,
+          status: s.status,
+          role: state.role,
+        };
+        errors = {};
+        screen = "editor";
+        render();
+        if (nameOnly) {
+          reveal($("#f-title"));
+          $("#f-title").focus({ preventScroll: true });
+        }
+      }
+      function saveRevision(submitForReview = false) {
+        const s = chosen();
+        if (
+          editorOrigin.role !== state.role ||
+          editorOrigin.status !== s.status ||
+          editorOrigin.revision !== latest(s).no
+        ) {
+          return notify("狀態或版本已更新，請重新開啟建議後再修改。");
+        }
+        if (s.status === "RETURNED" && !canEditSource())
+          return notify("沒有來源專案編輯權，不能保存修改。");
+        errors = state.role === "wu" || submitForReview ? validate(draft) : {};
+        if (Object.keys(errors).length) {
+          render(false);
+          return showEditorErrors();
+        }
+        const next = clean(draft),
+          changed = JSON.stringify(next) !== JSON.stringify(latest(s).content);
+        if (changed) revision(s, next, names[state.role]);
+        selectedVersion = latest(s).no;
+        draft = null;
+        screen = "detail";
+        render();
+        if (state.role === "wu") checkNameConflict();
+        const message =
+          state.role === "wu"
+            ? (changed
+                ? "已存第 " + latest(s).no + " 版，"
+                : "內容沒有變更，沿用原版本；") +
+              (targets[s.id]?.system
+                ? "目的地已保留，可再按核准。"
+                : "請選擇目的地後再按核准。")
+            : changed
+              ? "已保存第 " + latest(s).no + " 版，尚未送審。"
+              : "內容沒有變更，沿用原版本；尚未送審。";
+        notify(
+          message,
+          $(state.role === "wu" ? "#approval-feedback" : "#submit-feedback"),
+          true,
+        );
+        if (submitForReview) resubmit();
+      }
+      function checkNameConflict(failed = false) {
+        const s = chosen(),
+          target = targets[s.id];
+        const normalize = (value) =>
+          value.trim().toLowerCase().replaceAll("ß", "ss");
+        const conflict =
+          target?.system &&
+          state.library.some(
+            (t) =>
+              t.system === target.system &&
+              normalize(t.title) === normalize(latest(s).content.title),
+          );
+        const host = $("#name-conflict"),
+          title = $("#approval-title");
+        host.setAttribute("role", failed ? "alert" : "status");
+        host.innerHTML = conflict
+          ? `<p>此系統已有同名範本「${escapeHtml(
+              latest(s).content.title,
+            )}」。${
+              failed ? "本次沒有新增。" : "核准前請修改名稱或改選系統。"
+            }</p>${button("修改名稱", "rename", "link")}`
+          : "";
+        title.removeAttribute("aria-invalid");
+        title.setAttribute(
+          "aria-describedby",
+          conflict ? "title-hint name-conflict" : "title-hint",
+        );
+        if (conflict && failed) {
+          title.setAttribute("aria-invalid", "true");
+          reveal(title);
+          title.focus({ preventScroll: true });
+        }
+        return Boolean(conflict);
+      }
+      function approval() {
+        const s = chosen();
+        if (state.role !== "wu" || s.status !== "PENDING") return;
+        const target = targets[s.id] || { category: "", system: "" };
+        const setError = (id, text) => {
+          const el = $("#" + id);
+          el.setAttribute("aria-invalid", "true");
+          $("#" + id + "-error").textContent = text;
+          $("#" + id + "-error").setAttribute("role", "alert");
+          reveal(el);
+          el.focus({ preventScroll: true });
+        };
+        if (!target.category)
+          return setError("category", "請選擇目標工程類別");
+        if (!target.system) return setError("system", "請選擇目標系統");
+        if (Object.keys(validate(latest(s).content)).length) {
+          openEditor();
+          errors = validate(draft);
+          render(false);
+          return showEditorErrors();
+        }
+        if (checkNameConflict(true)) return;
+        const no = latest(s).no,
+          content = clone(latest(s).content);
+        const categoryName = { building: "建築工程", road: "道路工程" }[
+          target.category
+        ];
+        const systemName = {
+          structure: "結構工程",
+          waterproof: "防水工程",
+          pavement: "路面工程",
+        }[target.system];
+        confirmAt(
+          $("#approve-confirm"),
+          "確認核准入庫",
+          "將第 " +
+            no +
+            " 版「" +
+            content.title +
+            "」建立為「" +
+            categoryName +
+            "／" +
+            systemName +
+            "」的一筆獨立範本；不覆蓋既有範本，也不改來源專案。",
+          () => {
+            if (s.status !== "PENDING" || latest(s).no !== no)
+              throw Error("版本或狀態已改變，請重新讀取。");
+            const sequence =
+              Math.max(
+                0,
+                ...state.library
+                  .filter((t) => t.system === target.system)
+                  .map((t) => t.sequence),
+              ) + 1;
+            state.library.push({
+              title: content.title,
+              ...clone(target),
+              sequence,
+              content: clone(content),
+            });
+            s.target = freeze({
+              ...clone(target),
+              path: categoryName + "／" + systemName,
+              title: content.title,
+              revision: no,
+              sequence,
+              time: stamp(),
+            });
+            transition(s, "APPROVED", "吳經理");
+            render();
+            notify(
+              "已核准第 " + no + " 版並新增一筆範本；原建議與來源項目保留。",
+              $("#feedback"),
+              true,
+            );
+          },
+        );
+      }
+      function returnForm() {
+        $("#return-host").innerHTML = `<form id="return-form" novalidate>
+    <h3>退回第 ${latest(chosen()).no} 版</h3>
+    <label for="reason">退回原因 <span class="required">＊</span></label>
+    <textarea id="reason"
+      aria-describedby="reason-error reason-hint"></textarea>
+    <p id="reason-hint" class="muted">1～1000 字元，請說明要修改的地方。</p>
+    <p id="reason-error" class="field-error" role="alert"></p>
+    <div class="actions">${button("取消退回", "cancel-return")}
+    <button type="submit">退回建議</button></div>
+    <div id="return-confirm"></div></form>`;
+        const el = $("#reason");
+        reveal(el);
+        el.focus({ preventScroll: true });
+      }
+      function returnSuggestion() {
+        const reason = $("#reason").value.trim();
+        if (!reason || reason.length > 1000) {
+          $("#reason-error").textContent = !reason
+            ? "請填寫退回原因"
+            : "退回原因不得超過 1000 字元";
+          const el = $("#reason");
+          el.setAttribute("aria-invalid", "true");
+          reveal(el);
+          el.focus({ preventScroll: true });
+          return;
+        }
+        const s = chosen(),
+          no = latest(s).no;
+        confirmAt(
+          $("#return-confirm"),
+          "確認退回建議",
+          "退回第 " +
+            no +
+            " 版「" +
+            latest(s).content.title +
+            "」。" +
+            names[s.proposer] +
+            "將看到原因：" +
+            reason +
+            "。原版及本次原因會保留，可修改後重送。",
+          () => {
+            if (s.status !== "PENDING" || latest(s).no !== no)
+              throw Error("版本或狀態已改變，請重新讀取。");
+            transition(s, "RETURNED", "吳經理", reason);
+            render();
+            notify(
+              "已退回第 " + no + " 版，原因與審核人已保存。",
+              $("#feedback"),
+              true,
+            );
+          },
+        );
+      }
+      function resubmit() {
+        const s = chosen();
+        if (
+          state.role !== s.proposer ||
+          !canEditSource() ||
+          s.status !== "RETURNED"
+        )
+          return;
+        const ret = s.events.findLast((e) => e.status === "RETURNED");
+        const issues = validate(latest(s).content);
+        if (latest(s).no <= ret.revision)
+          return notify(
+            "請先修改退回內容並保存新版本，再重新送審。",
+            $("#submit-error"),
+            true,
+          );
+        if (Object.keys(issues).length) {
+          $("#submit-error").innerHTML =
+            `<section class="error-summary" role="alert" tabindex="-1">
+              <h2>此版尚未送審，請完成以下欄位</h2><ul>${Object.entries(issues)
+                .map(
+                  ([path, text]) =>
+                    `<li>${button(text, "fix-submit:" + path, "link")}</li>`,
+                )
+                .join("")}</ul></section>`;
+          reveal($("#submit-error"));
+          $("#submit-error section").focus({ preventScroll: true });
+          return;
+        }
+        const no = latest(s).no;
+        confirmAt(
+          $("#submit-confirm"),
+          "確認重新送審",
+          "將本件第 " +
+            no +
+            " 版重新交給範本管理者審核；" +
+            "沿用同一件建議，先前內容與退回原因繼續保留。" +
+            pendingWarning,
+          () => {
+            if (s.status !== "RETURNED" || latest(s).no !== no)
+              throw Error("版本或狀態已改變，請重新讀取。");
+            transition(s, "PENDING", names[state.role]);
+            render();
+            notify("第 " + no + " 版已重新送審。", $("#feedback"), true);
+          },
+        );
+      }
+      function render(moveFocus = true) {
+        if (screen !== "editor") nameOnly = false;
+        shell();
+        const pages = {
+          project: projectPage,
+          settings: settingsPage,
+          library: libraryPage,
+          mine: () => listPage("mine"),
+          review: () => listPage("review"),
+          detail: detailPage,
+          editor: editorPage,
+          compare: comparePage,
+        };
+        $("#app").innerHTML = pages[screen]();
+        if ($("#settings-theme"))
+          $("#settings-theme").value = $("#theme").value;
+        if (moveFocus) focusHeading();
+      }
+      function editAgain(focusId) {
+        render(false);
+        const el = focusId ? $("#" + focusId) : null;
+        if (el) el.focus({ preventScroll: true });
+      }
+      function swap(array, i, j) {
+        if (j >= 0 && j < array.length)
+          [array[i], array[j]] = [array[j], array[i]];
+      }
+      function action(value) {
+        const [name, ...parts] = value.split(":"),
+          i = Number(parts[0]),
+          j = Number(parts[1]);
+        if (
+          ["project", "settings", "library", "mine", "review"].includes(name)
+        )
+          return go(name);
+        if (name === "mine-settings") {
+          mineOrigin = "settings";
+          filters.mine = { status: "all", query: "", page: 0 };
+          return go("mine");
+        }
+        if (name === "my-project") {
+          mineOrigin = "project";
+          filters.mine = {
+            status: "all",
+            query: "",
+            page: 0,
+            project: projectName,
+          };
+          return go("mine");
+        }
+        if (name === "clear-project") {
+          delete filters.mine.project;
+          return render();
+        }
+        if (name === "propose") {
+          if (state.role !== "lin" || !state.canEdit) return;
+          const content = clone(state.sources[i]);
+          const duplicate = state.suggestions.some(
+            (s) =>
+              s.project === projectName &&
+              s.sourceIndex === i &&
+              ["PENDING", "RETURNED"].includes(s.status),
+          );
+          return confirmAt(
+            $("#source-confirm-" + i),
+            "確認提出建議",
+            "將「" +
+              content.title +
+              "」目前的項目、標準、實測欄位定義及照片需求複製成一件待審建議；" +
+              "不改來源、不複製查核結果或照片，送出即進入待審。" +
+              pendingWarning +
+              (duplicate
+                ? "提醒：同一來源項目已有待審或退回件；仍可繼續提出另一件建議。"
+                : ""),
+            () => {
+              const s = {
+                id: state.nextId++,
+                proposer: "lin",
+                sourceIndex: i,
+                project: projectName,
+                sourceName: content.title,
+                status: "PENDING",
+                revisions: [],
+                events: [],
+                target: null,
+              };
+              revision(s, content, "林小姐");
+              transition(s, "PENDING", "林小姐");
+              state.suggestions.push(s);
+              render();
+              notify(
+                "「" +
+                  content.title +
+                  "」已送審。可由「我的範本建議」查看結果。",
+                $("#feedback"),
+                true,
+              );
+              $("#feedback .notice").insertAdjacentHTML(
+                "beforeend",
+                button("查看我的範本建議", "my-project", "link"),
+              );
+            },
+          );
+        }
+        if (name === "open") {
+          selectedId = i;
+          selectedVersion = latest(chosen()).no;
+          detailKind = screen === "review" ? "review" : "mine";
+          screen = "detail";
+          return render();
+        }
+        if (name === "version") {
+          selectedVersion = i;
+          screen = "detail";
+          return render();
+        }
+        if (name === "detail") {
+          screen = "detail";
+          return render();
+        }
+        if (name === "edit") return openEditor();
+        if (name === "rename") return openEditor(true);
+        if (name === "latest-version") {
+          selectedVersion = latest(chosen()).no;
+          render();
+          checkNameConflict();
+          reveal($("#approval-area"));
+          return $("#approval-title").focus({ preventScroll: true });
+        }
+        if (name === "save-submit") return saveRevision(true);
+        if (name === "fix-submit") {
+          const path = parts.join(":");
+          openEditor();
+          errors = validate(draft);
+          render(false);
+          showEditorErrors();
+          return action("focus:" + path);
+        }
+        if (name === "jump-summary") {
+          const el = $("#comparison-summary");
+          reveal(el);
+          return el.focus({ preventScroll: true });
+        }
+        if (name === "jump-before" || name === "jump-after") {
+          const side = name === "jump-before" ? "before" : "after";
+          const [a, b] = comparePair.split(":").map(Number);
+          const s = chosen();
+          const first = s.revisions.find((r) => r.no === a).content;
+          const second = s.revisions.find((r) => r.no === b).content;
+          const d = differences(first, second)[i];
+          const host = $("#compare-" + side);
+          host.open = true;
+          const el =
+            document.getElementById(
+              "compare-" + side + "-point-" + d.pointKey,
+            ) || $("#compare-" + side + "-item");
+          el.focus({ preventScroll: true });
+          return el.scrollIntoView({ block: "start" });
+        }
+        if (name === "cancel-edit")
+          return guard(() => {
+            screen = "detail";
+            render();
+          });
+        if (name === "compare") {
+          comparePair = "";
+          screen = "compare";
+          return render();
+        }
+        if (name === "prev" || name === "next-page") {
+          filters[screen].page += name === "prev" ? -1 : 1;
+          return render();
+        }
+        if (name === "focus") {
+          const path = parts.join(":"),
+            el =
+              path === "points" ? $("#points-error") : $("#" + fieldId(path));
+          el.closest("details")?.setAttribute("open", "");
+          el.tabIndex = el.tabIndex < 0 ? -1 : el.tabIndex;
+          reveal(el);
+          return el.focus({ preventScroll: true });
+        }
+        if (name === "show-return") return returnForm();
+        if (name === "cancel-return") {
+          $("#return-host").innerHTML = "";
+          return $("[data-action=show-return]").focus({ preventScroll: true });
+        }
+        if (name === "resubmit") return resubmit();
+        if (name === "withdraw") {
+          const s = chosen(),
+            no = latest(s).no;
+          return confirmAt(
+            $("#withdraw-confirm"),
+            "確認撤回建議",
+            "撤回「" +
+              latest(s).content.title +
+              "」後不再審核；各版與退回原因保留，本件不能再重送。需要再次提議時請建立新件。",
+            () => {
+              if (
+                state.role !== s.proposer ||
+                !["PENDING", "RETURNED"].includes(s.status)
+              )
+                throw Error("此建議目前不能撤回。");
+              transition(s, "WITHDRAWN", names[state.role]);
+              render();
+              notify(
+                "已撤回第 " + no + " 版建議，內容與歷程保留。",
+                $("#feedback"),
+                true,
+              );
+            },
+            true,
+          );
+        }
+        if (name === "add-point") {
+          const p = clone(second.points[0]);
+          p.key = "p-" + state.key++;
+          p.title = "新增查核項次";
+          p.fields = [];
+          draft.points.push(p);
+          return editAgain();
+        }
+        if (name === "remove-point")
+          return confirmAt(
+            $("#point-confirm-" + i),
+            "確認移除項次",
+            "從本次新版本移除「" +
+              draft.points[i].title +
+              "」；舊版仍保留此項次。",
+            () => {
+              draft.points.splice(i, 1);
+              editAgain();
+            },
+            true,
+          );
+        if (name === "point-up" || name === "point-down") {
+          swap(draft.points, i, i + (name === "point-up" ? -1 : 1));
+          return editAgain();
+        }
+        if (name === "add-field") {
+          draft.points[i].fields.push({
+            key: "f-" + state.key++,
+            name: "新增欄位",
+            type: "text",
+            unit: "",
+          });
+          return editAgain();
+        }
+        if (name === "remove-field") {
+          const p = draft.points[i];
+          if (p.bound === p.fields[j].key && p.standardType === "number")
+            return;
+          p.fields.splice(j, 1);
+          return editAgain();
+        }
+        if (name === "field-up" || name === "field-down") {
+          swap(draft.points[i].fields, j, j + (name === "field-up" ? -1 : 1));
+          return editAgain();
+        }
+      }
+      // 聚焦改名只是初始收合策略；尊重使用者後續展開的編修意圖。
+      document.addEventListener(
+        "toggle",
+        (event) => {
+          if (
+            screen === "editor" &&
+            event.target.matches?.(".point-editor") &&
+            event.target.open
+          )
+            nameOnly = false;
+        },
+        true,
+      );
+      document.addEventListener("click", (event) => {
+        const el = event.target.closest("[data-action]");
+        if (el && !el.disabled) action(el.dataset.action);
+      });
+      document.addEventListener("input", (event) => {
+        const el = event.target;
+        if (!el.dataset.path || !draft) return;
+        const parts = el.dataset.path.split(".");
+        let object = draft;
+        for (const key of parts.slice(0, -1)) object = object[key];
+        object[parts.at(-1)] = el.value;
+        if (errors[el.dataset.path]) {
+          delete errors[el.dataset.path];
+          el.removeAttribute("aria-invalid");
+          $("#" + el.id + "-error").textContent = "";
+        }
+        const submit = $("[data-action=save-submit]");
+        if (submit) {
+          submit.disabled = !dirty() && !revisedAfterReturn(chosen());
+          $("#editor-submit-hint").textContent = submit.disabled
+            ? "請先修改退回內容，才能重新送審。"
+            : "重新送審前會檢查所有欄位；只儲存可保留未完成內容。";
+        }
+      });
+      document.addEventListener("change", (event) => {
+        const el = event.target;
+        if (el.id === "settings-theme") {
+          $("#theme").value = el.value;
+          return applyTheme();
+        }
+        if (el.id === "filter-status") {
+          filters[screen].status = el.value;
+          filters[screen].page = 0;
+          render(false);
+          return $("#filter-status").focus({ preventScroll: true });
+        }
+        if (el.id === "version") {
+          selectedVersion = Number(el.value);
+          render(false);
+          return $("#version").focus({ preventScroll: true });
+        }
+        if (el.id === "compare-pair") {
+          comparePair = el.value;
+          render(false);
+          return $("#compare-pair").focus({ preventScroll: true });
+        }
+        if (el.id === "category") {
+          const target = (targets[selectedId] = {
+            category: el.value,
+            system: "",
+          });
+          $("#system").innerHTML = systemOptions(target.category);
+          $("#system").disabled = !el.value;
+          el.removeAttribute("aria-invalid");
+          $("#category-error").textContent = "";
+          checkNameConflict();
+          return;
+        }
+        if (el.id === "system") {
+          targets[selectedId].system = el.value;
+          el.removeAttribute("aria-invalid");
+          $("#system-error").textContent = "";
+          checkNameConflict();
+          return;
+        }
+        if (el.dataset.path && draft && el.tagName === "SELECT") {
+          const parts = el.dataset.path.split(".");
+          let object = draft;
+          for (const key of parts.slice(0, -1)) object = object[key];
+          object[parts.at(-1)] = el.value;
+          if (parts.at(-1) === "type" && el.value === "text") object.unit = "";
+          return editAgain(el.id);
+        }
+      });
+      document.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (event.isComposing) return;
+        if (event.target.id === "editor-form") return saveRevision();
+        if (event.target.id === "approve-form") return approval();
+        if (event.target.id === "return-form") return returnSuggestion();
+        if (event.target.id === "list-filter") {
+          filters[screen].query = $("#search").value.trim();
+          filters[screen].page = 0;
+          return render();
+        }
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && event.isComposing) event.preventDefault();
+        if (event.key === "Escape") {
+          const cancel = $("[data-confirm-cancel]");
+          if (cancel) return cancel.click();
+          if (!$("#person-menu").hidden) {
+            $("#person-menu").hidden = true;
+            $("#person-trigger").setAttribute("aria-expanded", "false");
+            return $("#person-trigger").focus({ preventScroll: true });
+          }
+          if (!$("#prototype-help").hidden) setHelp(false);
+        }
+        // 單檔原型在離線 Chrome 仍提供明確的選單鍵盤路徑。
+        const el = event.target;
+        if (
+          el.tagName !== "SELECT" ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey
+        )
+          return;
+        if (!["Home", "End", "ArrowUp", "ArrowDown"].includes(event.key))
+          return;
+        event.preventDefault();
+        const current = el.selectedIndex;
+        el.selectedIndex =
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? el.options.length - 1
+              : Math.max(
+                  0,
+                  Math.min(
+                    el.options.length - 1,
+                    current + (event.key === "ArrowDown" ? 1 : -1),
+                  ),
+                );
+        if (el.selectedIndex !== current) {
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      });
+      function applyTheme() {
+        document.documentElement.dataset.theme = $("#theme").value;
+        if ($("#settings-theme"))
+          $("#settings-theme").value = $("#theme").value;
+      }
+      function setHelp(open) {
+        $("#prototype-help").hidden = !open;
+        $("#help-toggle").setAttribute("aria-expanded", String(open));
+        if (!open) $("#help-toggle").focus({ preventScroll: true });
+      }
+      $("#theme").onchange = applyTheme;
+      $("#help-toggle").onclick = () => setHelp($("#prototype-help").hidden);
+      $("#help-close").onclick = () => setHelp(false);
+      $("#person-trigger").onclick = () => {
+        const open = $("#person-menu").hidden;
+        $("#person-menu").hidden = !open;
+        $("#person-trigger").setAttribute("aria-expanded", String(open));
+        if (open) $("#person-menu button").focus({ preventScroll: true });
+      };
+      $("#role").onchange = (e) => {
+        const role = e.target.value;
+        e.target.value = state.role;
+        guard(() => {
+          state.role = role;
+          screen = role === "wu" ? "library" : "project";
+          render();
+        });
+      };
+      $("#lost-access").onchange = (e) => {
+        const allowed = !e.target.checked;
+        e.target.checked = !state.canEdit;
+        guard(() => {
+          state.canEdit = allowed;
+          render();
+        });
+      };
+      window.addEventListener("beforeunload", (event) => {
+        if (dirty()) {
+          event.preventDefault();
+          event.returnValue = "";
+        }
+      });
+      applyTheme();
+      render();
+      document.body.dataset.ready = "true";
+    </script>
+  </body>
+</html>
