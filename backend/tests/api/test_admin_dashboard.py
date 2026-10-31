@@ -546,9 +546,11 @@ def test_dashboard_tasks_require_global_permission_and_revoke_immediately(
     assert set(row) == {
         "task_id",
         "status",
+        "plan_archived",
         "location",
         "suggested_assignee",
     }
+    assert row["plan_archived"] is False
     assert row["location"] == {
         "zone_name": "A 棟 2 樓",
         "location_text": "機房",
@@ -556,6 +558,7 @@ def test_dashboard_tasks_require_global_permission_and_revoke_immediately(
     assert row["suggested_assignee"] == {
         "user_id": str(world["field_user"].id),
         "name_zh": world["field_user"].name_zh,
+        "is_active": True,
     }
     detail = world["plain"].get(f"{base}/{task.id}")
     assert detail.status_code == 200, detail.text
@@ -757,3 +760,30 @@ def test_effective_access_cache_reads_writes_and_rollback_in_one_request(
         "changed": True,
         "restored": False,
     }
+
+
+def test_dashboard_task_inactive_assignee_and_archive_context(
+    db_session, make_client
+):
+    """主管總覽取得停用與封存狀態，歷史任務只顯示中性提醒（#734）。"""
+    from app.models import InspectionPlan
+
+    world = _dashboard_fixture(db_session, make_client)
+    task = db_session.scalar(
+        select(InspectionTask).where(
+            InspectionTask.project_id == world["project"].id,
+            InspectionTask.status == "PENDING",
+        )
+    )
+    assert task is not None
+    person = world["field_user"]
+    person.is_active = False
+    plan = db_session.get(InspectionPlan, task.plan_id)
+    assert plan is not None
+    plan.is_archived = True
+    db_session.commit()
+    base = f"/api/v1/admin/dashboard/projects/{task.project_id}/tasks"
+    detail = world["admin"].get(f"{base}/{task.id}")
+    assert detail.status_code == 200
+    assert detail.json()["plan_archived"] is True
+    assert detail.json()["suggested_assignee"]["is_active"] is False

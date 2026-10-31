@@ -3,7 +3,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import styles from './components.module.css'
 
 export type ButtonVariant =
-  'primary' | 'secondary' | 'tertiary' | 'destructive'
+  'primary' | 'secondary' | 'tertiary' | 'destructive' | 'destructiveOutline'
 
 /**
  * 依優先順序呈現操作，載入時阻擋重複觸發。

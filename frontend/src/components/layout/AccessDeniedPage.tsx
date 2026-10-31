@@ -4,11 +4,18 @@ import { Link } from 'react-router'
 import { landingPath } from '../../auth/landing'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 
-/** ADM-R25：統一頁級無權限提示與符合使用者權限的返回落點。 */
+/**
+ * 統一頁級無權限提示與符合使用者權限的返回落點（ADM-R25）。
+ * 預設提示與補充說明分開呈現，讓測試與 e2e 能精準比對預設提示；
+ * 真值判斷讓空字串採預設提示，避免補充說明以句號開頭。
+ */
 export default function AccessDeniedPage({
   headingLevel = 1,
+  message,
 }: {
   headingLevel?: 1 | 2
+  /** 覆蓋預設提示；空字串視為未提供。 */
+  message?: string
 }) {
   const { user } = useCurrentUser()
   const headingId = useId()
@@ -16,9 +23,12 @@ export default function AccessDeniedPage({
 
   return (
     <section aria-labelledby={headingId}>
-      <Heading id={headingId}>無權限</Heading>
+      <Heading className="access-denied-heading" id={headingId}>
+        無權限
+      </Heading>
       <p className="notice-info" role="status">
-        你沒有使用這個頁面的權限
+        <span>{message || '你沒有使用這個頁面的權限'}</span>
+        {!message && <span>。如需使用，請洽系統管理者。</span>}
       </p>
       <Link className="btn" to={landingPath(user)}>
         回到我的首頁

@@ -2,3 +2,80 @@
   margin: 0.25rem 0 0.75rem;
   color: var(--text-muted);
 }
+
+.planning-task-item-choice {
+  margin-block: var(--space-4);
+}
+
+.planning-task-item-choice > details {
+  margin-inline-start: var(--space-5);
+  padding: var(--space-2);
+  border-inline-start: 2px solid var(--border);
+}
+
+.planning-section-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-block-start: var(--space-5);
+}
+
+.plan-list .planning-plan-link {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  text-align: start;
+}
+
+.planning-task-row {
+  display: block;
+  min-height: 44px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+
+.planning-task-row p {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.planning-task-row h4 {
+  text-decoration: none;
+}
+
+.planning-task-name {
+  text-decoration: underline;
+}
+
+.planning-parent-plan {
+  margin-block: 0 var(--space-2);
+}
+
+.planning-task-delete {
+  margin-block-start: var(--space-4);
+}
+
+.planning-item-label {
+  display: inline;
+}
+
+.planning-inactive-label {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.planning-task-list {
+  list-style: none;
+  padding: 0;
+}
+
+.planning-section-title > h3 {
+  margin-block: 0;
+}

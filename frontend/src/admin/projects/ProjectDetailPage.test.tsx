@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -12,6 +13,7 @@ import type { CurrentUser } from '../../auth/api'
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import ProjectDetailPage from './ProjectDetailPage'
+import { deferred, type Deferred } from '../../testing/submitGuard'
 
 const currentUser: CurrentUser = {
   id: 'user-1',
@@ -70,6 +72,7 @@ function renderMembers(
   failBatch = false,
   bobRoleIds = ['role-a'],
   active = true,
+  reloadGate?: Deferred<void>,
 ) {
   const members = [
     createMember('user-1', 'anna.deng', ['role-a']),
@@ -86,8 +89,21 @@ function renderMembers(
         body: String(init?.body ?? ''),
       }
       calls.push(call)
-      if (call.method === 'GET' && call.path.endsWith('/members'))
+      if (call.method === 'GET' && call.path.endsWith('/members')) {
+        if (
+          calls.filter((item) => item.path.endsWith('/members')).length > 1
+        ) {
+          await reloadGate?.promise
+        }
         return Response.json(members)
+      }
+      if (call.method === 'DELETE') {
+        const index = members.findIndex((member) =>
+          call.path.endsWith(`/members/${member.user_id}`),
+        )
+        if (index !== -1) members.splice(index, 1)
+        return new Response(null, { status: 204 })
+      }
       if (call.method === 'GET' && call.path.endsWith('/member-candidates')) {
         return Response.json({ items: [], next_cursor: null })
       }
@@ -99,6 +115,20 @@ function renderMembers(
             { error: { code: 'request.validation_failed' } },
             { status: 422 },
           )
+        const body = JSON.parse(call.body) as {
+          items: Array<{ user_id: string; role_ids: string[] }>
+        }
+        for (const item of body.items) {
+          const member = members.find(
+            (entry) => entry.user_id === item.user_id,
+          )
+          if (member) {
+            Object.assign(
+              member,
+              createMember(member.user_id, member.username, item.role_ids),
+            )
+          }
+        }
         return Response.json({ items: [] })
       }
       return Response.json({})
@@ -125,6 +155,48 @@ afterEach(() => {
 })
 
 describe('專案成員批次角色（#414）', () => {
+  it.each(['批次改角色', '移出'] as const)(
+    '%s 成功後等待重查期間保留成員清單，完成後顯示新資料',
+    async (action) => {
+      const gate = deferred()
+      const { calls } = renderMembers(false, ['role-a'], true, gate)
+      const name = await screen.findByText('林鮑伯')
+      const card = name.closest('li')!
+      const list = card.parentElement!
+      if (action === '批次改角色') {
+        fireEvent.click(screen.getByRole('checkbox', { name: /林鮑伯/ }))
+        fireEvent.change(screen.getByLabelText('批次角色'), {
+          target: { value: 'role-b' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: '批次指派角色' }))
+      } else {
+        fireEvent.click(within(card).getByRole('button', { name: /移出專案/ }))
+        fireEvent.click(
+          await screen.findByRole('button', { name: '確認移出' }),
+        )
+      }
+      await waitFor(() =>
+        expect(
+          calls.filter((call) => call.path.endsWith('/members')),
+        ).toHaveLength(2),
+      )
+      expect(screen.queryByText('載入中…')).toBeNull()
+      expect(list).toBeVisible()
+      expect(name).toBeVisible()
+      expect(within(card).getByText('檢視者')).toBeVisible()
+
+      await act(async () => gate.resolve())
+      if (action === '批次改角色') {
+        expect(await within(card).findByText('檢視者、管理者')).toBeVisible()
+        expect(card.parentElement).toBe(list)
+      } else {
+        await waitFor(() => expect(screen.queryByText('林鮑伯')).toBeNull())
+        expect(screen.getByText('鄧安娜')).toBeVisible()
+        expect(list).toBeVisible()
+      }
+    },
+  )
+
   it('不能勾選停用成員的角色，並說明原因', async () => {
     renderMembers(false, ['role-a'], false)
     expect(

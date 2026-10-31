@@ -31,13 +31,25 @@ interface FilterErrors {
   to?: string
 }
 
+// 空值顯示「無」：新增事件的 before、刪除事件的 after 本來就是空值
+// （ALG-R09），不是資料遺失。
 function displayJson(value: unknown): string {
   return value == null ? '無' : JSON.stringify(value, null, 2)
 }
 
+/**
+ * Admin 專用的稽核紀錄查詢頁（ADM-R07、ADM-R08、ALG-R22、ALG-R23）。
+ *
+ * 唯讀：只查詢，不新增、修改或刪除紀錄（ALG-R04）。篩選條件按下
+ * 「查詢」才生效，改了輸入但沒送出時不會重新載入。
+ */
 export default function AuditLogPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([])
+  const [rolesState, setRolesState] = useState<'loading' | 'ready' | 'error'>(
+    'loading',
+  )
   const [optionsError, setOptionsError] = useState('')
   const [projectId, setProjectId] = useState('')
   const [actorId, setActorId] = useState('')
@@ -49,13 +61,26 @@ export default function AuditLogPage() {
   const toRef = useRef<HTMLInputElement>(null)
   const [filters, setFilters] = useState<AuditLogFilters>(emptyFilters)
   const [cursor, setCursor] = useState<string | null>(null)
+  // 後端只給「下一頁」的 cursor；上一頁靠前端記下走過的 cursor 往回退。
   const [history, setHistory] = useState<Array<string | null>>([])
   const [result, setResult] = useState<AuditLogPage | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
+  // 篩選選項與對象名稱對照一次載入；操作者主行固定使用寫入時快照，
+  // 名單只提供登入名與沒有對象快照時的備援查找（ALG-R22）。
   useEffect(() => {
     let active = true
+    void listAllPages<{ id: string; name: string }>('/roles')
+      .then((rows) => {
+        if (active) {
+          setRoles(rows)
+          setRolesState('ready')
+        }
+      })
+      .catch(() => {
+        if (active) setRolesState('error')
+      })
     void Promise.all([
       listAllPages<Project>('/projects'),
       listAllPages<User>('/users'),
@@ -99,6 +124,9 @@ export default function AuditLogPage() {
 
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    // 輸入是本地時間，轉成 UTC 的 ISO 字串再送出（audit-log 規格
+    // 查詢 API：from、to 為 UTC ISO-8601，含起不含迄）；起訖顛倒或
+    // 格式不對就擋在前端，錯誤顯示在欄位旁。
     const fromDate = from ? new Date(from) : null
     const toDate = to ? new Date(to) : null
     const nextErrors: FilterErrors = {}
@@ -147,8 +175,18 @@ export default function AuditLogPage() {
     setHistory((previous) => previous.slice(0, -1))
   }
 
-  function actorName(id: string): string {
-    return userName(id) ?? '未知帳號'
+  // ALG-R22：角色以「目前名稱」呈現，不是事件當時的名稱；角色清單
+  // 成功載入後仍找不到才回 null（role_ids 摘要顯示「已刪除的角色」；
+  // 對象欄查不到名稱時只保留類型，ALG-AC17），載入中或失敗時顯示
+  // 暫時無法顯示，兩者不能混為一談，也不得顯示 UUID。
+  function roleName(id: string): string | null {
+    if (rolesState !== 'ready') return '角色名稱暫時無法顯示'
+    return roles.find((role) => role.id === id)?.name ?? null
+  }
+
+  function accountUsername(id: string): string | null {
+    const user = users.find((candidate) => candidate.id === id)
+    return user?.username ?? null
   }
 
   // 內部編號不給人看：查不到名稱就回 null，由呼叫端決定怎麼說。
@@ -180,13 +218,19 @@ export default function AuditLogPage() {
             </div>
             <div>
               <dt>操作者</dt>
-              <dd>{actorName(entry.created_by)}</dd>
+              <dd className="audit-actor">
+                <span>{entry.actor_snapshot}</span>
+                {accountUsername(entry.created_by) && (
+                  <small>帳號：{accountUsername(entry.created_by)}</small>
+                )}
+              </dd>
             </div>
             <div>
               <dt>對象</dt>
               <dd>
                 {entityLabel(entry, {
                   userName,
+                  roleName,
                   projectName: (id) => {
                     const project = projects.find(
                       (candidate) => candidate.id === id,
@@ -202,9 +246,11 @@ export default function AuditLogPage() {
           <details>
             <summary>查看改前與改後內容</summary>
             <AuditChanges
+              eventType={entry.event_type}
               before={entry.before}
               after={entry.after}
               lookup={{
+                roleName,
                 userName,
                 projectName: (id) => {
                   const project = projects.find((item) => item.id === id)

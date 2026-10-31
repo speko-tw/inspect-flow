@@ -13,7 +13,7 @@
 | T3 | 範本庫服務與 API：工程類別、系統新增／改名／刪除，以及單項範本 CRUD 與覆蓋更新；整個系統僅以 `system_id` 查詢或操作其項目集合；刪除有子系統／範本分別回 `template.category_not_empty`／`template.system_not_empty`（409）；依 api-conventions 實作錯誤、UUID 與分頁，讀取授權依 T2，所有範本寫入允許 Admin 或範本管理員；另以 `system_id` 提供分頁巢狀讀取與整系統覆蓋；Admin 依 AUT-Q2 可讀，請求內的實測欄位識別只用於綁定，持久 UUID 由後端產生 | `backend/app/api/`、`backend/app/auth/access.py`、`backend/app/services/`、`backend/app/main.py`、`backend/tests/api/`、`backend/tests/contract/`、`docs/specs/template-system/`、`docs/specs/authentication/spec.md` | T1、T2 | TPL-AC01、TPL-AC02、TPL-AC03、TPL-AC04、TPL-AC07、TPL-AC08、TPL-AC09、TPL-AC10 | #327、#389 |
 | T4 | 專案套用範本：依 `project_inspection_item.edit` 複製單項或指定 `system_id` 下全部項目結構至 `ProjectInspectionItem`，並保存 `project_id`、來源範本名稱、套用時間及套用當下來源類別／系統名稱；系統套用來源名稱用系統名稱。提供專案成員、Admin、範本管理員讀取完整副本的 cursor 分頁 API。驗證來源覆蓋、改名或刪除不影響副本與來源路徑快照；舊資料路徑未知時保留空值。P4 得擴充副本欄位並定義作廢／重查／更正流程 | `backend/app/` 專案服務/API 與測試 | T1、T2、T3 | TPL-AC05、TPL-AC06、TPL-AC08 | #328；專案副本列表 API #365 |
 | T5 | MVP 範本管理 UI：管理兩層分類、編輯範本結構、標準與實測欄位定義、管理照片需求、預覽單項與整個系統範本；入口掛載於既有 AdminPage，瀏覽連結位於 FieldPage，樣式沿用全域樣式表；Admin 與範本管理員皆可編輯 | `frontend/src/admin/templates/api.ts`、`frontend/src/admin/templates/api.test.ts`、`frontend/src/admin/templates/TemplatesPage.tsx`、`frontend/src/admin/templates/TemplatesPage.test.tsx`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/field/FieldPage.tsx`、`frontend/src/field/FieldPage.test.tsx`、`frontend/src/styles.css` | T2、T3 | TPL-AC02、TPL-AC03、TPL-AC04、TPL-AC07、TPL-AC09、TPL-AC10 | #329、#357、#389 |
-| T6 | 專案套用與存為範本 UI：由具 `project_inspection_item.edit` 權限者以 `template_id` 套用單項，或以 `system_id` 套用整個系統；Admin 與範本管理員可跨專案瀏覽並把專案項目存至指定系統；顯示副本記錄的來源名稱與時間。範本頁另提供管理者跨專案存入範本的流程，並驗證非成員只有讀取／複製能力；專案查核項目列表提供引用任務數（含 #734 負責人核可的綜合修正） | `frontend/src/admin/projects/ProjectTemplatesPage.tsx`、`ProjectTemplatesPage.test.tsx`、`projectTemplatesApi.ts`、`projectTemplatesApi.test.ts`、`frontend/src/admin/projectItems/ProjectItemLinks.tsx`、`ProjectItemLinks.test.tsx`、`frontend/src/admin/projectItems/api.ts`、`api.test.ts`、`frontend/src/admin/projectItems/ProjectItemChangePage.tsx`、`ProjectItemChangePage.test.tsx`、`frontend/src/admin/templates/TemplateItemEditor.tsx`、`frontend/src/admin/planning/PlanningPage.tsx`、`PlanningPage.test.tsx`、`ProjectZonesPage.tsx`、`ProjectZonesPage.test.tsx`、`frontend/src/admin/projectHome/ProjectSectionShell.tsx`、`ProjectSectionShell.test.tsx`、`ProjectHomePage.tsx`、`ProjectHomePage.test.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx`、`ProjectCreationForm.tsx`、`ProjectsPage.tsx`、`ProjectsAdmin.test.tsx`、`frontend/src/auth/ChangePasswordPage.tsx`、`ChangePasswordPage.test.tsx`、`frontend/src/admin/templates/TemplatesPage.tsx`、`TemplatesPage.test.tsx`、`SaveTemplateFromProjectPage.tsx`、`SaveTemplateFromProjectPage.test.tsx`、`SaveTemplateFromProjectPage.css`、`frontend/src/routes.ts`、`frontend/src/admin/AdminPage.tsx`、`backend/app/api/v1/project_inspection_items.py`、`backend/app/services/inspection_details.py`、`backend/tests/api/test_project_template_application.py`、`test_project_item_removal.py`、`test_planning_query_counts.py`、`docs/specs/template-system/spec.md` | T2、T3、T4 | TPL-AC05、TPL-AC06、TPL-AC08、TPL-AC30、TPL-AC31 | #330、#389、#734、#736 |
+| T6 | 專案套用與存為範本 UI：由具 `project_inspection_item.edit` 權限者以 `template_id` 套用單項，或以 `system_id` 套用整個系統；Admin 與範本管理員可跨專案瀏覽並把專案項目存至指定系統；顯示副本記錄的來源名稱與時間。範本頁另提供管理者跨專案存入範本的流程，並驗證非成員只有讀取／複製能力；專案查核項目列表提供引用任務數（含 #734 負責人核可的綜合修正） | `frontend/src/admin/projects/ProjectTemplatesPage.tsx`、`ProjectTemplatesPage.test.tsx`、`projectTemplatesApi.ts`、`projectTemplatesApi.test.ts`、`frontend/src/admin/projectItems/ProjectItemLinks.tsx`、`ProjectItemLinks.test.tsx`、`ProjectItemLinks.css`、`frontend/src/admin/projectItems/api.ts`、`api.test.ts`、`frontend/src/admin/projectItems/ProjectItemChangePage.tsx`、`ProjectItemChangePage.test.tsx`、`frontend/src/admin/templates/TemplateItemEditor.tsx`、`frontend/src/admin/planning/PlanningPage.tsx`、`PlanningPage.test.tsx`、`PlanningPage.css`、`ProjectZonesPage.tsx`、`ProjectZonesPage.test.tsx`、`frontend/src/admin/projectHome/ProjectSectionShell.tsx`、`ProjectSectionShell.test.tsx`、`ProjectSectionShell.css`、`ProjectHomePage.tsx`、`ProjectHomePage.test.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx`、`ProjectDetailPage.test.tsx`、`ProjectCreationForm.tsx`、`ProjectsPage.tsx`、`ProjectsAdmin.test.tsx`、`frontend/src/auth/ChangePasswordPage.tsx`、`ChangePasswordPage.test.tsx`、`frontend/src/admin/templates/TemplatesPage.tsx`、`TemplatesPage.test.tsx`、`SaveTemplateFromProjectPage.tsx`、`SaveTemplateFromProjectPage.test.tsx`、`SaveTemplateFromProjectPage.css`、`frontend/src/routes.ts`、`routes.test.ts`、`frontend/src/admin/AdminPage.tsx`、`backend/app/api/v1/project_inspection_items.py`、`backend/app/services/inspection_details.py`、`backend/tests/api/test_project_template_application.py`、`test_project_item_removal.py`、`test_planning_query_counts.py`、`docs/specs/template-system/spec.md` | T2、T3、T4 | TPL-AC05、TPL-AC06、TPL-AC08、TPL-AC30、TPL-AC31 | #330、#389、#734、#736 |
 | T7 | E2E／整合驗收與文件收尾：驗證權限、複製隔離、照片需求結構及不版本化；依規格確認範圍並更新索引，確保 TPL-AC01～TPL-AC12 都有證據 | `backend/tests/api/`、`backend/tests/contract/`、`frontend/` 範本相關測試、`docs/specs/template-system/spec.md`、`docs/specs/template-system/plan.md`、`docs/specs/README.md` | T1～T6、T8（#356）、#357、#365 | TPL-AC01～TPL-AC12 | #331 |
 | T8 | 範圍條件兩種形式與套用同名拒絕：更新數值標準欄位、驗證、遷移、複製與重複名稱檢查 | `backend/`、`docs/specs/template-system/`、必要的 `docs/specs/database-foundation/` | T1、T3、T4 | TPL-AC11、TPL-AC12 | #356 |
 | T9 | 依核可原型重設範本管理 UI：階層導覽與詳情、手機單欄往返、分開新增與改名、單頁項次卡片與即時預覽、欄位錯誤及草稿保留；項目寫入使用既有單項端點，並驗證綁定欄位的 `unit: null` 契約，不變更 API 端點。#427 第 1 輪修正另持久化實測欄位順序，覆蓋範本、專案副本與任務快照 | 原 T9 檔案；另含 `backend/app/models/template_system.py`、`backend/app/models/inspection_planning.py`、`backend/app/services/template_library.py`、`backend/app/services/inspection_details.py`、`backend/app/services/project_templates.py`、`backend/app/services/inspection_planning_snapshots.py`、`backend/alembic/versions/`、`backend/tests/api/test_project_template_application.py`、`backend/tests/services/test_inspection_planning.py` | T3、T5、T8 | TPL-AC13～TPL-AC17 | #427 |
@@ -70,7 +70,7 @@
 | TPL-AC05 | 服務/API 測試：以 `template_id` 套用單項、以 `system_id` 套用整個系統；確認每筆 `ProjectInspectionItem` 複製完整、含 `project_id`、來源名稱與時間，且來源變更不影響專案資料。 |
 | TPL-AC06 | 權限與整合測試：範本管理員可跨專案讀取並存成範本；專案副本在來源刪改後保持不變。 |
 | TPL-AC07 | API 測試 `test_photo_requirements_are_required_unbounded_and_photo_only`、`test_template_writes_reject_two_photo_requirements_per_point`、`test_structure_validation_requires_exactly_one_photo_requirement`、`test_save_as_template_rejects_a_source_with_two_photo_requirements`、`test_project_item_patch_rejects_invalid_point_structure`，以及資料庫測試 `test_duplicate_photo_requirement_rows_are_blocked_by_the_database`與遷移測試 `test_evidence_unique_migration_keeps_largest_min_count_per_point`：每項次恰好一筆必填照片需求（範本 POST、PUT、整系統 PUT 與專案項目 PATCH 送兩筆都回 422；另存為範本的結構驗證與資料庫唯一索引同樣擋下）、`min_count >= 1`、無最大數量且只接受照片；送入 `overview`／`is_overview` 總覽標記回 422，範本沒有總覽需求欄位，因此總覽照不計入此最低需求。現場照片覆蓋、跨項次共用及總覽照選拍由 P6 `field-evidence` #105 驗收。 |
-| TPL-AC08 | API 整合／契約測試：逐端點驗證讀寫權限；Admin 與範本管理員可執行所有範本庫寫入、存成範本及跨專案瀏覽，一般專案成員（含專案管理者）仍為 403；只有 Admin 可指派或收回固定 `template_admin` 角色，成功後查核稽核紀錄；Admin 與範本管理員的 `GET /api/v1/projects` 均回傳全部專案，其他非 Admin 為 403；分類或系統刪除衝突回指定 409；路徑、UUID、內容型別與錯誤 envelope 依 `api-conventions`。 |
+| TPL-AC08 | API 整合／契約測試：逐端點驗證讀寫權限；Admin 與範本管理員可執行所有範本庫寫入、存成範本及跨專案瀏覽，一般專案成員（含專案管理者）仍為 403；只有 Admin 可指派或收回固定 `template_admin` 角色，成功後查核稽核紀錄；Admin 與範本管理員的 `GET /api/v1/projects` 均回傳全部專案，其他非 Admin 為 403；正式條件見 domain-model 專案管理 API；分類或系統刪除衝突回指定 409；路徑、UUID、內容型別與錯誤 envelope 依 `api-conventions`。 |
 | TPL-AC09 | model/API 測試：同一項次可設多個文字或數字實測欄位；數字欄位有單位；每個數值標準綁定一個數字欄位，僅該欄位單位自動帶入且不可另設；範本 schema 不含現場填值或換算行為。 |
 | TPL-AC10 | 前端測試：範本管理 UI 可管理工程類別、系統與單項查核項目範本；分類或系統刪除衝突顯示對應 409。 |
 | TPL-AC11 | API／migration 測試：兩種形式建立、更新與讀回；省略形式預設 `tolerance`，且空誤差補 `0` 並持久化；明填形式時空誤差及其他非法欄位組合回 422；舊資料轉為 `tolerance` 且空誤差補 `0`；套用後再存成範本保留形式。 |
@@ -115,18 +115,30 @@
 - 依 TPL-AC16，兩頁前端的容許誤差有填時一律須為非負有限值，避免 KD-52 的 ± 顯示負誤差而誤導；後端 API 接受條件不變。舊格式缺省形式統一為 tolerance。
 - 單元測試涵蓋界限、容差、欄位必填與錯誤識別；元件測試將同組輸入套到兩頁，驗證區間空白、負容差、缺省形式及各自重名範圍。驗收對應 TPL-R13、TPL-R16、TPL-R18 與既有 TPL-AC11、TPL-AC16；不改版面。
 
+## Issue #717：停用名稱仍參與比對
+
+套用／改名／存為範本的來源狀態、錯誤訊息與驗證由 inspection-planning 的 #717 接續工作負責，範本庫本身無停用欄位。涵蓋 TPL-R28、TPL-AC32；專案 templates UI 與 API 錯誤轉譯新增停用提示，範本頁不變。
+
+## #717 第 1 輪審查修正
+
+依負責人工作單修正既有停用範圍的規格澄清與驗收：錯誤優先序、啟用同名優先、摘要只計啟用項目、選單重載裁除、草稿停用標示、兩個存為範本入口過濾、錯誤聚焦，以及 PostgreSQL 雙連線鎖等待。不新增或重用 R／AC 編號；仍為規格設計（非負責人裁定），沿用 #717 的負責人指示範圍。
+
+## #717 第 2 輪審查修正
+
+存為範本選到停用來源時，`inactive_name` 的提示改為「來源項目已停用，請先到已停用清單恢復，才能存為範本。」且不附清單連結，與套用／改名的同名衝突提示分開；TPL-R28、TPL-AC32 同步。不新增或重用 R／AC 編號；仍為規格設計（非負責人裁定）。
+
 ## 0.6.x 範本建議與核准（#314）
 
-依 [TPL-R28～R35／AC32～AC42](spec.md#template-suggestions)及該節四則負責人裁定拆分。這裡只規劃未來實作，不在本次文件工作建立資料表、migration、API、UI 或新 issue。原 T1～T14 不改為「尚未完成」；下列任務另以 task issue 開立，issue 只追蹤交付工作，規格仍以文件為準。依已凍結規格開工；重大 UI 仍需人工核可原型。
+依 [TPL-R29～R36／AC33～AC43](spec.md#template-suggestions)及該節四則負責人裁定拆分。這裡只規劃未來實作，不在本次文件工作建立資料表、migration、API、UI 或新 issue。原 T1～T14 不改為「尚未完成」；下列任務另以 task issue 開立，issue 只追蹤交付工作，規格仍以文件為準。依已凍結規格開工；重大 UI 仍需人工核可原型。
 
 | ID | 0.6.x 內容 | 預定獨占檔案／共用責任 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T15 | 建議主件、不可變修訂／審核／狀態歷程資料與一致性約束；來源刪除隔離、內容快照及穩定邏輯識別；SQLite／PostgreSQL migration 測試，不新增正式範本版本表 | 新 `backend/app/models/template_suggestions.py`、一支 `backend/alembic/versions/` migration、`backend/app/models/__init__.py` 只加匯出、新 `backend/tests/db/test_template_suggestions.py`；migration 鏈單獨一波，先查最新 head | 本節已凍結規格；現有 template-system schema | TPL-AC33～AC35（資料約束）、AC38（唯一性） | 待開 task |
-| T16 | 本人 API：一致性複製來源並建立即送審、退回修訂與重送、撤回、本人清單與各版歷程（從首次送審起）；重用共用授權與結構驗證、expected 欄位／主列鎖；同步五種專屬稽核事件登記（本次文件已列目錄，實作時核對） | 新 `backend/app/services/template_suggestions.py`、`backend/app/api/v1/template_suggestions.py`、新 API／service 測試；`main.py` 只加路由註冊、`api/errors.py` 只登記本功能錯誤碼、`services/audit.py` 只加本功能事件；`test_route_access.py` 本功能存取宣告由本任務一次登記 | T15；既有專案項目來源共享鎖／結構驗證與兩層授權 | TPL-AC32～AC35、AC40、AC41（本人操作事件） | 待開 task |
-| T17 | 管理 API：曾送審件清單、待審計數、修訂比較、修改、附原因退回與同交易核准入庫；沿用既有名稱／結構／配號規則；故障注入及固定交錯驗證核准、撤回、修訂競爭；新增範本與核准事件一起回滾 | 接續 T16 的同兩個服務／API 模組，重用 `services/template_library.py` 的驗證與建庫函式，必要時只抽共用入口；新 `test_template_suggestion_review.py` API／DB 測試；稽核欄位僅限本功能 | T16（同檔，不能同波）；既有範本建立與稽核機制 | TPL-AC35～AC42（含 SQLite／PostgreSQL 併發與回滾） | 待開 task |
-| T18 | 【人工關卡】提議入口、個人清單與各版原因、待審數量／清單、兩版比較、修改後核准、同名與欄位錯誤的可點原型及試用腳本；先討論設計，負責人親手操作核可，涵蓋 360px 與鍵盤 | `docs/specs/template-system/ui-suggestion-prototype.html`（新增）與本計畫試用腳本，僅本功能區段 | 本節已凍結規格；可與 T15～T17 後端分波工作並行 | TPL-AC39、AC41（只取得 UI 設計核可，不冒充產品 PASS） | 待開 task |
-| T19 | 接真 API 的提議／個人歷程／待審審核畫面；共用既有項目結構編輯器但不改正式範本版本模型；成功刷新計數、失敗保留草稿／目標並就近提示；操作前顯示對象／影響與確認 | 新 `frontend/src/admin/templates/suggestions/`、對應元件／契約測試；`TemplatesPage.tsx` 只加本功能入口與待審數量、專案 `projectItems/` 只對可編輯者加提議入口與「我的範本建議（N）」連結至 `/settings#template-suggestions`（沿用 ADM-R50 的 `/settings` 路由，不新增全域入口或 Field 首頁入口）、既有 `frontend/src/auth/AppearanceSettings.tsx`（`/settings`）新增只對曾提議者顯示的「我的範本建議」區塊（不要求仍具來源專案／template.use）、`styles.css` 只加本頁樣式；開 task 前列實際檔案鎖 | T17 真 API；T18 人工核可；上述共用前端檔案當時責任線先合併 | TPL-AC32、AC35、AC39～AC41（UI 與真後端契約） | 待開 task |
-| T20 | 真後端整合：來源改刪不影響待審，核准後來源改刪亦不影響入庫範本與已核准件、退回兩次重送、管理者修改後核准、撤回競爭、同名與故障回滾、稽核追溯；桌面／360px／鍵盤走查，整理 0.6.x AC 證據與規格索引 | 新本功能 integration／demo 腳本及測試資料；截圖／log 放 repo 外工作目錄；規格與索引只更新本功能完成證據 | T15～T19；驗收用獨立 SQLite／PostgreSQL 測試庫，不與其他線共用會重建的 schema | TPL-AC32～AC42（彙整） | 待開 task |
+| T15 | 建議主件、不可變修訂／審核／狀態歷程資料與一致性約束；來源刪除隔離、內容快照及穩定邏輯識別；SQLite／PostgreSQL migration 測試，不新增正式範本版本表 | 新 `backend/app/models/template_suggestions.py`、一支 `backend/alembic/versions/` migration、`backend/app/models/__init__.py` 只加匯出、新 `backend/tests/db/test_template_suggestions.py`；migration 鏈單獨一波，先查最新 head | 本節已凍結規格；現有 template-system schema | TPL-AC34～AC36（資料約束）、AC39（唯一性） | 待開 task |
+| T16 | 本人 API：一致性複製來源並建立即送審、退回修訂與重送、撤回、本人清單與各版歷程（從首次送審起）；重用共用授權與結構驗證、expected 欄位／主列鎖；同步五種專屬稽核事件登記（本次文件已列目錄，實作時核對） | 新 `backend/app/services/template_suggestions.py`、`backend/app/api/v1/template_suggestions.py`、新 API／service 測試；`main.py` 只加路由註冊、`api/errors.py` 只登記本功能錯誤碼、`services/audit.py` 只加本功能事件；`test_route_access.py` 本功能存取宣告由本任務一次登記 | T15；既有專案項目來源共享鎖／結構驗證與兩層授權；初次提出沿 IP-R23 檢查啟用來源，既有建議不回查來源狀態 | TPL-AC33～AC36、AC41、AC42（本人操作事件） | 待開 task |
+| T17 | 管理 API：曾送審件清單、待審計數、修訂比較、修改、附原因退回與同交易核准入庫；沿用既有名稱／結構／配號規則；故障注入及固定交錯驗證核准、撤回、修訂競爭；新增範本與核准事件一起回滾 | 接續 T16 的同兩個服務／API 模組，重用 `services/template_library.py` 的驗證與建庫函式，必要時只抽共用入口；新 `test_template_suggestion_review.py` API／DB 測試；稽核欄位僅限本功能 | T16（同檔，不能同波）；既有範本建立與稽核機制 | TPL-AC36～AC43（含 SQLite／PostgreSQL 併發與回滾） | 待開 task |
+| T18 | 【人工關卡】提議入口、個人清單與各版原因、待審數量／清單、兩版比較、修改後核准、同名與欄位錯誤的可點原型及試用腳本；先討論設計，負責人親手操作核可，涵蓋 360px 與鍵盤 | `docs/specs/template-system/ui-suggestion-prototype.html`（新增）與本計畫試用腳本，僅本功能區段 | 本節已凍結規格；可與 T15～T17 後端分波工作並行 | TPL-AC40、AC42（只取得 UI 設計核可，不冒充產品 PASS） | 待開 task |
+| T19 | 接真 API 的提議／個人歷程／待審審核畫面；共用既有項目結構編輯器但不改正式範本版本模型；成功刷新計數、失敗保留草稿／目標並就近提示；操作前顯示對象／影響與確認 | 新 `frontend/src/admin/templates/suggestions/`、對應元件／契約測試；`TemplatesPage.tsx` 只加本功能入口與待審數量、專案 `projectItems/` 只對可編輯者加提議入口與「我的範本建議（N）」連結至 `/settings#template-suggestions`（沿用 ADM-R50 的 `/settings` 路由，不新增全域入口或 Field 首頁入口）、既有 `frontend/src/auth/AppearanceSettings.tsx`（`/settings`）新增只對曾提議者顯示的「我的範本建議」區塊（不要求仍具來源專案／template.use）、`styles.css` 只加本頁樣式；開 task 前列實際檔案鎖 | T17 真 API；T18 人工核可；上述共用前端檔案當時責任線先合併 | TPL-AC33、AC36、AC40～AC42（UI 與真後端契約） | 待開 task |
+| T20 | 真後端整合：來源改刪不影響待審，核准後來源改刪亦不影響入庫範本與已核准件、退回兩次重送、管理者修改後核准、撤回競爭、同名與故障回滾、稽核追溯；桌面／360px／鍵盤走查，整理 0.6.x AC 證據與規格索引 | 新本功能 integration／demo 腳本及測試資料；截圖／log 放 repo 外工作目錄；規格與索引只更新本功能完成證據 | T15～T19；驗收用獨立 SQLite／PostgreSQL 測試庫，不與其他線共用會重建的 schema | TPL-AC33～AC43（彙整） | 待開 task |
 
 ### 分波與共用檔案
 
@@ -137,12 +149,12 @@
 
 ### 驗證對照與風險
 
-- AC32／AC40：API 權限矩陣與本人歷史隔離，含失去來源專案權限、只有委派、只有範本管理權、跨件 revision 與偽造身分欄位。
-- AC33：控制來源共享讀與刪除先後；確認原項目、現場值、照片不受影響，後續改源不改待審 JSON。
-- AC34／AC35：完整合法／非法轉換、至少兩次退回與重送、每次內容／原因／審核人的不可覆寫、提議人可讀與前後兩版比較（非相鄰拒絕）；版本從首次送審起保存。
-- AC36／AC37：退回原因必填、結構驗證／同名／錯誤目標，配號沿用目標系統最大序號；審核者不需要來源專案角色，審核也不授予該角色。
-- AC38：SQLite／PostgreSQL 固定交錯的兩人核准、核准對撤回／修訂，以及各寫入點故障；斷言恰一個新範本或全部回滾，不只檢查 HTTP 成功。
-- AC42：核准後修改再刪除來源項目，逐欄比較已入庫範本與已核准件／各版／審核／目的地快照完全不變。
-- AC39／AC41：跨頁／搜尋不影響待審總數、動作後刷新、無通知功能、settings 曾提議者區塊、專案本人件數連結且全域／Field 無入口；核准新範本事件形狀不改、project_id 空值，五種建議事件均標專案脈絡且僅 approved 保存新範本關聯；真 API／元件與瀏覽器各負責適合層級，原型不是產品通過證據。
+- AC33／AC41：API 權限矩陣與本人歷史隔離，含失去來源專案權限、只有委派、只有範本管理權、跨件 revision 與偽造身分欄位。
+- AC34：控制來源共享讀與刪除先後；確認原項目、現場值、照片不受影響，後續改源不改待審 JSON。
+- AC35／AC36：完整合法／非法轉換、至少兩次退回與重送、每次內容／原因／審核人的不可覆寫、提議人可讀與前後兩版比較（非相鄰拒絕）；版本從首次送審起保存。
+- AC37／AC38：退回原因必填、結構驗證／同名／錯誤目標，配號沿用目標系統最大序號；審核者不需要來源專案角色，審核也不授予該角色。
+- AC39：SQLite／PostgreSQL 固定交錯的兩人核准、核准對撤回／修訂，以及各寫入點故障；斷言恰一個新範本或全部回滾，不只檢查 HTTP 成功。
+- AC43：核准後修改再刪除來源項目，逐欄比較已入庫範本與已核准件／各版／審核／目的地快照完全不變。
+- AC40／AC42：跨頁／搜尋不影響待審總數、動作後刷新、無通知功能、settings 曾提議者區塊、專案本人件數連結且全域／Field 無入口；核准新範本事件形狀不改、project_id 空值，五種建議事件均標專案脈絡且僅 approved 保存新範本關聯；真 API／元件與瀏覽器各負責適合層級，原型不是產品通過證據。
 - 版本不限次數可能成長：歷程採 cursor 分頁、不默默清除；提議／核准紀錄沿既有不可刪稽核政策保存。正式範本仍不版本化，不能為方便讀歷程而復活 Template Version。
 - 自訂 JSON 只存建議結構快照；核准必須轉成既有正規化範本子表並重驗，不把審核 JSON 直接當正式範本資料模型。共享規格只補本功能責任指向與事件區段，無新共用慣例。

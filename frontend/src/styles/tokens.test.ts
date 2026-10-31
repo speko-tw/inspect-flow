@@ -85,6 +85,7 @@ const requiredTokens = [
   '--color-border-control',
   '--color-border-strong',
   '--color-focus',
+  '--color-selected-bg',
   '--color-selection',
   '--color-link',
   '--color-action-primary',
@@ -143,6 +144,8 @@ describe('semantic design tokens', () => {
     expect(light).toMatchObject({
       '--color-brand-primary': '#002060',
       '--color-brand-accent': '#ffc200',
+      '--color-action-primary': '#002060',
+      '--color-action-primary-hover': '#123b79',
       '--color-bg-page': '#f3f6fa',
       '--color-bg-surface': '#ffffff',
       '--color-bg-muted': '#eaf0f7',
@@ -159,6 +162,8 @@ describe('semantic design tokens', () => {
       '--color-text-secondary': '#b8c5d6',
       '--color-focus': '#82c9f2',
       '--color-selection': '#8cc4ff',
+      '--color-action-primary': '#8cc4ff',
+      '--color-action-primary-hover': '#a8d2ff',
       '--color-border': '#344960',
     })
   })
@@ -307,5 +312,34 @@ describe('semantic token contrast', () => {
         `${status} boundary on status background`,
       ).toBeGreaterThanOrEqual(3)
     }
+  })
+})
+
+describe('selected segment background', () => {
+  function luminance(color: string) {
+    const [red, green, blue] = color
+      .match(/[\da-f]{2}/gi)!
+      .map((channel) => Number.parseInt(channel, 16) / 255)
+      .map((value) =>
+        value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+      )
+    return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!
+  }
+
+  it.each([
+    ['light', light],
+    ['dark', dark],
+    ['system dark', systemDark],
+  ])('is lighter than the track and readable in %s', (_name, map) => {
+    // 負責人裁定：深淺色層級行為相似，選取的分段都要比軌道更亮。
+    expect(luminance(map['--color-selected-bg']!)).toBeGreaterThan(
+      luminance(map['--color-bg-muted']!),
+    )
+    expect(
+      contrastRatio(map['--color-text-primary']!, map['--color-selected-bg']!),
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      contrastRatio(map['--color-selection']!, map['--color-selected-bg']!),
+    ).toBeGreaterThanOrEqual(3)
   })
 })

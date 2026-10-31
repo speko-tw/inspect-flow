@@ -72,11 +72,17 @@ export default function ChangePasswordPage() {
   const { user } = useCurrentUser()
   const target = landingPath(user)
   const hasFeatureAccess = target !== '/settings'
+  const [showPassword, setShowPassword] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const forced = user.must_change_password && !success
+  const currentLabel = forced ? '臨時密碼' : '目前密碼'
+  const currentIncorrect = forced
+    ? '臨時密碼錯誤。請確認臨時密碼後再試一次。'
+    : CURRENT_PASSWORD_INCORRECT_MESSAGE
   const [errorField, setErrorField] = useState<
     'current' | 'new' | 'confirmation' | 'form' | null
   >(null)
@@ -102,7 +108,7 @@ export default function ChangePasswordPage() {
     setErrorField(null)
 
     if (currentPassword === '') {
-      setError('目前密碼尚未填寫。請輸入目前密碼。')
+      setError(`${currentLabel}尚未填寫。請輸入${currentLabel}。`)
       setErrorField('current')
       setErrorAttempt((attempt) => attempt + 1)
       return
@@ -134,6 +140,7 @@ export default function ChangePasswordPage() {
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')
+        setShowPassword(false)
         setSuccess(SUCCESS_NOTICE)
         return
       }
@@ -149,8 +156,13 @@ export default function ChangePasswordPage() {
     } catch (caught) {
       const code = caught instanceof ApiError ? caught.code : undefined
       setError(
-        (code !== undefined ? ERROR_MESSAGES_BY_CODE[code] : undefined) ??
-          GENERIC_ERROR_MESSAGE,
+        (code === 'auth.current_password_incorrect'
+          ? currentIncorrect
+          : code === 'auth.password_unchanged' && forced
+            ? '新密碼與臨時密碼相同。請改用不同的新密碼。'
+            : code !== undefined
+              ? ERROR_MESSAGES_BY_CODE[code]
+              : undefined) ?? GENERIC_ERROR_MESSAGE,
       )
       if (code === 'auth.current_password_incorrect') {
         setErrorField('current')
@@ -169,22 +181,27 @@ export default function ChangePasswordPage() {
   return (
     <AuthLayout
       back={
-        user.must_change_password || !hasFeatureAccess ? undefined : (
+        forced || !hasFeatureAccess ? undefined : (
           <BackLink to={target}>返回{landingLabel(target)}</BackLink>
         )
       }
-      title={PAGE_TITLES.personalSettings}
+      title={forced ? '請先設定新密碼' : PAGE_TITLES.personalSettings}
       lead={
-        user.must_change_password
-          ? '請輸入目前密碼，並設定新的密碼。'
-          : '調整外觀或變更密碼。'
+        !forced && !hasFeatureAccess
+          ? undefined
+          : forced
+            ? '你用的是管理者給的臨時密碼，設定自己的密碼後才能繼續使用。'
+            : '調整外觀或變更密碼。'
       }
     >
       {!hasFeatureAccess && (
-        <p role="status">尚未開通任何功能，請洽系統管理者</p>
+        <p className="notice-info settings-no-access" role="status">
+          {/* 分成兩段語意完整的文字，讓窄螢幕優先在逗號處換行。 */}
+          <span>你的帳號尚未開通任何功能，</span>
+          <span>請洽系統管理者開通。</span>
+        </p>
       )}
-      {!user.must_change_password && <AppearanceSettings />}
-      {success && user.must_change_password && <p role="status">{success}</p>}
+      {!forced && <AppearanceSettings />}
       <UnsavedLeaveBox guard={leaveGuard} />
       <Form
         onSubmit={handleSubmit}
@@ -205,7 +222,7 @@ export default function ChangePasswordPage() {
                           : 'change-password-confirm',
                     fieldLabel:
                       errorField === 'current'
-                        ? '目前密碼'
+                        ? currentLabel
                         : errorField === 'new'
                           ? '新密碼'
                           : '再輸入一次新密碼',
@@ -215,9 +232,16 @@ export default function ChangePasswordPage() {
               : []
           }
         />
-        <FormGroup title="設定新密碼" description="請依序輸入目前與新密碼。">
+        <FormGroup
+          title={forced ? '密碼資料' : '設定新密碼'}
+          description={
+            forced
+              ? '請輸入臨時密碼，再設定自己的新密碼。'
+              : '請依序輸入目前與新密碼。'
+          }
+        >
           <FormField
-            label="目前密碼"
+            label={currentLabel}
             id="change-password-current"
             required
             error={errorField === 'current' ? (error ?? undefined) : undefined}
@@ -226,7 +250,7 @@ export default function ChangePasswordPage() {
               <input
                 {...control}
                 name="current-password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 required
                 value={currentPassword}
@@ -242,14 +266,18 @@ export default function ChangePasswordPage() {
             label="新密碼"
             id="change-password-new"
             required
-            description={PASSWORD_RULE_TEXT}
+            description={
+              forced
+                ? PASSWORD_RULE_TEXT.replace('目前密碼', '臨時密碼')
+                : PASSWORD_RULE_TEXT
+            }
             error={errorField === 'new' ? (error ?? undefined) : undefined}
           >
             {(control) => (
               <input
                 {...control}
                 name="new-password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="new-password"
                 required
                 value={newPassword}
@@ -273,7 +301,7 @@ export default function ChangePasswordPage() {
               <input
                 {...control}
                 name="confirm-password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="new-password"
                 required
                 value={confirmPassword}
@@ -285,18 +313,26 @@ export default function ChangePasswordPage() {
               />
             )}
           </FormField>
+          <label className="settings-show-password">
+            <input
+              type="checkbox"
+              checked={showPassword}
+              onChange={(event) => setShowPassword(event.target.checked)}
+            />
+            顯示密碼
+          </label>
         </FormGroup>
         {errorField === 'form' && error !== null ? (
           <FormError focusRequest={errorAttempt} tabIndex={-1}>
             {error}
           </FormError>
         ) : null}
-        {success && !user.must_change_password && (
-          <p role="status">{success}</p>
-        )}
+        {success && !forced && <p role="status">{success}</p>}
         <FormSubmitButton className="btn-primary">變更密碼</FormSubmitButton>
       </Form>
-      <LogoutButton />
+      <div className="settings-logout">
+        <LogoutButton />
+      </div>
     </AuthLayout>
   )
 }

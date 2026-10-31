@@ -87,6 +87,13 @@ export function deleteRole(id: string): Promise<void> {
 }
 
 const ROLE_ERROR_MESSAGES: Record<string, string> = {
+  'role.external_in_use':
+    '目前有外部協作人員持有這個角色，不能取消「外部協作帳號可用」。請先移除他們的這個角色。',
+  'role.external_allowed_invalid':
+    '這個角色含有外部協作人員不能使用的權限，或它是新專案預設角色，不能設成「外部協作帳號可用」。',
+  'role.creator_role_requires_permissions':
+    '這是新專案預設角色，必須保留「檢視專案」「調整專案」「管理專案成員與其角色」三項權限。',
+
   'role.name_conflict': '角色名稱已被使用（不分大小寫）。',
   'role.not_found': '找不到這個角色，可能已被刪除，請重新整理後再試。',
   'role.permission_code_invalid': '權限代碼無效，請重新整理頁面後再選擇。',

@@ -101,6 +101,18 @@ describe('現場任務詳情', () => {
     const fetcher = vi.fn(async () => Response.json(detail))
     vi.stubGlobal('fetch', fetcher)
     renderDetail()
+    const action = await screen.findByRole('region', { name: '任務操作' })
+    expect(
+      within(action).getByRole('heading', { name: '任務操作' }),
+    ).toHaveClass('visually-hidden')
+    expect(
+      within(action).getByText('開始前請先看下方查核需求。'),
+    ).toBeVisible()
+    const requirements = screen.getByRole('heading', { name: '查核需求' })
+    expect(action.compareDocumentPosition(requirements) & 4).toBe(4)
+    expect(
+      within(action).getByText('填寫結果與照片上傳將在後續版本提供。').tagName,
+    ).toBe('SMALL')
     expect(await screen.findByText('依圖面查核')).toBeInTheDocument()
     expect(
       screen.getByRole('heading', {
@@ -370,4 +382,29 @@ describe('現場任務詳情', () => {
       }),
     ).toBeInTheDocument()
   })
+})
+
+it.each([
+  ['COMPLETED', false],
+  ['CANCELLED', false],
+  ['PENDING', true],
+  ['IN_PROGRESS', false],
+])('現場詳情停用提醒依 %s、封存 %s 判斷', async (status, plan_archived) => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        ...detail,
+        status,
+        plan_archived,
+        suggested_assignee: { ...detail.suggested_assignee, is_active: false },
+      }),
+    ),
+  )
+  renderDetail()
+  const warning = !plan_archived && status === 'IN_PROGRESS'
+  expect(
+    await screen.findByText(warning ? '（已停用，請改派）' : '（已停用）'),
+  ).toBeVisible()
+  if (!warning) expect(screen.queryByText(/請改派/)).toBeNull()
 })

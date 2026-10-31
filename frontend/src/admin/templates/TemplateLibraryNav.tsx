@@ -1,7 +1,9 @@
 import type { TemplateCategory, TemplateItem, TemplateSystem } from './api'
+import './TemplateLibraryNav.css'
 
 type Selection = { type: 'category' | 'system' | 'item'; id: string }
 
+/** 呈現範本庫階層與選取入口，操作授權由呼叫頁面決定。 */
 export function TemplateLibraryNav({
   categories,
   systems,
@@ -17,6 +19,7 @@ export function TemplateLibraryNav({
   mobile,
   mode,
   selectSystemOnly = false,
+  showSelectedMarker = false,
   appliedItemIds = new Set(),
 }: {
   categories: TemplateCategory[]
@@ -33,8 +36,29 @@ export function TemplateLibraryNav({
   mobile: boolean
   mode: 'manage' | 'select'
   selectSystemOnly?: boolean
+  /** 存為範本時補上非顏色選取線索，其他用途預設隱藏。 */
+  showSelectedMarker?: boolean
   appliedItemIds?: ReadonlySet<string>
 }) {
+  // 提示只在畫面上真的有「開啟詳情」可點的項目列時才顯示；樹還收合時
+  // 提示指向不存在的按鈕（360px 範本頁的設計審查發現）。
+  const hasOpenableItemRow =
+    !selectSystemOnly &&
+    categories.some(
+      (category) =>
+        expanded.has(category.id) &&
+        systems.some(
+          (system) =>
+            system.category_id === category.id &&
+            expanded.has(system.id) &&
+            items.some(
+              (item) =>
+                item.system_id === system.id &&
+                Boolean(item.id) &&
+                !appliedItemIds.has(item.id as string),
+            ),
+        ),
+    )
   return (
     <aside className="tpl-nav" aria-label="範本庫導覽">
       <div className="tpl-nav-heading">
@@ -125,6 +149,14 @@ export function TemplateLibraryNav({
                               {selectSystemOnly ? '•' : systemOpen ? '▾' : '▸'}
                             </span>
                             <span>{system.name}</span>
+                            {showSelectedMarker &&
+                              mode === 'select' &&
+                              selected?.type === 'system' &&
+                              selected.id === system.id && (
+                                <span className="tpl-selected-marker">
+                                  ✓ 已選取
+                                </span>
+                              )}
                             {itemCount !== undefined && (
                               <span
                                 aria-hidden="true"
@@ -226,7 +258,7 @@ export function TemplateLibraryNav({
           })}
         </ul>
       )}
-      {mobile && (
+      {mobile && hasOpenableItemRow && (
         <p className="tpl-mobile-hint muted-text">點選「開啟詳情」查看內容</p>
       )}
     </aside>

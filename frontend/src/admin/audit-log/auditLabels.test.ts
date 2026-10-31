@@ -20,6 +20,8 @@ describe('稽核事件白話對照', () => {
     ['template_item.deleted', null, '刪除範本項目'],
     ['project.template_applied', null, '套用範本'],
     ['project_inspection_item.deleted', null, '刪除查核項目'],
+    ['project_inspection_item.deactivated', null, '停用查核項目'],
+    ['project_inspection_item.reactivated', null, '恢復查核項目'],
     ['user.created', null, '建立帳號'],
     ['user.email_changed', null, '修改帳號電子郵件'],
     ['user.account_expiry_changed', null, '修改帳號到期日'],
@@ -40,6 +42,32 @@ describe('稽核事件白話對照', () => {
     expect(eventLabel(auditLogEntryFixture({ event_type: 'x.unknown' }))).toBe(
       UNKNOWN_EVENT_LABEL,
     )
+  })
+
+  it('對象優先顯示事件快照名稱，不使用目前人員清單名稱', () => {
+    expect(
+      entityLabel(
+        auditLogEntryFixture({
+          event_type: 'user.created',
+          entity_type: 'user',
+          after: { name_zh: '當時姓名', username: 'anna.d' },
+        }),
+        { userName: () => '目前姓名', projectName: () => null },
+      ),
+    ).toBe('帳號：當時姓名')
+  })
+
+  it('修改帳號名稱仍以目前人員清單顯示姓名與帳號', () => {
+    expect(
+      entityLabel(
+        auditLogEntryFixture({
+          event_type: 'user.username_changed',
+          entity_type: 'user',
+          after: { username: 'anna.d' },
+        }),
+        { ...noLookup, userName: () => '鄧安娜 (anna.d)' },
+      ),
+    ).toBe('帳號：鄧安娜 (anna.d)')
   })
 
   it('對象沒有名稱時只顯示類型，不顯示編號', () => {
@@ -127,4 +155,52 @@ it.each([
       noLookup,
     ),
   ).toBe('範本項目：排水管坡度檢查')
+})
+
+it('取消任務從快照取任務名稱', () => {
+  expect(
+    entityLabel(
+      auditLogEntryFixture({
+        entity_type: 'inspection_task',
+        before: { task_name: '給水管試壓' },
+        after: { status: 'CANCELLED' },
+      }),
+      noLookup,
+    ),
+  ).toBe('任務：給水管試壓')
+})
+
+it('角色只改權限時仍顯示角色名；帳號快照可提供刪除前名稱', () => {
+  expect(
+    entityLabel(
+      auditLogEntryFixture({
+        entity_type: 'role',
+        entity_id: 'known-role',
+        after: { permission_codes: ['project.read'] },
+      }),
+      { ...noLookup, roleName: () => '現場工程師' },
+    ),
+  ).toBe('角色：現場工程師')
+  expect(
+    entityLabel(
+      auditLogEntryFixture({
+        entity_type: 'user',
+        after: { name_zh: '林承安' },
+      }),
+      noLookup,
+    ),
+  ).toBe('帳號：林承安')
+})
+
+it('套用範本的對象維持專案名，不把來源範本名當成專案', () => {
+  expect(
+    entityLabel(
+      auditLogEntryFixture({
+        entity_type: 'project',
+        entity_id: 'project',
+        after: { source_name: '給排水範本', item_count: 2 },
+      }),
+      { ...noLookup, projectName: () => '示範工程' },
+    ),
+  ).toBe('專案：示範工程')
 })

@@ -4,6 +4,7 @@ export interface AuditLogEntry {
   id: string
   created_at: string
   created_by: string
+  actor_snapshot: string
   project_id: string | null
   event_type: string
   entity_type: string

@@ -9,6 +9,7 @@ export type RoutePermission =
   | 'admin-or-account-delegate'
   | 'project-list-access'
   | 'dashboard-access'
+  | 'project-create-access'
   | 'template-library-access'
   | 'project-access'
   | 'project-template-access'
@@ -52,6 +53,11 @@ export const ROUTES = {
     title: PAGE_TITLES.account,
     permission: 'admin-or-account-delegate',
   },
+  adminAccountNew: {
+    path: '/accounts/new',
+    title: '新增帳號',
+    permission: 'admin-only',
+  },
   adminPeople: {
     path: '/accounts/:personId?',
     title: PAGE_TITLES.account,
@@ -67,10 +73,41 @@ export const ROUTES = {
     title: PAGE_TITLES.projectRoles,
     permission: 'admin-only',
   },
+  // ADM-R55：公司單欄改名留詳情，角色使用獨立新增與修改頁。
+  adminCompanyNew: {
+    path: '/companies/new',
+    title: '新增公司',
+    permission: 'admin-only',
+  },
+  adminCompanyDetail: {
+    path: '/companies/:companyId',
+    title: '公司詳情',
+    permission: 'admin-only',
+  },
+  adminRoleNew: {
+    path: '/roles/new',
+    title: '新增角色',
+    permission: 'admin-only',
+  },
+  adminRoleDetail: {
+    path: '/roles/:roleId',
+    title: '角色詳情',
+    permission: 'admin-only',
+  },
+  adminRoleEdit: {
+    path: '/roles/:roleId/edit',
+    title: '修改角色',
+    permission: 'admin-only',
+  },
   adminProjects: {
     path: '/projects',
     title: PAGE_TITLES.projects,
     permission: 'project-list-access',
+  },
+  projectNew: {
+    path: '/projects/new',
+    title: PAGE_TITLES.projectNew,
+    permission: 'project-create-access',
   },
   dashboard: {
     path: '/overview/*',
@@ -112,9 +149,25 @@ export const ROUTES = {
     title: PAGE_TITLES.projectHome,
     permission: 'project-access',
   },
+  projectEdit: {
+    path: '/projects/:projectId/edit',
+    title: PAGE_TITLES.projectEdit,
+    permission: 'project-access',
+  },
+  // ADM-R52：成員新增、角色修改與分區新增都有直接網址。
   projectMembers: {
     path: '/projects/:projectId/members',
     title: PAGE_TITLES.projectMembers,
+    permission: 'project-access',
+  },
+  projectMemberNew: {
+    path: '/projects/:projectId/members/new',
+    title: PAGE_TITLES.projectMemberNew,
+    permission: 'project-access',
+  },
+  projectMemberEdit: {
+    path: '/projects/:projectId/members/:userId/edit',
+    title: PAGE_TITLES.projectMemberEdit,
     permission: 'project-access',
   },
   projectItems: {
@@ -127,6 +180,11 @@ export const ROUTES = {
     title: PAGE_TITLES.projectZones,
     permission: 'project-access',
   },
+  projectZoneNew: {
+    path: '/projects/:projectId/zones/new',
+    title: PAGE_TITLES.projectZoneNew,
+    permission: 'project-access',
+  },
   projectInspectionTemplates: {
     path: '/projects/:projectId/inspection-items/templates',
     title: PAGE_TITLES.templates,
@@ -135,6 +193,31 @@ export const ROUTES = {
   projectPlanning: {
     path: '/projects/:projectId/planning',
     title: PAGE_TITLES.projectPlanning,
+    permission: 'project-access',
+  },
+  projectPlanNew: {
+    path: '/projects/:projectId/planning/new',
+    title: '建立計畫',
+    permission: 'project-access',
+  },
+  projectPlan: {
+    path: '/projects/:projectId/planning/:planId',
+    title: '計畫詳情',
+    permission: 'project-access',
+  },
+  projectTaskNew: {
+    path: '/projects/:projectId/planning/:planId/tasks/new',
+    title: '新增任務',
+    permission: 'project-access',
+  },
+  projectTask: {
+    path: '/projects/:projectId/planning/:planId/tasks/:taskId',
+    title: '任務詳情',
+    permission: 'project-access',
+  },
+  projectTaskEdit: {
+    path: '/projects/:projectId/planning/:planId/tasks/:taskId/edit',
+    title: '修改任務',
     permission: 'project-access',
   },
   projectProgress: {
@@ -200,6 +283,8 @@ export function canAccessRoute(
       return Boolean(
         user.is_admin || user.has_project_access || user.can_create_project,
       )
+    case 'project-create-access':
+      return Boolean(user.is_admin || user.can_create_project)
     case 'dashboard-access':
       return user.is_admin || modules.includes('all_project_progress.read')
     case 'template-library-access':
@@ -234,18 +319,34 @@ const ACCESS_ROUTES: Array<{ route: ProductRoute; end: boolean }> = [
   { route: ROUTES.dashboardTasks, end: true },
   { route: ROUTES.dashboardIndex, end: true },
   { route: ROUTES.dashboard, end: false },
+  { route: ROUTES.adminAccountNew, end: true },
   { route: ROUTES.adminPeople, end: false },
+  { route: ROUTES.adminCompanyNew, end: true },
+  { route: ROUTES.adminCompanyDetail, end: true },
+  { route: ROUTES.adminRoleNew, end: true },
+  { route: ROUTES.adminRoleDetail, end: true },
+  { route: ROUTES.adminRoleEdit, end: true },
   { route: ROUTES.adminCompanies, end: false },
   { route: ROUTES.adminRoles, end: false },
   { route: ROUTES.adminAuditLogs, end: false },
   { route: ROUTES.projectInspectionTemplates, end: true },
   { route: ROUTES.projectProgressTask, end: true },
   { route: ROUTES.projectProgress, end: true },
+  { route: ROUTES.projectPlanNew, end: true },
+  { route: ROUTES.projectTaskNew, end: true },
+  { route: ROUTES.projectTaskEdit, end: true },
+  { route: ROUTES.projectTask, end: true },
+  { route: ROUTES.projectPlan, end: true },
   { route: ROUTES.projectPlanning, end: true },
   { route: ROUTES.projectItemChange, end: true },
   { route: ROUTES.projectItems, end: true },
+  { route: ROUTES.projectMemberEdit, end: true },
+  { route: ROUTES.projectEdit, end: true },
+  { route: ROUTES.projectMemberNew, end: true },
   { route: ROUTES.projectZones, end: true },
+  { route: ROUTES.projectZoneNew, end: true },
   { route: ROUTES.projectMembers, end: true },
+  { route: ROUTES.projectNew, end: true },
   { route: ROUTES.projectHome, end: true },
   { route: ROUTES.adminProjects, end: true },
   { route: ROUTES.templateSaveFromProject, end: true },

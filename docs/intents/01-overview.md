@@ -43,8 +43,8 @@ MVP 核心是本公司人員自己的查核流程（內業派工、現場查核�
 
 | 角色 | 職責 |
 |---|---|
-| 系統管理者（Admin，人員身上的開關，不是角色） | 管理系統設定、人員、公司、角色定義；可直接查看、修改所有專案（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-24](03-decisions-and-stack.md#kd-24)）。 |
-| 專案角色（可自訂，掛在專案成員上） | 依指派的角色決定在該專案能做什麼，例如建立查核計畫、指派工程師、批次產生任務、監看完成度、審閱照片並產生報告，或唯讀存取；一個人在同一專案可同時擁有多個角色，權限加總（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-26](03-decisions-and-stack.md#kd-26)、[KD-27](03-decisions-and-stack.md#kd-27)）。 |
+| 系統管理者（Admin，人員身上的開關，不是角色） | 管理系統設定、人員、公司、角色定義、模組權限與委派；可直接查看、修改所有專案（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-24](03-decisions-and-stack.md#kd-24)）。 |
+| 專案角色（可自訂，掛在專案成員上） | 依指派的角色決定在該專案能做什麼，例如建立計畫與任務、派出任務、指派現場工程師、監看進度，或唯讀存取；一個人在同一專案可同時擁有多個角色，權限加總（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-26](03-decisions-and-stack.md#kd-26)、[KD-27](03-decisions-and-stack.md#kd-27)）。 |
 | 範本模組管理權限（模組權限「管理範本庫」） | 範本模組的模組權限，逐人勾選，由 Admin 或被委派管理範本模組的人授予；具此權限的人可維護範本庫，包含跨專案瀏覽查核項目並存成範本，但不因此取得任何專案內的查核權限；Admin 擁有全部權限。範本建議與審核排入 0.6.x，由可編輯專案項目者提議、範本管理權者審核，待審數量與個人清單呈現結果，不另通知（[#314 裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231392325)）（依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），沿用 #313 的範本管理行為；見 [KD-49](03-decisions-and-stack.md#kd-49)、[KD-69](03-decisions-and-stack.md#kd-69)、[權限表](07-permission-model.md#permission-table)）。 |
 | 現場工程師（Inspector / Field Engineer） | 查看今日指派任務，依要求拍照、填寫必要說明，並將任務標記完成；屬於現場查核這類專案角色的典型職責（依據：架構基準 §6.1）。 |
 
@@ -70,7 +70,7 @@ flowchart LR
 
 除了系統內部角色之外，正式報告（DOCX／PDF）另有一群**文件收受方**：業主、監造單位、品管、政府標案審查方，以及文件歸檔／管理系統，他們不一定是系統的登入使用者，而是報告的閱讀與簽核對象 （依據：架構基準 §20.1、§20.12–20.13）。設計現場與後台流程時，需要區分「誰是系統使用者」與「誰只是最終文件的收受者」。
 
-InspectFlow 的管理介面與現場介面共用單一 React application，依路由群組拆分程式碼，且入口與登入落點依帳號有效權限決定；使用者畫面不以 `/admin/*` 或 `/field/*` 網址前綴區分（路由方向見 [KD-12](03-decisions-and-stack.md#kd-12)，待 #705 負責人確認）。
+InspectFlow 的管理介面與現場介面共用單一 React application，依路由群組拆分程式碼，且入口與登入落點依帳號有效權限決定；使用者畫面不以 `/admin/*` 或 `/field/*` 網址前綴區分（路由方向見 [KD-12](03-decisions-and-stack.md#kd-12) 與 [ADM-R50](../specs/admin-dashboard/spec.md#需求)）。
 
 ## 查核生命週期
 
@@ -105,12 +105,12 @@ flowchart LR
 - **Phase 7 — Completion Validation（完成驗證）**：必要證據 vs. 已上傳證據的伺服器端驗證；查核項次結果分符合、不符合、不適用，各結果的必填內容見 [KD-54](03-decisions-and-stack.md#kd-54)。完成驗證上線後，管理後台完成數與完成率改採伺服器驗證結果（依 [KD-66](03-decisions-and-stack.md#kd-66)），不另增儀表板指標。
 - **Phase 8 — Formal Report Delivery**：Report View Model、DOCX 範本、DOCX／PDF 與版次資料。MVP **必須**保存報告範本（報告版面）版本、文件編號、版次、產製者與時間、兩種檔案鍵、資料快照與 SHA-256；已核發檔案**不得**覆蓋（依據：架構基準 §20.22、§30 Phase 9）。完整簽核流程**得**先用空白簽名欄簡化；正式流程見 [OQ-07](05-open-questions.md#oq-07)（依據：架構基準 §15、§20.12）。
 
-- **Phase 9 — Pilot Deployment**：單一 Linux 伺服器、Docker Compose、HTTPS、持久化儲存。
+- **Phase 9 — Pilot Deployment**：正式部署與維運（#109），涵蓋正式憑證管理、自動備份、監控與完整部署 DoD。Docker 試用部署已提前在 0.6.x（#758）落地：單一 Linux 主機、Docker Compose、持久化儲存；瀏覽器經主機反向代理 HTTPS 連入，代理以 HTTP 轉送同時提供前端與 API 的單一容器（見 [KD-09](03-decisions-and-stack.md#kd-09)）。
 - **Phase 10 — Pilot Hardening & Release Readiness（試營運強化與發布整備）**：依試營運回饋修正問題，強化效能、資安與維運，驗證相容性、備份／還原及報告正確性，完成發布整備。
 
 各 Phase 對應哪份規格、目前狀態與被擋議題，見 [docs/specs/README.md 規格索引](../specs/README.md#index)。
 
-Phase N 對應哪個 Milestone、各 Phase 的能力範圍，以[版本路線圖](06-versioning-and-milestone-governance.md#roadmap)為準（含 0.5.x 與 0.4.x 可並行的安排）。
+Phase N 對應哪個 Milestone、各 Phase 的能力範圍，以[版本路線圖](06-versioning-and-milestone-governance.md#roadmap)為準。
 
 一個版本要視為「可部署」，**必須**滿足 §22A.20 的完整 Deployment Definition of Done，包括 DOCX／PDF 可產出、重啟後資料不消失等條件（依據：架構基準 §22A.20）。
 
@@ -174,7 +174,7 @@ Corporate SSO                            檢查時機／停留點
 
 ```mermaid
 flowchart TB
-  AdminUI["Admin Dashboard（後台）"] -->|HTTPS/REST| API["Backend API"]
+  AdminUI["Admin UI（管理介面）"] -->|HTTPS/REST| API["Backend API"]
   FieldUI["Field Web/PWA（現場）"] -->|HTTPS/REST| API
   API --> DB[("SQLite")]
   API --> Storage["Photo Storage（本機資料夾）"]
@@ -246,17 +246,22 @@ flowchart TB
   Project["Project（專案）"] --> Plan["Inspection Plan（查核計畫）"]
   Plan --> Task["Inspection Task（查核任務）"]
   Task --> Snapshot["Task Requirement Snapshot（需求快照）"]
-  Snapshot --> Evidence["Evidence（證據）"]
+  Snapshot --> SnapshotPoint["查核項次快照"]
+  SnapshotPoint --> Evidence["Evidence（證據）"]
+  Project --> ProjectItem["專案查核項目"]
+  ProjectItem --> ProjectPoint["查核項次"]
+  ProjectPoint --> ProjectRequirement["Evidence Requirement（證據需求）"]
   Template["Inspection Template（範本庫的範本）"] --> Item["Template Item（範本項目）"]
-  Item --> Requirement["Evidence Requirement（證據需求）"]
+  Item --> Point["查核項次"]
+  Point --> Requirement["Evidence Requirement（證據需求）"]
   Template -.->|套用即複製，記錄來源名稱與時間| Project
-  Requirement -.->|建立任務時複製為| Snapshot
+  ProjectRequirement -.->|建立任務時產生；派出後固定| Snapshot
 ```
 
-依據：架構基準 §12；範本不版本化、套用即複製依負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02），見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)
+依據：架構基準 §12；任務快照時間點依負責人裁定（#760，2026-10-28）；範本不版本化、套用即複製依負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02），見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)
 
 - 範本庫獨立於專案；範本修改時直接覆蓋，沒有 `Template Version`。專案套用範本時複製成自己的查核項目，並記錄來源範本名稱與套用時間，之後範本改動不影響已套用的專案。
-- `Inspection Task` 建立時把當時的 `Evidence Requirement` 複製成自己的 `Task Requirement Snapshot`（見 [PR-04](02-principles.md#pr-04)）；專案查核項目修改後，內業選擇是否讓現場重新查核，選「要」則只作廢被修改的查核項目、舊紀錄整份保留，同一任務其他項目保留、任務退回進行中補查（見 [KD-55](03-decisions-and-stack.md#kd-55)）。
+- 建立 `Inspection Task` 時依專案查核項目產生自己的 `Task Requirement Snapshot`；草稿任務可隨來源項目同步或重建，派出後固定（見 [PR-04](02-principles.md#pr-04)）；專案查核項目修改後，內業選擇是否讓現場重新查核，選「要」則只作廢被修改的查核項目、舊紀錄整份保留，同一任務其他項目保留、任務退回進行中補查（見 [KD-55](03-decisions-and-stack.md#kd-55)）。
 - 完成度檢查與報告都應讀 `Task` 自己的 Snapshot，不直接查目前的 `Template Item` / `Evidence Requirement`。
 - `Evidence` 隸屬於某個 `Task` 與其 `Task Requirement Snapshot`，可再往上追溯到 `Plan` 與 `Project`（見 [PR-07](02-principles.md#pr-07)）。
 
@@ -286,16 +291,15 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  Client["Client 瀏覽器"] -->|HTTPS| Proxy["Reverse Proxy（Caddy/Nginx）"]
-  Proxy --> Web["Frontend（Web）"]
-  Proxy --> API["Backend API"]
+  Client["Client 瀏覽器"] -->|HTTPS| Proxy["主機反向代理（例：Nginx）"]
+  Proxy -->|HTTP，主機 127.0.0.1 發布埠| API["單一容器：FastAPI 前端靜態檔與 API"]
   API --> DB[("SQLite")]
   API --> Storage["本機 Storage"]
 ```
 
-依據：架構基準 §22.5–22.7
+依據：架構基準 §22.5–22.7；[pilot-install](../specs/pilot-install/spec.md)、#758／#759 實作
 
-- 第一階段標準部署單位是 Docker Compose；SQLite 與 Storage 用 persistent volume／bind mount 掛載到 Backend，不是獨立 container（見 [KD-09](03-decisions-and-stack.md#kd-09)）。
+- 第一階段標準部署單位是 Docker Compose；單一 `python:3.12-slim` image 提供前端與 API，容器內只跑 HTTP。HTTPS、網域與子路徑分流由主機反向代理負責；同一 image 以執行期 `INSPECTFLOW_BASE_PATH` 支援根目錄與子路徑。SQLite 與 Storage 用 persistent volume／bind mount 掛載到 Backend，不是獨立 container（見 [KD-09](03-decisions-and-stack.md#kd-09)）。
 - 升級到 PostgreSQL 後，Compose 會多一個 db service；API 對外呼叫路徑不變。
 - 部署基準見 [03-decisions-and-stack.md](03-decisions-and-stack.md) （[KD-09](03-decisions-and-stack.md#kd-09)）；環境細節與待決事項見 [OQ-18](05-open-questions.md#oq-18)。
 

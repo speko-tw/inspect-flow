@@ -58,6 +58,14 @@ header.app-header {
   .app-header .app-header-personal-trigger:active {
     background: var(--color-header-nav-pressed);
   }
+
+  .app-header a.app-header-tab[aria-current='page']:hover,
+  .app-header a.app-header-tab[aria-current='page']:active,
+  .app-header .app-header-management-trigger[aria-current='page']:hover,
+  .app-header .app-header-management-trigger[aria-current='page']:active {
+    background: var(--color-header-nav-current);
+    color: var(--color-brand-accent);
+  }
 }
 
 /* UDS-R19：只覆寫品牌表面的焦點，浮層仍沿用各主題焦點。 */
@@ -108,7 +116,8 @@ header.app-header {
 .roles-page-tools {
   display: flex;
   flex-wrap: wrap;
-  align-items: start;
+  /* 一列內有 44px 與 48px（主要）按鈕，置中對齊才不會一高一低。 */
+  align-items: center;
   gap: var(--space-3);
   margin-top: var(--space-5);
 }
@@ -117,8 +126,10 @@ header.app-header {
   flex-basis: 100%;
 }
 
-.roles-page-tools > button,
-.roles-page-editor button {
+/* 主要按鈕的 48px 高度由 .btn-primary 決定，這裡排除，避免特異性相同時
+   被 44px 蓋回去。 */
+.roles-page-tools > button:not(.btn-primary),
+.roles-page-editor button:not(.btn-primary) {
   min-height: 2.75rem;
 }
 

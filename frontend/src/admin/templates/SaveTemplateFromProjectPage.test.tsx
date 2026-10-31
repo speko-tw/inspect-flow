@@ -7,7 +7,7 @@ import {
   within,
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { currentUserFixture } from '../../testing/contractFixtures'
@@ -15,6 +15,7 @@ import { listProjectItems } from '../projectItems/api'
 import {
   listAllProjects,
   saveProjectItemAsTemplate,
+  templateErrorMessage,
 } from '../projects/projectTemplatesApi'
 import { listTemplateCategories, listTemplateSystems } from './api'
 import SaveTemplateFromProjectPage from './SaveTemplateFromProjectPage'
@@ -23,12 +24,16 @@ vi.mock('../projectItems/api', () => ({ listProjectItems: vi.fn() }))
 vi.mock('../projects/projectTemplatesApi', () => ({
   listAllProjects: vi.fn(),
   saveProjectItemAsTemplate: vi.fn(),
-  templateErrorMessage: (error: Error) => error.message,
+  templateErrorMessage: vi.fn((error: Error) => error.message),
 }))
 vi.mock('./api', () => ({
   listTemplateCategories: vi.fn(),
   listTemplateSystems: vi.fn(),
 }))
+
+afterEach(() => {
+  Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+})
 
 function LocationState() {
   const location = useLocation()
@@ -75,6 +80,7 @@ describe('SaveTemplateFromProjectPage', () => {
   it('讓非成員範本管理員完成專案項目複製並保留選取結果', async () => {
     vi.mocked(listAllProjects).mockResolvedValue([
       { id: 'p1', project_code: 'P-1', name: '工程一' },
+      { id: 'p2', project_code: 'P-2', name: '工程二' },
     ])
     vi.mocked(listTemplateCategories).mockResolvedValue([
       { id: 'c1', name: '土木' },
@@ -100,22 +106,102 @@ describe('SaveTemplateFromProjectPage', () => {
       title: '鋼筋查核',
     })
 
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
     renderPage(true)
-    expect(await screen.findByText('步驟 1／3')).toBeVisible()
+    expect(
+      await screen.findByRole('heading', { name: '步驟 1：選擇專案' }),
+    ).toBeVisible()
     const projectButton = await screen.findByRole('button', {
       name: 'P-1 · 工程一',
     })
+    expect(scrollIntoView).not.toHaveBeenCalled()
     fireEvent.click(projectButton)
-    expect(await screen.findByText('步驟 2／3')).toBeVisible()
+    expect(projectButton).toHaveTextContent('✓ 已選取')
+    expect(screen.getByText(/目前在步驟/)).toHaveTextContent(
+      '目前在步驟 2，共 3 步',
+    )
+    const itemsHeading = screen.getByRole('heading', {
+      name: '步驟 2：選擇查核項目',
+    })
+    await waitFor(() => expect(itemsHeading).toHaveFocus())
+    expect(scrollIntoView).toHaveBeenCalled()
+    expect(itemsHeading.closest('li')).toHaveAttribute('aria-current', 'step')
+    expect(
+      screen.getByRole('heading', {
+        name: /步驟 1：選擇專案\s*已選：工程一/,
+      }),
+    ).toBeVisible()
+    const sourceButton = await screen.findByRole('button', {
+      name: /鋼筋查核/,
+    })
+    fireEvent.click(sourceButton)
+    expect(sourceButton).toHaveTextContent('✓ 已選取')
+    expect(screen.getByText(/目前在步驟/)).toHaveTextContent(
+      '目前在步驟 3，共 3 步',
+    )
+    const targetHeading = screen.getByRole('heading', {
+      name: '步驟 3：選擇存入位置並命名',
+    })
+    await waitFor(() => expect(targetHeading).toHaveFocus())
+    expect(targetHeading.closest('li')).toHaveAttribute('aria-current', 'step')
+    fireEvent.click(screen.getByRole('button', { name: 'P-2 · 工程二' }))
+    const returnedHeading = screen.getByRole('heading', {
+      name: '步驟 2：選擇查核項目',
+    })
+    await waitFor(() => expect(returnedHeading).toHaveFocus())
+    expect(returnedHeading.closest('li')).toHaveAttribute(
+      'aria-current',
+      'step',
+    )
+    expect(
+      screen.queryByRole('heading', { name: '步驟 3：選擇存入位置並命名' }),
+    ).toBeNull()
+    expect(
+      screen.getByRole('heading', { name: /步驟 1：選擇專案/ }).closest('li'),
+    ).not.toHaveAttribute('aria-current')
     fireEvent.click(await screen.findByRole('button', { name: /鋼筋查核/ }))
-    expect(await screen.findByText('步驟 3／3')).toBeVisible()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', {
+          name: '步驟 3：選擇存入位置並命名',
+        }),
+      ).toHaveFocus(),
+    )
+    expect(screen.getByText('存入位置：尚未選擇')).toBeVisible()
+    expect(screen.getByText('請先選好存入的系統')).toBeVisible()
+    expect(screen.getByRole('button', { name: '存入這個系統' })).toBeDisabled()
+    expect(screen.getByText('1 個查核項次・來源範本：原範本')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: '土木' }))
-    fireEvent.click(await screen.findByRole('button', { name: '結構' }))
+    const systemButton = await screen.findByRole('button', { name: '結構' })
+    fireEvent.click(systemButton)
+    expect(systemButton).toHaveTextContent('✓ 已選取')
+    expect(screen.getByText('存入位置：範本庫 / 土木 / 結構')).toBeVisible()
+    expect(screen.queryByText('請先選好存入的系統')).toBeNull()
+    fireEvent.change(screen.getByLabelText('範本名稱'), {
+      target: { value: '  ' },
+    })
+    const nameInput = screen.getByLabelText<HTMLInputElement>('範本名稱')
+    const nameLabel = nameInput.labels?.[0]
+    expect(nameLabel).toBeInTheDocument()
+    expect(nameLabel?.querySelector('.required-mark')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '存入這個系統' })).toBeDisabled()
+    const missingName = screen.getByText('請輸入範本名稱')
+    expect(missingName).toBeVisible()
+    expect(missingName.previousElementSibling).toBe(nameInput)
+    fireEvent.change(screen.getByLabelText('範本名稱'), {
+      target: { value: '鋼筋查核' },
+    })
+    expect(screen.queryByText('請輸入範本名稱')).toBeNull()
+    expect(screen.getByRole('button', { name: '存入這個系統' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
 
     await waitFor(() =>
       expect(saveProjectItemAsTemplate).toHaveBeenCalledWith(
-        'p1',
+        'p2',
         'i1',
         's1',
         '鋼筋查核',
@@ -297,7 +383,7 @@ describe('SaveTemplateFromProjectPage', () => {
 
     const targetStep = screen
       .getByRole('heading', {
-        name: '3. 選擇範本庫位置',
+        name: '步驟 3：選擇存入位置並命名',
       })
       .closest('li')
     expect(targetStep).not.toBeNull()
@@ -312,4 +398,95 @@ describe('SaveTemplateFromProjectPage', () => {
     })
     expect(within(targetStep!).queryByRole('alert')).toBeNull()
   })
+})
+
+it('TPL-AC32：跨專案存為範本不列停用來源', async () => {
+  vi.mocked(listAllProjects).mockResolvedValue([
+    { id: 'p1', project_code: 'P-1', name: '工程一' },
+  ])
+  vi.mocked(listTemplateCategories).mockResolvedValue([])
+  const source = {
+    id: 'active',
+    project_id: 'p1',
+    sequence: 1,
+    title: '啟用來源',
+    instruction: '',
+    source_template_name: '範本',
+    applied_at: '2026-10-01T00:00:00Z',
+    task_count: 0,
+    inspection_points: [],
+  }
+  vi.mocked(listProjectItems).mockResolvedValue([
+    source,
+    { ...source, id: 'inactive', title: '停用來源', is_active: false },
+  ])
+  renderPage(true)
+  fireEvent.click(await screen.findByRole('button', { name: 'P-1 · 工程一' }))
+  expect(await screen.findByRole('button', { name: /啟用來源/ })).toBeVisible()
+  expect(screen.queryByRole('button', { name: /停用來源/ })).toBeNull()
+  expect(screen.getByText('停用項目須先恢復，才能存為範本。')).toBeVisible()
+})
+
+it('TPL-AC32：沒有停用項目時不顯示先恢復的提示', async () => {
+  vi.mocked(listAllProjects).mockResolvedValue([
+    { id: 'p1', project_code: 'P-1', name: '工程一' },
+  ])
+  vi.mocked(listTemplateCategories).mockResolvedValue([])
+  vi.mocked(listProjectItems).mockResolvedValue([
+    {
+      id: 'active',
+      project_id: 'p1',
+      sequence: 1,
+      title: '啟用來源',
+      instruction: '',
+      source_template_name: '範本',
+      applied_at: '2026-10-01T00:00:00Z',
+      task_count: 0,
+      inspection_points: [],
+    },
+  ])
+  renderPage(true)
+  fireEvent.click(await screen.findByRole('button', { name: 'P-1 · 工程一' }))
+  expect(await screen.findByRole('button', { name: /啟用來源/ })).toBeVisible()
+  expect(screen.queryByText('停用項目須先恢復，才能存為範本。')).toBeNull()
+})
+
+it('TPL-AC32：存入失敗以存為範本的語意轉譯錯誤', async () => {
+  vi.mocked(listAllProjects).mockResolvedValue([
+    { id: 'p1', project_code: 'P-1', name: '工程一' },
+  ])
+  vi.mocked(listTemplateCategories).mockResolvedValue([
+    { id: 'c1', name: '土木' },
+  ])
+  vi.mocked(listTemplateSystems).mockResolvedValue([
+    { id: 's1', category_id: 'c1', name: '結構' },
+  ])
+  vi.mocked(listProjectItems).mockResolvedValue([
+    {
+      id: 'i1',
+      project_id: 'p1',
+      sequence: 1,
+      title: '鋼筋查核',
+      instruction: '',
+      source_template_name: '原範本',
+      applied_at: '2026-10-01T00:00:00Z',
+      task_count: 0,
+      inspection_points: [],
+    },
+  ])
+  vi.mocked(saveProjectItemAsTemplate).mockRejectedValueOnce(
+    new Error('來源項目已停用'),
+  )
+  renderPage(true)
+  fireEvent.click(await screen.findByRole('button', { name: 'P-1 · 工程一' }))
+  fireEvent.click(await screen.findByRole('button', { name: /鋼筋查核/ }))
+  fireEvent.click(screen.getByRole('button', { name: '土木' }))
+  fireEvent.click(await screen.findByRole('button', { name: '結構' }))
+  fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('來源項目已停用')
+  expect(vi.mocked(templateErrorMessage)).toHaveBeenLastCalledWith(
+    expect.any(Error),
+    '鋼筋查核',
+    'save',
+  )
 })

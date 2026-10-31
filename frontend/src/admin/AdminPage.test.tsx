@@ -384,6 +384,11 @@ function managementFetch({
         return Response.json(created, { status: 201 })
       }
       const companyMatch = /\/companies\/([^/]+)$/.exec(parsed.pathname)
+      if (companyMatch && method === 'GET') {
+        return Response.json(
+          companies.find((row) => row.id === companyMatch[1]),
+        )
+      }
       if (companyMatch && method === 'PATCH') {
         const row = companies.find((item) => item.id === companyMatch[1])
         if (row) {
@@ -487,6 +492,9 @@ function managementFetch({
             companies.find((c) => c.id === row?.company_id)?.name ?? null,
         })
       }
+      if (parsed.pathname.endsWith('/participating-projects')) {
+        return Response.json({ items: [] })
+      }
       if (url.endsWith('/users/user-1/deactivation-check')) {
         return Response.json({ user_id: 'user-1', last_manager_projects: [] })
       }
@@ -536,9 +544,10 @@ async function createAccountThroughWizard(
   username: string,
   email = `${username}@example.com`,
   name = '李柏',
+  expectSuccess = true,
 ) {
-  fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
-  await screen.findByRole('heading', { name: '設定帳號', level: 2 })
+  fireEvent.click(await screen.findByRole('link', { name: '新增帳號' }))
+  await screen.findByRole('heading', { name: '帳號資料', level: 2 })
   fireEvent.change(screen.getByLabelText('帳號名稱'), {
     target: { value: username },
   })
@@ -553,6 +562,9 @@ async function createAccountThroughWizard(
   fireEvent.click(screen.getByRole('button', { name: '下一步' }))
   fireEvent.click(screen.getByRole('button', { name: '下一步' }))
   fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+  if (expectSuccess) {
+    await screen.findByRole('heading', { level: 1, name })
+  }
 }
 
 async function openAccountDetails(username: string, displayName: string) {
@@ -579,8 +591,8 @@ describe('管理表單未儲存導覽防護', () => {
     },
     {
       label: '公司',
-      path: '/companies',
-      entries: ['/accounts', '/companies', '/roles'],
+      path: '/companies/new',
+      entries: ['/accounts', '/companies/new', '/roles'],
       input: '公司名稱',
       value: '未儲存公司',
     },
@@ -594,11 +606,11 @@ describe('管理表單未儲存導覽防護', () => {
       index: 1,
     })
     await screen.findByRole('heading', {
-      name: item.label === '帳號' ? '帳號' : '公司管理',
+      name: item.label === '帳號' ? '帳號' : '新增公司',
     })
     if (item.label === '帳號') {
-      fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
-      await screen.findByRole('heading', { name: '設定帳號', level: 2 })
+      fireEvent.click(screen.getByRole('link', { name: '新增帳號' }))
+      await screen.findByRole('heading', { name: '帳號資料', level: 2 })
     }
     fireEvent.change(screen.getByLabelText(item.input), {
       target: { value: item.value },
@@ -615,13 +627,18 @@ describe('管理表單未儲存導覽防護', () => {
     expect(confirm).toHaveBeenLastCalledWith(
       '有尚未儲存的變更。確定要離開嗎？',
     )
-    expect(screen.getByTestId('pathname')).toHaveTextContent(item.path)
+    expect(screen.getByTestId('pathname')).toHaveTextContent(
+      item.label === '帳號' ? '/accounts/new' : item.path,
+    )
 
     confirm.mockReturnValue(true)
-    fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器下一頁' }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: item.label === '帳號' ? '測試瀏覽器上一頁' : '測試瀏覽器下一頁',
+      }),
+    )
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2))
-    const nextHeading =
-      item.entries[2] === '/companies' ? '公司管理' : '專案角色'
+    const nextHeading = item.label === '帳號' ? '帳號' : '專案角色'
     expect(
       await screen.findByRole('heading', { name: nextHeading }),
     ).toBeInTheDocument()
@@ -631,11 +648,11 @@ describe('管理表單未儲存導覽防護', () => {
     managementFetch()
     renderAdmin(item.path)
     await screen.findByRole('heading', {
-      name: item.label === '帳號' ? '帳號' : '公司管理',
+      name: item.label === '帳號' ? '帳號' : '新增公司',
     })
     if (item.label === '帳號') {
-      fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
-      await screen.findByRole('heading', { name: '設定帳號', level: 2 })
+      fireEvent.click(screen.getByRole('link', { name: '新增帳號' }))
+      await screen.findByRole('heading', { name: '帳號資料', level: 2 })
     }
     fireEvent.change(screen.getByLabelText(item.input), {
       target: { value: item.value },
@@ -721,8 +738,10 @@ describe('admin user and company pages', () => {
   it('guards edited company names after actual input', async () => {
     managementFetch()
     renderAdmin('/companies')
-    const companyRow = await screen.findByRole('row', { name: /示範公司/ })
-    fireEvent.click(within(companyRow).getByRole('button', { name: '改名稱' }))
+    fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改公司名稱' }),
+    )
     fireEvent.change(screen.getByLabelText('公司名稱'), {
       target: { value: '更新公司' },
     })
@@ -891,21 +910,32 @@ describe('admin user and company pages', () => {
     managementFetch({ companyRows: rows })
     renderAdmin('/companies')
 
+    // 100 列表格上的 getByRole 每次要檢查全部節點的可及性，高負載下
+    // 三次查詢就超過 5 秒測試逾時（#744）；按鈕改用文字加標籤查詢。
     expect(await screen.findByText('目標公司0')).toBeInTheDocument()
+    const list = screen.getByRole('region', { name: '公司管理' })
     expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    // 每個測試只在第一次保留清單範圍內的 getByRole，驗證按鈕的無障礙名稱。
+    // 續載鈕限定所屬清單，避開其他管理面板（#741、#744）。
+    fireEvent.click(within(list).getByRole('button', { name: '載入更多' }))
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('搜尋公司'), {
       target: { value: '目標公司' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    fireEvent.click(
+      within(screen.getByLabelText('搜尋公司').closest('form')!).getByRole(
+        'button',
+        { name: '搜尋' },
+      ),
+    )
     expect(await screen.findByText('目標公司0')).toBeInTheDocument()
     expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('搜尋公司'), {
       target: { value: '草稿不應套用' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    // 清單已載入 100 列，這裡改用文字查詢避免高負載逾時（#744）。
+    fireEvent.click(screen.getByText('載入更多', { selector: 'button' }))
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
   })
 
@@ -955,8 +985,10 @@ describe('admin user and company pages', () => {
 
       fireEvent.click(search)
       await waitFor(() => expect(requestCount()).toBe(1))
-      await waitFor(() => expect(search).toBeEnabled())
-      fireEvent.click(search)
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: '搜尋' })).toBeEnabled(),
+      )
+      fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
       await waitFor(() => expect(requestCount()).toBe(2))
     },
   )
@@ -997,7 +1029,7 @@ describe('admin user and company pages', () => {
     await createAccountThroughWizard('bob.lee')
 
     const passwordHeading = await screen.findByRole('heading', {
-      name: '已新增李柏的帳號',
+      name: '已建立帳號：李柏',
       level: 2,
     })
     expect(
@@ -1007,10 +1039,7 @@ describe('admin user and company pages', () => {
     ).toHaveLength(1)
     expect(passwordHeading).toBeVisible()
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(password)
-    expect(screen.getByRole('button', { name: '回清單' })).toBeVisible()
-    expect(
-      screen.getByRole('button', { name: '查看這個帳號的能力' }),
-    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '返回帳號清單' })).toBeVisible()
     expectNoPasswordPersistence(password)
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1028,10 +1057,10 @@ describe('admin user and company pages', () => {
     )
     expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
     expect(
-      screen.getAllByRole('heading', { name: '已新增李柏的帳號' }),
+      screen.getAllByRole('heading', { name: '已建立帳號：李柏' }),
     ).toHaveLength(1)
     expectNoPasswordPersistence(password)
-    fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    fireEvent.click(screen.getByRole('link', { name: '返回帳號清單' }))
     expect(
       await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
     ).toBeVisible()
@@ -1039,7 +1068,7 @@ describe('admin user and company pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '留在此頁' }))
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(password)
 
-    fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    fireEvent.click(screen.getByRole('link', { name: '返回帳號清單' }))
     fireEvent.click(screen.getByRole('button', { name: '離開此頁' }))
     expect(await screen.findByRole('heading', { name: '帳號' })).toBeVisible()
     expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
@@ -1056,6 +1085,7 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByRole('heading', { name: '已重設鄧安娜的臨時密碼' }),
     ).toBeVisible()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
       'reset-once-123',
     )
@@ -1117,9 +1147,16 @@ describe('admin user and company pages', () => {
       fireEvent.click(await screen.findByRole('button', { name: '確認重設' }))
     })
     await screen.findByRole('heading', { name: '已重設鄧安娜的臨時密碼' })
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(
+        '/accounts/user-1',
+      ),
+    )
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     await waitFor(() =>
-      expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？'),
+      expect(confirm).toHaveBeenCalledWith(
+        '臨時密碼抄下了嗎？離開後就無法再查看。',
+      ),
     )
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
       'reset-once-123',
@@ -1170,7 +1207,7 @@ describe('admin user and company pages', () => {
       await screen.findByRole('button', { name: '已複製' }),
     ).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    fireEvent.click(screen.getByRole('link', { name: '返回帳號清單' }))
     expect(
       await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
     ).toBeVisible()
@@ -1217,7 +1254,7 @@ describe('admin user and company pages', () => {
     )
     expect(
       await screen.findByRole('heading', {
-        name: '已新增李柏的帳號',
+        name: '已建立帳號：李柏',
         level: 2,
       }),
     ).toBeVisible()
@@ -1264,15 +1301,22 @@ describe('admin user and company pages', () => {
     expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
       'back-navigation-password',
     )
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(
+        '/accounts/user-2',
+      ),
+    )
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     await waitFor(() =>
-      expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？'),
+      expect(confirm).toHaveBeenCalledWith(
+        '臨時密碼抄下了嗎？離開後就無法再查看。',
+      ),
     )
     expect(screen.getByLabelText('臨時密碼')).toBeInTheDocument()
     confirm.mockReturnValue(true)
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     expect(
-      await screen.findByRole('heading', { name: '公司管理' }),
+      await screen.findByRole('heading', { name: '帳號' }),
     ).toBeInTheDocument()
     expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
     expectNoPasswordPersistence('back-navigation-password')
@@ -1427,10 +1471,15 @@ describe('admin user and company pages', () => {
   it('translates API conflicts to a Traditional Chinese message', async () => {
     managementFetch()
     renderAdmin()
-    await createAccountThroughWizard('bob.lee', 'anna@example.com')
+    await createAccountThroughWizard(
+      'bob.lee',
+      'anna@example.com',
+      '李柏',
+      false,
+    )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Email 已被使用。',
+      '電子郵件已被使用。',
     )
   })
 
@@ -1438,7 +1487,7 @@ describe('admin user and company pages', () => {
     managementFetch({ failAdminAction: true })
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
-    fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(screen.getByRole('button', { name: '設為系統管理者' }))
     const confirmation = screen.getByRole('region', { name: '操作確認' })
     // 確認與取消固定排成 [取消][確認]，只有最終確認是危險色（#500）。
     const buttons = within(confirmation).getAllByRole('button')
@@ -1446,7 +1495,7 @@ describe('admin user and company pages', () => {
       '取消',
       '確認',
     ])
-    // 指派管理者是授予權限，確認用主要色；停用與收回才用危險色。
+    // 設為系統管理者是授予權限，確認用主要色；停用與收回才用危險色。
     expect(buttons[1]).toHaveClass('btn-primary')
     expect(buttons[0]).not.toHaveClass('btn-danger', 'btn-primary')
     // ConfirmBox 的初始焦點由 effect 設定，等待它完成後再檢查。
@@ -1467,11 +1516,19 @@ describe('admin user and company pages', () => {
     expect(within(confirmation).getAllByRole('alert')).toHaveLength(1)
   })
 
-  it('edits users and toggles admin and active status', async () => {
+  // 原本與編輯、管理者切換合在同一個測試；高負載下整段會超過 5 秒
+  // 的測試逾時（#744），依動作拆開，每段仍完整驗證各自的請求。
+  it('edits users and toggles admin status', async () => {
     const fetchMock = managementFetch()
     renderAdmin()
     await openAccountDetails('anna.deng', '鄧安娜')
-    fireEvent.click(screen.getByRole('button', { name: '修改資料' }))
+    // 基本資料操作不需遍歷同頁的權限與角色面板（#744）。
+    const section = screen
+      .getByRole('heading', { name: '鄧安娜', level: 1 })
+      .closest('section')
+    expect(section).not.toBeNull()
+    const basic = within(section as HTMLElement)
+    fireEvent.click(basic.getByRole('button', { name: '修改資料' }))
     const editForm = screen
       .getByRole('heading', { name: '修改帳號資料' })
       .closest('form')
@@ -1489,12 +1546,12 @@ describe('admin user and company pages', () => {
     )
     await waitFor(() => {
       expect(
-        screen.queryByRole('heading', { name: '修改帳號資料' }),
+        basic.queryByRole('heading', { name: '修改帳號資料' }),
       ).not.toBeInTheDocument()
     })
-    expect(screen.getByText('帳號：anna.new')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
-    const assignment = screen.getByRole('region', { name: '操作確認' })
+    expect(basic.getByText('帳號：anna.new')).toBeInTheDocument()
+    fireEvent.click(basic.getByRole('button', { name: '設為系統管理者' }))
+    const assignment = basic.getByRole('region', { name: '操作確認' })
     expect(assignment).toHaveTextContent('anna.new')
     expect(assignment).toHaveTextContent('系統全部權限')
     // 授予權限用主要色；立刻剝奪他人存取的動作才用危險色（#500）。
@@ -1508,10 +1565,10 @@ describe('admin user and company pages', () => {
       ).toHaveFocus(),
     )
     ;(document.activeElement as HTMLElement).blur()
-    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
-    const switched = screen.getByRole('region', { name: '操作確認' })
+    fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
+    const switched = basic.getByRole('region', { name: '操作確認' })
     expect(switched).toHaveTextContent(
-      '停用鄧安娜（anna.new）他會立刻被登出，之後不能再登入',
+      '要停用的帳號：鄧安娜（anna.new）他會立刻被登出，之後不能再登入',
     )
     await waitFor(() =>
       expect(
@@ -1519,9 +1576,9 @@ describe('admin user and company pages', () => {
       ).toHaveFocus(),
     )
     fireEvent.click(within(switched).getByRole('button', { name: '取消' }))
-    fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(basic.getByRole('button', { name: '設為系統管理者' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
         { name: '取消' },
       ),
@@ -1533,24 +1590,24 @@ describe('admin user and company pages', () => {
           init?.method === 'PUT',
       ),
     ).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(basic.getByRole('button', { name: '設為系統管理者' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
         { name: '確認' },
       ),
     )
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: '收回管理者' }),
+        basic.getByRole('button', { name: '收回管理者' }),
       ).toBeInTheDocument()
     })
-    fireEvent.click(screen.getByRole('button', { name: '收回管理者' }))
-    expect(screen.getByRole('region', { name: '操作確認' })).toHaveTextContent(
+    fireEvent.click(basic.getByRole('button', { name: '收回管理者' }))
+    expect(basic.getByRole('region', { name: '操作確認' })).toHaveTextContent(
       'anna.new',
     )
     expect(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
         { name: '確認' },
       ),
@@ -1560,7 +1617,7 @@ describe('admin user and company pages', () => {
         String(url).endsWith('/users/user-1/admin') && init?.method === 'PUT',
     ).length
     fireEvent.click(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
         { name: '取消' },
       ),
@@ -1572,20 +1629,20 @@ describe('admin user and company pages', () => {
           init?.method === 'PUT',
       ),
     ).toHaveLength(adminActionsBeforeCancel)
-    fireEvent.click(screen.getByRole('button', { name: '收回管理者' }))
+    fireEvent.click(basic.getByRole('button', { name: '收回管理者' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      within(basic.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
         { name: '確認' },
       ),
     )
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: '指派管理者' }),
+        basic.getByRole('button', { name: '設為系統管理者' }),
       ).toBeInTheDocument()
     })
-    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
-    const deactivation = screen.getByRole('region', { name: '操作確認' })
+    fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
+    const deactivation = basic.getByRole('region', { name: '操作確認' })
     expect(deactivation).toHaveTextContent('anna.new')
     expect(deactivation).toHaveTextContent('不能再登入')
     expect(
@@ -1599,8 +1656,44 @@ describe('admin user and company pages', () => {
           init?.method === 'PUT',
       ),
     ).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
-    const disableConfirmation = screen.getByRole('region', {
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1') && init?.method === 'PATCH',
+      ),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1/admin') &&
+          init?.method === 'PUT',
+      ),
+    ).toBe(true)
+  })
+
+  it('deactivates and reactivates users', async () => {
+    const fetchMock = managementFetch()
+    renderAdmin()
+    await openAccountDetails('anna.deng', '鄧安娜')
+    // 基本資料操作不需遍歷同頁的權限與角色面板（#744）。
+    const section = screen
+      .getByRole('heading', { name: '鄧安娜', level: 1 })
+      .closest('section')
+    expect(section).not.toBeNull()
+    const basic = within(section as HTMLElement)
+    fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
+    const deactivation = basic.getByRole('region', { name: '操作確認' })
+    fireEvent.click(within(deactivation).getByRole('button', { name: '取消' }))
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1/active') &&
+          init?.method === 'PUT',
+      ),
+    ).toBe(false)
+    // 取消後重新開啟確認框，仍可完成停用。
+    fireEvent.click(basic.getByRole('button', { name: '停用帳號' }))
+    const disableConfirmation = basic.getByRole('region', {
       name: '操作確認',
     })
     await waitFor(() =>
@@ -1616,11 +1709,11 @@ describe('admin user and company pages', () => {
       }),
     )
     await waitFor(() => {
-      expect(screen.getByText('狀態：已停用')).toBeInTheDocument()
+      expect(basic.getByText('狀態：已停用')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '啟用帳號' }))
-    const activation = screen.getByRole('region', { name: '操作確認' })
+    fireEvent.click(basic.getByRole('button', { name: '啟用帳號' }))
+    const activation = basic.getByRole('region', { name: '操作確認' })
     await waitFor(() =>
       expect(
         within(activation).getByRole('button', { name: '確認' }),
@@ -1628,22 +1721,9 @@ describe('admin user and company pages', () => {
     )
     fireEvent.click(within(activation).getByRole('button', { name: '確認' }))
     await waitFor(() => {
-      expect(screen.getByText('狀態：啟用中')).toBeInTheDocument()
+      expect(basic.getByText('狀態：啟用中')).toBeInTheDocument()
     })
 
-    expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).endsWith('/users/user-1') && init?.method === 'PATCH',
-      ),
-    ).toBe(true)
-    expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).endsWith('/users/user-1/admin') &&
-          init?.method === 'PUT',
-      ),
-    ).toBe(true)
     expect(
       fetchMock.mock.calls.filter(
         ([url, init]) =>
@@ -1712,10 +1792,12 @@ describe('admin user and company pages', () => {
       has_field_access: false,
     })
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
-    const permissionNotice = screen.getByText('你沒有使用這個頁面的權限', {
-      selector: 'p',
-    })
-    expect(permissionNotice).toHaveTextContent('你沒有使用這個頁面的權限')
+    const permissionNotice = screen
+      .getByText('你沒有使用這個頁面的權限', { exact: true })
+      .closest('p[role="status"]')
+    expect(permissionNotice).toHaveTextContent(
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
     expect(permissionNotice).toHaveAttribute('role', 'status')
     expect(permissionNotice).toHaveClass('notice-info')
     expect(permissionNotice).not.toHaveClass('notice-error')
@@ -1735,9 +1817,9 @@ describe('admin user and company pages', () => {
         screen.getByRole('heading', { name: '無權限' }),
       ).toBeInTheDocument()
       expect(
-        screen.getByText('你沒有使用這個頁面的權限', {
-          selector: 'p',
-        }),
+        screen
+          .getByText('你沒有使用這個頁面的權限', { exact: true })
+          .closest('p[role="status"]'),
       ).toHaveAttribute('role', 'status')
       expect(screen.queryByRole('alert')).toBeNull()
       expect(
@@ -1769,6 +1851,7 @@ describe('admin user and company pages', () => {
     renderAdmin('/projects/project-demo-1/planning')
 
     await screen.findByRole('heading', { name: '計畫與任務' })
+    fireEvent.click(await screen.findByRole('link', { name: '建立計畫' }))
     const planName = await screen.findByLabelText(/計畫名稱/)
     fireEvent.change(planName, {
       target: { value: '尚未儲存的計畫名稱' },
@@ -2042,10 +2125,15 @@ describe('admin user and company pages', () => {
 
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
     expect(
-      screen.getByText('你沒有使用這個頁面的權限', {
-        selector: 'p',
-      }),
+      screen
+        .getByText('你沒有使用這個頁面的權限', { exact: true })
+        .closest('p[role="status"]'),
     ).toHaveAttribute('role', 'status')
+    expect(
+      screen
+        .getByText('你沒有使用這個頁面的權限', { exact: true })
+        .closest('p[role="status"]'),
+    ).toHaveTextContent('你沒有使用這個頁面的權限。如需使用，請洽系統管理者。')
     expect(screen.queryByRole('link', { name: '範本' })).toBeNull()
     expect(
       fetchMock.mock.calls.some(([input]) =>
@@ -2320,10 +2408,17 @@ describe('admin user and company pages', () => {
       })
 
       expect(
-        screen.getByText('你沒有使用這個頁面的權限', {
-          selector: 'p',
-        }),
+        screen
+          .getByText('你沒有使用這個頁面的權限', { exact: true })
+          .closest('p[role="status"]'),
       ).toHaveAttribute('role', 'status')
+      expect(
+        screen
+          .getByText('你沒有使用這個頁面的權限', { exact: true })
+          .closest('p[role="status"]'),
+      ).toHaveTextContent(
+        '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+      )
     })
 
     it('does not route to template management without access', () => {
@@ -2424,6 +2519,10 @@ describe('admin user and company pages', () => {
           })
           return Response.json(rows.at(-1), { status: 201 })
         }
+        const detail = /^\/api\/v1\/companies\/([^/]+)$/.exec(parsed.pathname)
+        if (detail && method === 'GET') {
+          return Response.json(rows.find((row) => row.id === detail[1]))
+        }
         if (url.includes('/companies/company-1') && init?.method === 'PATCH') {
           const body = JSON.parse(String(init.body)) as { name: string }
           rows[0].name = body.name
@@ -2450,25 +2549,43 @@ describe('admin user and company pages', () => {
     renderAdmin('/companies')
 
     expect(await screen.findByText('示範公司')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('公司名稱'), {
+    fireEvent.click(screen.getByRole('link', { name: '新增公司' }))
+    fireEvent.change(await screen.findByLabelText('公司名稱'), {
       target: { value: '第二家公司' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增公司' }))
-    expect(await screen.findByText('第二家公司')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: '第二家公司' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: '返回公司清單' }))
+    fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
 
-    fireEvent.click(screen.getAllByRole('button', { name: '改名稱' })[0])
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改公司名稱' }),
+    )
     fireEvent.change(screen.getByLabelText('公司名稱'), {
       target: { value: '更新後公司' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '儲存名稱' }))
-    expect(await screen.findByText('更新後公司')).toBeInTheDocument()
-
-    fireEvent.click(screen.getAllByRole('button', { name: '停用公司' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '儲存公司名稱' }))
     expect(
-      await screen.findByText('還有 1 個啟用中的帳號'),
+      await screen.findByRole('heading', { name: '更新後公司' }),
+    ).toBeInTheDocument()
+
+    const deactivate = screen.getAllByRole('button', { name: '停用公司' })[0]
+    // 停用的觸發鈕用外框紅，實心紅只留給確認框內的確認鈕。
+    expect(deactivate).toHaveClass('btn-danger-outline')
+    fireEvent.click(deactivate)
+    expect(
+      await screen.findByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(screen.queryByText('還有 1 個啟用中的帳號')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
+    ).not.toBeInTheDocument()
     expect(
       fetchMock.mock.calls.some(
         ([url, init]) =>
@@ -2479,7 +2596,9 @@ describe('admin user and company pages', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: '停用公司' })[0])
     expect(
-      await screen.findByText('還有 1 個啟用中的帳號'),
+      await screen.findByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
     ).toBeInTheDocument()
     await waitFor(() => {
       expect(
@@ -2515,6 +2634,9 @@ describe('admin user and company pages', () => {
         if (parsed.pathname === '/api/v1/companies' && !init?.method) {
           return Response.json({ items: [company], next_cursor: null })
         }
+        if (parsed.pathname === '/api/v1/companies/company-1') {
+          return Response.json(company)
+        }
         if (url.endsWith('/companies/company-1/active-users')) {
           return Response.json({
             count: 1,
@@ -2528,10 +2650,12 @@ describe('admin user and company pages', () => {
         return Response.json({}, { status: 204 })
       }),
     )
-    renderAdmin('/companies')
+    renderAdmin('/companies/company-1')
     fireEvent.click(await screen.findByRole('button', { name: '停用公司' }))
     expect(
-      await screen.findByText('還有 1 個啟用中的帳號'),
+      await screen.findByText(
+        '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+      ),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '確認停用公司' }))
     await waitFor(() => {
@@ -2564,7 +2688,7 @@ describe('management error messages', () => {
     ['user.external_managed', '此帳號的基本資料由外部來源管理。'],
     ['company.inactive', '不能把帳號連結到已停用的公司。'],
     ['user.username_conflict', '帳號名稱已被使用。'],
-    ['user.email_conflict', 'Email 已被使用。'],
+    ['user.email_conflict', '電子郵件已被使用。'],
     ['user.employee_no_conflict', '這家公司已有相同工號。'],
     ['company.name_conflict', '公司名稱已被使用。'],
     ['auth.password_invalid', '密碼長度不符合要求。'],
@@ -2637,13 +2761,14 @@ it('建立完成有臨時密碼時標題帶姓名，頂端取消隱藏', async (
   await createAccountThroughWizard('trial.new', 'trial@example.test', '王新進')
   const done = await screen.findByRole('region', { name: '建立完成' })
   expect(
-    within(done).getByRole('heading', { name: '已新增王新進的帳號' }),
+    within(done).getByRole('heading', { name: '已建立帳號：王新進' }),
   ).toBeVisible()
   expect(within(done).getByText('帳號：trial.new')).toBeVisible()
   expect(
-    within(done).getByRole('heading').nextElementSibling,
+    within(done).getByRole('heading').closest('[role="status"]')!
+      .nextElementSibling,
   ).toHaveTextContent('帳號：trial.new')
-  expect(done).toHaveTextContent('他第一次登入必須先改成自己的密碼')
+  expect(done).toHaveTextContent('對方第一次登入時必須改成自己的密碼')
   expect(done.textContent).not.toContain('王新進 的')
   await waitFor(() =>
     expect(
@@ -2652,4 +2777,215 @@ it('建立完成有臨時密碼時標題帶姓名，頂端取消隱藏', async (
       }),
     ).toBeNull(),
   )
+})
+
+it('ADM-AC56：直接開新增帳號有單一 h1，重新進頁回到第一步', async () => {
+  const fetchMock = managementFetch()
+  const view = renderAdmin('/accounts/new?q=anna')
+  await screen.findByLabelText('帳號名稱')
+  expect(
+    fetchMock.mock.calls.some(([url]) =>
+      /\/users\/new(?:[/?]|$)/.test(String(url)),
+    ),
+  ).toBe(false)
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+    '新增帳號',
+  )
+  expect(screen.getByRole('link', { name: '返回帳號清單' })).toHaveAttribute(
+    'href',
+    '/accounts?q=anna',
+  )
+  fireEvent.change(screen.getByLabelText('帳號名稱'), {
+    target: { value: 'draft.user' },
+  })
+  view.unmount()
+  renderAdmin('/accounts/new?q=anna')
+  expect(await screen.findByLabelText('帳號名稱')).toHaveValue('')
+  expect(
+    screen
+      .getByRole('navigation', { name: '新增帳號步驟' })
+      .querySelector('[aria-current="step"]'),
+  ).toBeVisible()
+  expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
+})
+
+it.each([{ delegated_modules: [] }, { delegated_modules: ['project'] }])(
+  'ADM-AC56：非管理者直接開新增網址不載入精靈：%j',
+  async ({ delegated_modules }) => {
+    const fetchMock = managementFetch()
+    renderAdmin('/accounts/new', false, { delegated_modules })
+    expect(
+      await screen.findByRole('heading', { name: '無權限' }),
+    ).toBeVisible()
+    expect(
+      screen
+        .getByText('新增帳號只有系統管理者能操作。', { exact: true })
+        .closest('p[role="status"]'),
+    ).toBeVisible()
+    expect(screen.queryByText(/如需使用，請洽系統管理者/)).toBeNull()
+    expect(screen.queryByLabelText('帳號名稱')).toBeNull()
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        /\/(companies|roles|permission-bundles|projects)(?:[/?]|$)/.test(
+          String(url),
+        ),
+      ),
+    ).toBe(false)
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        /\/users\/new(?:[/?]|$)/.test(String(url)),
+      ),
+    ).toBe(false)
+  },
+)
+
+it('ADM-AC56：新增頁選項載入 403 顯示無權限', async () => {
+  const fetchMock = managementFetch()
+  const original = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (input, init) => {
+    if (String(input).includes('/api/v1/companies')) {
+      return Response.json(
+        { error: { code: 'permission.denied' } },
+        { status: 403 },
+      )
+    }
+    return original(input, init)
+  })
+  renderAdmin('/accounts/new')
+  expect(await screen.findByRole('heading', { name: '無權限' })).toBeVisible()
+  expect(screen.queryByLabelText('帳號名稱')).toBeNull()
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+})
+
+it('ADM-AC56：新增頁選項失敗就近提示並可重試', async () => {
+  const fetchMock = managementFetch()
+  const original = fetchMock.getMockImplementation()!
+  let failed = false
+  fetchMock.mockImplementation(async (input, init) => {
+    if (String(input).includes('/api/v1/companies') && !failed) {
+      failed = true
+      return Response.json(
+        { error: { code: 'server.error' } },
+        { status: 500 },
+      )
+    }
+    return original(input, init)
+  })
+  renderAdmin('/accounts/new')
+  expect(await screen.findByRole('alert')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '重新載入選項' }))
+  expect(
+    await screen.findByRole('option', { name: '示範公司' }),
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
+})
+
+it.each(['/accounts/NEW', '/accounts/new/'])(
+  '新增保留字 %s 不查帳號且只有一個 h1',
+  async (path) => {
+    const fetchMock = managementFetch()
+    renderAdmin(path)
+    await screen.findByLabelText('帳號名稱')
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(
+      fetchMock.mock.calls.some(([url]) => /\/users\//i.test(String(url))),
+    ).toBe(false)
+  },
+)
+
+it.each([false, true])('詳情載入／失敗有唯一 h1，failure=%s', async (fail) => {
+  const fetchMock = managementFetch()
+  const original = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (url, init) => {
+    if (String(url).endsWith('/users/unlisted-id')) {
+      if (fail)
+        return Response.json(
+          { error: { code: 'server.error' } },
+          { status: 500 },
+        )
+      return new Promise<Response>(() => {})
+    }
+    return original(url, init)
+  })
+  renderAdmin('/accounts/unlisted-id')
+  if (fail) await screen.findAllByRole('alert')
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+    '帳號詳情',
+  )
+})
+
+it('不存在的帳號顯示 RouteNotFound 與唯一 h1', async () => {
+  const fetchMock = managementFetch()
+  const original = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (url, init) =>
+    String(url).endsWith('/users/unlisted-id')
+      ? Response.json(
+          { error: { code: 'resource.not_found' } },
+          { status: 404 },
+        )
+      : original(url, init),
+  )
+  renderAdmin('/accounts/unlisted-id')
+  await screen.findByRole('heading', { name: '找不到這個帳號' })
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  expect(screen.queryByRole('heading', { name: '能做什麼' })).toBeNull()
+})
+
+it('授權 403 後重試成功導到詳情，保留同一密碼且只建立一次', async () => {
+  const fetchMock = managementFetch({
+    onCreate: (body) => ({
+      ...regularUser,
+      id: 'retry-person',
+      username: String(body.username),
+      email: String(body.email),
+      name_zh: String(body.name_zh),
+      temporary_password: 'retry-once-password',
+    }),
+  })
+  const original = fetchMock.getMockImplementation()!
+  let attempts = 0
+  fetchMock.mockImplementation(async (url, init) => {
+    if (String(url).endsWith('/permission-bundles/office-bundle:apply')) {
+      attempts += 1
+      return attempts === 1
+        ? Response.json(
+            { error: { code: 'permission.denied' } },
+            { status: 403 },
+          )
+        : Response.json({ user_id: 'retry-person', granted_codes: [] })
+    }
+    return original(url, init)
+  })
+  renderAdmin('/accounts')
+  await createAccountThroughWizard(
+    'retry.account',
+    'retry@example.test',
+    '重試帳號',
+    false,
+  )
+  await screen.findByRole('button', { name: '重試未完成的步驟' })
+  expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts/new')
+  expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
+    'retry-once-password',
+  )
+  expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '重試未完成的步驟' }))
+  await screen.findByRole('heading', { level: 1, name: '重試帳號' })
+  expect(screen.getByTestId('pathname')).toHaveTextContent(
+    '/accounts/retry-person',
+  )
+  expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
+    'retry-once-password',
+  )
+  expect(attempts).toBe(2)
+  expect(
+    fetchMock.mock.calls.filter(
+      ([url, init]) =>
+        String(url).endsWith('/api/v1/users') && init?.method === 'POST',
+    ),
+  ).toHaveLength(1)
 })

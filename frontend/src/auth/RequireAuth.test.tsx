@@ -137,7 +137,7 @@ describe('RequireAuth 導向登入頁並保留原路徑（AUT-AC28）', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '登入' }))
 
-    await screen.findByRole('heading', { name: 'Admin' })
+    await screen.findByRole('heading', { name: '帳號', level: 1 })
 
     await waitFor(() => {
       const probe = screen.getByTestId('location-probe').textContent ?? ''
@@ -176,7 +176,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
     renderApp(['/accounts?x=1'])
 
-    await screen.findByRole('heading', { name: '個人設定' })
+    await screen.findByRole('heading', { name: '請先設定新密碼' })
 
     const probe = screen.getByTestId('location-probe').textContent ?? ''
     expect(probe).toContain('/settings')
@@ -193,7 +193,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
     renderApp(['/tasks'])
 
-    await screen.findByRole('heading', { name: '個人設定' })
+    await screen.findByRole('heading', { name: '請先設定新密碼' })
 
     const probe = screen.getByTestId('location-probe').textContent ?? ''
     expect(probe).toContain('/settings')
@@ -202,7 +202,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
   it.each([
     ['/accounts', '帳號'],
-    ['/tasks', '我的任務'],
+    ['/tasks', '全部任務'],
   ])('%s 變更密碼成功後回到原本的路徑', async (path, heading) => {
     let mustChangePassword = true
 
@@ -232,9 +232,9 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
     renderApp([path])
 
-    await screen.findByRole('heading', { name: '個人設定' })
+    await screen.findByRole('heading', { name: '請先設定新密碼' })
 
-    fireEvent.change(screen.getByLabelText('目前密碼'), {
+    fireEvent.change(screen.getByLabelText('臨時密碼'), {
       target: { value: 'old-temp-password' },
     })
     fireEvent.change(screen.getByLabelText('新密碼'), {
@@ -249,7 +249,8 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
     await waitFor(() => {
       const probe = screen.getByTestId('location-probe').textContent ?? ''
-      expect(probe.startsWith(`${path}|`)).toBe(true)
+      const expectedPath = path === '/tasks' ? '/tasks?scope=all' : path
+      expect(probe.startsWith(`${expectedPath}|`)).toBe(true)
     })
   })
 })
@@ -300,7 +301,7 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     stubSession()
     renderApp(['/tasks'])
 
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByRole('heading', { name: '全部任務' })
     fireEvent.click(screen.getByRole('button', { name: / ▾$/ }))
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
@@ -313,7 +314,7 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     stubSession()
     renderApp(['/tasks'])
 
-    await screen.findByRole('heading', { name: '我的任務' })
+    await screen.findByRole('heading', { name: '全部任務' })
     fireEvent.click(screen.getByRole('button', { name: / ▾$/ }))
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })

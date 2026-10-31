@@ -3,13 +3,16 @@ import { useId, useState } from 'react'
 import { rolePermissionDetails, summarizeRole } from './roleDescriptions'
 import './RolePermissionSummary.css'
 
+/** 顯示角色權限摘要，並由使用頁面指定展開鈕的既有樣式。 */
 export default function RolePermissionSummary({
   codes,
+  buttonClassName,
   descriptions,
   emptyText,
   name,
 }: {
   codes: string[]
+  buttonClassName?: string
   descriptions?: Map<string, string>
   emptyText?: string
   name: string
@@ -28,13 +31,14 @@ export default function RolePermissionSummary({
       {details.length > 0 && (
         <>
           <button
+            className={buttonClassName}
             aria-controls={listId}
             aria-expanded={expanded}
-            aria-label={`「${name}」完整權限`}
+            aria-label={`查看完整權限（${name}）`}
             onClick={() => setExpanded((value) => !value)}
             type="button"
           >
-            完整權限
+            查看完整權限
           </button>
           <ul hidden={!expanded} id={listId}>
             {details.map(({ code, label }) => (

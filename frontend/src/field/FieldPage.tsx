@@ -1,3 +1,4 @@
+import { SuggestedAssignee } from '../ui/SuggestedAssignee'
 import { useEffect, useState } from 'react'
 import {
   Link,
@@ -162,6 +163,9 @@ function TaskList({
   const [loading, setLoading] = useState(() => !restore || !memory.has(key))
   const [error, setError] = useState<'forbidden' | 'other' | null>(null)
   const [retry, setRetry] = useState(0)
+  // FUI-R02：預設範圍要等指派查詢完成才知道；決定前標題中性為「任務」，
+  // 避免先出現「我的任務」再改成「全部任務」。
+  const pendingDefaultScope = allowAutoScope && !state
 
   useEffect(() => {
     let active = true
@@ -267,9 +271,16 @@ function TaskList({
 
   return (
     <>
-      <h1 className="field-heading">{PAGE_TITLES.tasks}</h1>
+      <h1 className="field-heading">
+        {/* FUI-R02：查詢未決時沿用中性標題，範圍確定後才顯示對應標題。 */}
+        {pendingDefaultScope
+          ? '任務'
+          : scope === 'all'
+            ? '全部任務'
+            : PAGE_TITLES.tasks}
+      </h1>
       <p className="field-intro">已派出的未完成任務，依派送時間排列。</p>
-      {noAssignedTasks && (
+      {noAssignedTasks && scope === 'mine' && Boolean(state?.items.length) && (
         <section className="field-notice" aria-label="我的任務提醒">
           <p>目前沒有指派給你的任務。</p>
           <Button onClick={() => updateFilter('all', 'all')}>
@@ -409,7 +420,12 @@ function TaskList({
                       <span>補充地點：{task.location.location_text}</span>
                     )}
                     <span>
-                      建議指派：{task.suggested_assignee?.name_zh ?? '未指定'}
+                      建議指派：
+                      <SuggestedAssignee
+                        person={task.suggested_assignee}
+                        status={task.status}
+                        archived={Boolean(task.plan_archived)}
+                      />
                     </span>
                   </span>
                   <span className="field-card-foot">

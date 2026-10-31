@@ -40,6 +40,29 @@ async function settleInitial(
 }
 
 describe('useCursorList race conditions', () => {
+  it('reads initialQuery only from the first render', async () => {
+    const gate = deferred<Page<Row>>()
+    const calls: ListPageOptions[] = []
+    const fetchPage = vi.fn((params: ListPageOptions) => {
+      calls.push(params)
+      return gate.promise
+    })
+    const getErrorMessage = vi.fn(() => '載入失敗')
+    const view = renderHook(
+      ({ query }) => useCursorList(fetchPage, getErrorMessage, query),
+      { initialProps: { query: 'first' } },
+    )
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls).toEqual([{ q: 'first', limit: 50 }])
+    await act(async () => gate.resolve(page(['first-result'])))
+
+    view.rerender({ query: 'later' })
+
+    expect(calls).toHaveLength(1)
+    expect(view.result.current.query).toBe('first')
+    expect(view.result.current.appliedQuery).toBe('first')
+  })
+
   it('ignores an older search response that arrives late', async () => {
     const ctx = setup()
     await settleInitial(ctx)

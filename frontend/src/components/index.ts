@@ -14,3 +14,5 @@ export {
   FormGroup,
   type FormFieldControlProps,
 } from './forms/FormPatterns'
+
+export { PageTabs } from './PageTabs'

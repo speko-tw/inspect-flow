@@ -241,7 +241,16 @@ describe('project home', () => {
       has_field_access: true,
     })
 
-    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    const heading = await screen.findByRole('heading', {
+      name: 'DEMO-001｜示範工程',
+    })
+    // 代號（含「｜」）與名稱拆成兩個區塊，窄螢幕斷點只會落在「｜」後。
+    expect(heading.querySelector('.project-title-code')).toHaveTextContent(
+      'DEMO-001｜',
+    )
+    expect(heading.querySelector('.project-title-name')).toHaveTextContent(
+      '示範工程',
+    )
     expectNoNextStepCard()
     expect(screen.queryByText('新增查核項目')).not.toBeInTheDocument()
     expect(
@@ -418,7 +427,9 @@ describe('project home', () => {
     await screen.findByRole('heading', { name: '計畫與任務' })
     fireEvent.click(screen.getByRole('link', { name: '成員' }))
 
-    expect(await screen.findByRole('heading', { name: '成員' })).toBeVisible()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '成員' })).toBeVisible(),
+    )
     expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(2)
   })
 

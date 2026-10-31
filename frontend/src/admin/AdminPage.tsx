@@ -33,9 +33,11 @@ import RequireValidRouteIds from '../RequireValidRouteIds'
 import RouteNotFound from '../RouteNotFound'
 import { hasGlobalDashboardAccess } from './dashboard/api'
 import CompaniesPage from './CompaniesPage'
-import PeoplePage from './people/PeoplePage'
+import PeoplePage, { AccountCreationProvider } from './people/PeoplePage'
 import RolesPage from './roles/RolesPage'
 import ProjectHomePage from './projectHome/ProjectHomePage'
+import ProjectEditPage from './projects/ProjectEditPage'
+import ProjectCreatePage from './projects/ProjectCreatePage'
 import ProjectSectionPage from './projectHome/ProjectSectionPage'
 import { WorkflowSummaryProvider } from './projectHome/WorkflowSummaryProvider'
 import ProjectsPage from './projects/ProjectsPage'
@@ -61,11 +63,20 @@ const DashboardTaskPage = lazy(() => import('./dashboard/DashboardTaskPage'))
 
 const PROJECT_PAGE_ROUTES = [
   ROUTES.projectHome,
+  ROUTES.projectEdit,
   ROUTES.projectMembers,
+  ROUTES.projectMemberNew,
+  ROUTES.projectMemberEdit,
   ROUTES.projectItems,
   ROUTES.projectZones,
+  ROUTES.projectZoneNew,
   ROUTES.projectInspectionTemplates,
   ROUTES.projectPlanning,
+  ROUTES.projectPlanNew,
+  ROUTES.projectPlan,
+  ROUTES.projectTaskNew,
+  ROUTES.projectTask,
+  ROUTES.projectTaskEdit,
   ROUTES.projectProgress,
   ROUTES.projectProgressTask,
   ROUTES.projectItemChange,
@@ -75,6 +86,12 @@ type DashboardAccessState = { kind: 'allowed' } | { kind: 'denied' }
 
 function AdminRouteSuspense({ children }: { children: ReactNode }) {
   return <Suspense fallback={<p>載入中…</p>}>{children}</Suspense>
+}
+
+/** ADM-R54：換專案時重建表單，避免沿用上一筆的錯誤與確認草稿。 */
+function ProjectEditRoute() {
+  const { projectId = '' } = useParams()
+  return <ProjectEditPage key={projectId} />
 }
 
 function ProjectPlanningRoute({
@@ -176,8 +193,20 @@ const PROJECT_ROUTES = (
       path={nestedRoutePath(ROUTES.projectHome, ROUTES.adminShell)}
     />
     <Route
+      element={<ProjectEditRoute />}
+      path={nestedRoutePath(ROUTES.projectEdit, ROUTES.adminShell)}
+    />
+    <Route
       element={<ProjectSectionPage section="members" />}
       path={nestedRoutePath(ROUTES.projectMembers, ROUTES.adminShell)}
+    />
+    <Route
+      element={<ProjectSectionPage section="members" />}
+      path={nestedRoutePath(ROUTES.projectMemberNew, ROUTES.adminShell)}
+    />
+    <Route
+      element={<ProjectSectionPage section="members" />}
+      path={nestedRoutePath(ROUTES.projectMemberEdit, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectSectionPage section="inspection-items" />}
@@ -186,6 +215,10 @@ const PROJECT_ROUTES = (
     <Route
       element={<ProjectSectionPage section="zones" />}
       path={nestedRoutePath(ROUTES.projectZones, ROUTES.adminShell)}
+    />
+    <Route
+      element={<ProjectSectionPage section="zones" />}
+      path={nestedRoutePath(ROUTES.projectZoneNew, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectTemplatesRoute />}
@@ -203,6 +236,56 @@ const PROJECT_ROUTES = (
         </ProjectSectionPage>
       }
       path={nestedRoutePath(ROUTES.projectPlanning, ROUTES.adminShell)}
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
+        </ProjectSectionPage>
+      }
+      path={nestedRoutePath(ROUTES.projectPlanNew, ROUTES.adminShell)}
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
+        </ProjectSectionPage>
+      }
+      path={nestedRoutePath(ROUTES.projectPlan, ROUTES.adminShell)}
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
+        </ProjectSectionPage>
+      }
+      path={nestedRoutePath(ROUTES.projectTaskNew, ROUTES.adminShell)}
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
+        </ProjectSectionPage>
+      }
+      path={nestedRoutePath(ROUTES.projectTask, ROUTES.adminShell)}
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          {(permissions) => (
+            <ProjectPlanningRoute viewerPermissions={permissions} />
+          )}
+        </ProjectSectionPage>
+      }
+      path={nestedRoutePath(ROUTES.projectTaskEdit, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectSectionPage section="progress" />}
@@ -234,7 +317,9 @@ export default function AdminPage() {
   const { user } = useCurrentUser()
   return (
     <WorkflowSummaryProvider key={user.id}>
-      <AdminPageContent />
+      <AccountCreationProvider>
+        <AdminPageContent />
+      </AccountCreationProvider>
     </WorkflowSummaryProvider>
   )
 }
@@ -247,7 +332,10 @@ function TemporaryPasswordResult({
   children: ReactNode
   onDone: () => void
 }) {
-  const guard = useUnsavedNavigationGuard(true, '臨時密碼抄下了嗎？')
+  const guard = useUnsavedNavigationGuard(
+    true,
+    '臨時密碼抄下了嗎？離開後就無法再查看。',
+  )
   return (
     <>
       {guard.pending && (
@@ -259,6 +347,7 @@ function TemporaryPasswordResult({
           title="臨時密碼抄下了嗎？"
         >
           <p>離開後就無法再次查看臨時密碼。</p>
+          <p>忘了抄也沒關係，可以在帳號頁按「重設臨時密碼」重新產生。</p>
         </ConfirmBox>
       )}
       <section
@@ -310,9 +399,11 @@ function AdminPageContent() {
   // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
 
-  const isProjectSectionRoute = PROJECT_PAGE_ROUTES.some((route) =>
-    matchPath({ path: route.path, end: true }, location.pathname),
-  )
+  const isProjectSectionRoute =
+    location.pathname !== ROUTES.projectNew.path &&
+    PROJECT_PAGE_ROUTES.some((route) =>
+      matchPath({ path: route.path, end: true }, location.pathname),
+    )
 
   if (!user.is_admin) {
     return <MemberAdminShell dashboardAccess={dashboardAccess} user={user} />
@@ -322,7 +413,8 @@ function AdminPageContent() {
     <div className="app-shell">
       <AppHeader
         badge={
-          isProjectSectionRoute ? (
+          isProjectSectionRoute ||
+          location.pathname.toLowerCase().startsWith('/accounts') ? (
             <p className="topbar-badge">Admin</p>
           ) : (
             <h1 className="topbar-badge">Admin</h1>
@@ -349,15 +441,15 @@ function AdminPageContent() {
               })
             }}
           >
-            <h2
+            <h1
               id="temporary-password-heading"
               ref={resultHeadingRef}
               tabIndex={-1}
             >
               {temporaryPassword.source === 'created'
-                ? `已新增${passwordRecipient}的帳號`
+                ? `已建立帳號：${passwordRecipient}`
                 : `已重設${passwordRecipient}的臨時密碼`}
-            </h2>
+            </h1>
             <p>帳號：{temporaryPassword.username}</p>
             <p>
               {temporaryPassword.source === 'created'
@@ -384,6 +476,10 @@ function AdminPageContent() {
                   />
                 )
               }
+            />
+            <Route
+              path={nestedRoutePath(ROUTES.adminAccountNew, ROUTES.adminShell)}
+              element={<PeoplePage onTemporaryPassword={() => undefined} />}
             />
             <Route
               path={nestedRoutePath(ROUTES.adminPeople, ROUTES.adminShell)}
@@ -416,8 +512,40 @@ function AdminPageContent() {
               element={<RolesPage />}
             />
             <Route
+              path={nestedRoutePath(ROUTES.adminCompanyNew, ROUTES.adminShell)}
+              element={<CompaniesPage />}
+            />
+            <Route
+              path={nestedRoutePath(ROUTES.adminRoleNew, ROUTES.adminShell)}
+              element={<RolesPage />}
+            />
+            <Route element={<RequireValidRouteIds />}>
+              <Route
+                path={nestedRoutePath(
+                  ROUTES.adminCompanyDetail,
+                  ROUTES.adminShell,
+                )}
+                element={<CompaniesPage />}
+              />
+              <Route
+                path={nestedRoutePath(
+                  ROUTES.adminRoleDetail,
+                  ROUTES.adminShell,
+                )}
+                element={<RolesPage />}
+              />
+              <Route
+                path={nestedRoutePath(ROUTES.adminRoleEdit, ROUTES.adminShell)}
+                element={<RolesPage />}
+              />
+            </Route>
+            <Route
               path={nestedRoutePath(ROUTES.adminProjects, ROUTES.adminShell)}
               element={<ProjectsPage />}
+            />
+            <Route
+              element={<ProjectCreatePage />}
+              path={nestedRoutePath(ROUTES.projectNew, ROUTES.adminShell)}
             />
             <Route
               path={nestedRoutePath(ROUTES.dashboard, ROUTES.adminShell)}
@@ -519,9 +647,17 @@ function MemberAdminShell({
               canAccessRoute(user, ROUTES.adminProjects) ? (
                 <MyProjectsPage canCreateProject={user.can_create_project} />
               ) : (
-                <Navigate replace to={indexTarget} />
+                <AccessDeniedPage />
               )
             }
+          />
+          <Route
+            path={nestedRoutePath(ROUTES.adminAccountNew, ROUTES.adminShell)}
+            element={<PeoplePage onTemporaryPassword={() => undefined} />}
+          />
+          <Route
+            element={<ProjectCreatePage />}
+            path={nestedRoutePath(ROUTES.projectNew, ROUTES.adminShell)}
           />
           {canManageAccounts && (
             <Route

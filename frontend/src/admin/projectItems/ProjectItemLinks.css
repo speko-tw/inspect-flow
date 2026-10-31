@@ -62,6 +62,7 @@
 
 .project-item-delete-blocked p {
   color: var(--warning-text);
+  white-space: pre-line;
 }
 
 .project-item-template-hint {
@@ -73,4 +74,20 @@
   .project-item-actions {
     width: 100%;
   }
+}
+
+.project-item-inactive {
+  margin-block-start: var(--space-4);
+}
+
+.project-item-inactive > summary {
+  min-height: var(--touch-target);
+  cursor: pointer;
+}
+
+/* 使用中說明本身已有警示框，避免全域 alert 再套一層紅框。 */
+.project-item-delete-blocked [role='alert'] {
+  padding: 0;
+  border: 0;
+  background: transparent;
 }

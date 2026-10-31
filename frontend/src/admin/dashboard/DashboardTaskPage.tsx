@@ -1,3 +1,4 @@
+import { SuggestedAssignee } from '../../ui/SuggestedAssignee'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
@@ -28,9 +29,16 @@ const PAGE_SIZE = 50
 const FALLBACK_PROJECT_NAME = '這個專案'
 
 /** 建議指派的顯示名；姓名為空時不退回 user_id，改顯示「未指派」。 */
-function assigneeLabel(task: DashboardTask): string {
+function assigneeLabel(task: DashboardTask) {
   if (!task.suggested_assignee) return '未提供建議指派'
-  return task.suggested_assignee.name_zh?.trim() || '未指派'
+  return (
+    <SuggestedAssignee
+      person={task.suggested_assignee}
+      status={task.status}
+      archived={Boolean(task.plan_archived)}
+      unassignedLabel="未指派"
+    />
+  )
 }
 
 function taskStatus(status: string) {
@@ -200,7 +208,7 @@ export default function DashboardTaskPage() {
   }
 
   return (
-    <main className="dashboard-task-page">
+    <section className="dashboard-task-page">
       <nav aria-label="頁面路徑" className="dashboard-task-crumb">
         <Link to={ROUTES.dashboardIndex.path}>全部專案進度</Link>
         <span aria-hidden="true">／</span>
@@ -215,8 +223,7 @@ export default function DashboardTaskPage() {
         <Tag className="dashboard-task-scope">全部進度・唯讀</Tag>
       </header>
       <p className="dashboard-task-notice">
-        {'顯示任務、狀態、地點與建議指派。 ' +
-          '照片與查核結果不在此權限範圍。'}
+        {'顯示任務、狀態、地點與建議指派。' + '照片與查核結果不在此權限範圍。'}
       </p>
       <ListDetailLayout
         detail={
@@ -245,7 +252,7 @@ export default function DashboardTaskPage() {
         listTitle="任務清單"
         onBack={() => navigate(basePath)}
       />
-    </main>
+    </section>
   )
 }
 

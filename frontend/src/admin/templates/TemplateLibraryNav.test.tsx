@@ -172,6 +172,27 @@ describe('TemplateLibraryNav item selection', () => {
     expect(screen.queryByText('開啟詳情')).not.toBeInTheDocument()
   })
 
+  it('shows the mobile hint only while an openable item row exists', () => {
+    const { rerender } = render(
+      <TemplateLibraryNav
+        {...props}
+        expanded={new Set(['category-1'])}
+        mobile
+      />,
+    )
+
+    // 系統還收合時畫面上沒有「開啟詳情」，提示不能指向不存在的按鈕。
+    expect(screen.queryByText('開啟詳情')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('點選「開啟詳情」查看內容'),
+    ).not.toBeInTheDocument()
+
+    rerender(<TemplateLibraryNav {...props} mobile />)
+
+    expect(screen.getByText('開啟詳情')).toBeInTheDocument()
+    expect(screen.getByText('點選「開啟詳情」查看內容')).toBeInTheDocument()
+  })
+
   it('keeps the mobile detail cue and item selection', () => {
     render(<TemplateLibraryNav {...props} mobile />)
 
@@ -202,5 +223,29 @@ describe('TemplateLibraryNav item selection', () => {
     expect(within(appliedItem).getByText('已套用')).toBeInTheDocument()
     fireEvent.click(appliedItem)
     expect(onSelect).not.toHaveBeenCalled()
+  })
+})
+
+describe('TemplateLibraryNav selected marker', () => {
+  it('預設隱藏選取標記，只有明確啟用才顯示', () => {
+    const props = {
+      categories: [{ id: 'category-1', name: '土木工程' }],
+      systems: [{ id: 'system-1', category_id: 'category-1', name: '護欄' }],
+      items: [],
+      loadedCategoryIds: new Set(['category-1']),
+      loadedSystemIds: new Set(['system-1']),
+      selected: { type: 'system' as const, id: 'system-1' },
+      expanded: new Set(['category-1']),
+      onSelect: vi.fn(),
+      onToggle: vi.fn(),
+      onAddCategory: vi.fn(),
+      readOnly: true,
+      mobile: false,
+      mode: 'select' as const,
+    }
+    const { rerender } = render(<TemplateLibraryNav {...props} />)
+    expect(screen.queryByText('✓ 已選取')).toBeNull()
+    rerender(<TemplateLibraryNav {...props} showSelectedMarker />)
+    expect(screen.getByText('✓ 已選取')).toBeVisible()
   })
 })

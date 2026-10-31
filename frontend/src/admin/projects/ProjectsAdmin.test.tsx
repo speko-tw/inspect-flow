@@ -1,11 +1,12 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
   within,
 } from '@testing-library/react'
-import { Link, Route, Routes, useNavigate } from 'react-router'
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -19,6 +20,7 @@ import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import AdminPage from '../AdminPage'
 import type { User } from '../api'
 import type { MemberCandidate, Project, ProjectMember, Role } from './api'
+import ProjectDetailPage from './ProjectDetailPage'
 import contract from './fixtures/member-roles-contract.json'
 import roleContract from './fixtures/company-role-contract.json'
 
@@ -157,7 +159,10 @@ const systemAdmin = {
 function renderAt(
   path: string,
   user: CurrentUser = adminUser,
-  history?: { entries: string[]; index: number },
+  history?: {
+    entries: Array<string | { pathname: string; state?: unknown }>
+    index: number
+  },
 ) {
   return render(
     <DataMemoryRouter
@@ -179,10 +184,43 @@ function renderAt(
   )
 }
 
+function renderMemberReturnContract(returnTo: unknown) {
+  // 驗證內部回傳 state 契約；目前實際編輯入口仍只有成員清單。
+  return render(
+    <DataMemoryRouter
+      initialEntries={[
+        {
+          pathname: '/projects/project-1/members/user-1/edit',
+          state: { returnTo },
+        },
+      ]}
+    >
+      <CurrentUserProvider value={{ user: adminUser, clear: vi.fn() }}>
+        <Routes>
+          <Route
+            element={<ProjectDetailPage />}
+            path="/projects/:projectId/members/:userId/edit"
+          />
+          <Route
+            element={<p data-testid="member-return-list">Member list</p>}
+            path="/projects/:projectId/members"
+          />
+          <Route
+            element={<p data-testid="member-return-account">Account detail</p>}
+            path="/accounts/:personId"
+          />
+        </Routes>
+      </CurrentUserProvider>
+    </DataMemoryRouter>,
+  )
+}
+
 function MemberTestNavigation() {
   const navigate = useNavigate()
+  const location = useLocation()
   return (
     <>
+      <span data-testid="member-path">{location.pathname}</span>
       <Link to="/projects">離開成員頁</Link>
       <button onClick={() => navigate(-1)} type="button">
         成員頁上一頁
@@ -205,6 +243,7 @@ function projectFetch({
   candidates,
   office = false,
   failWith,
+  viewerPermissions,
 }: {
   projects?: Project[]
   members?: ProjectMember[]
@@ -219,6 +258,7 @@ function projectFetch({
     status: number
     fields?: { path: string; code: string }[]
   }
+  viewerPermissions?: string[]
 } = {}) {
   const projectRows = projects.map((row) => ({ ...row }))
   const memberRows = members.map((row) => ({ ...row }))
@@ -291,9 +331,11 @@ function projectFetch({
           primary_step: null,
           task_counts_visible: true,
           draft_tasks_missing_assignee: 0,
-          viewer_permission_codes: office
-            ? ['project_member.manage', 'inspection_plan.read']
-            : ['inspection_plan.read'],
+          viewer_permission_codes:
+            viewerPermissions ??
+            (office
+              ? ['project_member.manage', 'inspection_plan.read']
+              : ['inspection_plan.read']),
         })
       }
       if (parsed.pathname === '/api/v1/projects' && method === 'GET') {
@@ -463,7 +505,7 @@ function calls(
 
 function fillProjectForm() {
   if (!screen.queryByLabelText(/專案代號/)) {
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(screen.getByRole('link', { name: '新增專案' }))
   }
   fireEvent.change(screen.getByLabelText(/專案代號/), {
     target: { value: 'DEMO-002' },
@@ -477,6 +519,15 @@ function fillProjectForm() {
   fireEvent.change(screen.getByLabelText(/整體工程地點/), {
     target: { value: '第二示範工地' },
   })
+}
+
+async function openProjectEdit() {
+  const [link] = await screen.findAllByRole('link', {
+    name: /編輯專案/,
+  })
+  fireEvent.click(link)
+  await screen.findByRole('heading', { name: /修改專案/ })
+  await screen.findByRole('button', { name: '儲存專案' })
 }
 
 async function waitForNewProjectSubmit() {
@@ -661,7 +712,7 @@ function expectCancelThenDanger(scope: HTMLElement, labels: [string, string]) {
 }
 
 describe('admin projects page', () => {
-  it('opens create and edit as separate form modes', async () => {
+  it('opens create and edit on their separate routes', async () => {
     projectFetch()
     renderAt('/projects')
     await screen.findAllByText('示範工程')
@@ -671,40 +722,115 @@ describe('admin projects page', () => {
       .closest('article') as HTMLElement
     expect(card.querySelector('.card-actions')).not.toBeNull()
     expect(
-      within(card).getAllByRole('button', { name: /編輯專案/ }),
+      within(card).getAllByRole('link', { name: /編輯專案/ }),
     ).toHaveLength(1)
-    expect(within(card).getAllByRole('link')).toHaveLength(3)
+    expect(within(card).getAllByRole('link')).toHaveLength(4)
 
     expect(screen.queryByLabelText(/專案代號/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    const createLink = screen.getByRole('link', { name: '新增專案' })
+    expect(createLink).toHaveClass('btn', 'btn-primary')
+    fireEvent.click(createLink)
     expect(screen.getByRole('heading', { name: '新增專案' })).toBeVisible()
     expect(screen.getByLabelText(/專案代號/)).toHaveValue('')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
-    expect(
-      screen.getByRole('heading', { name: '編輯專案「示範工程」' }),
-    ).toBeVisible()
+    fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))
+    await openProjectEdit()
+    expect(screen.getByRole('heading', { name: '修改專案' })).toBeVisible()
+    expect(screen.getByRole('link', { name: '專案首頁' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
     expect(screen.getByLabelText(/專案代號/)).toHaveValue('DEMO-001')
     expect(screen.queryByRole('heading', { name: '新增專案' })).toBeNull()
     expect(screen.queryByLabelText('搜尋專案')).toBeNull()
-    expect(screen.queryByRole('button', { name: '新增專案' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '新增專案' })).toBeNull()
     expect(screen.queryByRole('region', { name: '專案工作台' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByLabelText(/專案代號/)).not.toBeInTheDocument()
   })
 
+  it('resets edit state when browser history changes the project ID', async () => {
+    const confirmPop = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirmPop)
+    const fetchMock = projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+      failWith: {
+        match: /\/projects\/project-1$/,
+        method: 'PATCH',
+        code: 'validation.failed',
+        status: 422,
+        fields: [{ path: '/name', code: 'field.too_long' }],
+      },
+    })
+    renderAt('/projects/project-1/edit', adminUser, {
+      entries: ['/projects/project-1/edit', '/projects/project-2/edit'],
+      index: 0,
+    })
+    await screen.findByRole('heading', { name: '修改專案' })
+    const firstName = await screen.findByLabelText(/工程名稱/)
+    fireEvent.change(firstName, { target: { value: '第一筆錯誤草稿' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    await screen.findByRole('alert', { name: '請修正以下問題' })
+    expect(calls(fetchMock, 'PATCH', /\/projects\/project-1$/)).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '成員頁下一頁' }))
+    expect(confirmPop).toHaveBeenCalledTimes(1)
+    await waitFor(() =>
+      expect(screen.getByTestId('member-path')).toHaveTextContent(
+        '/projects/project-2/edit',
+      ),
+    )
+    expect(await screen.findByLabelText(/工程名稱/)).toHaveValue(
+      '第二示範工程',
+    )
+    expect(screen.queryByRole('alert', { name: '請修正以下問題' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '成員頁上一頁' }))
+    expect(await screen.findByLabelText(/工程名稱/)).toHaveValue('示範工程')
+    expect(screen.queryByLabelText(/第一筆錯誤草稿/)).toBeNull()
+
+    fireEvent.change(await screen.findByLabelText(/本公司在這個案子的角色/), {
+      target: { value: 'supervisor' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    expect(screen.getByRole('group', { name: '修改本公司角色' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '成員頁下一頁' }))
+    expect(confirmPop).toHaveBeenCalledTimes(2)
+    await waitFor(() =>
+      expect(screen.getByTestId('member-path')).toHaveTextContent(
+        '/projects/project-2/edit',
+      ),
+    )
+    expect(screen.queryByRole('group', { name: '修改本公司角色' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '成員頁上一頁' }))
+    expect(await screen.findByLabelText(/本公司在這個案子的角色/)).toHaveValue(
+      'contractor',
+    )
+    expect(screen.queryByRole('group', { name: '修改本公司角色' })).toBeNull()
+  })
+
   it('cancels a new project form through the list transition', async () => {
     projectFetch()
     renderAt('/projects')
     await screen.findAllByText('示範工程')
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(screen.getByRole('link', { name: '新增專案' }))
 
     expect(screen.getByRole('heading', { name: '新增專案' })).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
 
     expect(screen.queryByRole('heading', { name: '新增專案' })).toBeNull()
-    expect(screen.queryByRole('region', { name: '未儲存變更' })).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: '有尚未儲存的變更' }),
+    ).toBeNull()
   })
 
   it('keeps or discards a dirty edit when cancelling to the list', async () => {
@@ -712,22 +838,22 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '未儲存的名稱' },
     })
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
 
-    let prompt = screen.getByRole('region', { name: '未儲存變更' })
+    let prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的名稱')
 
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    prompt = screen.getByRole('region', { name: '未儲存變更' })
-    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
+    prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
     expect(screen.queryByLabelText(/工程名稱/)).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('示範工程')
   })
 
@@ -736,7 +862,7 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByLabelText(/工程名稱/)).not.toBeInTheDocument()
 
@@ -747,7 +873,7 @@ describe('admin projects page', () => {
     fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
     await screen.findAllByText('伺服器更新後的名稱')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('伺服器更新後的名稱')
   })
 
@@ -802,13 +928,14 @@ describe('admin projects page', () => {
       .closest('article') as HTMLElement
     const cardLinks = within(card).getAllByRole('link')
     expect(cardLinks[0]).toHaveAccessibleName('開啟專案')
-    expect(cardLinks[0]).toHaveClass('btn-primary')
+    expect(cardLinks[0]).toHaveClass('btn-emphasis')
+    expect(cardLinks[0]).not.toHaveClass('btn-primary')
     expect(cardLinks[1]).toHaveAccessibleName('套用範本')
     expect(cardLinks[1]).not.toHaveClass('btn-primary')
     expect(screen.getByRole('button', { name: '搜尋' })).not.toHaveClass(
       'btn-primary',
     )
-    expect(screen.getByRole('button', { name: '新增專案' })).toHaveClass(
+    expect(screen.getByRole('link', { name: '新增專案' })).toHaveClass(
       'btn-primary',
     )
   })
@@ -840,24 +967,27 @@ describe('admin projects page', () => {
     projectFetch({ projects })
     renderAt('/projects')
 
+    // 卡片很多時 getByRole 在高負載下過慢，本檔兩個分頁測試改用
+    // 文字加標籤查詢，避免超過 5 秒測試逾時（#744）。
     await screen.findAllByText('示範工程0')
     expect(
-      screen.getByRole('heading', { name: /示範工程0/ }),
+      screen.getByText('示範工程0', { selector: 'h3' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('目標工程')).not.toBeInTheDocument()
+    // 每個測試只在第一次保留 getByRole，驗證按鈕的無障礙名稱。
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     await screen.findAllByText('目標工程')
     expect(
-      screen.getByRole('heading', { name: /目標工程/ }),
+      screen.getByText('目標工程', { selector: 'h3' }),
     ).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('搜尋專案'), {
       target: { value: 'demo-050' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    fireEvent.click(screen.getByText('搜尋', { selector: 'button' }))
     await screen.findAllByText('目標工程')
     expect(
-      screen.getByRole('heading', { name: /目標工程/ }),
+      screen.getByText('目標工程', { selector: 'h3' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('示範工程0')).not.toBeInTheDocument()
   })
@@ -874,16 +1004,16 @@ describe('admin projects page', () => {
     const fetchMock = projectFetch({ projects })
     renderAt('/projects')
 
-    await screen.findByRole('heading', { name: /計數工程0/ })
+    await screen.findByText('計數工程0', { selector: 'h3' })
     const firstCard = screen
-      .getByRole('heading', { name: /計數工程0/ })
+      .getByText('計數工程0', { selector: 'h3' })
       .closest('article')
     expect(firstCard).not.toBeNull()
     expect(within(firstCard!).getByText('啟用成員 0 人')).toBeVisible()
 
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
-    const secondPageHeading = await screen.findByRole('heading', {
-      name: /第二頁工程/,
+    const secondPageHeading = await screen.findByText('第二頁工程', {
+      selector: 'h3',
     })
     const secondPageCard = secondPageHeading.closest('article')
     expect(secondPageCard).not.toBeNull()
@@ -1032,9 +1162,9 @@ describe('admin projects page', () => {
     await screen.findAllByText('示範工程')
     fillProjectForm()
     await waitForNewProjectSubmit()
-    const form = screen
-      .getByRole('heading', { name: '新增專案', level: 2 })
-      .closest('form') as HTMLFormElement
+    const form = (await screen.findByLabelText(/工程名稱/)).closest(
+      'form',
+    ) as HTMLFormElement
     fireEvent.click(within(form).getByRole('button', { name: '新增專案' }))
 
     const alert = await within(form).findByRole('alert')
@@ -1051,9 +1181,14 @@ describe('admin projects page', () => {
     const fetchMock = projectFetch()
     renderAt('/projects')
     await screen.findAllByText('示範工程')
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(screen.getByRole('link', { name: '新增專案' }))
 
     const creator = await screen.findByLabelText(/建立者角色人選/)
+    expect(
+      screen.getByText(
+        '選一位人員，以建立者角色加入這個專案；不選的話專案先沒有成員，之後到『成員』頁再加入。',
+      ),
+    ).toBeVisible()
     await within(creator).findByRole('option', {
       name: '林鮑伯（bob.lin）',
     })
@@ -1105,7 +1240,7 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     expect(screen.getByLabelText(/專案代號/)).toHaveValue('DEMO-001')
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '改名後的工程' },
@@ -1124,20 +1259,17 @@ describe('admin projects page', () => {
       name: '改名後的工程',
       planned_start_date: null,
     })
-    expect(screen.getByRole('button', { name: '新增專案' })).toBeVisible()
+    expect(screen.getByRole('link', { name: '新增專案' })).toBeVisible()
   })
 
   // ADM-AC39：角色欄在最上面、預設承攬施工方、選項取自後端登記表，
   // 兩次送出的請求本體都明確帶 company_role。
   it('puts the company role first and always sends the chosen value', async () => {
     const fetchMock = projectFetch()
-    renderAt('/projects')
-    await screen.findAllByText('示範工程')
-
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
-    const form = screen
-      .getByRole('heading', { name: '新增專案', level: 2 })
-      .closest('form') as HTMLFormElement
+    renderAt('/projects/new')
+    const form = (await screen.findByLabelText(/工程名稱/)).closest(
+      'form',
+    ) as HTMLFormElement
     const role = await within(form).findByLabelText(/本公司在這個案子的角色/)
     await waitFor(() => expect(role).toBeEnabled())
     expect((form.querySelector('label') as HTMLElement).textContent).toContain(
@@ -1148,10 +1280,12 @@ describe('admin projects page', () => {
       within(role as HTMLElement)
         .getAllByRole('option')
         .map((option) => option.textContent),
-    ).toEqual(['承攬施工方', '監造方'])
-    expect(within(form).getByText(/會決定報表種類/)).toBeVisible()
+    ).toEqual(['承攬施工方（一級自主檢查）', '監造方（二級抽查（驗））'])
     expect(
-      within(form).getByText(/同工地的另一種角色請另開專案/),
+      within(form).getByText(
+        '選您公司在這個工地的身分，會決定報表種類。' +
+          '同一工地要用另一種身分，請另開專案。',
+      ),
     ).toBeVisible()
 
     fillProjectForm()
@@ -1167,7 +1301,7 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(screen.getByRole('link', { name: '新增專案' }))
     const role = await screen.findByLabelText(/本公司在這個案子的角色/)
     await waitFor(() => expect(role).toBeEnabled())
     fireEvent.change(role, { target: { value: 'supervisor' } })
@@ -1175,9 +1309,9 @@ describe('admin projects page', () => {
     await waitForNewProjectSubmit()
     fireEvent.click(
       within(
-        screen
-          .getByRole('heading', { name: '新增專案', level: 2 })
-          .closest('form') as HTMLFormElement,
+        (await screen.findByLabelText(/工程名稱/)).closest(
+          'form',
+        ) as HTMLFormElement,
       ).getByRole('button', { name: '新增專案' }),
     )
 
@@ -1189,26 +1323,39 @@ describe('admin projects page', () => {
   })
 
   it('blocks creating a project when the role options cannot load', async () => {
-    const fetchMock = projectFetch({
-      failWith: {
-        match: /\/project-company-roles$/,
-        method: 'GET',
-        code: 'server.error',
-        status: 500,
-      },
+    const fetchMock = projectFetch()
+    const fetchImplementation = fetchMock.getMockImplementation()
+    let failFirstRoleLoad = true
+    fetchMock.mockImplementation(async (input, init) => {
+      if (
+        failFirstRoleLoad &&
+        (init?.method ?? 'GET') === 'GET' &&
+        /\/project-company-roles$/.test(String(input))
+      ) {
+        failFirstRoleLoad = false
+        return Response.json(
+          { error: { code: 'server.error' } },
+          { status: 500 },
+        )
+      }
+      return fetchImplementation!(input, init)
     })
-    renderAt('/projects')
-    await screen.findAllByText('示範工程')
-
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    renderAt('/projects/new')
 
     expect(await screen.findByText(/無法載入選項/)).toBeVisible()
-    const form = screen
-      .getByRole('heading', { name: '新增專案', level: 2 })
-      .closest('form') as HTMLFormElement
+    const form = (await screen.findByLabelText(/工程名稱/)).closest(
+      'form',
+    ) as HTMLFormElement
     expect(
       within(form).getByRole('button', { name: '新增專案' }),
     ).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '重新載入選項' }))
+    await waitFor(() =>
+      expect(
+        within(form).getByRole('button', { name: '新增專案' }),
+      ).toBeEnabled(),
+    )
+    expect(calls(fetchMock, 'GET', /\/project-company-roles$/)).toHaveLength(2)
     expect(calls(fetchMock, 'POST', /\/projects$/)).toHaveLength(0)
   })
 
@@ -1219,7 +1366,7 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     const role = await screen.findByLabelText(/本公司在這個案子的角色/)
     await waitFor(() => expect(role).toBeEnabled())
     expect(role).toHaveValue('contractor')
@@ -1227,11 +1374,18 @@ describe('admin projects page', () => {
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
 
     const box = await screen.findByRole('group', { name: '修改本公司角色' })
+    const saveButton = screen.getByRole('button', { name: '儲存專案' })
+    const confirmButton = within(box).getByRole('button', { name: '確認' })
+    const pagePrimaryButtons = within(screen.getByRole('main'))
+      .getAllByRole('button')
+      .filter((button) => button.classList.contains('btn-primary'))
+
     expect(box).toHaveTextContent('已建立的任務與已產生的報表維持原樣')
     expect(box).toHaveTextContent('由「承攬施工方」改為「監造方」')
-    expect(within(box).getByRole('button', { name: '確認' })).toHaveClass(
-      'btn-primary',
-    )
+    expect(saveButton).toBeDisabled()
+    expect(saveButton).not.toHaveClass('btn-primary')
+    expect(confirmButton).toHaveClass('btn-primary')
+    expect(pagePrimaryButtons).toEqual([confirmButton])
     expect(
       within(box)
         .getAllByRole('button')
@@ -1245,6 +1399,13 @@ describe('admin projects page', () => {
     fireEvent.click(within(box).getByRole('button', { name: '取消' }))
     expect(screen.queryByRole('group', { name: '修改本公司角色' })).toBeNull()
     expect(calls(fetchMock, 'PATCH', /\/projects\//)).toHaveLength(0)
+    expect(saveButton).toBeEnabled()
+    expect(saveButton).toHaveClass('btn-primary')
+    expect(
+      within(screen.getByRole('main'))
+        .getAllByRole('button')
+        .filter((button) => button.classList.contains('btn-primary')),
+    ).toEqual([saveButton])
     expect(role).toHaveFocus()
 
     // 再開一次，不填原因：錯誤在欄旁、焦點在原因欄、不送請求。
@@ -1284,7 +1445,7 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     const role = await screen.findByLabelText(/本公司在這個案子的角色/)
     await waitFor(() => expect(role).toBeEnabled())
     fireEvent.change(role, { target: { value: 'supervisor' } })
@@ -1313,7 +1474,7 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     const role = await screen.findByLabelText(/本公司在這個案子的角色/)
     await waitFor(() => expect(role).toBeEnabled())
     fireEvent.change(role, { target: { value: 'supervisor' } })
@@ -1327,6 +1488,40 @@ describe('admin projects page', () => {
       await within(box).findByText('改本公司角色必須填寫變更原因。'),
     ).toBeVisible()
     await waitFor(() => expect(reason).toHaveFocus())
+    expect(reason).toHaveValue('合約改為監造')
+    expect(reason).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('refocuses the reason field when the same error occurs twice', async () => {
+    const fetchMock = projectFetch({
+      failWith: {
+        match: /\/projects\/project-1$/,
+        method: 'PATCH',
+        code: roleContract.reason_required_error.code,
+        status: roleContract.reason_required_error.status,
+      },
+    })
+    renderAt('/projects')
+    await screen.findAllByText('示範工程')
+    await openProjectEdit()
+    const role = await screen.findByLabelText(/本公司在這個案子的角色/)
+    await waitFor(() => expect(role).toBeEnabled())
+    fireEvent.change(role, { target: { value: 'supervisor' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    const box = await screen.findByRole('group', { name: '修改本公司角色' })
+    const reason = within(box).getByLabelText(/變更原因/)
+    fireEvent.change(reason, { target: { value: '第一次原因' } })
+    fireEvent.click(within(box).getByRole('button', { name: '確認' }))
+    expect(
+      await within(box).findByText('改本公司角色必須填寫變更原因。'),
+    ).toBeVisible()
+    await waitFor(() => expect(reason).toHaveFocus())
+
+    fireEvent.change(reason, { target: { value: '第二次原因' } })
+    fireEvent.click(within(box).getByRole('button', { name: '確認' }))
+    await waitFor(() => expect(reason).toHaveFocus())
+    expect(reason).toHaveValue('第二次原因')
+    expect(calls(fetchMock, 'PATCH', /\/projects\/project-1$/)).toHaveLength(2)
   })
 
   // ADM-R28：後端對過長原因回帶欄位指標的 422，訊息顯示在原因欄旁。
@@ -1343,7 +1538,7 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     const role = await screen.findByLabelText(/本公司在這個案子的角色/)
     await waitFor(() => expect(role).toBeEnabled())
     fireEvent.change(role, { target: { value: 'supervisor' } })
@@ -1357,6 +1552,7 @@ describe('admin projects page', () => {
       await within(box).findByText('變更原因最多 256 個字元。'),
     ).toBeVisible()
     await waitFor(() => expect(reason).toHaveFocus())
+    expect(reason).toHaveValue('合約改為監造')
     expect(reason).toHaveAttribute('aria-invalid', 'true')
   })
 
@@ -1373,7 +1569,7 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     const role = await screen.findByLabelText(/本公司在這個案子的角色/)
     await waitFor(() => expect(role).toBeEnabled())
     fireEvent.change(role, { target: { value: 'supervisor' } })
@@ -1385,7 +1581,9 @@ describe('admin projects page', () => {
     fireEvent.click(within(box).getByRole('button', { name: '確認' }))
 
     expect(
-      await screen.findByText('這個角色不能使用，請重新選擇。'),
+      await screen.findByText('這個角色不能使用，請重新選擇。', {
+        selector: '.form-pattern-field-error',
+      }),
     ).toBeVisible()
     await waitFor(() => expect(role).toHaveFocus())
     expect(role).toHaveAttribute('aria-invalid', 'true')
@@ -1398,7 +1596,7 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     const role = await screen.findByLabelText(/本公司在這個案子的角色/)
     await waitFor(() => expect(role).toBeEnabled())
     fireEvent.change(role, { target: { value: 'supervisor' } })
@@ -1423,7 +1621,7 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     await waitFor(() =>
       expect(screen.getByLabelText(/本公司在這個案子的角色/)).toBeEnabled(),
     )
@@ -1454,9 +1652,8 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('第二示範工程')
 
-    fireEvent.click(
-      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
-    )
+    fireEvent.click(screen.getByRole('link', { name: '編輯專案「示範工程」' }))
+    await screen.findByRole('heading', { name: '修改專案' })
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '已儲存的工程' },
     })
@@ -1465,24 +1662,27 @@ describe('admin projects page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
-        'button',
-        { name: '捨棄' },
-      ),
+      within(
+        screen.getByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', { name: '捨棄變更' }),
     )
     fireEvent.click(
-      screen.getByRole('button', { name: '編輯專案「第二示範工程」' }),
+      await screen.findByRole('link', {
+        name: '編輯專案「第二示範工程」',
+      }),
     )
+    await screen.findByRole('heading', { name: '修改專案' })
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: 'B 的未儲存草稿' },
     })
 
-    gate.resolve()
-    await screen.findByText('專案「已儲存的工程」已儲存。')
-    expect(
-      screen.getByRole('heading', { name: '編輯專案「第二示範工程」' }),
-    ).toBeVisible()
+    await act(async () => {
+      gate.resolve()
+      await gate.requestFinished
+    })
+    expect(screen.getByRole('heading', { name: '修改專案' })).toBeVisible()
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('B 的未儲存草稿')
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('does not show or focus an old save error in the next form', async () => {
@@ -1506,28 +1706,35 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('第二示範工程')
 
-    fireEvent.click(
-      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
-    )
+    fireEvent.click(screen.getByRole('link', { name: '編輯專案「示範工程」' }))
+    await screen.findByRole('heading', { name: '修改專案' })
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '無效的 A 修改' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
-        'button',
-        { name: '捨棄' },
-      ),
+      within(
+        screen.getByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', { name: '捨棄變更' }),
     )
     fireEvent.click(
-      screen.getByRole('button', { name: '編輯專案「第二示範工程」' }),
+      await screen.findByRole('link', {
+        name: '編輯專案「第二示範工程」',
+      }),
     )
+    await screen.findByRole('heading', { name: '修改專案' })
     const nextName = screen.getByLabelText(/工程名稱/)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '修改專案' })).toHaveFocus(),
+    )
     nextName.focus()
     fireEvent.change(nextName, { target: { value: 'B 的草稿' } })
 
-    gate.resolve()
+    await act(async () => {
+      gate.resolve()
+      await gate.requestFinished
+    })
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '儲存專案' })).toBeEnabled(),
     )
@@ -1551,41 +1758,46 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('第二示範工程')
 
-    fireEvent.click(
-      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
-    )
+    fireEvent.click(screen.getByRole('link', { name: '編輯專案「示範工程」' }))
+    await screen.findByRole('heading', { name: '修改專案' })
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '舊 session 的名稱' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
-        'button',
-        { name: '捨棄' },
-      ),
+      within(
+        screen.getByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', { name: '捨棄變更' }),
     )
     fireEvent.click(
-      screen.getByRole('button', { name: '編輯專案「第二示範工程」' }),
+      await screen.findByRole('link', {
+        name: '編輯專案「第二示範工程」',
+      }),
     )
+    await screen.findByRole('heading', { name: '修改專案' })
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     fireEvent.click(
-      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
+      await screen.findByRole('link', {
+        name: '編輯專案「示範工程」',
+      }),
     )
+    await screen.findByRole('heading', { name: '修改專案' })
     const reopenedName = screen.getByLabelText(/工程名稱/)
     fireEvent.change(reopenedName, {
       target: { value: '新 session 的草稿' },
     })
 
-    gate.resolve()
-    await screen.findByText('專案「舊 session 的名稱」已儲存。')
-    expect(
-      screen.getByRole('heading', { name: '編輯專案「示範工程」' }),
-    ).toBeVisible()
+    await act(async () => {
+      gate.resolve()
+      await gate.requestFinished
+    })
+    expect(screen.getByRole('heading', { name: '修改專案' })).toBeVisible()
     expect(reopenedName).toHaveValue('新 session 的草稿')
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
-  it('links to a created project without replacing a newer form', async () => {
+  it('locks the create route while saving and opens the created project', async () => {
     const fetchMock = projectFetch({
       projects: [
         makeProject(),
@@ -1603,113 +1815,68 @@ describe('admin projects page', () => {
     fillProjectForm()
     await waitForNewProjectSubmit()
     fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    fireEvent.click(
-      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
-        'button',
-        { name: '捨棄' },
-      ),
-    )
-    fireEvent.click(
-      screen.getByRole('button', { name: '編輯專案「第二示範工程」' }),
-    )
-    const nextName = screen.getByLabelText(/工程名稱/)
-    fireEvent.change(nextName, { target: { value: 'B 的未儲存草稿' } })
-
-    gate.resolve()
-    expect(await screen.findByText('已建立專案「第二示範工程」')).toBeVisible()
-    expect(screen.getByRole('link', { name: '開啟專案' })).toHaveAttribute(
-      'href',
-      '/projects/project-3',
-    )
-    expect(
-      screen.getByRole('heading', { name: '編輯專案「第二示範工程」' }),
-    ).toBeVisible()
-    expect(nextName).toHaveValue('B 的未儲存草稿')
-
-    fireEvent.click(screen.getByRole('link', { name: '開啟專案' }))
-    const leavePrompt = screen.getByRole('region', {
-      name: '未儲存變更',
+    expect(screen.getByRole('button', { name: '取消' })).toBeDisabled()
+    await act(async () => {
+      gate.resolve()
+      await gate.requestFinished
     })
-    fireEvent.click(
-      within(leavePrompt).getByRole('button', { name: '保留編輯' }),
-    )
     expect(
-      screen.getByRole('heading', {
-        name: '編輯專案「第二示範工程」',
-      }),
-    ).toBeVisible()
-    expect(nextName).toHaveValue('B 的未儲存草稿')
-
-    fireEvent.click(screen.getByRole('link', { name: '開啟專案' }))
-    fireEvent.click(
-      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
-        'button',
-        { name: '捨棄' },
-      ),
-    )
-    expect(
-      await screen.findByRole('heading', { name: '專案首頁' }),
-    ).toBeVisible()
-    expect(
-      screen.getByRole('heading', {
+      await screen.findByRole('heading', {
         name: 'DEMO-002｜第二示範工程',
       }),
     ).toBeVisible()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '已建立專案「第二示範工程」',
+    )
+    expect(screen.getByTestId('member-path')).toHaveTextContent(
+      '/projects/project-3',
+    )
   })
 
-  // ADM-R38：表單內按鈕卸載後，鍵盤焦點須回到可見清單入口。
-  it('restores focus after cancel, discard, and save', async () => {
+  // ADM-R38：切換獨立路由後，焦點落在新頁標題。
+  it('focuses destination headings after cancel, discard, and save', async () => {
     projectFetch()
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(screen.getByRole('link', { name: '新增專案' }))
+    await screen.findByRole('heading', { name: '新增專案' })
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    // 表單開啟時原按鈕會卸載，須檢查關閉後重新掛載的入口。
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '新增專案' })).toHaveFocus(),
+      expect(screen.getByRole('heading', { name: '專案' })).toHaveFocus(),
     )
 
-    fireEvent.click(
-      within(document.getElementById('project-card-project-1')!).getByRole(
-        'button',
-        { name: '編輯專案「示範工程」' },
-      ),
-    )
+    fireEvent.click(screen.getByRole('link', { name: '編輯專案「示範工程」' }))
+    await screen.findByRole('heading', { name: '修改專案' })
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '捨棄的名稱' },
     })
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
-        'button',
-        { name: '捨棄' },
-      ),
+      within(
+        screen.getByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', { name: '捨棄變更' }),
     )
     await waitFor(() =>
-      expect(document.getElementById('project-card-project-1')).toHaveFocus(),
+      expect(screen.getByRole('heading', { name: '專案' })).toHaveFocus(),
     )
 
     fireEvent.click(
-      within(document.getElementById('project-card-project-1')!).getByRole(
-        'button',
-        { name: '編輯專案「示範工程」' },
-      ),
+      await screen.findByRole('link', { name: '編輯專案「示範工程」' }),
     )
+    await screen.findByRole('heading', { name: '修改專案' })
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '改名後的工程' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
     await waitFor(() =>
-      expect(document.getElementById('project-card-project-1')).toHaveFocus(),
+      expect(screen.getByRole('heading', { name: '專案' })).toHaveFocus(),
     )
   })
 
-  // ADM-R38：保留搜尋條件會濾掉卡片；
-  // 焦點需回到新增按鈕。
-  it('restores focus when saving filters the edited card out', async () => {
-    projectFetch({
+  // ADM-R38：篩選後編輯再返回清單時，焦點落在清單標題。
+  it('focuses the list heading when save filters the edited card out', async () => {
+    const fetchMock = projectFetch({
       projects: [
         makeProject(),
         makeProject({
@@ -1726,12 +1893,12 @@ describe('admin projects page', () => {
       target: { value: 'DEMO-001' },
     })
     fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
-    await screen.findByRole('button', {
+    await screen.findByRole('link', {
       name: '編輯專案「示範工程」',
     })
     expect(screen.queryByText('第二示範工程')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     expect(screen.queryByLabelText('搜尋專案')).toBeNull()
     fireEvent.change(screen.getByLabelText('專案代號'), {
       target: { value: 'DEMO-003' },
@@ -1741,10 +1908,70 @@ describe('admin projects page', () => {
     await waitFor(() =>
       expect(document.getElementById('project-card-project-1')).toBeNull(),
     )
-    const addProjectButton = screen.getByRole('button', {
-      name: '新增專案',
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '專案' })).toHaveFocus(),
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('搜尋專案')).toHaveValue('DEMO-001'),
+    )
+    expect(screen.queryByText('第二示範工程')).toBeNull()
+    expect(
+      calls(fetchMock, 'GET', /\/projects\?[^ ]*q=DEMO-001/),
+    ).toHaveLength(2)
+  })
+
+  it('preserves the project search when edit returns without saving', async () => {
+    const fetchMock = projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
     })
-    await waitFor(() => expect(addProjectButton).toHaveFocus())
+    renderAt('/projects')
+    await screen.findAllByText('示範工程')
+    fireEvent.change(screen.getByLabelText('搜尋專案'), {
+      target: { value: 'DEMO-001' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    await screen.findByRole('link', { name: '編輯專案「示範工程」' })
+
+    async function expectFilteredList(stage: string) {
+      await screen.findByRole('heading', { name: '專案' })
+      await waitFor(() =>
+        expect(screen.getByLabelText('搜尋專案'), stage).toHaveValue(
+          'DEMO-001',
+        ),
+      )
+      expect(screen.queryByText('第二示範工程')).toBeNull()
+      await screen.findByRole('link', { name: '編輯專案「示範工程」' })
+    }
+
+    await openProjectEdit()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    await expectFilteredList('after cancel')
+
+    await openProjectEdit()
+    fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))
+    await expectFilteredList('after BackLink')
+
+    await openProjectEdit()
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    await expectFilteredList('after unchanged save')
+
+    await openProjectEdit()
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '捨棄的工程名稱' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    const prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
+    await expectFilteredList('after dirty discard')
+
+    expect(calls(fetchMock, 'PATCH', /\/projects\/project-1$/)).toHaveLength(0)
   })
 
   it('opens the card edit entry with the existing unsaved guard and saves', async () => {
@@ -1754,13 +1981,13 @@ describe('admin projects page', () => {
     await screen.findAllByText('示範工程')
 
     const card = document.querySelector('.project-workspace-card')!
-    const edit = within(card as HTMLElement).getByRole('button', {
+    const edit = within(card as HTMLElement).getByRole('link', {
       name: '編輯專案「示範工程」',
     })
-    expect(edit).toHaveAttribute('type', 'button')
+    expect(edit).toHaveAttribute('href', '/projects/project-1/edit')
     fireEvent.click(edit)
-    const heading = screen.getByRole('heading', {
-      name: '編輯專案「示範工程」',
+    const heading = await screen.findByRole('heading', {
+      name: '修改專案',
     })
     expect(heading).toBeVisible()
     await waitFor(() => expect(document.activeElement).toBe(heading))
@@ -1772,18 +1999,19 @@ describe('admin projects page', () => {
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '尚未儲存的名稱' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    let prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))
+    let prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('尚未儲存的名稱')
-    // 確認框關閉後由 effect 還焦點，等待 effect 完成。
-    await waitFor(() => expect(projectName).toHaveFocus())
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: '返回專案清單' })).toHaveFocus(),
+    )
 
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    prompt = screen.getByRole('region', { name: '未儲存變更' })
-    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
+    fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))
+    prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
     expect(screen.queryByLabelText(/工程名稱/)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '手機更新工程' },
     })
@@ -1803,12 +2031,11 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(
-      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
-    )
+    fireEvent.click(screen.getByRole('link', { name: '編輯專案「示範工程」' }))
+    await screen.findByRole('heading', { name: '修改專案' })
     expect(screen.queryByRole('link', { name: '開啟專案' })).toBeNull()
     expect(screen.queryByRole('link', { name: '套用範本' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '新增專案' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '新增專案' })).toBeNull()
     expect(screen.queryByLabelText('搜尋專案')).toBeNull()
     expect(screen.getByRole('button', { name: '儲存專案' })).toBeVisible()
   })
@@ -1818,24 +2045,26 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: ' 示範工程 ' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '新增專案' })).toBeVisible(),
+      expect(screen.getByRole('link', { name: '新增專案' })).toBeVisible(),
     )
     expect(calls(fetchMock, 'PATCH', /projects/)).toHaveLength(0)
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(screen.queryByRole('region', { name: '未儲存變更' })).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: '有尚未儲存的變更' }),
+    ).toBeNull()
     expect(screen.queryByLabelText(/專案代號/)).not.toBeInTheDocument()
   })
 
-  it('keeps a dirty create form when edit is requested, then discards on choice', async () => {
+  it('guards the dedicated create page cancel and preserves or discards draft', async () => {
     projectFetch({
       projects: [
         makeProject(),
@@ -1848,97 +2077,78 @@ describe('admin projects page', () => {
     })
     renderAt('/projects')
     await screen.findAllByText('示範工程')
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(screen.getByRole('link', { name: '新增專案' }))
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '未儲存的新工程' },
     })
-    fireEvent.click(screen.getAllByRole('button', { name: /編輯專案/ })[0])
+    fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))
 
-    const prompt = screen.getByRole('region', { name: '未儲存變更' })
-    expectCancelThenDanger(prompt, ['保留編輯', '捨棄'])
+    const prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
+    expectCancelThenDanger(prompt, ['保留編輯', '捨棄變更'])
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的新工程')
 
-    fireEvent.click(screen.getAllByRole('button', { name: /編輯專案/ })[0])
+    fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))
     fireEvent.click(
-      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
-        'button',
-        { name: '捨棄' },
-      ),
+      within(
+        screen.getByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', { name: '捨棄變更' }),
     )
-    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('示範工程')
+    expect(await screen.findByRole('heading', { name: '專案' })).toBeVisible()
+    expect(screen.queryByLabelText(/工程名稱/)).toBeNull()
   })
 
-  it('asks before switching to another project and preserves or discards edits', async () => {
-    projectFetch({
-      projects: [
-        makeProject(),
-        makeProject({
-          id: 'project-2',
-          project_code: 'DEMO-002',
-          name: '第二示範工程',
-        }),
-      ],
-    })
+  it('guards switching from a dirty edit to project home', async () => {
+    projectFetch()
     renderAt('/projects')
-    await screen.findAllByText('第二示範工程')
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    await screen.findAllByText('示範工程')
+    await openProjectEdit()
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
-      target: { value: '未儲存的新工程' },
+      target: { value: '保留或捨棄的名稱' },
     })
-    fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
-    expect(
-      screen.getByRole('region', { name: '未儲存變更' }),
-    ).toBeInTheDocument()
-    // 被另一個轉換覆蓋時確認框重新掛載，焦點回到保留編輯（#501 審查）。
-    ;(document.activeElement as HTMLElement).blur()
-    fireEvent.click(screen.getAllByRole('link', { name: '成員' })[0])
-    let prompt = screen.getByRole('region', { name: '未儲存變更' })
-    await waitFor(() =>
-      expect(
-        within(prompt).getByRole('button', { name: '保留編輯' }),
-      ).toHaveFocus(),
-    )
-    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
-    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的新工程')
 
-    fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
-    prompt = screen.getByRole('region', { name: '未儲存變更' })
-    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
+    fireEvent.click(screen.getByRole('link', { name: '專案首頁' }))
+    let prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('保留或捨棄的名稱')
+
+    fireEvent.click(screen.getByRole('link', { name: '專案首頁' }))
+    prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
     expect(
-      await screen.findByRole('heading', {
-        level: 1,
-        name: 'DEMO-002｜第二示範工程',
-      }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '成員' })).toBeInTheDocument()
+      await screen.findByRole('heading', { name: '專案首頁' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText(/工程名稱/)).toBeNull()
   })
 
   it('keeps or discards dirty edits when switching to a new project form', async () => {
     projectFetch()
     renderAt('/projects')
     await screen.findAllByText('示範工程')
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '未儲存的修改' },
     })
 
-    expect(screen.queryByRole('button', { name: '新增專案' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '新增專案' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    let prompt = screen.getByRole('region', { name: '未儲存變更' })
+    let prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的修改')
 
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    prompt = screen.getByRole('region', { name: '未儲存變更' })
-    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
+    prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
     expect(screen.queryByRole('heading', { name: '新增專案' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(screen.getByRole('link', { name: '新增專案' }))
     expect(screen.getByRole('heading', { name: '新增專案' })).toBeVisible()
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('')
   })
 
-  it('hides navigation during edits and restores after discard', async () => {
+  it('keeps project navigation available during dedicated edit and guards it', async () => {
     projectFetch({
       projects: [
         makeProject(),
@@ -1951,23 +2161,26 @@ describe('admin projects page', () => {
     })
     renderAt('/projects')
     await screen.findAllByText('第二示範工程')
-    fireEvent.click(screen.getAllByRole('button', { name: /編輯專案/ })[0])
+    fireEvent.click(screen.getAllByRole('link', { name: /編輯專案/ })[0])
+    await screen.findByRole('heading', { name: /修改專案/ })
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '未儲存的修改' },
     })
 
-    expect(screen.queryByRole('link', { name: '成員' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    let prompt = screen.getByRole('region', { name: '未儲存變更' })
+    expect(screen.getByRole('link', { name: '專案首頁' })).toBeVisible()
+    fireEvent.click(screen.getByRole('link', { name: '專案首頁' }))
+    let prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的修改')
 
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    prompt = screen.getByRole('region', { name: '未儲存變更' })
-    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
-    expect(await screen.findAllByRole('link', { name: '成員' })).toHaveLength(
-      2,
-    )
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的修改')
+    fireEvent.click(screen.getByRole('link', { name: '專案首頁' }))
+    prompt = screen.getByRole('group', { name: '有尚未儲存的變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
+    expect(
+      await screen.findByRole('heading', { name: '專案首頁' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText(/工程名稱/)).toBeNull()
   })
 
   it('shows a clear message when saving fails', async () => {
@@ -1993,7 +2206,7 @@ describe('admin projects page', () => {
 
   it('shows a project edit save error beside the form', async () => {
     const scroll = mockScrollIntoView()
-    projectFetch({
+    const fetchMock = projectFetch({
       failWith: {
         match: /\/projects\/project-1$/,
         method: 'PATCH',
@@ -2004,23 +2217,30 @@ describe('admin projects page', () => {
     renderAt('/projects')
     await screen.findAllByText('示範工程')
 
-    fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
+    await openProjectEdit()
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '無效的變更' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    const patchIndex = fetchMock.mock.calls.findIndex(
+      ([, init]) => init?.method === 'PATCH',
+    )
+    expect(patchIndex).toBeGreaterThanOrEqual(0)
+    expect(String(fetchMock.mock.calls[patchIndex]?.[0])).toMatch(
+      /\/projects\/project-1$/,
+    )
+    const patchResponse = await fetchMock.mock.results[patchIndex]?.value
+    expect(patchResponse?.status).toBe(422)
 
-    const form = screen
-      .getByRole('heading', { name: '編輯專案「示範工程」' })
-      .closest('form') as HTMLFormElement
-    const alert = await within(form).findByRole('alert')
+    const alert = await screen.findByRole('alert')
+    const form = alert.closest('form') as HTMLFormElement
     expect(alert).toHaveTextContent('資料格式不正確')
     expect(alert).toHaveAttribute('tabindex', '-1')
     const saveButton = within(form).getByRole('button', {
       name: '儲存專案',
     })
     expect(
-      saveButton.compareDocumentPosition(alert) &
+      alert.compareDocumentPosition(saveButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
     await waitFor(() => expect(document.activeElement).toBe(alert))
@@ -2046,8 +2266,12 @@ const memberAnna: ProjectMember = {
 }
 
 function addForm(): HTMLElement {
-  return screen.getByRole('heading', { name: '加入成員' })
-    .parentElement as HTMLElement
+  return document.querySelector('.member-add-form') as HTMLElement
+}
+
+async function openMemberAddForm() {
+  fireEvent.click(await screen.findByRole('link', { name: '加入成員' }))
+  await screen.findByRole('heading', { name: '加入成員' })
 }
 
 describe('專案成員表單未儲存導覽防護', () => {
@@ -2061,10 +2285,15 @@ describe('專案成員表單未儲存導覽防護', () => {
     projectFetch()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderAt('/projects/project-1/members', adminUser, {
-      entries: ['/projects', '/projects/project-1/members', '/projects'],
-      index: 1,
+      entries: [
+        '/projects',
+        '/projects/project-1/members',
+        '/projects/project-1/members/new',
+        '/projects',
+      ],
+      index: 2,
     })
-    await screen.findByText('目前沒有成員。')
+    await screen.findByRole('heading', { name: '加入成員' })
     selectMember()
 
     fireEvent.click(screen.getByRole('link', { name: '離開成員頁' }))
@@ -2091,6 +2320,7 @@ describe('專案成員表單未儲存導覽防護', () => {
     projectFetch()
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
     selectMember()
     const event = new Event('beforeunload', { cancelable: true })
 
@@ -2101,6 +2331,200 @@ describe('專案成員表單未儲存導覽防護', () => {
 })
 
 describe('admin project members', () => {
+  it('opens and refreshes the standalone add route without showing the list', async () => {
+    projectFetch()
+    renderAt('/projects/project-1/members/new')
+
+    expect(
+      await screen.findByRole('heading', { name: '加入成員' }),
+    ).toBeVisible()
+    expect(screen.getByTestId('member-path')).toHaveTextContent(
+      '/projects/project-1/members/new',
+    )
+    expect(screen.queryByRole('heading', { name: '成員列表' })).toBeNull()
+    expect(screen.getByRole('link', { name: '取消' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+  })
+
+  it('matches the member add route with a trailing slash', async () => {
+    projectFetch()
+    renderAt('/projects/project-1/members/new/')
+
+    expect(
+      await screen.findByRole('heading', { name: '加入成員' }),
+    ).toBeVisible()
+    expect(screen.getByTestId('member-path')).toHaveTextContent(
+      '/projects/project-1/members/new/',
+    )
+  })
+
+  it('shows retry instead of not-found when edit members return 503', async () => {
+    projectFetch({
+      failWith: {
+        match: /\/members$/,
+        method: 'GET',
+        code: 'service.unavailable',
+        status: 503,
+      },
+    })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入成員')
+    expect(screen.queryByText('找不到這位專案成員。')).toBeNull()
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+  })
+
+  it('denies a direct edit route when the member API returns 403', async () => {
+    projectFetch({
+      failWith: {
+        match: /\/members$/,
+        method: 'GET',
+        code: 'permission.denied',
+        status: 403,
+      },
+    })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(
+      await screen.findByRole('heading', { name: '無權限', level: 2 }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeNull()
+    expect(screen.queryByLabelText('查核員')).toBeNull()
+  })
+
+  it('shows a role-field retry and disables save when edit roles return 503', async () => {
+    projectFetch({
+      members: [memberAnna],
+      failWith: {
+        match: /\/assignable-roles/,
+        method: 'GET',
+        code: 'service.unavailable',
+        status: 503,
+      },
+    })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(
+      await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeVisible()
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入角色')
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '儲存角色' })).toBeDisabled()
+  })
+
+  it('denies a direct add route without project member permission', async () => {
+    projectFetch({
+      office: true,
+      failWith: {
+        match: /\/projects\/project-1\/members$/,
+        method: 'GET',
+        code: 'permission.denied',
+        status: 403,
+      },
+    })
+    renderAt('/projects/project-1/members/new', officeUser)
+
+    expect(
+      await screen.findByRole('heading', { name: '無權限', level: 2 }),
+    ).toBeVisible()
+    expect(screen.queryByRole('heading', { name: '加入成員' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: '成員' })).toBeNull()
+  })
+
+  it('opens a direct edit route and returns to the member list on cancel', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members/user-1/edit')
+
+    expect(
+      await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeVisible()
+    expect(screen.getByTestId('member-path')).toHaveTextContent(
+      '/projects/project-1/members/user-1/edit',
+    )
+    expect(screen.queryByRole('heading', { name: '成員列表' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(
+      await screen.findByRole('heading', { name: '成員列表' }),
+    ).toBeVisible()
+  })
+
+  it('honors a valid account-detail return state on cancel', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderMemberReturnContract('/accounts/user-1')
+    expect(
+      await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(await screen.findByTestId('member-return-account')).toBeVisible()
+  })
+
+  it('honors a valid account-detail return state after save', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderMemberReturnContract('/accounts/user-1')
+    expect(
+      await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByLabelText('審核者'))
+    fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
+    expect(await screen.findByTestId('member-return-account')).toBeVisible()
+  })
+
+  it.each([
+    ['invalid resource id', '/accounts/../escape'],
+    ['another internal route', '/roles'],
+    ['external URL', 'https://example.com/'],
+    ['account URL with query', '/accounts/user-1?next=/roles'],
+  ])(
+    'falls back to the member list for %s return state',
+    async (_name, value) => {
+      projectFetch({ members: [memberAnna] })
+      renderMemberReturnContract(value)
+      expect(
+        await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+      ).toBeVisible()
+      fireEvent.click(screen.getByRole('button', { name: '取消' }))
+      expect(await screen.findByTestId('member-return-list')).toBeVisible()
+    },
+  )
+
+  it('keeps the member-list link for a missing member with return state', async () => {
+    projectFetch()
+    renderMemberReturnContract('/accounts/user-1')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '找不到這位專案成員。',
+    )
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+  })
+
+  it('labels a rejected return target as the member-list fallback', async () => {
+    projectFetch()
+    renderMemberReturnContract('https://example.com/')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '找不到這位專案成員。',
+    )
+    expect(screen.getByRole('link', { name: '返回成員清單' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/members',
+    )
+  })
+
   it('shows member cards with company and role summary, not a table', async () => {
     projectFetch({
       members: [
@@ -2194,6 +2618,7 @@ describe('admin project members', () => {
     projectFetch()
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     expect(screen.getByLabelText('查核員')).toHaveAccessibleDescription(
       '可執行現場查核、讀取查核任務',
@@ -2205,9 +2630,11 @@ describe('admin project members', () => {
   })
 
   it('adds a member; hides existing, inactive, system users', async () => {
+    const scroll = mockScrollIntoView()
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
 
     const select = screen.getByRole('combobox', { name: '成員' })
     const optionNames = within(select)
@@ -2235,12 +2662,52 @@ describe('admin project members', () => {
       '已加入「林鮑伯（bob.lin）」。',
     )
     expect(screen.getByRole('status')).toHaveClass('notice-success')
+    const addedRow = screen.getByRole('link', { name: '林鮑伯' }).closest('li')
+    await waitFor(() => {
+      expect(addedRow).toHaveStyle({ backgroundColor: 'var(--success-bg)' })
+    })
+    const rowNotice = within(addedRow as HTMLElement).getByRole('status')
+    expect(rowNotice).toHaveTextContent('已加入「林鮑伯（bob.lin）」。')
+    await waitFor(() => {
+      expect(scroll.scrollIntoView.mock.contexts).toContain(rowNotice)
+    })
+    expect(scroll.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(screen.getByRole('heading', { name: '成員列表' })).toBeVisible()
+    await openMemberAddForm()
     expect(screen.getByText('沒有可加入的成員。')).toBeVisible()
-    // 全部都加完後，角色勾選與加入按鈕一起隱藏，只剩說明（#487）。
     expect(within(addForm()).queryByRole('checkbox')).toBeNull()
     expect(
       within(addForm()).queryByRole('button', { name: '加入成員' }),
     ).toBeNull()
+  })
+
+  it('reveals the added-member notice after roles finish loading', async () => {
+    const scroll = mockScrollIntoView()
+    const fetchMock = projectFetch()
+    renderAt('/projects/project-1/members')
+    await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
+
+    const select = screen.getByRole('combobox', { name: '成員' })
+    fireEvent.change(select, { target: { value: bob.id } })
+    fireEvent.click(within(addForm()).getByLabelText('查核員'))
+    const rolesGate = holdRequests(fetchMock, 'GET', /\/assignable-roles/)
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+
+    expect(await screen.findByRole('link', { name: '林鮑伯' })).toBeVisible()
+    expect(calls(fetchMock, 'GET', /\/assignable-roles/)).toHaveLength(2)
+    const addedRow = screen.getByRole('link', { name: '林鮑伯' }).closest('li')
+    const rowNotice = within(addedRow as HTMLElement).getByRole('status')
+    expect(rowNotice).toHaveTextContent('已加入「林鮑伯（bob.lin）」。')
+    expect(scroll.scrollIntoView.mock.contexts).not.toContain(rowNotice)
+
+    rolesGate.resolve()
+    await waitFor(() => {
+      expect(scroll.scrollIntoView.mock.contexts).toContain(rowNotice)
+    })
+    expect(scroll.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
   })
 
   it('filters assignable roles for external candidates', async () => {
@@ -2251,6 +2718,7 @@ describe('admin project members', () => {
     })
     renderAt('/projects/project-1/members', officeUser)
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     const select = screen.getByRole('combobox', { name: '成員' })
     fireEvent.change(select, { target: { value: externalCandidate.id } })
@@ -2280,10 +2748,42 @@ describe('admin project members', () => {
     renderAt('/projects/project-1/members')
     await screen.findByText('外部協作者')
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
 
     expect(screen.getByLabelText('查核員')).toBeVisible()
     expect(screen.queryByLabelText('內部角色')).toBeNull()
+  })
+
+  it('disables role editing on the current user row with an explanation', async () => {
+    const selfUser = {
+      ...adminUser,
+      id: anna.id,
+      username: anna.username,
+      name_zh: anna.name_zh,
+    }
+    const selfMember = { ...memberAnna }
+    projectFetch({ members: [selfMember] })
+    renderAt('/projects/project-1/members', selfUser)
+    await screen.findByText('不能修改自己的角色或把自己移出專案。')
+
+    const link = screen.getByRole('link', {
+      name: /修改「鄧安娜.*」的角色/,
+    })
+    expect(link).toHaveAttribute('aria-disabled', 'true')
+    expect(link).toHaveAttribute('tabindex', '-1')
+    const checkbox = screen.getByRole('checkbox', {
+      name: /選取.*鄧安娜.*的角色/,
+    })
+    expect(checkbox.closest('label')).toHaveTextContent(/^選取$/)
+    const warning = screen.getByText('不能修改自己的角色或把自己移出專案。')
+    expect(screen.getByRole('button', { name: /移出專案/ })).toBeDisabled()
+    expect(warning).toHaveClass('field-hint')
+    expect(warning.parentElement).not.toBe(link.parentElement)
+    expect(warning).toHaveAttribute('id', `self-role-warning-${selfMember.id}`)
+    expect(link).toHaveAttribute(
+      'aria-describedby',
+      `self-role-warning-${selfMember.id}`,
+    )
   })
 
   it('shows the not-assignable error by role choices', async () => {
@@ -2297,6 +2797,7 @@ describe('admin project members', () => {
     })
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
     })
@@ -2325,6 +2826,7 @@ describe('admin project members', () => {
     })
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: externalCandidate.id },
     })
@@ -2347,6 +2849,7 @@ describe('admin project members', () => {
     const fetchMock = projectFetch()
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: anna.id },
@@ -2379,6 +2882,7 @@ describe('admin project members', () => {
     const fetchMock = projectFetch()
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     fireEvent.click(
       within(addForm()).getByRole('button', { name: '加入成員' }),
@@ -2403,6 +2907,7 @@ describe('admin project members', () => {
     })
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: anna.id },
@@ -2423,7 +2928,7 @@ describe('admin project members', () => {
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     // 獨立畫面：清單與加入表單不在同一畫面。
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: /修改「/ })).toHaveFocus(),
@@ -2468,7 +2973,7 @@ describe('admin project members', () => {
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     fireEvent.click(screen.getByLabelText('審核者'))
     fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
 
@@ -2477,17 +2982,46 @@ describe('admin project members', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('maps the last-manager error on edit to the roles field', async () => {
+    const fetchMock = projectFetch({
+      members: [memberAnna],
+      failWith: {
+        match: /\/roles$/,
+        method: 'PUT',
+        code: 'project.last_manager',
+        status: 409,
+      },
+    })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
+    await screen.findByRole('heading', { name: /修改「.*」的角色/ })
+    fireEvent.click(screen.getByLabelText('審核者'))
+    fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
+
+    const error = await screen.findByText(
+      '這是此專案最後一位管理者，請先安排其他管理者後再修改角色。',
+    )
+    expect(error).toBeVisible()
+    expect(
+      screen.getByRole('group', { name: /專案角色/ }),
+    ).toHaveAccessibleDescription(error.textContent ?? '')
+    expect(screen.getByLabelText('查核員')).toHaveFocus()
+    expect(screen.getByLabelText('審核者')).toBeChecked()
+    expect(calls(fetchMock, 'PUT', /\/roles$/)).toHaveLength(1)
+  })
+
   it('asks before discarding unsaved role changes; Escape cancels', async () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     // 沒改動就取消：直接回清單。
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.getByRole('heading', { name: '成員列表' })).toBeVisible()
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     fireEvent.click(screen.getByLabelText('審核者'))
     fireEvent.keyDown(screen.getByLabelText('審核者'), { key: 'Escape' })
     const prompt = screen.getByRole('group', { name: '捨棄確認' })
@@ -2511,10 +3045,19 @@ describe('admin project members', () => {
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    fireEvent.click(screen.getByRole('button', { name: /移出專案/ }))
+    // 每張成員卡的動作：修改角色為外框強調，移出專案為外框紅；
+    // 實心紅只留給確認框。
+    expect(screen.getByRole('link', { name: /修改「.*」的角色/ })).toHaveClass(
+      'btn-emphasis',
+    )
+    const removeTrigger = screen.getByRole('button', { name: /移出專案/ })
+    expect(removeTrigger).toHaveClass('btn-danger-outline')
+    expect(removeTrigger).not.toHaveClass('btn-danger')
+    fireEvent.click(removeTrigger)
     expect(calls(fetchMock, 'DELETE', /members/)).toHaveLength(0)
     const confirm = screen.getByRole('group', { name: '移出確認' })
     expectCancelThenDanger(confirm, ['取消', '確認移出'])
+    expect(confirm).toHaveTextContent('嗎？移出後這個人在本專案的角色')
     // ConfirmBox 的初始焦點由 effect 設定，等待它完成後再檢查。
     await waitFor(() =>
       expect(
@@ -2548,6 +3091,7 @@ describe('admin project members', () => {
     })
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: anna.id },
@@ -2566,6 +3110,7 @@ describe('admin project members', () => {
     projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
 
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
@@ -2580,20 +3125,151 @@ describe('admin project members', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 
-  it('keeps the draft add form while editing another member', async () => {
+  it('guards leaving a draft add form and keeps it when continuing', async () => {
     projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
 
     fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
     })
     fireEvent.click(within(addForm()).getByLabelText('審核者'))
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
+    const prompt = screen.getByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
 
     expect(screen.getByRole('combobox', { name: '成員' })).toHaveValue(bob.id)
     expect(within(addForm()).getByLabelText('審核者')).toBeChecked()
+  })
+
+  it('clears an add draft after discard and reopening the same route', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    await openMemberAddForm()
+
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
+      target: { value: bob.id },
+    })
+    fireEvent.click(within(addForm()).getByLabelText('審核者'))
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
+    const prompt = screen.getByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
+    expect(screen.getByRole('heading', { name: '成員列表' })).toBeVisible()
+
+    await openMemberAddForm()
+    expect(screen.getByRole('combobox', { name: '成員' })).toHaveValue('')
+    expect(within(addForm()).getByLabelText('查核員')).not.toBeChecked()
+    expect(within(addForm()).getByLabelText('審核者')).not.toBeChecked()
+  })
+
+  it('clears add field errors after cancel and reopening the route', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    await openMemberAddForm()
+    await screen.findByRole('combobox', { name: '成員' })
+    await screen.findByLabelText('查核員')
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+
+    expect(screen.getByText('請選擇要加入的成員。')).toBeVisible()
+    expect(screen.getByText('請至少選一個角色。')).toBeVisible()
+    expect(screen.getByRole('combobox', { name: '成員' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    expect(within(addForm()).getByLabelText('查核員')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
+    expect(screen.getByRole('heading', { name: '成員列表' })).toBeVisible()
+    await openMemberAddForm()
+
+    expect(screen.queryByText('請選擇要加入的成員。')).toBeNull()
+    expect(screen.queryByText('請至少選一個角色。')).toBeNull()
+    expect(screen.getByRole('combobox', { name: '成員' })).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    expect(within(addForm()).getByLabelText('查核員')).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+  })
+
+  it('closes a removal confirmation when opening the add route', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+
+    fireEvent.click(screen.getByRole('button', { name: /移出專案/ }))
+    expect(screen.getByRole('group', { name: '移出確認' })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('link', { name: '加入成員' }))
+    await screen.findByRole('heading', { name: '加入成員' })
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
+
+    await screen.findByRole('heading', { name: '成員列表' })
+    expect(screen.queryByRole('group', { name: '移出確認' })).toBeNull()
+  })
+
+  it('does not return to the add form after saving and going Back', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members', adminUser, {
+      entries: ['/projects', '/projects/project-1/members'],
+      index: 1,
+    })
+    await screen.findByText('鄧安娜')
+    await openMemberAddForm()
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
+      target: { value: bob.id },
+    })
+    fireEvent.click(screen.getByLabelText('查核員'))
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+    await screen.findByRole('status')
+
+    fireEvent.click(screen.getByRole('button', { name: '成員頁上一頁' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('member-path')).toHaveTextContent(
+        /^\/projects\/project-1\/members$/,
+      ),
+    )
+    expect(screen.queryByRole('heading', { name: '加入成員' })).toBeNull()
+  })
+
+  it('discards edit changes on Back before reopening the same member', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    projectFetch({ members: [memberAnna] })
+    renderAt('/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
+    await screen.findByRole('heading', { name: /修改「.*」的角色/ })
+    fireEvent.click(screen.getByLabelText('查核員'))
+    fireEvent.click(screen.getByLabelText('審核者'))
+    expect(screen.getByLabelText('審核者')).toBeChecked()
+
+    fireEvent.click(screen.getByRole('button', { name: '成員頁上一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    expect(
+      await screen.findByRole('heading', { name: '成員列表' }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
+    await screen.findByRole('heading', { name: /修改「.*」的角色/ })
+    expect(screen.getByLabelText('查核員')).toBeChecked()
+    expect(screen.getByLabelText('審核者')).not.toBeChecked()
   })
 
   it('uses mock shapes that match the backend member schema', async () => {
@@ -2634,6 +3310,7 @@ describe('admin project members', () => {
     const fetchMock = projectFetch({ rolePages: [[roleA], [roleB]] })
     renderAt('/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
+    await openMemberAddForm()
 
     expect(screen.getByLabelText('審核者')).toBeVisible()
     expect(calls(fetchMock, 'GET', /\/assignable-roles/)).toHaveLength(2)
@@ -2665,6 +3342,7 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
 
     expect(await screen.findByText('鄧安娜')).toBeVisible()
+    await openMemberAddForm()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(calls(fetchMock, 'GET', globalReads)).toHaveLength(0)
     expect(calls(fetchMock, 'GET', /\/projects\/project-1$/)).toHaveLength(0)
@@ -2680,10 +3358,11 @@ describe('project members for an office user (not admin, #481)', () => {
     projectFetch({ office: true, members: [memberAnna] })
     renderAt(path, officeUser)
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
 
     const checkbox = screen.getByLabelText('查核員')
     const button = screen.getByRole('button', {
-      name: '「查核員」完整權限',
+      name: '查看完整權限（查核員）',
     })
     expect(button).toHaveAttribute('aria-expanded', 'false')
     const checked = (checkbox as HTMLInputElement).checked
@@ -2699,6 +3378,7 @@ describe('project members for an office user (not admin, #481)', () => {
     const fetchMock = projectFetch({ office: true, members: [memberAnna] })
     renderAt(path, officeUser)
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
 
     const select = screen.getByRole('combobox', { name: '成員' })
     expect(
@@ -2722,11 +3402,9 @@ describe('project members for an office user (not admin, #481)', () => {
     expect(
       JSON.parse(String(calls(fetchMock, 'POST', /\/members$/)[0][1]?.body)),
     ).toEqual({ user_id: bob.id, role_ids: [roleA.id] })
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(await screen.findByRole('status')).toHaveTextContent(
       '已加入「林鮑伯（bob.lin）」。',
     )
-    // 加入後這個人不再是候選；沒有人可加時改顯示說明。
-    expect(await screen.findByText('沒有可加入的成員。')).toBeVisible()
   })
 
   it('changes roles on the separate screen by clicking', async () => {
@@ -2734,7 +3412,7 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
     await screen.findByText('鄧安娜')
 
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     expect(
       await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
     ).toBeVisible()
@@ -2777,14 +3455,23 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
 
     expect(await screen.findByText('鄧安娜')).toBeVisible()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(
+      screen.getByRole('link', { name: /修改「.*」的角色/ }),
+    ).toBeEnabled()
+    await openMemberAddForm()
     expect(await screen.findByText(/無法載入可加入的成員/)).toBeVisible()
     expect(
       within(addForm()).getByRole('button', { name: '加入成員' }),
     ).toBeDisabled()
-    // 角色區塊與成員操作不受影響。
+    // 新增表單的角色選擇仍可用；取消後回到原清單。
     expect(within(addForm()).getByLabelText('查核員')).toBeVisible()
+    fireEvent.click(screen.getByRole('link', { name: '取消' }))
     expect(
-      screen.getByRole('button', { name: /修改「.*」的角色/ }),
+      await screen.findByRole('heading', { name: '成員列表' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('link', { name: /修改「.*」的角色/ }),
     ).toBeEnabled()
   })
 
@@ -2820,14 +3507,15 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
 
     expect(await screen.findByText('鄧安娜')).toBeVisible()
-    expect(await screen.findByText(/無法載入角色/)).toBeVisible()
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法載入角色')
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
     // 名稱由成員清單直接帶來，角色清單失敗也不影響顯示。
     expect(screen.getByText('查核員')).toBeVisible()
     expect(screen.queryByText('（角色名稱無法顯示）')).toBeNull()
+    expect(screen.queryByRole('combobox', { name: '成員' })).toBeNull()
     expect(
-      screen.getByRole('button', { name: /修改「.*」的角色/ }),
-    ).toBeDisabled()
-    expect(screen.getByRole('combobox', { name: '成員' })).toBeVisible()
+      screen.getByRole('link', { name: /修改「.*」的角色/ }),
+    ).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('retries every failed block with the reload button', async () => {
@@ -2841,6 +3529,8 @@ describe('project members for an office user (not admin, #481)', () => {
       return (inner as NonNullable<typeof inner>)(input, init)
     })
     renderAt(path, officeUser)
+    await screen.findByRole('heading', { name: '成員列表' })
+    await openMemberAddForm()
     await screen.findByText(/無法載入可加入的成員/)
 
     failing = false
@@ -2865,11 +3555,9 @@ describe('project members for an office user (not admin, #481)', () => {
     expect(
       await screen.findByRole('heading', { name: '無權限', level: 2 }),
     ).toBeVisible()
-    expect(
-      await screen.findByText('你沒有使用這個頁面的權限', {
-        selector: 'p[role="status"]',
-      }),
-    ).toBeVisible()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
     expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/settings',
@@ -2889,6 +3577,8 @@ describe('project members for an office user (not admin, #481)', () => {
       ],
     })
     renderAt(path, officeUser)
+    await screen.findByRole('heading', { name: '成員列表' })
+    await openMemberAddForm()
 
     expect(await screen.findByText('沒有可加入的成員。')).toBeVisible()
     expect(screen.getByText(/需要新增帳號請洽系統管理者/)).toBeVisible()
@@ -2905,16 +3595,21 @@ function holdRequests(
   fetchMock: ReturnType<typeof projectFetch>,
   method: string,
   pattern: RegExp,
-): Deferred<void> {
+): Deferred<void> & { requestFinished: Promise<void> } {
   const gate = deferred()
+  const requestFinished = deferred<void>()
   const original = fetchMock.getMockImplementation()
   fetchMock.mockImplementation(async (input, init) => {
     if ((init?.method ?? 'GET') === method && pattern.test(String(input))) {
       await gate.promise
     }
-    return (original as NonNullable<typeof original>)(input, init)
+    try {
+      return await (original as NonNullable<typeof original>)(input, init)
+    } finally {
+      requestFinished.resolve()
+    }
   })
-  return gate
+  return { ...gate, requestFinished: requestFinished.promise }
 }
 
 function formOf(element: HTMLElement): HTMLFormElement {
@@ -2933,6 +3628,7 @@ describe('project members forms guard (#507)', () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
     await fillAdd()
     const gate = holdRequests(fetchMock, 'POST', /\/members$/)
     const form = formOf(addForm())
@@ -2958,6 +3654,7 @@ describe('project members forms guard (#507)', () => {
     })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
     await fillAdd()
     const form = formOf(addForm())
 
@@ -2974,6 +3671,7 @@ describe('project members forms guard (#507)', () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
+    await openMemberAddForm()
     await fillAdd()
 
     expectImeEnterIgnored(screen.getByRole('combobox', { name: '成員' }))
@@ -2985,7 +3683,7 @@ describe('project members forms guard (#507)', () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     fireEvent.click(screen.getByLabelText('審核者'))
     const gate = holdRequests(fetchMock, 'PUT', /\/roles$/)
     const form = formOf(screen.getByRole('button', { name: '儲存角色' }))
@@ -3002,7 +3700,7 @@ describe('project members forms guard (#507)', () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/projects/project-1/members')
     await screen.findByText('鄧安娜')
-    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByRole('link', { name: /修改「.*」的角色/ }))
     fireEvent.click(screen.getByLabelText('審核者'))
 
     expectImeEnterIgnored(screen.getByLabelText('審核者'))
@@ -3024,5 +3722,383 @@ describe('project members forms guard (#507)', () => {
 
     expect(await screen.findByText('目前沒有成員。')).toBeVisible()
     expect(calls(fetchMock, 'DELETE', /\/members\//)).toHaveLength(1)
+  })
+
+  it('creates through the dedicated page and replaces the form history entry', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/projects/new', adminUser, {
+      entries: ['/projects', '/projects/new'],
+      index: 1,
+    })
+
+    const form = await screen.findByRole('heading', { name: '新增專案' })
+    expect(form).toBeVisible()
+    expect(screen.getByLabelText(/本公司在這個案子的角色/)).toHaveValue(
+      'contractor',
+    )
+    expect(screen.getByLabelText(/建立者角色人選/)).toBeVisible()
+    fillProjectForm()
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+
+    expect(await screen.findByRole('status', { name: '' })).toHaveTextContent(
+      '已建立專案「第二示範工程」',
+    )
+    expect(calls(fetchMock, 'POST', /\/projects$/)).toHaveLength(1)
+    expect(screen.getByTestId('member-path')).toHaveTextContent(
+      '/projects/project-2',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '成員頁上一頁' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('member-path')).toHaveTextContent(
+        /^\/projects$/,
+      ),
+    )
+    expect(screen.queryByRole('heading', { name: '新增專案' })).toBeNull()
+  })
+
+  it('gives both Admin and creators one h1 on the new-project page', async () => {
+    projectFetch()
+    const adminView = renderAt('/projects/new', adminUser)
+    await screen.findByRole('heading', { name: '新增專案' })
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(
+      screen.getByRole('heading', { name: 'Admin', level: 1 }),
+    ).toBeVisible()
+
+    adminView.unmount()
+    projectFetch()
+    renderAt('/projects/new', { ...officeUser, can_create_project: true })
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: '新增專案',
+      }),
+    ).toBeVisible()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  })
+
+  it('shows the project edit entry to Admin and scoped editors only', async () => {
+    projectFetch({ viewerPermissions: ['project.update'] })
+    const adminView = renderAt('/projects/project-1', adminUser)
+
+    expect(
+      await screen.findByRole('link', { name: '編輯專案' }),
+    ).toHaveAttribute('href', '/projects/project-1/edit')
+
+    adminView.unmount()
+    projectFetch({ viewerPermissions: ['project.update'] })
+    const scopedEditor = { ...officeUser, has_project_access: true }
+    const scopedView = renderAt('/projects/project-1', scopedEditor)
+    expect(
+      await screen.findByRole('link', { name: '編輯專案' }),
+    ).toHaveAttribute('href', '/projects/project-1/edit')
+
+    scopedView.unmount()
+    projectFetch({ viewerPermissions: ['project.read'] })
+    const readonlyMember = { ...officeUser, has_project_access: true }
+    renderAt('/projects/project-1', readonlyMember)
+    await screen.findByRole('heading', { name: '專案首頁' })
+    expect(
+      screen.queryByRole('link', { name: '編輯專案' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('edits a project on its route and returns to its safe list target', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/projects/project-1/edit', adminUser, {
+      entries: ['/projects', '/projects/project-1/edit'],
+      index: 1,
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: '修改專案' }),
+    ).toBeVisible()
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '修改後工程' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '專案「修改後工程」已儲存。',
+    )
+    expect(calls(fetchMock, 'PATCH', /\/projects\/project-1$/)).toHaveLength(1)
+    expect(screen.getByTestId('member-path')).toHaveTextContent(
+      '/projects/project-1',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '成員頁上一頁' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('member-path')).toHaveTextContent(
+        /^\/projects$/,
+      ),
+    )
+    expect(screen.queryByRole('heading', { name: /修改專案/ })).toBeNull()
+  })
+
+  it('allows scoped project creators and denies unauthorized direct form routes', async () => {
+    projectFetch()
+    const creator: CurrentUser = {
+      ...officeUser,
+      can_create_project: true,
+    }
+    const creatorView = renderAt('/projects/new', creator)
+    expect(
+      await screen.findByRole('heading', { name: '新增專案' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText('建立者角色人選')).toBeNull()
+    creatorView.unmount()
+
+    const deniedUser: CurrentUser = {
+      ...officeUser,
+      has_project_access: true,
+    }
+    renderAt('/projects/new', deniedUser)
+    expect(
+      await screen.findByRole('heading', { name: '無權限' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText(/專案代號/)).toBeNull()
+  })
+
+  it.each(['https://x', '//x', '/roles', 42])(
+    'returns to this project for unsafe return target %s',
+    async (returnTo) => {
+      projectFetch()
+      renderAt('/projects/project-1/edit', adminUser, {
+        entries: [
+          '/projects',
+          {
+            pathname: '/projects/project-1/edit',
+            state: { returnTo },
+          },
+        ],
+        index: 1,
+      })
+      await screen.findByRole('heading', { name: /修改專案/ })
+
+      fireEvent.click(screen.getByRole('button', { name: '取消' }))
+      await screen.findByRole('heading', {
+        name: 'DEMO-001｜示範工程',
+        level: 1,
+      })
+      expect(screen.getByTestId('member-path')).toHaveTextContent(
+        /^\/projects\/project-1$/,
+      )
+    },
+  )
+
+  it.each(['https://x', '//x', '/roles', 42])(
+    'discards unsafe project query state already on the list route %s',
+    async (projectQuery) => {
+      projectFetch()
+      renderAt('/projects', adminUser, {
+        entries: [
+          {
+            pathname: '/projects',
+            state: { projectQuery },
+          },
+        ],
+        index: 0,
+      })
+
+      expect(await screen.findByLabelText('搜尋專案')).toHaveValue('')
+    },
+  )
+
+  it('keeps plain project query state already on the list route', async () => {
+    projectFetch()
+    renderAt('/projects', adminUser, {
+      entries: [
+        {
+          pathname: '/projects',
+          state: { projectQuery: '示範' },
+        },
+      ],
+      index: 0,
+    })
+
+    expect(await screen.findByLabelText('搜尋專案')).toHaveValue('示範')
+  })
+
+  it.each(['https://x', '//x', '/roles', 42])(
+    'discards unsafe project query state %s',
+    async (projectQuery) => {
+      projectFetch()
+      renderAt('/projects/project-1/edit', adminUser, {
+        entries: [
+          '/projects',
+          {
+            pathname: '/projects/project-1/edit',
+            state: { returnTo: '/projects', returnQuery: projectQuery },
+          },
+        ],
+        index: 1,
+      })
+      await screen.findByRole('heading', { name: /修改專案/ })
+
+      fireEvent.click(screen.getByRole('button', { name: '取消' }))
+      const search = await screen.findByLabelText('搜尋專案')
+      await waitFor(() => expect(search).toHaveValue(''))
+      expect(screen.getByTestId('member-path')).toHaveTextContent(
+        /^\/projects$/,
+      )
+    },
+  )
+
+  it('explains the report impact of the company role on edit', async () => {
+    projectFetch()
+    renderAt('/projects/project-1/edit')
+    const role = await screen.findByLabelText(/本公司在這個案子的角色/)
+
+    expect(role).toHaveAttribute(
+      'aria-describedby',
+      'edit-company-role-description',
+    )
+    expect(
+      screen.getByText(
+        '選您公司在這個工地的身分，會決定報表種類。同一工地要用另一種身分，請另開專案。',
+      ),
+    ).toBeVisible()
+  })
+
+  it('allows scoped project updates and denies a readonly member edit URL', async () => {
+    projectFetch({ viewerPermissions: ['project.update'] })
+    const scopedEditor: CurrentUser = {
+      ...officeUser,
+      has_project_access: true,
+    }
+    const editor = renderAt('/projects/project-1/edit', scopedEditor)
+    expect(
+      await screen.findByRole('heading', { name: '修改專案' }),
+    ).toBeVisible()
+    editor.unmount()
+
+    projectFetch()
+    const readonlyMember: CurrentUser = {
+      ...officeUser,
+      has_project_access: true,
+    }
+    renderAt('/projects/project-1/edit', readonlyMember)
+    expect(
+      await screen.findByRole('heading', { name: '無權限' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText(/工程名稱/)).toBeNull()
+  })
+
+  it('focuses a server field error and keeps the edited draft', async () => {
+    const fetchMock = projectFetch({
+      failWith: {
+        match: /\/projects\/project-1$/,
+        method: 'PATCH',
+        code: 'validation.failed',
+        status: 422,
+        fields: [{ path: '/name', code: 'field.too_long' }],
+      },
+    })
+    renderAt('/projects/project-1/edit')
+    await screen.findByRole('heading', { name: '修改專案' })
+    const name = screen.getByLabelText(/工程名稱/)
+    fireEvent.change(name, { target: { value: '保留草稿名稱' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+
+    const summary = await screen.findByRole('alert', {
+      name: '請修正以下問題',
+    })
+    expect(summary).toHaveTextContent('工程名稱')
+    expect(
+      within(summary).getByRole('link', { name: /工程名稱.*輸入內容太長/ }),
+    ).toHaveAttribute('href', '#edit-project-name')
+    expect(
+      await screen.findByText('輸入內容太長。', {
+        selector: '.form-pattern-field-error',
+      }),
+    ).toBeVisible()
+    expect(name).toHaveAttribute('aria-invalid', 'true')
+    expect(name).toHaveFocus()
+    expect(name).toHaveValue('保留草稿名稱')
+    expect(calls(fetchMock, 'PATCH', /\/projects\/project-1$/)).toHaveLength(1)
+  })
+
+  it('rejects an invalid project ID before calling a project API', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/projects/not.a.resource/edit')
+
+    expect(
+      await screen.findByRole('heading', { name: '找不到這個專案' }),
+    ).toBeVisible()
+    expect(
+      calls(fetchMock, 'GET', /\/projects\/not\.a\.resource/),
+    ).toHaveLength(0)
+    expect(screen.queryByLabelText(/工程名稱/)).toBeNull()
+  })
+
+  it('shows the not-found page when project loading returns 404', async () => {
+    const fetchMock = projectFetch({
+      failWith: {
+        match: /\/projects\/project-1$/,
+        method: 'GET',
+        code: 'project.not_found',
+        status: 404,
+      },
+    })
+    renderAt('/projects/project-1/edit')
+
+    expect(
+      await screen.findByRole('heading', { name: '找不到這個專案' }),
+    ).toBeVisible()
+    expect(calls(fetchMock, 'GET', /\/projects\/project-1$/)).toHaveLength(1)
+    expect(screen.queryByLabelText(/工程名稱/)).toBeNull()
+  })
+
+  it('denies editing when saving returns 403', async () => {
+    const fetchMock = projectFetch({
+      failWith: {
+        match: /\/projects\/project-1$/,
+        method: 'PATCH',
+        code: 'permission.denied',
+        status: 403,
+      },
+    })
+    renderAt('/projects/project-1/edit')
+    await screen.findByRole('heading', { name: '修改專案' })
+    fireEvent.change(await screen.findByLabelText(/工程名稱/), {
+      target: { value: '權限撤回後的草稿' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '無權限' }),
+    ).toBeVisible()
+    expect(calls(fetchMock, 'PATCH', /\/projects\/project-1$/)).toHaveLength(1)
+    expect(screen.queryByLabelText(/工程名稱/)).toBeNull()
+  })
+
+  it('retries a transient project load error without exposing the form', async () => {
+    const fetchMock = projectFetch()
+    const fetchImplementation = fetchMock.getMockImplementation()
+    let failFirstProjectLoad = true
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (
+        failFirstProjectLoad &&
+        (init?.method ?? 'GET') === 'GET' &&
+        /\/projects\/project-1$/.test(url)
+      ) {
+        failFirstProjectLoad = false
+        return Response.json(
+          { error: { code: 'server.error' } },
+          { status: 503 },
+        )
+      }
+      return fetchImplementation!(input, init)
+    })
+    renderAt('/projects/project-1/edit')
+
+    expect(await screen.findByRole('alert')).toBeVisible()
+    expect(screen.queryByLabelText(/工程名稱/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '重新載入' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '修改專案' }),
+    ).toBeVisible()
+    expect(calls(fetchMock, 'GET', /\/projects\/project-1$/)).toHaveLength(2)
   })
 })

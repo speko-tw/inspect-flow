@@ -1,10 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { useState } from 'react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
-import PeoplePage from './PeoplePage'
+import RealPeoplePage, { AccountCreationProvider } from './PeoplePage'
 
 const peopleApiMock = vi.hoisted(() => ({
   request: vi.fn(),
@@ -25,20 +24,28 @@ vi.mock('../../auth/useCurrentUser', () => ({
   }),
 }))
 
+function PeoplePage(props: Parameters<typeof RealPeoplePage>[0]) {
+  return (
+    <AccountCreationProvider>
+      <RealPeoplePage {...props} />
+    </AccountCreationProvider>
+  )
+}
+
 vi.mock('../UsersPage', () => ({
   default: ({
-    onSelectUser,
     initialQuery,
     detailUserId,
   }: {
-    onSelectUser: (id: string) => void
     initialQuery: string
     detailUserId?: string | null
   }) => (
     <section>
       <span>搜尋：{initialQuery}</span>
       {detailUserId && <span>詳情：{detailUserId}</span>}
-      <button onClick={() => onSelectUser('person-1')}>開啟林沐青</button>
+      <Link to={`/accounts/person-1?q=${encodeURIComponent(initialQuery)}`}>
+        開啟林沐青
+      </Link>
     </section>
   ),
 }))
@@ -47,103 +54,42 @@ vi.mock('../module-permissions/ModulePermissionsPage', () => ({
   default: ({
     selectedUserId,
     openWizardRequest,
-    onTemporaryPasswordVisible,
-    onRequestTemporaryPasswordLeave,
-    onWizardBackToList,
-    onWizardViewUser,
+    onCreationComplete,
+    onWizardCancel,
   }: {
     selectedUserId?: string
     openWizardRequest?: number
-    onTemporaryPasswordVisible?: (visible: boolean) => void
-    onRequestTemporaryPasswordLeave?: (action: () => void) => void
-    onWizardBackToList?: () => void
-    onWizardViewUser?: (id: string) => void
+    onWizardCancel?: () => void
+    onCreationComplete?: (result: {
+      id: string
+      username: string
+      name_zh: string
+      temporary_password: string
+    }) => void
   }) => (
-    <ModulePermissionsMock
-      onRequestTemporaryPasswordLeave={onRequestTemporaryPasswordLeave}
-      onTemporaryPasswordVisible={onTemporaryPasswordVisible}
-      onWizardBackToList={onWizardBackToList}
-      onWizardViewUser={onWizardViewUser}
-      openWizardRequest={openWizardRequest}
-      selectedUserId={selectedUserId}
-    />
-  ),
-}))
-
-function ModulePermissionsMock({
-  openWizardRequest,
-  selectedUserId,
-  onTemporaryPasswordVisible,
-  onRequestTemporaryPasswordLeave,
-  onWizardBackToList,
-  onWizardViewUser,
-}: {
-  openWizardRequest?: number
-  selectedUserId?: string
-  onTemporaryPasswordVisible?: (visible: boolean) => void
-  onRequestTemporaryPasswordLeave?: (action: () => void) => void
-  onWizardBackToList?: () => void
-  onWizardViewUser?: (id: string) => void
-}) {
-  const [passwordVisible, setPasswordVisible] = useState(false)
-  const action = (leave: () => void) =>
-    onRequestTemporaryPasswordLeave?.(leave)
-
-  return (
     <section>
       {selectedUserId ? '模組授權' : '能力設定'}
       {openWizardRequest ? (
         <>
-          <button
-            onClick={() => {
-              setPasswordVisible(true)
-              onTemporaryPasswordVisible?.(true)
-            }}
-            type="button"
-          >
-            顯示臨時密碼
-          </button>
-          {passwordVisible && <output>temporary-secret</output>}
+          <input aria-label="精靈草稿" />
+          <button onClick={onWizardCancel}>取消</button>
           <button
             onClick={() =>
-              action(() => {
-                setPasswordVisible(false)
-                onTemporaryPasswordVisible?.(false)
+              onCreationComplete?.({
+                id: 'person-1',
+                username: 'new.person',
+                name_zh: '新帳號',
+                temporary_password: 'once-only-password',
               })
             }
-            type="button"
           >
-            新增另一個帳號
-          </button>
-          <button
-            onClick={() =>
-              action(() => {
-                setPasswordVisible(false)
-                onTemporaryPasswordVisible?.(false)
-                onWizardBackToList?.()
-              })
-            }
-            type="button"
-          >
-            回清單
-          </button>
-          <button
-            onClick={() =>
-              action(() => {
-                setPasswordVisible(false)
-                onTemporaryPasswordVisible?.(false)
-                onWizardViewUser?.('person-1')
-              })
-            }
-            type="button"
-          >
-            查看這個帳號的能力
+            完成建立
           </button>
         </>
       ) : null}
     </section>
-  )
-}
+  ),
+}))
 
 describe('PeoplePage', () => {
   beforeEach(() => {
@@ -185,6 +131,7 @@ describe('PeoplePage', () => {
 
     expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
     expect(screen.queryByText('林沐青')).toBeNull()
+    expect(await screen.findByPlaceholderText('輸入姓名或帳號')).toBeVisible()
     fireEvent.click(await screen.findByRole('link', { name: '其他帳號' }))
 
     expect(await screen.findByText('模組授權')).toBeInTheDocument()
@@ -283,127 +230,111 @@ describe('PeoplePage', () => {
     )
   })
 
-  it('臨時密碼顯示時，站內導覽須確認且可留在精靈', async () => {
-    peopleApiMock.request.mockResolvedValue({ items: [] })
-    render(
-      <DataMemoryRouter initialEntries={['/accounts']}>
-        <>
-          <PeoplePage onTemporaryPassword={vi.fn()} />
-          <Link to="/companies">離開精靈</Link>
-        </>
-      </DataMemoryRouter>,
-    )
-
-    fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
-    fireEvent.click(screen.getByRole('button', { name: '顯示臨時密碼' }))
-    fireEvent.click(screen.getByRole('link', { name: '離開精靈' }))
-
-    expect(
-      await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
-    ).toBeVisible()
-    expect(screen.getByRole('heading', { name: '新增帳號' })).toBeVisible()
-    expect(screen.getByText('temporary-secret')).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: '留在此頁' }))
-    expect(
-      screen.queryByRole('heading', { name: '臨時密碼抄下了嗎？' }),
-    ).toBeNull()
-    expect(screen.getByRole('heading', { name: '新增帳號' })).toBeVisible()
-    expect(screen.getByText('temporary-secret')).toBeVisible()
-  })
-
-  it.each([
-    ['新增另一個帳號', '新增帳號'],
-    ['回清單', '帳號'],
-    ['查看這個帳號的能力', '詳情：person-1'],
-  ])(
-    '內部操作「%s」取消會保留密碼，確認後才執行',
-    async (actionLabel, expectedAfterConfirm) => {
-      peopleApiMock.request.mockResolvedValue({ items: [] })
-      render(
-        <DataMemoryRouter initialEntries={['/accounts']}>
-          <PeoplePage onTemporaryPassword={vi.fn()} />
-        </DataMemoryRouter>,
-      )
-
-      fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
-      fireEvent.click(screen.getByRole('button', { name: '顯示臨時密碼' }))
-      expect(screen.getByText('temporary-secret')).toBeVisible()
-
-      fireEvent.click(screen.getByRole('button', { name: actionLabel }))
-      expect(
-        await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
-      ).toBeVisible()
-      expect(screen.getByText('temporary-secret')).toBeVisible()
-      fireEvent.click(screen.getByRole('button', { name: '留在此頁' }))
-      expect(screen.getByText('temporary-secret')).toBeVisible()
-      expect(screen.getByRole('button', { name: actionLabel })).toBeVisible()
-
-      fireEvent.click(screen.getByRole('button', { name: actionLabel }))
-      fireEvent.click(screen.getByRole('button', { name: '離開此頁' }))
-      expect(screen.queryByText('temporary-secret')).toBeNull()
-      if (expectedAfterConfirm === '新增帳號') {
-        expect(screen.getByRole('heading', { name: '新增帳號' })).toBeVisible()
-      } else if (expectedAfterConfirm === '帳號') {
-        expect(screen.getByRole('heading', { name: '帳號' })).toBeVisible()
-      } else {
-        expect(screen.getByText('詳情：person-1')).toBeVisible()
-      }
-    },
-  )
-
-  it('有臨時密碼時隱藏頂端取消，尚未產生密碼前仍可取消', async () => {
+  it('新增帳號是帳號頁的主要按鈕', async () => {
     peopleApiMock.request.mockResolvedValue({ items: [] })
     render(
       <DataMemoryRouter initialEntries={['/accounts']}>
         <PeoplePage onTemporaryPassword={vi.fn()} />
       </DataMemoryRouter>,
     )
-    fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
-    expect(screen.getByRole('button', { name: '取消' })).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: '顯示臨時密碼' }))
-    expect(screen.getByText('temporary-secret')).toBeVisible()
-    expect(screen.queryByRole('button', { name: '取消' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
-    expect(screen.getByRole('button', { name: '回清單' })).toBeVisible()
+
+    expect(await screen.findByRole('link', { name: '新增帳號' })).toHaveClass(
+      'btn-primary',
+    )
   })
 
-  it('臨時密碼顯示時，瀏覽器返回使用指定確認文字', async () => {
-    peopleApiMock.request.mockResolvedValue({ items: [] })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
-
-    function BackNavigation() {
-      const navigate = useNavigate()
-      const location = useLocation()
-      return (
-        <>
-          <output data-testid="path">{location.pathname}</output>
-          <button onClick={() => navigate(-1)} type="button">
-            上一頁
-          </button>
-        </>
+  it.each(['返回帳號清單', '取消'])(
+    'ADM-AC56：%s 保留搜尋且遵守各自歷史行為',
+    async (action) => {
+      render(
+        <DataMemoryRouter
+          initialEntries={['/companies', '/accounts/new?q=anna']}
+          initialIndex={1}
+        >
+          <PeoplePage onTemporaryPassword={vi.fn()} />
+          <RouteProbe />
+        </DataMemoryRouter>,
       )
-    }
+      expect(screen.getByText('能力設定')).toBeVisible()
+      expect(screen.queryByText('詳情：new')).toBeNull()
+      fireEvent.click(
+        screen.getByRole(action === '取消' ? 'button' : 'link', {
+          name: action,
+        }),
+      )
+      expect(screen.getByTestId('route')).toHaveTextContent('/accounts?q=anna')
+      fireEvent.click(screen.getByRole('button', { name: '測試上一頁' }))
+      await waitFor(() =>
+        expect(screen.getByTestId('route')).toHaveTextContent(
+          action === '取消' ? '/companies' : '/accounts/new?q=anna',
+        ),
+      )
+    },
+  )
 
+  it('ADM-AC56：完成以 replace 進詳情；上一頁不回精靈', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(
       <DataMemoryRouter
-        initialEntries={['/companies', '/accounts']}
+        initialEntries={['/companies', '/accounts/new?q=anna']}
         initialIndex={1}
       >
-        <>
+        <AccountCreationProvider>
           <PeoplePage onTemporaryPassword={vi.fn()} />
-          <BackNavigation />
-        </>
+        </AccountCreationProvider>
+        <RouteProbe />
       </DataMemoryRouter>,
     )
-
-    fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
-    fireEvent.click(screen.getByRole('button', { name: '顯示臨時密碼' }))
-    fireEvent.click(screen.getByRole('button', { name: '上一頁' }))
-
-    expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？')
-    expect(screen.getByTestId('path')).toHaveTextContent('/accounts')
-    expect(screen.getByText('temporary-secret')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '完成建立' }))
+    expect(await screen.findByText('詳情：person-1')).toBeVisible()
+    expect(screen.getByTestId('route')).toHaveTextContent(
+      '/accounts/person-1?q=anna',
+    )
+    expect(
+      screen.getByRole('heading', { name: '已建立帳號：新帳號' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
+      'once-only-password',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '測試上一頁' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('route')).toHaveTextContent('/companies'),
+    )
+    expect(screen.queryByLabelText('臨時密碼')).toBeNull()
     confirm.mockRestore()
+  })
+
+  it.each(['新增帳號', '開啟林沐青'])(
+    '清單到 %s 使用一般導頁，上一頁回清單',
+    async (label) => {
+      render(
+        <DataMemoryRouter initialEntries={['/accounts?q=anna']}>
+          <PeoplePage onTemporaryPassword={vi.fn()} />
+          <RouteProbe />
+        </DataMemoryRouter>,
+      )
+      fireEvent.click(screen.getByRole('link', { name: label }))
+      expect(screen.getByTestId('route')).not.toHaveTextContent(
+        '/accounts?q=anna',
+      )
+      fireEvent.click(screen.getByRole('button', { name: '測試上一頁' }))
+      await waitFor(() =>
+        expect(screen.getByTestId('route')).toHaveTextContent(
+          '/accounts?q=anna',
+        ),
+      )
+    },
+  )
+
+  it('缺少 provider 立即報錯，不能靜默丟失密碼', () => {
+    render(
+      <DataMemoryRouter>
+        <RealPeoplePage onTemporaryPassword={vi.fn()} />
+      </DataMemoryRouter>,
+    )
+    expect(
+      screen.getByText('PeoplePage requires AccountCreationProvider'),
+    ).toBeVisible()
   })
 
   it('shows not-found for a malformed account id without any request', () => {
@@ -444,26 +375,6 @@ describe('PeoplePage', () => {
     )
   })
 
-  it('returns to the list when the account nav link is clicked in the wizard', () => {
-    peopleApiMock.request.mockResolvedValue({ items: [] })
-    render(
-      <DataMemoryRouter initialEntries={['/accounts']}>
-        <Link to="/accounts">帳號導覽</Link>
-        <PeoplePage onTemporaryPassword={vi.fn()} />
-      </DataMemoryRouter>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
-    expect(screen.getByRole('heading', { name: '新增帳號' })).toBeVisible()
-    expect(screen.getByText('能力設定')).toBeVisible()
-
-    fireEvent.click(screen.getByRole('link', { name: '帳號導覽' }))
-
-    expect(screen.getByRole('heading', { name: '帳號' })).toBeVisible()
-    expect(screen.queryByText('能力設定')).toBeNull()
-    expect(screen.getByRole('button', { name: '新增帳號' })).toBeVisible()
-  })
-
   it('keeps list search in the route when opening a person', () => {
     peopleApiMock.request.mockResolvedValue({ items: [] })
     render(
@@ -474,7 +385,7 @@ describe('PeoplePage', () => {
 
     expect(screen.getByRole('heading', { name: '帳號' })).toBeInTheDocument()
     expect(screen.getByText('搜尋：林沐')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '開啟林沐青' }))
+    fireEvent.click(screen.getByRole('link', { name: '開啟林沐青' }))
 
     expect(screen.getByRole('link', { name: '返回帳號清單' })).toHaveAttribute(
       'href',
@@ -491,4 +402,18 @@ function deferred<T>() {
     resolve = complete
   })
   return { promise, resolve }
+}
+
+function RouteProbe() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  return (
+    <>
+      <output data-testid="route">
+        {location.pathname}
+        {location.search}
+      </output>
+      <button onClick={() => navigate(-1)}>測試上一頁</button>
+    </>
+  )
 }

@@ -92,6 +92,11 @@ beforeEach(() => {
 describe('Dashboard 任務唯讀頁', () => {
   it('主管可從任務清單點進唯讀明細', async () => {
     renderAt('/overview/projects/project-1/tasks')
+    expect(
+      screen.getByText(
+        '顯示任務、狀態、地點與建議指派。' + '照片與查核結果不在此權限範圍。',
+      ),
+    ).toBeVisible()
 
     fireEvent.click(await screen.findByRole('link', { name: /二樓機房/ }))
 
@@ -224,4 +229,48 @@ describe('Dashboard 任務唯讀頁', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText('陳建宏')).not.toBeInTheDocument()
   })
+})
+
+it.each([
+  ['COMPLETED', false],
+  ['CANCELLED', false],
+  ['PENDING', true],
+  ['PENDING', false],
+])('主管總覽停用提醒依 %s、封存 %s 判斷', async (status, plan_archived) => {
+  api.listDashboardTasks.mockResolvedValue({
+    items: [
+      {
+        ...task,
+        status,
+        plan_archived,
+        suggested_assignee: {
+          ...task.suggested_assignee,
+          is_active: false,
+        },
+      },
+    ],
+    next_cursor: null,
+  })
+  api.getDashboardTask.mockResolvedValue({
+    ...task,
+    status,
+    plan_archived,
+    suggested_assignee: {
+      ...task.suggested_assignee,
+      is_active: false,
+    },
+  })
+  renderAt('/overview/projects/project-1/tasks')
+  const notice =
+    !plan_archived && status === 'PENDING'
+      ? '（已停用，請改派）'
+      : '（已停用）'
+  expect(await screen.findByText(notice)).toBeVisible()
+  if (notice.includes('請改派'))
+    expect(screen.getByText(notice)).toHaveClass('field-error')
+  fireEvent.click(screen.getByRole('link', { name: /二樓機房/ }))
+  const detail = await screen.findByRole('region', { name: '任務明細' })
+  expect(within(detail).getByText(notice)).toBeVisible()
+  if (notice.includes('請改派'))
+    expect(within(detail).getByText(notice)).toHaveClass('field-error')
 })

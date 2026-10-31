@@ -63,16 +63,25 @@ export default function ProjectSectionShell({
   projectId,
   activeSection,
   viewerPermissions,
+  backTo,
+  backLabel,
+  backState,
   children,
 }: {
   project: { project_code: string; name: string } | null
   projectId: string
   activeSection: ProjectSection
   viewerPermissions: string[]
+  backTo?: string
+  backLabel?: string
+  backState?: unknown
   children: ReactNode
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
+  const isProjectEditRoute =
+    location.pathname ===
+    ROUTES.projectEdit.path.replace(':projectId', projectId)
   const routeState = location.state as { highlightedItemIds?: unknown } | null
   const highlightedItemIds = Array.isArray(routeState?.highlightedItemIds)
     ? routeState.highlightedItemIds.filter(
@@ -101,7 +110,7 @@ export default function ProjectSectionShell({
       ).map((section) => (
         <NavLink
           aria-current={activeSection === section.id ? 'page' : undefined}
-          end={section.id === 'home'}
+          end={section.id === 'home' && !isProjectEditRoute}
           key={section.id}
           onClick={() => setMenuOpen(false)}
           state={
@@ -120,9 +129,20 @@ export default function ProjectSectionShell({
   return (
     <div className="project-home-layout">
       <header className="project-home-header">
-        <BackLink to={ROUTES.adminProjects.path}>返回專案清單</BackLink>
+        <BackLink state={backState} to={backTo ?? ROUTES.adminProjects.path}>
+          {backLabel ?? '返回專案清單'}
+        </BackLink>
         <h1>
-          {project ? `${project.project_code}｜${project.name}` : '專案'}
+          {project ? (
+            <>
+              <span className="project-title-code">
+                {`${project.project_code}｜`}
+              </span>
+              <span className="project-title-name">{project.name}</span>
+            </>
+          ) : (
+            '專案'
+          )}
         </h1>
       </header>
       <button

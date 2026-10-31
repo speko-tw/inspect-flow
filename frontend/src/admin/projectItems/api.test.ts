@@ -306,6 +306,27 @@ describe('projectItemApi', () => {
     expect(fetchMock.mock.calls[2][0]).toContain('cursor=next')
   })
 
+  it('IP-AC23：停用項目載入為唯讀，啟用或缺值維持可編輯', async () => {
+    const load = async (flag: boolean | undefined) => {
+      const row = flag === undefined ? item : { ...item, is_active: flag }
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(
+            Response.json({ items: [row], next_cursor: null }),
+          )
+          .mockResolvedValueOnce(
+            Response.json({ items: [], next_cursor: null }),
+          ),
+      )
+      return projectItemApi.loadPreview('project-1', 'item-1')
+    }
+    expect((await load(false)).readOnly).toBe(true)
+    expect((await load(true)).readOnly).toBe(false)
+    expect((await load(undefined)).readOnly).toBe(false)
+  })
+
   it('sends a strict PATCH body and reads affected_tasks', async () => {
     const response = {
       ...item,

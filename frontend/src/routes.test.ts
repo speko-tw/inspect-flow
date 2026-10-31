@@ -172,6 +172,20 @@ describe('product route metadata', () => {
     module_permissions: [],
   }
 
+  it('reserves account creation for admins before matching person IDs', () => {
+    expect(routeForPath('/accounts/new')).toBe(ROUTES.adminAccountNew)
+    expect(canAccessRoute(noAccess, ROUTES.adminAccountNew)).toBe(false)
+    expect(
+      canAccessRoute(
+        { ...noAccess, delegated_modules: ['project'] },
+        ROUTES.adminAccountNew,
+      ),
+    ).toBe(false)
+    expect(
+      canAccessRoute({ ...noAccess, is_admin: true }, ROUTES.adminAccountNew),
+    ).toBe(true)
+  })
+
   it('declares a path, page title, and permission for every route', () => {
     for (const [name, route] of Object.entries(ROUTES)) {
       expect(route.path, name).toBeTruthy()
@@ -220,20 +234,32 @@ describe('product route metadata', () => {
       [ROUTES.login, '/login'],
       [ROUTES.setup, '/setup'],
       [ROUTES.settings, '/settings/profile'],
+      [ROUTES.adminAccountNew, '/accounts/new'],
       [ROUTES.adminPeople, '/accounts/person-1'],
       [ROUTES.adminCompanies, '/companies'],
+      [ROUTES.adminCompanyNew, '/companies/new'],
+      [ROUTES.adminCompanyDetail, '/companies/c1'],
+      [ROUTES.adminRoleNew, '/roles/new'],
+      [ROUTES.adminRoleDetail, '/roles/r1'],
+      [ROUTES.adminRoleEdit, '/roles/r1/edit'],
+
       [ROUTES.adminRoles, '/roles'],
       [ROUTES.adminAuditLogs, '/logs'],
       [ROUTES.adminProjects, '/projects'],
+      [ROUTES.projectNew, '/projects/new'],
       [ROUTES.dashboardIndex, '/overview'],
       [ROUTES.dashboardTasks, '/overview/projects/p1/tasks'],
       [ROUTES.dashboardTask, '/overview/projects/p1/tasks/t1'],
       [ROUTES.adminTemplates, '/templates'],
       [ROUTES.templateSaveFromProject, '/templates/from-project'],
       [ROUTES.projectHome, '/projects/p1'],
+      [ROUTES.projectEdit, '/projects/p1/edit'],
       [ROUTES.projectMembers, '/projects/p1/members'],
+      [ROUTES.projectMemberNew, '/projects/p1/members/new'],
+      [ROUTES.projectMemberEdit, '/projects/p1/members/u1/edit'],
       [ROUTES.projectItems, '/projects/p1/inspection-items'],
       [ROUTES.projectZones, '/projects/p1/zones'],
+      [ROUTES.projectZoneNew, '/projects/p1/zones/new'],
       [
         ROUTES.projectInspectionTemplates,
         '/projects/p1/inspection-items/templates',
@@ -270,4 +296,84 @@ describe('product route metadata', () => {
     ).toBe(true)
     expect(canVisit(delegate, '/roles')).toBe(false)
   })
+
+  it('limits project creation to admins and users with create permission', () => {
+    const creator = { ...noAccess, can_create_project: true }
+
+    expect(canVisit(noAccess, '/projects/new')).toBe(false)
+    expect(canVisit(creator, '/projects/new')).toBe(true)
+    expect(canVisit({ ...noAccess, is_admin: true }, '/projects/new')).toBe(
+      true,
+    )
+    expect(canVisit(creator, '/projects')).toBe(true)
+  })
+})
+
+it('IP-AC28：planning deep links stay beneath the route-id guard', () => {
+  const text = readFileSync('src/admin/AdminPage.tsx', 'utf8')
+  const source = ts.createSourceFile(
+    'AdminPage.tsx',
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  )
+  const expected = new Set([
+    'projectPlanNew',
+    'projectPlan',
+    'projectTaskNew',
+    'projectTask',
+    'projectTaskEdit',
+  ])
+  const guarded = new Set<string>()
+  function visit(node: ts.Node, underGuard = false) {
+    if (ts.isJsxElement(node)) {
+      const opening = node.openingElement
+      const guard =
+        opening.tagName.getText(source) === 'Route' &&
+        opening.attributes.properties.some(
+          (prop) =>
+            ts.isJsxAttribute(prop) &&
+            prop.name.getText(source) === 'element' &&
+            prop.initializer
+              ?.getText(source)
+              .includes('<RequireValidRouteIds'),
+        )
+      ts.forEachChild(node, (child) => visit(child, underGuard || guard))
+      return
+    }
+    if (
+      ts.isJsxSelfClosingElement(node) &&
+      node.tagName.getText(source) === 'Route'
+    ) {
+      const path = node.attributes.properties.find(
+        (prop) =>
+          ts.isJsxAttribute(prop) && prop.name.getText(source) === 'path',
+      )
+      if (path && ts.isJsxAttribute(path)) {
+        for (const name of expected) {
+          if (path.initializer?.getText(source).includes(`ROUTES.${name},`)) {
+            expect(underGuard, name).toBe(true)
+            guarded.add(name)
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, (child) => visit(child, underGuard))
+  }
+  visit(source)
+  expect(guarded).toEqual(expected)
+  const paths = [
+    [ROUTES.projectPlanNew, '/projects/p1/planning/new'],
+    [ROUTES.projectPlan, '/projects/p1/planning/plan1'],
+    [ROUTES.projectTaskNew, '/projects/p1/planning/plan1/tasks/new'],
+    [ROUTES.projectTask, '/projects/p1/planning/plan1/tasks/task1'],
+    [ROUTES.projectTaskEdit, '/projects/p1/planning/plan1/tasks/task1/edit'],
+  ] as const
+  for (const [route, path] of paths) {
+    expect(routeForPath(path)).toBe(route)
+    expect(
+      canAccessRoute({ is_admin: false, has_project_access: false }, route),
+    ).toBe(false)
+  }
 })

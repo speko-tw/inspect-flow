@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.errors import APIError, ErrorCode
 from app.db.base import uuid7
 from app.models import (
     Project,
@@ -34,7 +35,10 @@ from app.services.template_library import create_template
 
 
 class DuplicateProjectItemError(ValueError):
-    def __init__(self, names: list[str]) -> None:
+    """區分停用名稱衝突，讓呼叫端能提示恢復而非重建。"""
+
+    def __init__(self, names: list[str], *, inactive: bool = False) -> None:
+        self.inactive = inactive
         self.names = names
         super().__init__(", ".join(names))
 
@@ -63,21 +67,27 @@ def _reject_duplicate_names(
     db.scalar(
         select(Project.id).where(Project.id == project_id).with_for_update()
     )
-    existing = {
-        title.strip().casefold()
-        for title in db.scalars(
-            select(ProjectInspectionItem.title).where(
-                ProjectInspectionItem.project_id == project_id
-            )
-        )
+    existing = db.execute(
+        select(
+            ProjectInspectionItem.title, ProjectInspectionItem.is_active
+        ).where(ProjectInspectionItem.project_id == project_id)
+    ).all()
+    names = {title.strip().casefold() for title, _ in existing}
+    active_names = {
+        title.strip().casefold() for title, active in existing if active
     }
     conflicts = [
         template.title
         for template in templates
-        if template.title.strip().casefold() in existing
+        if template.title.strip().casefold() in names
     ]
     if conflicts:
-        raise DuplicateProjectItemError(conflicts)
+        raise DuplicateProjectItemError(
+            conflicts,
+            inactive=not any(
+                name.strip().casefold() in active_names for name in conflicts
+            ),
+        )
 
 
 def _copy_template_item(
@@ -91,6 +101,7 @@ def _copy_template_item(
     applied_at: datetime,
     operator_id: UUID,
 ) -> ProjectInspectionItem:
+    # TPL-R08：項目與全部子結構都新建列複製，不保留對來源的參照。
     copy = ProjectInspectionItem(
         project_id=project_id,
         sequence=template.sequence,
@@ -144,6 +155,7 @@ def _copy_template_item(
         db.add(point)
         db.flush()
 
+        # TPL-R11：標準必須指向副本的欄位，不能沿用範本欄位 UUID。
         field_id_map: dict[UUID, UUID] = {}
         for template_field in template_fields.get(template_point.id, ()):
             field_id = uuid7()
@@ -289,6 +301,7 @@ def apply_template(
         .where(TemplateItem.system_id == system_id)
         .order_by(TemplateItem.sequence, TemplateItem.id)
     ).all()
+    # TPL-R14：先檢查整組名稱；任何衝突都不能留下部分套用結果。
     _reject_duplicate_names(db, project_id, templates)
     copies = [
         _copy_template_item(
@@ -351,6 +364,13 @@ def create_template_from_project_item(
     )
     if source is None or system is None:
         return None
+    # IP-R25：來源已停用時先恢復，再存入範本，避免繞過停用入口。
+    if not source.is_active:
+        raise APIError(
+            ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE_NAME,
+            409,
+            details=[source.title],
+        )
 
     points_data: list[dict[str, object]] = []
     points = db.scalars(
@@ -381,6 +401,7 @@ def create_template_from_project_item(
     )
     for point in points:
         fields = project_fields.get(point.id, [])
+        # 經共用建立入口重新配發持久 ID；暫時 ID 只串接標準與欄位。
         client_ids = {field.id: uuid7() for field in fields}
         text = next(iter(project_texts.get(point.id, ())), None)
         numeric = next(iter(project_numerics.get(point.id, ())), None)
@@ -410,6 +431,7 @@ def create_template_from_project_item(
                         "client_id": client_ids[field.id],
                         "name": field.name,
                         "field_type": field.field_type,
+                        # TPL-R11：綁定欄位的單位由標準帶入，請求不得另設。
                         "unit": (
                             None
                             if numeric is not None

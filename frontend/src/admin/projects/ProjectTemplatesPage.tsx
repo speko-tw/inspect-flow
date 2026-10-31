@@ -1,3 +1,4 @@
+import type * as SaveNotice from '../projectItems/templateSaveNotice'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
@@ -51,6 +52,7 @@ function formatTime(value: string): string {
       }).format(date)
 }
 
+// TPL-R14：預覽需與後端 strip／casefold 一致，JS trim／小寫有 Unicode 差異。
 const PYTHON_WHITESPACE =
   '\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680' +
   '\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000'
@@ -65,6 +67,7 @@ function pythonStrip(value: string): string {
 function pythonCasefold(value: string): string {
   return Array.from(pythonStrip(value), (character) => {
     const codepoint = character.codePointAt(0) ?? 0
+    // 無點 i、大寫 ẞ（U+1E9E）與 Cherokee 的摺疊規則無法只靠一般大小寫往返。
     if (codepoint === 0x0131) return character
     if (codepoint === 0x1e9e) return 'ss'
     if (
@@ -146,8 +149,10 @@ export default function ProjectTemplatesPage({
     null,
   )
   const [saveName, setSaveName] = useState('')
+  // TPL-R28：存為範本不列停用來源；網址直接帶入停用項目時也不採用，
+  // 避免略過清單過濾而送出必定被拒絕的請求。
   const routeSaveSource = projectItems.find(
-    (item) => item.id === routeSaveItemId,
+    (item) => item.id === routeSaveItemId && item.is_active !== false,
   )
   const activeSaveSource = routeSaveSource ?? saveSource
   const activeSaveName = routeSaveSource
@@ -199,7 +204,8 @@ export default function ProjectTemplatesPage({
   }, [])
 
   const applyConflict =
-    applyErrorCode === 'project_inspection_item.duplicate_name'
+    applyErrorCode === 'project_inspection_item.duplicate_name' ||
+    applyErrorCode === 'project_inspection_item.inactive_name'
   const canEditProjectItems =
     user.is_admin || viewerPermissions.includes('project_inspection_item.edit')
   const saveConflict = saveErrorCode === 'template.name_conflict'
@@ -207,7 +213,14 @@ export default function ProjectTemplatesPage({
   const currentItemsLoadError =
     itemsLoadError?.projectId === projectId ? itemsLoadError.message : ''
   const showEmptyProjectItems =
-    !itemsLoading && !currentItemsLoadError && projectItems.length === 0
+    !itemsLoading &&
+    !currentItemsLoadError &&
+    projectItems.every((item) => item.is_active === false)
+  // TPL-R28：載入完成且確實有停用項目時才提示先恢復，其餘情況不顯示。
+  const showInactiveSaveHint =
+    !itemsLoading &&
+    !currentItemsLoadError &&
+    projectItems.some((item) => item.is_active === false)
 
   useEffect(() => {
     if (applyConflict) conflictActionRef.current?.focus()
@@ -220,9 +233,8 @@ export default function ProjectTemplatesPage({
   useEffect(() => {
     let active = true
     async function loadProject() {
-      // TPL-R09: only Admin or a template manager may save as a template.
-      // The server computes it (`has_template_access`); the page never
-      // guesses, and `GET /projects` is 403 for everyone else.
+      // TPL-R09：存為範本只開放 Admin 或範本管理者，依後端摘要判斷。
+      // #728：主管也可讀全部專案清單，但不因此取得存為範本的權限。
       const canManage =
         user.can_manage_template_library ?? user.has_template_access === true
       setSaveAllowed(canManage)
@@ -394,6 +406,7 @@ export default function ProjectTemplatesPage({
     : selected?.type === 'category'
       ? categories.find((item) => item.id === selected.id)
       : undefined
+  // 依系統 ID 取快取，較晚回來的其他系統資料不會成為目前預覽。
   const templates = selectedSystem
     ? (templatesBySystem[selectedSystem.id] ?? [])
     : []
@@ -403,6 +416,21 @@ export default function ProjectTemplatesPage({
     () => new Set(projectItems.map((item) => pythonCasefold(item.title))),
     [projectItems],
   )
+  // TPL-R28：停用項目仍參與同名比對；這組只含啟用項目，用來分辨
+  // 「已套用」與「同名項目已停用」兩種提示。
+  const activeProjectItemNames = useMemo(
+    () =>
+      new Set(
+        projectItems
+          .filter((item) => item.is_active !== false)
+          .map((item) => pythonCasefold(item.title)),
+      ),
+    [projectItems],
+  )
+  const projectItemsPath = `/projects/${projectId}/inspection-items`
+  const isInactiveConflict = (item: TemplateItem) =>
+    isAlreadyApplied(item, projectItemNames) &&
+    !isAlreadyApplied(item, activeProjectItemNames)
   const appliedItemIds = useMemo(
     () =>
       new Set(
@@ -438,6 +466,7 @@ export default function ProjectTemplatesPage({
     selectedTemplates.length > 0 &&
     (mode === 'system' || activeSelection?.type === 'item'),
   )
+  // TPL-R14：整系統不能略過衝突項目，部分已套用仍須改選單項。
   const selectedAlreadyApplied = selectedTemplates.some((item) =>
     isAlreadyApplied(item, projectItemNames),
   )
@@ -579,7 +608,7 @@ export default function ProjectTemplatesPage({
     setNotice('')
     try {
       const name = activeSaveName.trim()
-      await saveProjectItemAsTemplate(
+      const saved = await saveProjectItemAsTemplate(
         projectId,
         activeSaveSource.id,
         selected.id,
@@ -592,6 +621,19 @@ export default function ProjectTemplatesPage({
       )
       const categoryName = category?.name ?? '範本庫'
       const systemName = destination?.name ?? '目標系統'
+      if (routeSaveSource) {
+        navigate(`/projects/${projectId}/inspection-items`, {
+          replace: true,
+          state: {
+            savedFromItemId: activeSaveSource.id,
+            savedTemplateTitle: name,
+            savedTemplateId: saved.id,
+            savedCategoryId: category?.id,
+            savedSystemId: destination?.id,
+          } satisfies SaveNotice.ProjectItemsLocationState,
+        })
+        return
+      }
       setNotice(`已將「${name}」存入「${categoryName} / ${systemName}」。`)
       setSaveCompleted(true)
       setMobilePane('list')
@@ -599,7 +641,7 @@ export default function ProjectTemplatesPage({
       setRouteSaveItemId(null)
       setRouteSaveName(null)
     } catch (caught) {
-      setSaveError(templateErrorMessage(caught, activeSaveName.trim()))
+      setSaveError(templateErrorMessage(caught, activeSaveName.trim(), 'save'))
       setSaveErrorCode(
         caught instanceof ProjectTemplatesApiError && caught.status === 409
           ? (caught.code ?? '')
@@ -721,29 +763,32 @@ export default function ProjectTemplatesPage({
               )}
               {itemsLoading && <p>載入中…</p>}
               {showEmptyProjectItems && <p>目前沒有查核項目。</p>}
+              {showInactiveSaveHint && <p>停用項目須先恢復，才能存為範本。</p>}
               <ul>
-                {projectItems.map((item) => (
-                  <li key={item.id}>
-                    <strong>{item.title}</strong>
-                    <span>來源範本：{item.source_template_name}</span>
-                    <time dateTime={item.applied_at}>
-                      {formatTime(item.applied_at)}
-                    </time>
-                    {saveAllowed &&
-                      !readDenied &&
-                      !saveDenied &&
-                      !itemsDenied && (
-                        <button
-                          className="card-action"
-                          disabled={busy}
-                          onClick={() => startSave(item)}
-                          type="button"
-                        >
-                          存為範本
-                        </button>
-                      )}
-                  </li>
-                ))}
+                {projectItems
+                  .filter((item) => item.is_active !== false)
+                  .map((item) => (
+                    <li key={item.id}>
+                      <strong>{item.title}</strong>
+                      <span>來源範本：{item.source_template_name}</span>
+                      <time dateTime={item.applied_at}>
+                        {formatTime(item.applied_at)}
+                      </time>
+                      {saveAllowed &&
+                        !readDenied &&
+                        !saveDenied &&
+                        !itemsDenied && (
+                          <button
+                            className="card-action"
+                            disabled={busy}
+                            onClick={() => startSave(item)}
+                            type="button"
+                          >
+                            存為範本
+                          </button>
+                        )}
+                    </li>
+                  ))}
               </ul>
             </section>
           )}
@@ -998,7 +1043,9 @@ export default function ProjectTemplatesPage({
                             <span>單一項目：{item.title}</span>
                             {isAlreadyApplied(item, projectItemNames) && (
                               <span className="tpl-applied-status muted-text">
-                                已套用
+                                {isInactiveConflict(item)
+                                  ? '已停用'
+                                  : '已套用'}
                               </span>
                             )}
                           </label>
@@ -1007,7 +1054,16 @@ export default function ProjectTemplatesPage({
                               className="tpl-conflict-hint muted-text"
                               id={`applied-template-${item.id}`}
                             >
-                              專案已有同名項目，需要第二份請先改名
+                              {isInactiveConflict(item) ? (
+                                <>
+                                  同名項目已停用，可在已停用清單恢復{' '}
+                                  <Link to={projectItemsPath}>
+                                    前往已停用清單
+                                  </Link>
+                                </>
+                              ) : (
+                                '專案已有同名項目，需要第二份請先改名'
+                              )}
                             </p>
                           )}
                         </div>

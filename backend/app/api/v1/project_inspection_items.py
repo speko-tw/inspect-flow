@@ -121,12 +121,16 @@ def apply_template_to_project(
         )
     except DuplicateProjectItemError as exc:
         raise APIError(
-            ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
+            ErrorCode.PROJECT_INSPECTION_ITEM_INACTIVE_NAME
+            if exc.inactive
+            else ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
             409,
             details=exc.names,
         ) from exc
     if result is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    # 空系統沒有建立任何資源，所以不回 201；
+    # 依 template-system/spec.md 的介面表回 200 與空清單。
     if system_id is not None and not result:
         response.status_code = 200
     return [
@@ -175,6 +179,7 @@ def list_project_inspection_items(
     project_id: UUID,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
+    active_only: bool = False,
     db: Session = Depends(get_db, scope="function"),  # noqa
     user: User = Depends(require_login_access, scope="function"),  # noqa
 ) -> dict:
@@ -191,7 +196,8 @@ def list_project_inspection_items(
     if db.get(Project, project_id) is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     can_edit_items = access.is_admin or (
-        "project_inspection_item.edit"
+        "inspection.use" in access.module_permissions
+        and "project_inspection_item.edit"
         in access.project_permissions_by_project.get(project_id, frozenset())
     )
 
@@ -200,7 +206,10 @@ def list_project_inspection_items(
         ProjectInspectionItem,
         cursor=cursor,
         limit=limit,
-        filters=(ProjectInspectionItem.project_id == project_id,),
+        filters=(ProjectInspectionItem.project_id == project_id,)
+        + (
+            (ProjectInspectionItem.is_active.is_(True),) if active_only else ()
+        ),
         serialize_batch=lambda items: project_inspection_item_list_details(
             db, items, include_task_count=can_edit_items
         ),
