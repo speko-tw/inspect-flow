@@ -25,7 +25,7 @@ def test_defaults_and_empty_values_are_cwd_independent(monkeypatch, tmp_path):
         "data/evidence"
     )
     assert settings.max_file_bytes == 30 * 1024 * 1024
-    assert settings.max_decode_pixels == 40_000_000
+    assert settings.max_decode_pixels == 50_000_000
     monkeypatch.chdir(tmp_path)
     for name in _NAMES:
         monkeypatch.setenv(name, "")

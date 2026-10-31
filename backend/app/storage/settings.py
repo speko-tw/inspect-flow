@@ -39,6 +39,6 @@ def get_storage_settings() -> StorageSettings:
             "INSPECTFLOW_EVIDENCE_MAX_FILE_BYTES", 30 * 1024 * 1024
         ),
         max_decode_pixels=_positive_integer(
-            "INSPECTFLOW_EVIDENCE_MAX_DECODE_PIXELS", 40_000_000
+            "INSPECTFLOW_EVIDENCE_MAX_DECODE_PIXELS", 50_000_000
         ),
     )
