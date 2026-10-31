@@ -621,3 +621,42 @@ def test_template_capabilities_match_effective_permissions(world) -> None:
         world["editor"].get(ME_PROJECTS).json()[0]["can_apply_templates"]
         is False
     )
+
+
+@pytest.mark.parametrize(
+    ("code", "module", "office"),
+    [
+        ("evidence.read", True, False),
+        ("evidence.manage", True, True),
+        ("evidence.manage", False, False),
+    ],
+)
+def test_evidence_classification_uses_two_layers(world, code, module, office):
+    db = world["db"]
+    user = create_user(
+        db,
+        username="evidence-member",
+        name_zh="照片人員",
+        email="evidence@example.com",
+        is_external_collaborator=False,
+    )
+    role = create_role(db, name="照片角色", permission_codes=[code])
+    add_project_member(
+        db,
+        project_id=world["project_a"].id,
+        user_id=user.id,
+        role_ids=[role.id],
+    )
+    if module:
+        db.add(
+            UserModulePermission(
+                user_id=user.id,
+                permission_code="inspection.use",
+                source="manual",
+            )
+        )
+    db.commit()
+    result = _client_for(db, world["make_client"], user).get(ME)
+    assert result.status_code == 200
+    assert result.json()["has_office_access"] is office
+    assert result.json()["has_field_access"] is False

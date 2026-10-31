@@ -27,6 +27,7 @@ FIELD_PERMISSION_CODES: frozenset[str] = frozenset({"inspection_task.inspect"})
 # 所屬模組的「可使用」權限才成立（AUT-R19，見 summarize_access）。
 OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     {
+        "evidence.manage",
         "project_member.manage",
         "project.update",
         "project_inspection_item.edit",

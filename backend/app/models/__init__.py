@@ -9,6 +9,7 @@ so each model registers its table as a side effect of that import;
 from app.models.audit_log import AuditLog
 from app.models.auth_session import AuthSession
 from app.models.company import Company
+from app.models.evidence import Evidence, EvidencePointLink, EvidenceVariant
 from app.models.inspection_planning import (
     InspectionPlan,
     InspectionTask,
@@ -58,6 +59,9 @@ __all__ = [
     "AuditLog",
     "AuthSession",
     "Company",
+    "Evidence",
+    "EvidencePointLink",
+    "EvidenceVariant",
     "InspectionPlan",
     "InspectionTask",
     "ProjectInspectionItemChange",

@@ -345,6 +345,8 @@ def test_role_api_list_uses_cursor_pagination(role_admin_client):
     assert returned_codes.isdisjoint(module_codes)
     assert catalog.json() == {
         "items": [
+            {"code": "evidence.manage", "description": "管理照片佐證"},
+            {"code": "evidence.read", "description": "讀取照片佐證"},
             {
                 "code": "inspection_plan.archive",
                 "description": "封存查核計畫",
