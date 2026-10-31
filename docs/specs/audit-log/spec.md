@@ -167,6 +167,23 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 
 `template_item.inspection_points` 以順序保存各查核項次、檢查標準、實測欄位與照片需求；不含資料庫主鍵或稽核欄位。`project.template_applied` 的 `entity_id` 與 `project_id` 都是目標專案 UUID。
 
+<a id="template-suggestion-事件"></a>
+### 0.6.x 範本建議事件（#314）
+
+依 [TPL-R35](../template-system/spec.md#template-suggestions)及[版本與審核留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)登記；建立即為首次送審，不另設 created 事件。entity_type 為 template_suggestion、entity_id 為建議 ID；共用 actor／時間欄位照舊，不覆寫歷次事件。五種新事件都具來源專案脈絡，因此依 ALG-R24 標 `project_scoped=true`，`AuditLog.project_id` 必填來源專案 UUID；即使跨專案審核，仍須能以來源專案篩選找回提議歷程。完整內容讀不可變修訂與審核紀錄，不在事件重複整份結構。
+
+| 事件代碼 | 什麼時候寫 | entity_type | project_scoped | before | after |
+|---|---|---|---|---|---|
+| `template_suggestion.revised` | 保存不同內容修訂 | `template_suggestion` | true | 原 revision_id、content_sha256 | 新 revision_id、content_sha256 |
+| `template_suggestion.submitted` | 首次提出或退回後重送 | `template_suggestion` | true | 首次空值；重送只記 status=RETURNED | 首次記 proposer_id、來源專案／項目 ID、revision_id、content_sha256、status=PENDING；重送只記 status=PENDING |
+| `template_suggestion.returned` | 管理者附原因退回 | `template_suggestion` | true | status=PENDING | status=RETURNED、review_id、reviewed_revision_id、reviewer_id、reason |
+| `template_suggestion.approved` | 核准並建立新範本 | `template_suggestion` | true | status=PENDING | status=APPROVED、review_id、reviewed_revision_id、reviewer_id、template_id、category_id、system_id |
+| `template_suggestion.withdrawn` | 本人撤回未核准件 | `template_suggestion` | true | status=PENDING／RETURNED | status=WITHDRAWN |
+
+`revised` 只記修訂 ID／雜湊的變更；重送的 `submitted` 只記 RETURNED → PENDING，不重複未變的修訂或來源欄位，符合 ALG-R09。首次 `submitted` 是新件，before 空值、after 記新增欄位；不再另寫一筆 created。重送版本的精確關聯由狀態歷程（revision_id、對應 AuditLog.id）追溯。
+
+核准同交易另寫既有 `template_item.created`（TPL-R25／ALG-R32），entity_id 是新範本；它是全域範本庫事件，`project_scoped=false`、`project_id` 為空，before／after 形狀完全沿用既有目錄，**不新增** suggestion_id、revision_id 或 project_id。關聯只放在 template_suggestion.approved 的 template_id 與受審版本／審核 ID；不寫 created_from_project。理由：範本獨立於來源專案，建議的來源脈絡由 approved 保存，不能因新功能改動既有建庫事件契約。失敗、非法轉換、過期 expected 欄位與無變更保存不寫成功事件；任一稽核失敗即與業務變更回滾。驗收依 TPL-AC39、AC42 與 T16／T17，未宣稱已實作。
+
 <a id="模組權限事件"></a>
 ## 模組權限事件
 
@@ -400,3 +417,7 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 - 規格澄清（#728）：ALG-R22、ALG-AC17 與查詢 API 契約補上操作者快照及帳號副行規則，並明定舊紀錄在改名、換公司及人員清單載入失敗時仍呈現寫入當時的操作者資訊；對象僅有帶 `name_zh` 的事件使用快照，其他查目前名稱。依[負責人裁定 B（#728）](https://github.com/speko-tw/inspect-flow/issues/728#issuecomment-6416038172)。
 
 - 規格澄清（[#760](https://github.com/speko-tw/inspect-flow/issues/760)）：資料模型補明稽核事件 ID 現行實作使用 UUIDv4（`uuid4`），與 KD-07 的主要實體 UUIDv7 分開描述。
+
+- 範圍變更跟進（負責人既有裁定，#314）：在 template-system 事件目錄增列五種建議／審核專屬事件，核准串接既有 template_item.created；沿用共用同交易與回滾規則，驗收由 TPL-AC39、AC42 承接，未新增跨模組慣例。依據：[版本與審核留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)。
+
+- 第 2 輪 #314 審查修正：建立即送審、移除 created；五種建議事件補 entity_type／project_scoped 與 ALG-R24 分類理由，revised／submitted 只列變更；既有 template_item.created 形狀與空 project_id 保持不變，關聯只記 approved。依據：[負責人版本留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)及本輪定案。
