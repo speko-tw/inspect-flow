@@ -44,3 +44,15 @@ def test_registered_codes_have_scope_module_and_external_policy() -> None:
 def test_role_rejects_module_scoped_permission_code() -> None:
     with pytest.raises(PermissionCodeValidationError):
         RolePermission(code="project.create")
+
+
+@pytest.mark.parametrize(
+    ("code", "external_allowed"),
+    [("evidence.read", True), ("evidence.manage", False)],
+)
+def test_fev_r12_registers_inspection_permissions(code, external_allowed):
+    assert permission_code_scope(code) == "project"
+    assert permission_code_module(code) == "inspection"
+    assert permission_code_external_allowed(code) is external_allowed
+    assert permission_code_descriptions()[code]
+    assert RolePermission(code=code).code == code

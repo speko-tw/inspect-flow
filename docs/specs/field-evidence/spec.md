@@ -354,4 +354,4 @@
 
 - 規格澄清（#588，PR #788 第 1 輪審查）：依 CMV-R13 與改善上傳端點的 `point_id` 契約，改善照片標示沿 `result_id` 追溯有效不符合結果、其項目需求快照與所屬 Task；移除「無對應項目時印任務名稱」備援及其正常驗收情境。同步既有 FEV-AC34 與計畫，不新增、刪除或重用 R／AC 編號。依據：[審查意見](https://github.com/speko-tw/inspect-flow/pull/788#discussion_r4430631524)。
 
-- 範圍變更（負責人裁定，#795）：FEV-R22 改為圖層資料與照片內合成；新增 R23～R25、AC35～AC37，同步 R02／R07／R14／R16／R18 及 AC02／AC03／AC21／AC30～AC34、資料／API／稽核。現場依追加指示僅旋轉、亮度、比較及圖層開關／四角，精細操作全移內業；T6 待再次核可。[負責人裁定 #795](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540663667)、[現場簡化追加](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540752753)。
+- 範圍變更（負責人裁定，#795）：FEV-R22 改為圖層資料與照片內合成；新增 R23～R25、AC35～AC37，同步 R02／R07／R14／R16／R18 及 AC02／AC03／AC21／AC30～AC34、資料／API／稽核。現場依追加指示僅旋轉、亮度、比較及圖層開關／四角，精細操作全移內業；T6 已由負責人核可（2026-10-31，[核可紀錄](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6541229921)）。[負責人裁定 #795](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540663667)、[現場簡化追加](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540752753)。

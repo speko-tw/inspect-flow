@@ -207,6 +207,22 @@
       "scope": "project",
       "module": "inspection",
       "external_allowed": false
+    },
+    {
+      "name": "EVIDENCE_READ",
+      "code": "evidence.read",
+      "description": "讀取照片佐證",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": true
+    },
+    {
+      "name": "EVIDENCE_MANAGE",
+      "code": "evidence.manage",
+      "description": "管理照片佐證",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
     }
   ]
 }
