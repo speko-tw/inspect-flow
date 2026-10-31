@@ -58,8 +58,12 @@ class Evidence(AuditMixin, TimestampedBase):
     is_overview: Mapped[bool] = mapped_column(nullable=False, default=False)
     caption: Mapped[str | None] = mapped_column(String(500))
     captured_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
-    uploader_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
-    label_source: Mapped[dict] = mapped_column(JSON, nullable=False)
+    uploader_snapshot: Mapped[dict] = mapped_column(
+        JSON(none_as_null=True), nullable=False
+    )
+    label_source: Mapped[dict] = mapped_column(
+        JSON(none_as_null=True), nullable=False
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     deleted_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id")

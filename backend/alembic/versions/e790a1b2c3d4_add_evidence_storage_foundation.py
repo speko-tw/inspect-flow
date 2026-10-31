@@ -25,8 +25,10 @@ def upgrade() -> None:
         sa.Column("is_overview", sa.Boolean(), nullable=False),
         sa.Column("caption", sa.String(length=500), nullable=True),
         sa.Column("captured_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("uploader_snapshot", sa.JSON(), nullable=False),
-        sa.Column("label_source", sa.JSON(), nullable=False),
+        sa.Column(
+            "uploader_snapshot", sa.JSON(none_as_null=True), nullable=False
+        ),
+        sa.Column("label_source", sa.JSON(none_as_null=True), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("deleted_by", sa.Uuid(), nullable=True),
         sa.Column("voided_at", sa.DateTime(timezone=True), nullable=True),

@@ -272,6 +272,8 @@ def test_two_versions_trace_to_original_snapshot_and_stable_metadata(world):
     "changes",
     [
         {"caption": "字" * 501},
+        {"uploader_snapshot": None},
+        {"label_source": None},
         {"snapshot_revision": 999},
         {"task_id": uuid4()},
         {"project_id": uuid4()},
