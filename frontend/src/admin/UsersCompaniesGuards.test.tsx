@@ -1,6 +1,7 @@
 // 使用者與公司管理操作的確認框防護測試（#507）。
 
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -22,6 +23,7 @@ import {
 import CompaniesPage from './CompaniesPage'
 import UsersPage from './UsersPage'
 import type { Company, RestorePreview, User } from './api'
+import type { ParticipatingProject } from './module-permissions/api'
 
 const company: Company = { id: 'company-1', name: '示範公司', is_active: true }
 
@@ -68,7 +70,7 @@ const currentUser: CurrentUser = {
   is_external_collaborator: false,
 }
 
-type Call = { method: string; path: string; body: string }
+type Call = { method: string; path: string; body: string; q: string }
 
 /**
  * 列表請求立刻回應；`hold` 回傳 Deferred 時，該請求等到它完成才回應
@@ -81,6 +83,8 @@ function stubBackend(
     failureCode?: string
     failureStatus?: number
     users?: User[]
+    usersByQuery?: Record<string, User[]>
+    detailUser?: User
     companies?: Company[]
     activeCompanyUsers?: Record<
       string,
@@ -88,12 +92,25 @@ function stubBackend(
     >
     preview?: Partial<RestorePreview>
     previews?: Record<string, Partial<RestorePreview>>
+    participatingProjects?: Record<string, ParticipatingProject[]>
     lastManagerProjects?: Array<{
       id: string
       project_code: string
       name: string
     }>
     temporaryPassword?: string
+    externalNoProject?: Array<{
+      id: string
+      username: string
+      name_zh: string | null
+      account_expires_on: string | null
+    }>
+    unmanagedProjects?: Array<{
+      id: string
+      project_code: string
+      name: string
+      member_count: number
+    }>
   } = {},
 ) {
   const users = (options.users ?? [regularUser]).map((user) => ({ ...user }))
@@ -108,6 +125,7 @@ function stubBackend(
         method: init?.method ?? 'GET',
         path: url.pathname,
         body: String(init?.body ?? ''),
+        q: url.searchParams.get('q') ?? '',
       }
       calls.push(call)
       const gate = options.hold?.(call)
@@ -120,10 +138,19 @@ function stubBackend(
       }
       if (call.method === 'GET') {
         if (call.path === '/api/v1/users') {
-          return Response.json({ items: users, next_cursor: null })
+          return Response.json({
+            items: options.usersByQuery?.[call.q] ?? users,
+            next_cursor: null,
+          })
         }
         if (call.path === '/api/v1/companies') {
           return Response.json({ items: companies, next_cursor: null })
+        }
+        if (call.path.endsWith('/participating-projects')) {
+          const userId = call.path.split('/')[4]
+          return Response.json({
+            items: options.participatingProjects?.[userId] ?? [],
+          })
         }
         if (call.path.endsWith('/deactivation-check')) {
           return Response.json({
@@ -149,10 +176,16 @@ function stubBackend(
           })
         }
         if (call.path.includes('/external-without-project')) {
-          return Response.json({ items: [], next_cursor: null })
+          return Response.json({
+            items: options.externalNoProject ?? [],
+            next_cursor: null,
+          })
         }
         if (call.path.includes('/projects/unmanaged')) {
-          return Response.json({ items: [], next_cursor: null })
+          return Response.json({
+            items: options.unmanagedProjects ?? [],
+            next_cursor: null,
+          })
         }
         if (call.path.endsWith('/active-users')) {
           const companyId = call.path.split('/')[4]
@@ -196,6 +229,30 @@ function stubBackend(
           items: users.filter((user) => body.user_ids.includes(user.id)),
         })
       }
+      if (call.path === '/api/v1/companies' && call.method === 'POST') {
+        const created = {
+          id: `company-new-${companies.length}`,
+          name: JSON.parse(call.body).name as string,
+          is_active: true,
+        }
+        companies.push(created)
+        return Response.json(created, { status: 201 })
+      }
+      const companyMatch = /^\/api\/v1\/companies\/([^/]+)(?:\/active)?$/.exec(
+        call.path,
+      )
+      if (companyMatch) {
+        const target = companies.find((item) => item.id === companyMatch[1])
+        if (!target)
+          return Response.json(
+            { error: { code: 'resource.not_found' } },
+            { status: 404 },
+          )
+        if (call.method === 'PATCH') target.name = JSON.parse(call.body).name
+        if (call.method === 'PUT')
+          target.is_active = JSON.parse(call.body).is_active
+        return Response.json(target)
+      }
       if (call.path.startsWith('/api/v1/users/')) {
         const id = call.path.split('/')[4]
         const target = users.find((user) => user.id === id)
@@ -223,7 +280,7 @@ function stubBackend(
         ) {
           target.is_active = true
         }
-        return Response.json(target ?? regularUser)
+        return Response.json(target ?? options.detailUser ?? regularUser)
       }
       return Response.json(company)
     },
@@ -243,7 +300,6 @@ function renderUsers(
     detailUserId?: string | null
     initialQuery?: string
     onQueryApplied?: (query: string) => void
-    onSelectUser?: (id: string) => void
     onTemporaryPassword?: (
       username: string,
       password: string,
@@ -266,6 +322,78 @@ afterEach(() => {
 })
 
 describe('UsersPage 帳號詳情', () => {
+  it('初始搜尋只發一次過濾請求，顯示符合條件的帳號', async () => {
+    const other = {
+      ...regularUser,
+      id: 'user-2',
+      username: 'bob.lin',
+      name_zh: '林鮑伯',
+    }
+    const backend = stubBackend({
+      users: [other],
+      usersByQuery: { 鄧: [regularUser] },
+    })
+    renderUsers({ initialQuery: '  鄧  ' })
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '搜尋' })).toBeEnabled(),
+    )
+    const requests = backend.calls.filter(
+      (call) => call.path === '/api/v1/users',
+    )
+    expect(requests).toHaveLength(1)
+    expect(requests[0].q).toBe('鄧')
+    expect(screen.getByRole('row', { name: /anna\.deng/ })).toBeVisible()
+    expect(screen.queryByRole('row', { name: /bob\.lin/ })).toBeNull()
+  })
+
+  it('掛載後 initialQuery 改變仍會重新搜尋', async () => {
+    const other = {
+      ...regularUser,
+      id: 'user-2',
+      username: 'bob.lin',
+      name_zh: '林鮑伯',
+    }
+    const backend = stubBackend({
+      usersByQuery: { '': [regularUser], 林: [other] },
+    })
+    const view = renderUsers({ initialQuery: '' })
+    await screen.findByRole('row', { name: /anna\.deng/ })
+    view.rerender(
+      <DataMemoryRouter>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <UsersPage initialQuery=" 林 " onTemporaryPassword={vi.fn()} />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+
+    expect(await screen.findByRole('row', { name: /bob\.lin/ })).toBeVisible()
+    expect(screen.queryByRole('row', { name: /anna\.deng/ })).toBeNull()
+    expect(
+      backend.calls
+        .filter((call) => call.path === '/api/v1/users')
+        .map((call) => call.q),
+    ).toEqual(['', '林'])
+  })
+
+  it('帳號詳情第一次失敗後可重新載入成功', async () => {
+    let attempts = 0
+    const backend = stubBackend({
+      users: [],
+      detailUser: regularUser,
+      fail: (call) => call.path === '/api/v1/users/user-1' && ++attempts === 1,
+    })
+    renderUsers({ detailUserId: 'user-1' })
+    expect(await screen.findByRole('alert')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '重新載入' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '鄧安娜' }),
+    ).toBeVisible()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(backend.count('GET', '/api/v1/users/user-1')).toBe(2)
+  })
+
   it('列表使用 User.company_name 且不載入全公司清單', async () => {
     const backend = stubBackend()
     renderUsers({
@@ -279,11 +407,13 @@ describe('UsersPage 帳號詳情', () => {
 
   it('開啟公司連結表單時才載入公司選項', async () => {
     const backend = stubBackend()
-    renderUsers()
+    renderUsers({ detailUserId: 'user-1' })
 
-    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    const row = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
     expect(backend.count('GET', '/api/v1/companies')).toBe(0)
-    fireEvent.click(within(row).getByRole('button', { name: '公司連結' }))
+    fireEvent.click(within(row).getByRole('button', { name: '修改公司連結' }))
 
     await waitFor(() => {
       expect(backend.count('GET', '/api/v1/companies')).toBe(1)
@@ -293,6 +423,32 @@ describe('UsersPage 帳號詳情', () => {
         screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
       ).findByRole('option', { name: '示範公司' }),
     ).toBeVisible()
+  })
+
+  it('有提醒時進入清單便直接顯示，不需手動展開', async () => {
+    stubBackend({
+      externalNoProject: [
+        {
+          id: 'external-1',
+          username: 'outside',
+          name_zh: '外部人員',
+          account_expires_on: null,
+        },
+      ],
+      unmanagedProjects: [
+        {
+          id: 'project-1',
+          project_code: 'P-1',
+          name: '未管理專案',
+          member_count: 2,
+        },
+      ],
+    })
+    renderUsers()
+    expect(await screen.findByText(/提醒：/)).toBeVisible()
+    expect(screen.getByText('外部人員（outside）')).toBeVisible()
+    expect(screen.getByRole('link', { name: /P-1／未管理專案/ })).toBeVisible()
+    expect(screen.queryByRole('group')).toBeNull()
   })
 
   it('進入清單自動載入提醒，沒有提醒時整塊隱藏', async () => {
@@ -320,7 +476,7 @@ describe('UsersPage 帳號詳情', () => {
     expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
   })
 
-  it('details retain the main action order and add temporary password reset', async () => {
+  it('詳情保留主要操作順序並提供臨時密碼重設', async () => {
     stubBackend()
     renderUsers({ detailUserId: 'user-1' })
     await screen.findByRole('heading', { name: '鄧安娜' })
@@ -335,13 +491,14 @@ describe('UsersPage 帳號詳情', () => {
     expect(labels).toEqual([
       '修改資料',
       '修改公司連結',
-      '指派管理者',
+      '設為系統管理者',
       '停用帳號',
       '重設臨時密碼',
     ])
-    expect(
-      within(actions).getByRole('button', { name: '停用帳號' }),
-    ).toHaveClass('btn-danger')
+    // 觸發鈕只用外框紅，實心紅留給確認框裡的最終確認鈕。
+    const trigger = within(actions).getByRole('button', { name: '停用帳號' })
+    expect(trigger).toHaveClass('btn-danger-outline')
+    expect(trigger).not.toHaveClass('btn-danger')
   })
 
   it('deactivation uses the name and shows a success notice', async () => {
@@ -352,7 +509,7 @@ describe('UsersPage 帳號詳情', () => {
 
     const box = await screen.findByRole('region', { name: '操作確認' })
     expect(box).toHaveTextContent(
-      '停用鄧安娜（anna.deng）他會立刻被登出，之後不能再登入。',
+      '要停用的帳號：鄧安娜（anna.deng）他會立刻被登出，之後不能再登入。',
     )
     expect(box).toHaveTextContent(
       '他的功能權限與專案成員關係會先留著，重新啟用時由你逐項決定要不要恢復。',
@@ -415,7 +572,9 @@ describe('UsersPage 帳號詳情', () => {
     await screen.findByRole('heading', { name: '鄧安娜' })
     expect(screen.getByRole('button', { name: '修改資料' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '修改公司連結' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '指派管理者' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: '設為系統管理者' }),
+    ).toBeDisabled()
     expect(screen.getByRole('button', { name: '停用帳號' })).toBeDisabled()
   })
 
@@ -458,7 +617,7 @@ describe('UsersPage 帳號詳情', () => {
     ).toBe(1)
   })
 
-  it('requires in-page confirmation before deactivating from account detail', async () => {
+  it('帳號詳情停用前必須在頁內確認', async () => {
     const backend = stubBackend({ users: [{ ...regularUser }] })
     renderUsers({ detailUserId: 'user-1' })
     await screen.findByRole('heading', { name: '鄧安娜' })
@@ -490,7 +649,7 @@ describe('UsersPage 帳號詳情', () => {
 describe('UsersPage 帳號清單導覽', () => {
   it('renders the account name as an unbordered detail link', async () => {
     stubBackend()
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
 
     const accountLink = await screen.findByRole('link', { name: '鄧安娜' })
     expect(accountLink).toHaveAttribute('href', '/accounts/user-1')
@@ -531,10 +690,12 @@ describe('UsersPage 批次停用帳號（#414）', () => {
       hold: (call) =>
         call.path.endsWith(':batch-active-status') ? gate : undefined,
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
-    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    const batchTrigger = screen.getByRole('button', { name: '批次停用帳號' })
+    expect(batchTrigger).toHaveClass('btn-danger-outline')
+    fireEvent.click(batchTrigger)
     fireEvent.click(
       await screen.findByRole('button', { name: '確認停用帳號' }),
     )
@@ -560,7 +721,7 @@ describe('UsersPage 批次停用帳號（#414）', () => {
     const backend = stubBackend({
       fail: (call) => call.path.endsWith(':batch-active-status'),
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     const row = await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
@@ -599,7 +760,7 @@ describe('UsersPage 批次停用帳號（#414）', () => {
         ],
       },
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
@@ -645,7 +806,7 @@ describe('UsersPage 批次停用帳號（#414）', () => {
       users: [{ ...regularUser, is_active: false }],
       fail: (call) => call.path.endsWith(':batch-active-status'),
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     const row = await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
@@ -680,7 +841,7 @@ describe('UsersPage 批次停用帳號（#414）', () => {
         ],
       },
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 bob.lin' }))
@@ -735,21 +896,21 @@ describe('UsersPage 批次停用帳號（#414）', () => {
       ],
       preview: { account_expired: true },
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
     fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
     const box = await screen.findByRole('region', { name: '批次啟用確認' })
 
     expect(within(box).getByRole('status')).toHaveTextContent(
-      '1 個外部帳號已過到期日',
+      '鄧安娜已過到期日，不能啟用。請先改到期日，再回來啟用。',
     )
-    expect(
-      within(box).getByRole('link', { name: '改到期日：鄧安娜' }),
-    ).toHaveAttribute('href', '/accounts/user-1?edit=expiry')
-    expect(
-      within(box).getByRole('button', { name: '確認啟用其餘 0 個帳號' }),
-    ).toBeDisabled()
+    expect(within(box).getByRole('link', { name: '鄧安娜' })).toHaveAttribute(
+      'href',
+      '/accounts/user-1?edit=expiry',
+    )
+    expect(within(box).queryByRole('button', { name: /確認啟用/ })).toBeNull()
+    expect(within(box).getAllByText(/鄧安娜/)).toHaveLength(1)
     expect(backend.count('POST', /:batch-active-status$/)).toBe(0)
     expect(within(box).queryByText(/請逐一確認每個帳號要恢復/)).toBeNull()
     expect(within(box).queryByRole('group')).toBeNull()
@@ -769,7 +930,7 @@ const userFormCases = [
   },
   {
     name: '使用者公司連結',
-    open: '公司連結',
+    open: '修改公司連結',
     button: '儲存公司連結',
     input: '公司',
     method: 'PUT',
@@ -782,8 +943,10 @@ const userFormCases = [
 describe.each(userFormCases)('$name 共用表單', (formCase) => {
   async function openForm(options: Parameters<typeof stubBackend>[0] = {}) {
     const backend = stubBackend(options)
-    renderUsers()
-    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    renderUsers({ detailUserId: 'user-1' })
+    const row = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
     fireEvent.click(within(row).getByRole('button', { name: formCase.open }))
     const button = await screen.findByRole('button', { name: formCase.button })
     return {
@@ -793,6 +956,32 @@ describe.each(userFormCases)('$name 共用表單', (formCase) => {
       input: within(button.closest('form')!).getByLabelText(formCase.input),
     }
   }
+
+  it('存檔失敗後取消再開表單會清除舊錯誤', async () => {
+    const backend = stubBackend({
+      fail: (call) =>
+        call.method === formCase.method && call.path === formCase.path,
+    })
+    renderUsers({ detailUserId: 'user-1' })
+    const section = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
+    fireEvent.click(
+      within(section).getByRole('button', { name: formCase.open }),
+    )
+    const button = await screen.findByRole('button', { name: formCase.button })
+    const form = button.closest('form')!
+    formCase.prepare(within(form).getByLabelText(formCase.input))
+    fireEvent.click(button)
+    await screen.findByRole('alert')
+    fireEvent.click(within(form).getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(section).getByRole('button', { name: formCase.open }),
+    )
+    await screen.findByRole('button', { name: formCase.button })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(backend.count(formCase.method, formCase.path)).toBe(1)
+  })
 
   it('實際修改欄位會攔截 beforeunload', async () => {
     const { form, input } = await openForm()
@@ -839,8 +1028,10 @@ describe.each(userFormCases)('$name 共用表單', (formCase) => {
       fail: (call) =>
         call.method === formCase.method && call.path === formCase.path,
     })
-    renderUsers()
-    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    renderUsers({ detailUserId: 'user-1' })
+    const row = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
     fireEvent.click(within(row).getByRole('button', { name: formCase.open }))
     const button = await screen.findByRole('button', { name: formCase.button })
     formCase.prepare(
@@ -873,9 +1064,11 @@ describe('使用者公司連結錯誤', () => {
       failureCode: 'user.employee_no_conflict',
       failureStatus: 409,
     })
-    renderUsers()
-    const row = await screen.findByRole('row', { name: /anna\.deng/ })
-    fireEvent.click(within(row).getByRole('button', { name: '公司連結' }))
+    renderUsers({ detailUserId: 'user-1' })
+    const row = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
+    fireEvent.click(within(row).getByRole('button', { name: '修改公司連結' }))
     const form = within(
       screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
     )
@@ -941,57 +1134,6 @@ describe('使用者管理搜尋共用表單', () => {
   })
 })
 
-describe('使用者新增共用表單', () => {
-  function fillUserForm() {
-    fireEvent.change(screen.getByLabelText(/^帳號名稱/), {
-      target: { value: 'ben.lin' },
-    })
-    fireEvent.change(screen.getByLabelText(/^Email/), {
-      target: { value: 'ben@example.com' },
-    })
-    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
-      target: { value: '林本' },
-    })
-    fireEvent.click(screen.getByRole('radio', { name: '內部帳號' }))
-  }
-
-  it('新增 pending 鎖送出，IME 略過，失敗後可重試', async () => {
-    const gate = deferred()
-    let failing = false
-    const backend = stubBackend({
-      hold: (call) =>
-        call.method === 'POST' && call.path === '/api/v1/users'
-          ? gate
-          : undefined,
-      fail: (call) =>
-        failing && call.method === 'POST' && call.path === '/api/v1/users',
-    })
-    renderUsers()
-    await screen.findByRole('row', { name: /anna\.deng/ })
-    fillUserForm()
-    const button = screen.getByRole('button', { name: '新增帳號' })
-    const form = button.closest('form')!
-    const input = screen.getByLabelText(/^帳號名稱/)
-
-    expectImeEnterIgnored(input)
-    expect(backend.count('POST', '/api/v1/users')).toBe(0)
-    fireEvent.click(button)
-    fireEvent.submit(form)
-    expect(button).toBeDisabled()
-    expect(backend.count('POST', '/api/v1/users')).toBe(1)
-    gate.resolve()
-    await waitFor(() => expect(button).toBeEnabled())
-
-    failing = true
-    fillUserForm()
-    fireEvent.click(button)
-    await waitFor(() => expect(backend.count('POST', '/api/v1/users')).toBe(2))
-    failing = false
-    fireEvent.click(button)
-    await waitFor(() => expect(backend.count('POST', '/api/v1/users')).toBe(3))
-  })
-})
-
 const companyFormCases = [
   {
     name: '公司管理搜尋',
@@ -1023,13 +1165,17 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
         fail && call.method === formCase.method && call.path === formCase.path,
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter
+        initialEntries={[
+          formCase.method === 'POST' ? '/companies/new' : '/companies',
+        ]}
+      >
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
       </DataMemoryRouter>,
     )
-    await screen.findByText('示範公司')
+    if (formCase.method === 'GET') await screen.findByText('示範公司')
     const button = screen.getByRole('button', { name: formCase.button })
     const form = button.closest('form')!
     const field = within(form).getByLabelText(formCase.field)
@@ -1059,11 +1205,34 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
     test.hold()
     fireEvent.click(test.button)
     fireEvent.submit(test.form)
-    expect(test.button).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: formCase.button }),
+    ).toBeDisabled()
     const expected = test.baseline + 1
-    expect(test.backend.count(formCase.method, formCase.path)).toBe(expected)
+    if (formCase.method === 'POST') {
+      expect(test.backend.count(formCase.method, formCase.path)).toBe(expected)
+    } else {
+      await waitFor(() =>
+        expect(test.backend.count(formCase.method, formCase.path)).toBe(
+          expected,
+        ),
+      )
+    }
     test.gate.resolve()
-    await waitFor(() => expect(test.button).toBeEnabled())
+    if (formCase.method === 'POST') {
+      expect(
+        await screen.findByRole('heading', { name: '第二示範公司' }),
+      ).toBeVisible()
+      expect(
+        screen.queryByRole('button', { name: formCase.button }),
+      ).not.toBeInTheDocument()
+    } else {
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: formCase.button }),
+        ).toBeEnabled(),
+      )
+    }
   })
 
   it('IME Enter 不送出真實 API', async () => {
@@ -1079,13 +1248,18 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
     const expected = test.baseline + 1
     test.fail(true)
     fireEvent.click(test.button)
-    await waitFor(() =>
-      expect(test.backend.count(formCase.method, formCase.path)).toBe(
-        expected,
-      ),
-    )
+    if (formCase.method === 'POST') {
+      expect(test.backend.count(formCase.method, formCase.path)).toBe(expected)
+    } else {
+      await waitFor(() =>
+        expect(test.backend.count(formCase.method, formCase.path)).toBe(
+          expected,
+        ),
+      )
+    }
+    await screen.findByRole('alert')
     test.fail(false)
-    fireEvent.click(test.button)
+    fireEvent.click(screen.getByRole('button', { name: formCase.button }))
     await waitFor(() =>
       expect(test.backend.count(formCase.method, formCase.path)).toBe(
         expected + 1,
@@ -1095,11 +1269,15 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
 })
 
 describe('UsersPage 操作確認框（#507）', () => {
-  it('獨立清單停用確認也使用明確標籤與四項後果', async () => {
+  it('帳號詳情停用確認使用明確標籤與四項後果', async () => {
     const backend = stubBackend()
-    renderUsers()
-    const row = await screen.findByRole('row', { name: /anna\.deng/ })
-    fireEvent.click(within(row).getByRole('button', { name: '停用' }))
+    renderUsers({ detailUserId: 'user-1' })
+    const row = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
+    const rowTrigger = within(row).getByRole('button', { name: '停用帳號' })
+    expect(rowTrigger).toHaveClass('btn-danger-outline')
+    fireEvent.click(rowTrigger)
     const box = await screen.findByRole('region', { name: '操作確認' })
     expect(within(box).getAllByRole('listitem')).toHaveLength(4)
     const confirm = within(box).getByRole('button', {
@@ -1111,8 +1289,12 @@ describe('UsersPage 操作確認框（#507）', () => {
   })
 
   async function openConfirm() {
-    const row = await screen.findByRole('row', { name: /anna\.deng/ })
-    fireEvent.click(within(row).getByRole('button', { name: '指派管理者' }))
+    const row = (
+      await screen.findByRole('heading', { name: '鄧安娜' })
+    ).closest('section')!
+    fireEvent.click(
+      within(row).getByRole('button', { name: '設為系統管理者' }),
+    )
     return screen.getByRole('region', { name: '操作確認' })
   }
 
@@ -1121,7 +1303,7 @@ describe('UsersPage 操作確認框（#507）', () => {
     const backend = stubBackend({
       hold: (call) => (call.method === 'PUT' ? gate : undefined),
     })
-    renderUsers()
+    renderUsers({ detailUserId: 'user-1' })
     const box = await openConfirm()
     const confirm = within(box).getByRole('button', { name: '確認' })
 
@@ -1137,7 +1319,7 @@ describe('UsersPage 操作確認框（#507）', () => {
 
   it('失敗之後可以再確認', async () => {
     const backend = stubBackend({ fail: (call) => call.method === 'PUT' })
-    renderUsers()
+    renderUsers({ detailUserId: 'user-1' })
     const box = await openConfirm()
     const confirm = within(box).getByRole('button', { name: '確認' })
 
@@ -1152,7 +1334,7 @@ describe('UsersPage 操作確認框（#507）', () => {
 
   it('確認框不是表單，沒有 Enter 送出的路徑（輸入法 Enter 不適用）', async () => {
     stubBackend()
-    renderUsers()
+    renderUsers({ detailUserId: 'user-1' })
     const box = await openConfirm()
 
     expect(box.tagName).toBe('DIV')
@@ -1172,8 +1354,17 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
     username: RegExp,
     button: string,
   ): Promise<HTMLElement> {
-    const row = await screen.findByRole('row', { name: username })
-    fireEvent.click(within(row).getByRole('button', { name: button }))
+    await screen.findByText(username)
+    fireEvent.click(
+      screen.getByRole('button', {
+        name:
+          button === '停用'
+            ? '停用帳號'
+            : button === '啟用'
+              ? '啟用帳號'
+              : button,
+      }),
+    )
     return screen.getByRole('region', { name: '操作確認' })
   }
 
@@ -1183,7 +1374,7 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
 
   it('停用是紅色', async () => {
     stubBackend()
-    renderUsers()
+    renderUsers({ detailUserId: 'user-1' })
     const box = await openFor(/anna\.deng/, '停用')
 
     expect(box).toHaveClass('confirm-box-danger')
@@ -1196,7 +1387,7 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
     const backend = stubBackend({
       users: [{ ...regularUser, is_active: false }],
     })
-    renderUsers()
+    renderUsers({ detailUserId: 'user-1' })
     const box = await openFor(/anna\.deng/, '啟用')
 
     expect(box).toHaveClass('confirm-box-neutral')
@@ -1238,7 +1429,7 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
         ],
       },
     })
-    renderUsers()
+    renderUsers({ detailUserId: 'user-1' })
     const box = await openFor(/anna\.deng/, '啟用')
     const permission = await within(box).findByLabelText('使用專案功能')
     const membership = within(box).getByLabelText(/P-1／測試專案/)
@@ -1311,7 +1502,7 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
       ],
       preview: { account_expired: true },
     })
-    renderUsers()
+    renderUsers({ detailUserId: 'user-1' })
     const box = await openFor(/anna\.deng/, '啟用')
     expect(await within(box).findByRole('alert')).toHaveTextContent(
       '外部帳號已到期',
@@ -1319,10 +1510,10 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
     expect(confirmButton(box)).toBeDisabled()
   })
 
-  it('指派管理者是一般主色', async () => {
+  it('設為系統管理者是一般主色', async () => {
     stubBackend()
-    renderUsers()
-    const box = await openFor(/anna\.deng/, '指派管理者')
+    renderUsers({ detailUserId: 'user-1' })
+    const box = await openFor(/anna\.deng/, '設為系統管理者')
 
     expect(box).toHaveClass('confirm-box-neutral')
     expect(confirmButton(box)).toHaveClass('btn-primary')
@@ -1330,7 +1521,7 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
 
   it('收回管理者是紅色', async () => {
     stubBackend({ users: [adminUser] })
-    renderUsers()
+    renderUsers({ detailUserId: 'user-9' })
     const box = await openFor(/amy\.admin/, '收回管理者')
 
     expect(box).toHaveClass('confirm-box-danger')
@@ -1339,7 +1530,7 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
 
   it('管理者帳號停用是紅色，停用後再啟用是一般主色', async () => {
     const backend = stubBackend({ users: [{ ...adminUser }] })
-    renderUsers()
+    renderUsers({ detailUserId: 'user-9' })
     const deactivation = await openFor(/amy\.admin/, '停用')
     expect(deactivation).toHaveClass('confirm-box-danger')
 
@@ -1362,55 +1553,6 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
   })
 })
 
-describe('UsersPage 進行中停用整張列表的動作按鈕（#507）', () => {
-  const bob: User = {
-    ...regularUser,
-    id: 'user-2',
-    username: 'bob.lin',
-    email: 'bob@example.com',
-    name_zh: '林鮑伯',
-  }
-
-  it('一個動作進行中，別列的動作按鈕與儲存鈕都停用，完成後恢復', async () => {
-    const gate = deferred()
-    stubBackend({
-      users: [regularUser, bob],
-      hold: (call) => (call.method === 'PUT' ? gate : undefined),
-    })
-    renderUsers()
-    const bobRow = await screen.findByRole('row', { name: /bob\.lin/ })
-    fireEvent.click(within(bobRow).getByRole('button', { name: '修改資料' }))
-    const save = screen.getByRole('button', { name: '儲存資料' })
-    const annaRow = screen.getByRole('row', { name: /anna\.deng/ })
-    fireEvent.click(
-      within(annaRow).getByRole('button', { name: '指派管理者' }),
-    )
-    const box = screen.getByRole('region', { name: '操作確認' })
-    expect(
-      within(bobRow).getByRole('button', { name: '指派管理者' }),
-    ).toBeEnabled()
-    expect(save).toBeEnabled()
-
-    fireEvent.click(within(box).getByRole('button', { name: '確認' }))
-
-    expect(
-      within(bobRow).getByRole('button', { name: '指派管理者' }),
-    ).toBeDisabled()
-    expect(within(bobRow).getByRole('button', { name: '停用' })).toBeDisabled()
-    expect(save).toBeDisabled()
-    gate.resolve()
-    // 完成後列表會重新載入，列重新長出來，按鈕都恢復可按。
-    await waitFor(() =>
-      expect(
-        within(screen.getByRole('row', { name: /bob\.lin/ })).getByRole(
-          'button',
-          { name: '指派管理者' },
-        ),
-      ).toBeEnabled(),
-    )
-  })
-})
-
 describe('CompaniesPage 停用公司（#507）', () => {
   it('連點「停用公司」只查一次啟用中的人員', async () => {
     const gate = deferred()
@@ -1418,7 +1560,7 @@ describe('CompaniesPage 停用公司（#507）', () => {
       hold: (call) => (call.path.endsWith('/active-users') ? gate : undefined),
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies/company-1']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1426,13 +1568,19 @@ describe('CompaniesPage 停用公司（#507）', () => {
     )
     await screen.findByText('示範公司')
     const button = screen.getByRole('button', { name: '停用公司' })
-    expect(screen.getByText('停用公司不會自動停用帳號。')).toBeVisible()
+    expect(
+      screen.getByText(
+        '停用後，不能再把帳號連結到這家公司；已連結的帳號維持啟用，不受影響。',
+      ),
+    ).toBeVisible()
 
     fireEvent.click(button)
     fireEvent.click(button)
     gate.resolve()
 
-    await screen.findByText('還有 1 個啟用中的帳號')
+    await screen.findByText(
+      '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+    )
     expect(
       screen.getByText('只有勾選的帳號會一併停用；未選取的帳號會維持啟用。'),
     ).toBeVisible()
@@ -1445,7 +1593,7 @@ describe('CompaniesPage 停用公司（#507）', () => {
       hold: (call) => (call.method === 'PUT' ? gate : undefined),
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies/company-1']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1462,7 +1610,11 @@ describe('CompaniesPage 停用公司（#507）', () => {
     gate.resolve()
 
     await waitFor(() =>
-      expect(screen.queryByText('還有 1 個啟用中的帳號')).toBeNull(),
+      expect(
+        screen.queryByText(
+          '這家公司還有 1 個啟用中的帳號。停用公司不會停用他們；要一併停用，請在下方勾選。',
+        ),
+      ).toBeNull(),
     )
     expect(backend.count('PUT', '/api/v1/companies/company-1/active')).toBe(1)
   })
@@ -1478,7 +1630,7 @@ describe('CompaniesPage 批次狀態（#414）', () => {
       },
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1501,7 +1653,7 @@ describe('CompaniesPage 批次狀態（#414）', () => {
       hold: (call) => (call.path.endsWith(':batch-status') ? gate : undefined),
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1520,11 +1672,8 @@ describe('CompaniesPage 批次狀態（#414）', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /鄧安娜/ }))
     fireEvent.click(confirm)
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: '正在停用公司…' }),
-      ).toBeDisabled(),
-    )
+    await waitFor(() => expect(confirm).toBeDisabled())
+    expect(confirm).toHaveTextContent('正在更新公司…')
     expect(backend.count('POST', '/api/v1/companies:batch-status')).toBe(1)
     expect(
       backend.calls.find((call) => call.path.endsWith(':batch-status'))?.body,
@@ -1550,7 +1699,7 @@ describe('CompaniesPage 批次狀態（#414）', () => {
       fail: (call) => call.path.endsWith(':batch-status'),
     })
     render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1679,7 +1828,7 @@ describe('#727 帳號操作保護', () => {
 
   it('批次停用後準備啟用及取消，清除兩種舊訊息', async () => {
     stubBackend()
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     fireEvent.click(
       await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
     )
@@ -1722,7 +1871,7 @@ describe('#727 恢復項目的共用白話內容', () => {
           ],
         },
       })
-      renderUsers(mode === 'batch' ? { onSelectUser: vi.fn() } : {})
+      renderUsers(mode === 'batch' ? {} : { detailUserId: 'user-1' })
       let box: HTMLElement
       if (mode === 'batch') {
         fireEvent.click(
@@ -1731,8 +1880,9 @@ describe('#727 恢復項目的共用白話內容', () => {
         fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
         box = await screen.findByRole('region', { name: '批次啟用確認' })
       } else {
-        const row = await screen.findByRole('row', { name: /anna\.deng/ })
-        fireEvent.click(within(row).getByRole('button', { name: '啟用' }))
+        fireEvent.click(
+          await screen.findByRole('button', { name: '啟用帳號' }),
+        )
         box = await screen.findByRole('region', { name: '操作確認' })
         await within(box).findByText('選擇要恢復的權限')
       }
@@ -1766,7 +1916,7 @@ describe('#727 批次錯誤清除', () => {
         users: [{ ...regularUser, is_active: active }],
         fail: (call) => call.path.endsWith(':batch-active-status'),
       })
-      renderUsers({ onSelectUser: vi.fn() })
+      renderUsers({})
       const select = await screen.findByRole('checkbox', {
         name: '選取 anna.deng',
       })
@@ -1818,7 +1968,7 @@ describe('#727c 反向批次訊息清除', () => {
     const backend = stubBackend({
       users: [{ ...regularUser, is_active: false }],
     })
-    renderUsers({ onSelectUser: vi.fn() })
+    renderUsers({})
     fireEvent.click(
       await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
     )
@@ -1844,7 +1994,7 @@ describe('#734 T1/T2/T3 帳號批次回饋', () => {
     '啟用狀態 %s 的確認與結果在觸發處同一容器',
     async (active) => {
       stubBackend({ users: [{ ...regularUser, is_active: active }] })
-      renderUsers({ onSelectUser: vi.fn() })
+      renderUsers({})
       fireEvent.click(
         await screen.findByRole('checkbox', {
           name: '選取 anna.deng',
@@ -1861,6 +2011,12 @@ describe('#734 T1/T2/T3 帳號批次回饋', () => {
         name: `批次${action}確認`,
       })
       if (active) {
+        expect(
+          within(box).getByRole('heading', { name: '停用 1 個帳號？' }),
+        ).toBeVisible()
+        expect(
+          within(box).getByRole('list', { name: '要停用的帳號' }),
+        ).toHaveTextContent('anna.deng')
         expect(box).toHaveTextContent('會立刻被登出，之後不能再登入')
         expect(box).toHaveTextContent('功能權限與專案成員關係會先留著')
         expect(box).toHaveTextContent(
@@ -1925,7 +2081,7 @@ describe('#734 T1/T2/T3 帳號批次回饋', () => {
 describe('#734 T7 公司操作回饋位置', () => {
   function renderCompanies() {
     return render(
-      <DataMemoryRouter>
+      <DataMemoryRouter initialEntries={['/companies']}>
         <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
           <CompaniesPage />
         </CurrentUserProvider>
@@ -1936,7 +2092,8 @@ describe('#734 T7 公司操作回饋位置', () => {
   it('公司停用確認與結果留在該公司的操作列', async () => {
     stubBackend({ activeCompanyUsers: { 'company-1': [regularUser] } })
     renderCompanies()
-    const row = await screen.findByRole('row', { name: /示範公司/ })
+    fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
+    const row = await screen.findByRole('region', { name: '公司詳情' })
     fireEvent.click(within(row).getByRole('button', { name: '停用公司' }))
     const box = await within(row).findByRole('region', {
       name: '停用「示範公司」',
@@ -1950,13 +2107,16 @@ describe('#734 T7 公司操作回饋位置', () => {
   it('改名會聚焦表單，成功提示留在送出處', async () => {
     stubBackend()
     renderCompanies()
-    fireEvent.click(await screen.findByRole('button', { name: '改名稱' }))
+    fireEvent.click(await screen.findByRole('link', { name: '示範公司' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改公司名稱' }),
+    )
     const input = screen.getByLabelText('公司名稱')
     await waitFor(() => expect(input).toHaveFocus())
     const form = input.closest('form') as HTMLElement
     fireEvent.change(input, { target: { value: '新公司名稱' } })
-    fireEvent.click(within(form).getByRole('button', { name: '儲存名稱' }))
-    expect(await within(form).findByRole('status')).toHaveTextContent(
+    fireEvent.click(within(form).getByRole('button', { name: '儲存公司名稱' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
       '已將公司名稱更新為「新公司名稱」。',
     )
   })
@@ -2008,6 +2168,64 @@ it('詳情停用確認也顯示最後管理者專案警告，四項後果各自�
   expect(consequences).toHaveTextContent('請通知內業改派')
 })
 
+it.each(['詳情', '批次'])(
+  '一般成員的%s停用確認提供改派連結，取消不寫入',
+  async (entry) => {
+    const backend = stubBackend({
+      participatingProjects: {
+        'user-1': [
+          {
+            id: 'project-1',
+            project_code: 'P-1',
+            name: '示範工地',
+            roles: [{ id: 'field', name: '現場工程師' }],
+          },
+        ],
+      },
+    })
+    renderUsers(entry === '詳情' ? { detailUserId: 'user-1' } : {})
+    if (entry === '批次') {
+      fireEvent.click(
+        await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+      )
+      fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    } else {
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: entry === '詳情' ? '停用帳號' : '停用',
+        }),
+      )
+    }
+    const box = await screen.findByRole('region', {
+      name: entry === '批次' ? '批次停用確認' : '操作確認',
+    })
+    expect(
+      await within(box).findByRole('link', {
+        name: '計畫與任務：P-1／示範工地',
+      }),
+    ).toHaveAttribute('href', '/projects/project-1/planning')
+    expect(box).not.toHaveTextContent('將沒有啟用中的管理成員')
+    fireEvent.click(within(box).getByRole('button', { name: '取消' }))
+    expect(backend.calls.filter((call) => call.method !== 'GET')).toEqual([])
+  },
+)
+
+it('改派專案載入失敗時保留確認，禁止在影響資料未齊時停用', async () => {
+  const backend = stubBackend({
+    fail: (call) => call.path.endsWith('/participating-projects'),
+  })
+  renderUsers({ detailUserId: 'user-1' })
+  fireEvent.click(await screen.findByRole('button', { name: '停用帳號' }))
+  const box = await screen.findByRole('region', { name: '操作確認' })
+  await within(box).findByRole('alert')
+  const confirm = within(box).getByRole('button', { name: '確認停用帳號' })
+  expect(confirm).toBeDisabled()
+  fireEvent.click(confirm)
+  expect(backend.calls.filter((call) => call.method !== 'GET')).toEqual([])
+  fireEvent.click(within(box).getByRole('button', { name: '取消' }))
+  expect(screen.queryByRole('region', { name: '操作確認' })).toBeNull()
+})
+
 it('提醒自動載入失敗才顯示錯誤與重試，重試成功無提醒則隱藏', async () => {
   let failed = true
   const backend = stubBackend({
@@ -2037,7 +2255,7 @@ it('批次啟用排除到期者，警示附編輯連結且只送出其餘帳號'
     ],
     previews: { 'user-1': { account_expired: true } },
   })
-  renderUsers({ onSelectUser: vi.fn() })
+  renderUsers({})
   fireEvent.click(
     await screen.findByRole('checkbox', {
       name: '選取 anna.deng',
@@ -2048,11 +2266,12 @@ it('批次啟用排除到期者，警示附編輯連結且只送出其餘帳號'
   fireEvent.click(within(area).getByRole('button', { name: '批次啟用帳號' }))
   const box = await within(area).findByRole('region', { name: '批次啟用確認' })
   expect(within(box).getByRole('status')).toHaveTextContent(
-    '1 個外部帳號已過到期日',
+    '鄧安娜已過到期日，不能啟用。請先改到期日，再回來啟用。',
   )
-  expect(
-    within(box).getByRole('link', { name: '改到期日：鄧安娜' }),
-  ).toHaveAttribute('href', '/accounts/user-1?edit=expiry')
+  expect(within(box).getByRole('link', { name: '鄧安娜' })).toHaveAttribute(
+    'href',
+    '/accounts/user-1?edit=expiry',
+  )
   expect(within(box).getAllByRole('group')).toHaveLength(1)
   fireEvent.click(
     within(box).getByRole('button', {
@@ -2118,6 +2337,41 @@ it('到期參數 replace 消費一次，取消重開不再聚焦日期', async (
   )
 })
 
+it('清單外的到期詳情只載入一次，消費參數不重掛表單', async () => {
+  const listGate = deferred()
+  const backend = stubBackend({
+    users: [],
+    detailUser: { ...regularUser, is_external_collaborator: true },
+    hold: (call) => (call.path === '/api/v1/users' ? listGate : undefined),
+  })
+  function LocationProbe() {
+    const location = useLocation()
+    return <output aria-label="測試網址">{location.search}</output>
+  }
+  const view = render(
+    <DataMemoryRouter initialEntries={['/accounts/user-1?edit=expiry']}>
+      <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+        <UsersPage detailUserId="user-1" onTemporaryPassword={vi.fn()} />
+        <LocationProbe />
+      </CurrentUserProvider>
+    </DataMemoryRouter>,
+  )
+  const date = await screen.findByLabelText(/外部帳號到期日/)
+  await waitFor(() => expect(date).toHaveFocus())
+  const form = date.closest('form')
+  fireEvent.change(date, { target: { value: '2030-01-01' } })
+  await waitFor(() =>
+    expect(screen.getByLabelText('測試網址')).toBeEmptyDOMElement(),
+  )
+  // 清單仍在載入，replace 不得重取詳情或重掛表單（#741）。
+  expect(backend.count('GET', '/api/v1/users/user-1')).toBe(1)
+  expect(screen.getByLabelText(/外部帳號到期日/)).toBe(date)
+  expect(date.closest('form')).toBe(form)
+  expect(date).toHaveValue('2030-01-01')
+  view.unmount()
+  listGate.resolve()
+})
+
 it('提醒背景失敗不搶搜尋焦點，主動重試失敗才聚焦錯誤', async () => {
   const backend = stubBackend({
     fail: (call) => call.path.endsWith('/external-without-project'),
@@ -2133,4 +2387,633 @@ it('提醒背景失敗不搶搜尋焦點，主動重試失敗才聚焦錯誤', a
   fireEvent.click(screen.getByRole('button', { name: '重試' }))
   await waitFor(() => expect(screen.getByRole('alert')).toHaveFocus())
   expect(backend.count('GET', /external-without-project/)).toBe(2)
+})
+
+it('批次兩個帳號共用專案只顯示一個改派連結', async () => {
+  const other = { ...regularUser, id: 'user-2', username: 'other' }
+  const project = {
+    id: 'project-1',
+    project_code: 'P-1',
+    name: '共同工地',
+    roles: [{ id: 'field', name: '現場工程師' }],
+  }
+  stubBackend({
+    users: [regularUser, other],
+    participatingProjects: {
+      'user-1': [project],
+      'user-2': [project],
+    },
+  })
+  renderUsers()
+  for (const username of ['anna.deng', 'other'])
+    fireEvent.click(
+      await screen.findByRole('checkbox', {
+        name: `選取 ${username}`,
+      }),
+    )
+  fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+  const box = await screen.findByRole('region', { name: '批次停用確認' })
+  expect(
+    within(box).getAllByRole('link', {
+      name: '計畫與任務：P-1／共同工地',
+    }),
+  ).toHaveLength(1)
+})
+
+it.each(['詳情', '批次'])(
+  '%s參與專案查詢失敗時禁止停用且顯示錯誤',
+  async (entry) => {
+    const backend = stubBackend({
+      fail: (call) => call.path.endsWith('/participating-projects'),
+    })
+    renderUsers(entry === '詳情' ? { detailUserId: 'user-1' } : {})
+    if (entry === '批次') {
+      fireEvent.click(
+        await screen.findByRole('checkbox', {
+          name: '選取 anna.deng',
+        }),
+      )
+      fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+      const area = screen.getByRole('region', { name: '批次帳號操作' })
+      expect(await within(area).findByRole('alert')).toBeVisible()
+      expect(
+        screen.queryByRole('region', {
+          name: '批次停用確認',
+        }),
+      ).toBeNull()
+    } else {
+      fireEvent.click(await screen.findByRole('button', { name: '停用帳號' }))
+      const box = await screen.findByRole('region', { name: '操作確認' })
+      expect(await within(box).findByRole('alert')).toBeVisible()
+      expect(
+        within(box).getByRole('button', {
+          name: '確認停用帳號',
+        }),
+      ).toBeDisabled()
+    }
+    expect(backend.calls.filter((call) => call.method !== 'GET')).toEqual([])
+  },
+)
+
+it('批次預覽同時最多六個帳號、十二個 GET 在途', async () => {
+  const users = Array.from({ length: 8 }, (_, index) => ({
+    ...regularUser,
+    id: `user-${index + 1}`,
+    username: `person-${index + 1}`,
+  }))
+  const gates = users.map(() => deferred<void>())
+  stubBackend({
+    users,
+    hold: (call) => {
+      if (!/\/(deactivation-check|participating-projects)$/.test(call.path))
+        return undefined
+      return gates[Number(call.path.split('/')[4].split('-')[1]) - 1]
+    },
+  })
+  const original = globalThis.fetch
+  let inFlight = 0
+  let maximum = 0
+  const accounts = new Map<string, number>()
+  let maximumAccounts = 0
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (...args: Parameters<typeof fetch>) => {
+      const path = new URL(String(args[0]), 'http://localhost').pathname
+      if (!/\/(deactivation-check|participating-projects)$/.test(path))
+        return original(...args)
+      const id = path.split('/')[4]
+      accounts.set(id, (accounts.get(id) ?? 0) + 1)
+      maximumAccounts = Math.max(maximumAccounts, accounts.size)
+      maximum = Math.max(maximum, ++inFlight)
+      try {
+        return await original(...args)
+      } finally {
+        inFlight--
+        const count = accounts.get(id)! - 1
+        if (count) accounts.set(id, count)
+        else accounts.delete(id)
+      }
+    }),
+  )
+  renderUsers()
+  // 一次核對全部帳號，避免每次選取都重掃整個清單（#744）。
+  const checkboxes = await screen.findAllByRole('checkbox', {
+    name: /^選取 person-/,
+  })
+  expect(checkboxes.map((box) => box.getAttribute('aria-label'))).toEqual(
+    users.map((user) => `選取 ${user.username}`),
+  )
+  for (const checkbox of checkboxes) fireEvent.click(checkbox)
+  fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+  try {
+    await waitFor(() => expect(inFlight).toBeGreaterThanOrEqual(12))
+    expect(maximumAccounts).toBe(6)
+    expect(maximum).toBe(12)
+    await act(async () => {
+      gates[0].resolve()
+    })
+    await waitFor(() => expect(accounts.has('user-7')).toBe(true))
+    expect(maximumAccounts).toBe(6)
+    expect(maximum).toBe(12)
+  } finally {
+    await act(async () => {
+      gates.forEach((gate) => gate.resolve())
+    })
+  }
+  expect(
+    await screen.findByRole('region', {
+      name: '批次停用確認',
+    }),
+  ).toBeVisible()
+})
+
+describe('W-741 R4 回歸', () => {
+  it('詳情在途才放行不含目標的清單，只取一次且保留表單', async () => {
+    const listGate = deferred()
+    const detailGate = deferred()
+    const backend = stubBackend({
+      users: [],
+      detailUser: { ...regularUser, is_external_collaborator: true },
+      hold: (call) =>
+        call.path === '/api/v1/users'
+          ? listGate
+          : call.path === '/api/v1/users/user-1'
+            ? detailGate
+            : undefined,
+    })
+    function LocationProbe() {
+      return <output aria-label="測試網址">{useLocation().search}</output>
+    }
+    const view = render(
+      <DataMemoryRouter initialEntries={['/accounts/user-1?edit=expiry']}>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <UsersPage detailUserId="user-1" onTemporaryPassword={vi.fn()} />
+          <LocationProbe />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+    try {
+      await waitFor(() =>
+        expect(backend.count('GET', '/api/v1/users/user-1')).toBe(1),
+      )
+      await act(async () => listGate.resolve())
+      expect(backend.count('GET', '/api/v1/users')).toBe(1)
+      expect(backend.count('GET', '/api/v1/users/user-1')).toBe(1)
+      await act(async () => detailGate.resolve())
+      const date = await screen.findByLabelText(/外部帳號到期日/)
+      const form = date.closest('form')
+      expect(form).not.toBeNull()
+      fireEvent.change(date, { target: { value: '2030-01-01' } })
+      await waitFor(() =>
+        expect(screen.getByLabelText('測試網址')).toBeEmptyDOMElement(),
+      )
+      expect(backend.count('GET', '/api/v1/users/user-1')).toBe(1)
+      expect(screen.getByLabelText(/外部帳號到期日/)).toBe(date)
+      expect(date.closest('form')).toBe(form)
+      expect(date).toHaveValue('2030-01-01')
+    } finally {
+      view.unmount()
+      listGate.resolve()
+      detailGate.resolve()
+    }
+  })
+
+  it('大寫 UUID 的到期捷徑沿用小寫 API 帳號並只取一次', async () => {
+    const id = 'abcdefab-1234-4321-9876-abcdefabcdef'
+    const backend = stubBackend({
+      users: [],
+      detailUser: {
+        ...regularUser,
+        id,
+        is_external_collaborator: true,
+      },
+    })
+    render(
+      <DataMemoryRouter
+        initialEntries={[`/accounts/${id.toUpperCase()}?edit=expiry`]}
+      >
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <UsersPage
+            detailUserId={id.toUpperCase()}
+            onTemporaryPassword={vi.fn()}
+          />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+    const date = await screen.findByLabelText(/外部帳號到期日/)
+    await waitFor(() => expect(date).toHaveFocus())
+    expect(backend.count('GET', `/api/v1/users/${id}`)).toBe(1)
+    expect(
+      backend.calls.filter((call) =>
+        call.path.toLowerCase().endsWith(`/users/${id}`),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it.each(['修改資料', '修改公司連結'])(
+    '詳情%s取消後返回清單不再攔截未儲存變更',
+    async (action) => {
+      stubBackend({
+        companies: [company, { ...company, id: 'company-2', name: '示範二' }],
+      })
+      function RoutedUsers() {
+        const location = useLocation()
+        const navigate = useNavigate()
+        return (
+          <>
+            <button onClick={() => navigate('/accounts')}>測試返回清單</button>
+            <UsersPage
+              detailUserId={
+                location.pathname === '/accounts/user-1' ? 'user-1' : null
+              }
+              onTemporaryPassword={vi.fn()}
+            />
+          </>
+        )
+      }
+      render(
+        <DataMemoryRouter initialEntries={['/accounts/user-1']}>
+          <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+            <RoutedUsers />
+          </CurrentUserProvider>
+        </DataMemoryRouter>,
+      )
+      fireEvent.click(await screen.findByRole('button', { name: action }))
+      const form = (
+        await screen.findByRole('heading', {
+          name: action === '修改資料' ? '修改帳號資料' : '連結公司',
+        })
+      ).closest('form')!
+      if (action === '修改資料') {
+        fireEvent.change(within(form).getByLabelText(/中文姓名/), {
+          target: { value: '未儲存姓名' },
+        })
+      } else {
+        await within(form).findByRole('option', { name: '示範二' })
+        fireEvent.change(within(form).getByLabelText('公司'), {
+          target: { value: 'company-2' },
+        })
+      }
+      fireEvent.click(screen.getByRole('button', { name: '測試返回清單' }))
+      fireEvent.click(await screen.findByRole('button', { name: '保留編輯' }))
+      expect(form).toBeInTheDocument()
+      fireEvent.click(within(form).getByRole('button', { name: '取消' }))
+      fireEvent.click(screen.getByRole('button', { name: '測試返回清單' }))
+      expect(
+        await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+      ).toBeVisible()
+      expect(
+        screen.queryByRole('button', { name: '保留編輯' }),
+      ).not.toBeInTheDocument()
+    },
+  )
+
+  it('多筆預覽依序失敗時保留第一個錯誤', async () => {
+    stubBackend({
+      users: [
+        regularUser,
+        { ...regularUser, id: 'user-2', username: 'other' },
+      ],
+    })
+    const original = globalThis.fetch
+    const gates = [deferred(), deferred()]
+    const started: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (...args: Parameters<typeof fetch>) => {
+        const path = new URL(String(args[0]), 'http://localhost').pathname
+        if (!path.endsWith('/deactivation-check')) return original(...args)
+        const index = path.includes('/user-1/') ? 0 : 1
+        started.push(path)
+        await gates[index].promise
+        return Response.json(
+          {
+            error: {
+              code: index === 0 ? 'user.last_admin' : 'user.builtin_protected',
+            },
+          },
+          { status: 400 },
+        )
+      }),
+    )
+    const view = renderUsers()
+    try {
+      for (const checkbox of await screen.findAllByRole('checkbox', {
+        name: /^選取 /,
+      }))
+        fireEvent.click(checkbox)
+      fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+      await waitFor(() => expect(started).toHaveLength(2))
+      await act(async () => gates[0].resolve())
+      await act(async () => gates[1].resolve())
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        '系統至少要保留一位啟用中的管理者。',
+      )
+      expect(screen.queryByRole('region', { name: '批次停用確認' })).toBeNull()
+    } finally {
+      view.unmount()
+      gates.forEach((gate) => gate.resolve())
+    }
+  })
+
+  it.each(
+    ['搜尋', '相同搜尋', '切換詳情'].flatMap((transition) =>
+      [false, true].map((fail) => ({ transition, fail })),
+    ),
+  )(
+    '$transition 後丟棄舊預覽（失敗 $fail），不覆蓋新請求',
+    async ({ transition, fail }) => {
+      const gates = [deferred(), deferred()]
+      const backend = stubBackend({
+        users: [
+          regularUser,
+          { ...regularUser, id: 'user-2', username: 'other' },
+        ],
+        hold: (call) =>
+          /\/(deactivation-check|participating-projects)$/.test(call.path)
+            ? gates[call.path.includes('/user-1/') ? 0 : 1]
+            : undefined,
+        fail: (call) =>
+          fail && call.path.endsWith('/user-1/deactivation-check'),
+      })
+      function KeptUsers() {
+        const [detail, setDetail] = useState<string | null>(null)
+        return (
+          <>
+            <button onClick={() => setDetail('user-1')}>測試詳情</button>
+            <button onClick={() => setDetail(null)}>測試清單</button>
+            <UsersPage detailUserId={detail} onTemporaryPassword={vi.fn()} />
+          </>
+        )
+      }
+      const view = render(
+        <DataMemoryRouter>
+          <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+            <KeptUsers />
+          </CurrentUserProvider>
+        </DataMemoryRouter>,
+      )
+      try {
+        fireEvent.click(
+          await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+        await waitFor(() =>
+          expect(backend.count('GET', /user-1\/deactivation-check$/)).toBe(1),
+        )
+        if (transition === '切換詳情') {
+          fireEvent.click(screen.getByRole('button', { name: '測試詳情' }))
+          await screen.findByRole('heading', { name: '鄧安娜' })
+          fireEvent.click(screen.getByRole('button', { name: '測試清單' }))
+        } else {
+          fireEvent.change(screen.getByLabelText('搜尋帳號'), {
+            target: { value: transition === '搜尋' ? '新查詢' : '' },
+          })
+          fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+          await waitFor(() =>
+            expect(backend.count('GET', '/api/v1/users')).toBe(2),
+          )
+        }
+        fireEvent.click(
+          await screen.findByRole('checkbox', { name: '選取 other' }),
+        )
+        const button = screen.getByRole('button', { name: '批次停用帳號' })
+        expect(button).toBeEnabled()
+        fireEvent.click(button)
+        await waitFor(() =>
+          expect(backend.count('GET', /user-2\/deactivation-check$/)).toBe(1),
+        )
+        await act(async () => gates[0].resolve())
+        expect(button).toBeDisabled()
+        expect(
+          screen.queryByRole('region', { name: '批次停用確認' }),
+        ).toBeNull()
+        expect(screen.queryByRole('alert')).toBeNull()
+        await act(async () => gates[1].resolve())
+        const box = await screen.findByRole('region', { name: '批次停用確認' })
+        expect(
+          within(box).getByRole('list', { name: '要停用的帳號' }),
+        ).toHaveTextContent('other')
+        expect(
+          within(box).getByRole('list', { name: '要停用的帳號' }),
+        ).not.toHaveTextContent('anna.deng')
+      } finally {
+        view.unmount()
+        gates.forEach((gate) => gate.resolve())
+      }
+    },
+  )
+
+  it('批次改派連結排在名單與專案警告之後', async () => {
+    const project = { id: 'project-1', project_code: 'P-1', name: '示範工地' }
+    stubBackend({
+      lastManagerProjects: [project],
+      participatingProjects: { 'user-1': [{ ...project, roles: [] }] },
+    })
+    renderUsers()
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    const box = await screen.findByRole('region', { name: '批次停用確認' })
+    const names = within(box).getByRole('list', { name: '要停用的帳號' })
+    const warning =
+      within(box).getByText(/停用後下列專案將沒有啟用中的管理成員/)
+    const links = within(box).getByRole('region', { name: '改派未完成任務' })
+    expect(
+      names.compareDocumentPosition(warning) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      warning.compareDocumentPosition(links) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+})
+
+describe('#732 批次預覽的並行請求上限', () => {
+  const SELECTED = 8
+  const LIMIT = 6
+
+  /** 每個預覽請求稍後才回應，並記錄同時未完成的最大請求數。 */
+  function trackPeak(pathPattern: RegExp) {
+    const state = { inFlight: 0, peak: 0 }
+    const hold = (call: Call) => {
+      if (call.method !== 'GET' || !pathPattern.test(call.path)) {
+        return undefined
+      }
+      state.inFlight += 1
+      state.peak = Math.max(state.peak, state.inFlight)
+      const gate = deferred()
+      setTimeout(() => {
+        state.inFlight -= 1
+        gate.resolve()
+      }, 2)
+      return gate
+    }
+    return { state, hold }
+  }
+
+  const manyUsers = (isActive: boolean): User[] =>
+    Array.from({ length: SELECTED }, (_, index) => ({
+      ...regularUser,
+      id: `user-${index + 1}`,
+      username: `batch.user${index + 1}`,
+      is_active: isActive,
+    }))
+
+  /** 逐一勾選目前列表的核取方塊；用 DOM 查詢避免逐列的角色查詢拖慢。 */
+  function checkAll(labelPrefix: string) {
+    const boxes = document.querySelectorAll<HTMLInputElement>(
+      `input[type="checkbox"][aria-label^="${labelPrefix}"]`,
+    )
+    expect(boxes).toHaveLength(SELECTED)
+    boxes.forEach((box) => fireEvent.click(box))
+  }
+
+  async function selectAllUsers() {
+    renderUsers({})
+    await screen.findByRole('checkbox', { name: '選取 batch.user1' })
+    checkAll('選取 batch.user')
+  }
+
+  // 批次停用帳號的上限（含兩個查詢）已由上方「批次預覽同時最多六個
+  // 帳號」涵蓋；這裡補啟用預覽與公司預覽，以及預覽過期後停止領新工作。
+  it('批次啟用預覽同時最多 6 個請求', async () => {
+    const pattern = /\/reactivation-preview$/
+    const { state, hold } = trackPeak(pattern)
+    const backend = stubBackend({ users: manyUsers(false), hold })
+    await selectAllUsers()
+
+    fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+    await screen.findByRole('region', { name: '批次啟用確認' })
+
+    expect(backend.count('GET', pattern)).toBe(SELECTED)
+    expect(state.peak).toBeLessThanOrEqual(LIMIT)
+  })
+
+  it('批次停用預覽過期後不再發出新的請求', async () => {
+    const pattern = /\/deactivation-check$/
+    const gates = manyUsers(true).map(() => deferred<void>())
+    const backend = stubBackend({
+      users: manyUsers(true),
+      hold: (call) =>
+        call.method === 'GET' && pattern.test(call.path)
+          ? gates[Number(call.path.split('/')[4].split('-')[1]) - 1]
+          : undefined,
+    })
+    const view = renderUsers({})
+    await screen.findByRole('checkbox', { name: '選取 batch.user1' })
+    checkAll('選取 batch.user')
+
+    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    await waitFor(() => expect(backend.count('GET', pattern)).toBe(LIMIT))
+    // 離開頁面讓這一批預覽過期；放行在途請求後不應再領後面的帳號。
+    view.unmount()
+    await act(async () => {
+      gates.forEach((gate) => gate.resolve())
+    })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(backend.count('GET', pattern)).toBe(LIMIT)
+  })
+
+  it('批次停用公司預覽同時最多 6 個請求', async () => {
+    const { state, hold } = trackPeak(/\/active-users$/)
+    const companies = Array.from({ length: SELECTED }, (_, index) => ({
+      ...company,
+      id: `company-${index + 1}`,
+      name: `批次公司${index + 1}`,
+    }))
+    const backend = stubBackend({ companies, hold })
+    render(
+      <DataMemoryRouter initialEntries={['/companies']}>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <CompaniesPage />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+    await screen.findByRole('checkbox', { name: '選取公司 批次公司1' })
+    checkAll('選取公司 批次公司')
+
+    fireEvent.click(screen.getByRole('button', { name: '批次停用公司' }))
+    await screen.findByRole('region', { name: '批次停用確認' })
+
+    expect(backend.count('GET', /\/active-users$/)).toBe(SELECTED)
+    expect(state.peak).toBeLessThanOrEqual(LIMIT)
+  })
+})
+
+it('帳號詳情：資料寫入中互鎖停用、重設及儲存，完成後恢復（#507）', async () => {
+  const gate = deferred()
+  stubBackend({
+    hold: (call) =>
+      call.method === 'PUT' && call.path === '/api/v1/users/user-1/admin'
+        ? gate
+        : undefined,
+  })
+  renderUsers({ detailUserId: 'user-1' })
+  fireEvent.click(await screen.findByRole('button', { name: '修改資料' }))
+  fireEvent.change(screen.getByLabelText('中文姓名'), {
+    target: { value: '鄧安娜更新' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '設為系統管理者' }))
+  fireEvent.click(
+    within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+      'button',
+      { name: '確認' },
+    ),
+  )
+  expect(screen.getByRole('button', { name: '停用帳號' })).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: '正在重設臨時密碼…' }),
+  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: '儲存資料' })).toBeDisabled()
+  gate.resolve()
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: '儲存資料' })).toBeNull(),
+  )
+  expect(screen.getByRole('button', { name: '停用帳號' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '重設臨時密碼' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: '修改資料' }))
+  expect(screen.getByRole('button', { name: '儲存資料' })).toBeEnabled()
+})
+
+it('提醒每組先列五筆，提供帳號連結並能查看全部', async () => {
+  stubBackend({
+    externalNoProject: Array.from({ length: 7 }, (_, i) => ({
+      id: `external-${i}`,
+      username: `outside${i}`,
+      name_zh: `外部人員${i}`,
+      account_expires_on: null,
+    })),
+    unmanagedProjects: Array.from({ length: 6 }, (_, i) => ({
+      id: `project-${i}`,
+      project_code: `P-${i}`,
+      name: `未管理專案${i}`,
+      member_count: 2,
+    })),
+  })
+  renderUsers()
+  const reminders = await screen.findByRole('region', { name: '提醒' })
+  const external = within(reminders).getByRole('region', {
+    name: '沒有參與專案的外部協作帳號',
+  })
+  const projects = within(reminders).getByRole('region', {
+    name: '沒有啟用管理成員的專案',
+  })
+  expect(within(external).getAllByRole('listitem')).toHaveLength(5)
+  expect(within(projects).getAllByRole('listitem')).toHaveLength(5)
+  expect(
+    within(external).getByRole('link', { name: '外部人員0（outside0）' }),
+  ).toHaveAttribute('href', '/accounts/external-0')
+  expect(within(external).queryByText(/外部人員5/)).toBeNull()
+  fireEvent.click(
+    within(external).getByRole('button', { name: '查看全部（7）' }),
+  )
+  expect(within(external).getAllByRole('listitem')).toHaveLength(7)
+  expect(within(projects).getAllByRole('listitem')).toHaveLength(5)
+  fireEvent.click(
+    within(projects).getByRole('button', { name: '查看全部（6）' }),
+  )
+  expect(within(projects).getAllByRole('listitem')).toHaveLength(6)
 })

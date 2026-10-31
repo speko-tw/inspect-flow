@@ -1,5 +1,11 @@
-import { useEffect, useState } from 'react'
-import { Link, Navigate, useLocation, useParams } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router'
 
 import { landingPath } from '../../auth/landing'
 import { useCurrentUser } from '../../auth/useCurrentUser'
@@ -61,17 +67,37 @@ const STEP_PERMISSION: Partial<Record<WorkflowStepCode, string>> = {
 }
 
 /**
- * 依 ADM-R16、IP-R11（流程摘要）呈現下一步與可見的關鍵數字。
+ * 依 ADM-R16、IP-R30（流程摘要）呈現下一步與可見的關鍵數字。
  * 純現場權限者導向自身落點，拒絕或不存在的專案不顯示空首頁。
  */
 export default function ProjectHomePage() {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
   const location = useLocation()
+  const navigate = useNavigate()
   const { loadHomeSummary } = useWorkflowSummary()
   const { roles: companyRoles, status: companyRolesStatus } = useCompanyRoles()
   const [duplicateWarningDismissed, setDuplicateWarningDismissed] =
     useState(false)
+  const [feedback] = useState(() => {
+    const state = location.state as {
+      duplicateProjectCode?: unknown
+      projectNotice?: unknown
+    } | null
+    const notice =
+      typeof state?.projectNotice === 'string' ? state.projectNotice : ''
+    const duplicateProjectCode =
+      typeof state?.duplicateProjectCode === 'string'
+        ? state.duplicateProjectCode
+        : ''
+    if (!notice && !duplicateProjectCode) return null
+    return {
+      projectId,
+      notice,
+      duplicateProjectCode,
+    }
+  })
+  const noticeRef = useRef<HTMLParagraphElement>(null)
   const [result, setResult] = useState<{
     projectId: string
     summary?: WorkflowSummary
@@ -79,6 +105,32 @@ export default function ProjectHomePage() {
     denied?: boolean
     notFound?: boolean
   } | null>(null)
+
+  useEffect(() => {
+    const state = location.state as {
+      duplicateProjectCode?: unknown
+      projectNotice?: unknown
+    } | null
+    if (!state) return
+    const nextNotice =
+      typeof state.projectNotice === 'string' ? state.projectNotice : ''
+    const nextDuplicate =
+      typeof state.duplicateProjectCode === 'string'
+        ? state.duplicateProjectCode
+        : ''
+    if (!nextNotice && !nextDuplicate) return
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: null,
+    })
+  }, [
+    location.key,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+    projectId,
+  ])
 
   useEffect(() => {
     let active = true
@@ -131,9 +183,14 @@ export default function ProjectHomePage() {
           canViewProgress ||
           canViewPlanning)
   const progressFallback = canViewProgress ? '/progress' : '/planning'
-  const duplicateWarning = (
-    location.state as { duplicateProjectCode?: string } | null
-  )?.duplicateProjectCode
+  const currentFeedback = feedback?.projectId === projectId ? feedback : null
+  const projectNotice = currentFeedback?.notice ?? ''
+  const duplicateProjectCode = currentFeedback?.duplicateProjectCode ?? ''
+
+  useEffect(() => {
+    if (!projectNotice || !summary) return
+    noticeRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [projectNotice, summary])
 
   if (summary && !canViewIndoorSections(summary)) {
     return <Navigate replace to={landingPath(user)} />
@@ -153,10 +210,16 @@ export default function ProjectHomePage() {
     >
       <section aria-labelledby="project-home-heading">
         <h2 id="project-home-heading">專案首頁</h2>
-        {duplicateWarning && !duplicateWarningDismissed && (
+        {projectNotice && (
+          <p className="notice-success" ref={noticeRef} role="status">
+            {projectNotice}
+          </p>
+        )}
+        {duplicateProjectCode && !duplicateWarningDismissed && (
           <div className="notice-warning" role="alert">
             <p>
-              警告：專案代號「{duplicateWarning}」與其他專案重複，仍已儲存。
+              警告：專案代號「{duplicateProjectCode}
+              」與其他專案重複，仍已儲存。
             </p>
             <button
               onClick={() => setDuplicateWarningDismissed(true)}
@@ -183,6 +246,18 @@ export default function ProjectHomePage() {
                     )?.label ?? summary.project.company_role)}
               </strong>
             </p>
+            {(user.is_admin ||
+              summary.viewer_permission_codes.includes('project.update')) && (
+              <div className="card-actions">
+                <Link
+                  className="btn btn-emphasis"
+                  state={{ returnTo: base }}
+                  to={ROUTES.projectEdit.path.replace(':projectId', projectId)}
+                >
+                  編輯專案
+                </Link>
+              </div>
+            )}
             {showNextStep && (
               <section
                 aria-labelledby="project-next-step-heading"
@@ -214,7 +289,7 @@ export default function ProjectHomePage() {
               </section>
             )}
             {/* 草稿、未指派與待重查的數字依 ADM-R16 對能讀任務者都顯示
-                （後端以 inspection_task.read 決定可見性，IP-R11）；
+                （後端以 inspection_task.read 決定可見性，IP-R30）；
                 寫入入口與規劃頁連結由 canActOnPrimary 把關（ADM-R49）。 */}
             <dl aria-label="專案關鍵數字" className="project-key-numbers">
               <div>

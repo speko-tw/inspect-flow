@@ -1,0 +1,113 @@
+name: inspectflow
+
+services:
+  migrate:
+    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_IMAGE_TAG:-pilot-test}
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
+    volumes:
+      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data${INSPECTFLOW_SELINUX:-}
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  initialize:
+    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_IMAGE_TAG:-pilot-test}
+    command: ["python", "-m", "app.cli.ensure_initial_setup"]
+    environment:
+      INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
+    volumes:
+      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data${INSPECTFLOW_SELINUX:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  app:
+    image: ghcr.io/speko-tw/inspect-flow:${INSPECTFLOW_IMAGE_TAG:-pilot-test}
+    # $$ 延至容器內展開；只接受可信代理標頭，避免偽造來源 IP。
+    command:
+      - /bin/sh
+      - -ec
+      - >-
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+        --proxy-headers
+        --forwarded-allow-ips "$${INSPECTFLOW_FORWARDED_ALLOW_IPS}"
+    ports:
+      - target: 8000
+        published: "${INSPECTFLOW_HOST_PORT:-8080}"
+        host_ip: "${INSPECTFLOW_BIND_ADDRESS:-127.0.0.1}"
+    environment:
+      INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
+      INSPECTFLOW_BASE_PATH: ${INSPECTFLOW_BASE_PATH:-}
+      # YAML 續行不插入空白，讓巢狀插值保持完整並符合行寬限制。
+      INSPECTFLOW_FORWARDED_ALLOW_IPS: "\
+        ${INSPECTFLOW_FORWARDED_ALLOW_IPS:-127.0.0.1,\
+        ${INSPECTFLOW_NETWORK_SUBNET:-172.31.250.0/24}}"
+      INSPECTFLOW_SESSION_IDLE_TIMEOUT_MINUTES: >-
+        ${INSPECTFLOW_SESSION_IDLE_TIMEOUT_MINUTES:-60}
+      INSPECTFLOW_SESSION_ABSOLUTE_TIMEOUT_HOURS: >-
+        ${INSPECTFLOW_SESSION_ABSOLUTE_TIMEOUT_HOURS:-8}
+      INSPECTFLOW_LOGIN_FAILURE_THRESHOLD: >-
+        ${INSPECTFLOW_LOGIN_FAILURE_THRESHOLD:-10}
+      INSPECTFLOW_LOGIN_FAILURE_WINDOW_MINUTES: >-
+        ${INSPECTFLOW_LOGIN_FAILURE_WINDOW_MINUTES:-15}
+      INSPECTFLOW_LOGIN_LOCKOUT_MINUTES: >-
+        ${INSPECTFLOW_LOGIN_LOCKOUT_MINUTES:-15}
+      INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS: >-
+        ${INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS:-5000}
+      INSPECTFLOW_SETUP_FAILURE_THRESHOLD: >-
+        ${INSPECTFLOW_SETUP_FAILURE_THRESHOLD:-10}
+      INSPECTFLOW_SETUP_FAILURE_WINDOW_MINUTES: >-
+        ${INSPECTFLOW_SETUP_FAILURE_WINDOW_MINUTES:-15}
+      INSPECTFLOW_SETUP_LOCKOUT_MINUTES: >-
+        ${INSPECTFLOW_SETUP_LOCKOUT_MINUTES:-15}
+    volumes:
+      - ${INSPECTFLOW_DATA_DIR:-inspectflow-data}:/data${INSPECTFLOW_SELINUX:-}
+      - "${INSPECTFLOW_UPLOADS_DIR:-inspectflow-uploads}:\
+        /uploads${INSPECTFLOW_SELINUX:-}"
+    depends_on:
+      initialize:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health',
+          timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# 固定子網讓同機 Nginx 經 gateway 轉送的標頭開箱即可被信任。
+# 只綁 loopback；改為其他位址時須改成只信任 Nginx 的精確 IP。
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${INSPECTFLOW_NETWORK_SUBNET:-172.31.250.0/24}
+
+volumes:
+  inspectflow-data:
+    name: inspectflow-data
+  inspectflow-uploads:
+    name: inspectflow-uploads

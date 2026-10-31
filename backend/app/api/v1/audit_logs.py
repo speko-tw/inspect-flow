@@ -76,6 +76,7 @@ def list_audit_logs(
                 "id": row.id,
                 "created_at": format_utc(row.created_at),
                 "created_by": row.created_by,
+                "actor_snapshot": row.actor_snapshot,
                 "project_id": row.project_id,
                 "event_type": row.event_type,
                 "entity_type": row.entity_type,

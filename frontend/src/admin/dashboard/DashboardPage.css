@@ -1,9 +1,9 @@
 .dashboard-page {
-  --dashboard-brand: var(--color-brand-primary);
-  --dashboard-accent: var(--color-brand-accent);
-  max-width: 1280px;
+  max-width: var(--content-width);
   margin: 0 auto;
-  padding: var(--space-8) var(--space-6) var(--space-12);
+  /* 左右內縮由外層 main 提供（見 styles.css 的 .project-home-header 註解）；這裡
+     再加一次會讓總覽的左緣比其他管理頁多縮一截（#738 設計審查 D8）。 */
+  padding: 0 0 var(--space-12);
   color: var(--color-text-primary);
 }
 
@@ -23,7 +23,7 @@
 
 .dashboard-heading h1 {
   margin: 0;
-  font-size: clamp(1.75rem, 3vw, 2.125rem);
+  font-size: var(--font-size-heading);
   line-height: 1.25;
 }
 
@@ -34,40 +34,9 @@
   text-align: right;
 }
 
-.dashboard-tabs {
-  display: flex;
-  gap: var(--space-1);
-  overflow-x: auto;
-  border-bottom: 3px solid var(--dashboard-accent);
-}
-
-.dashboard-tab {
-  min-height: 44px;
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font: inherit;
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.dashboard-tab:hover {
-  background: var(--color-bg-muted);
-  color: var(--color-text-primary);
-}
-
-.dashboard-tab[aria-selected='true'] {
-  border-color: var(--color-border);
-  border-bottom-color: var(--color-bg-surface);
-  background: var(--color-bg-surface);
-  color: var(--color-action-primary);
-}
-
-.dashboard-tab:focus-visible,
-.dashboard-page button:focus-visible,
+/* 分頁（role=tab）的焦點環由 PageTabs 自己負責；這裡排除它，否則
+   這條較高特異性的規則會蓋掉 PageTabs 的 -3px 內縮，環被 overflow 裁掉。 */
+.dashboard-page button:not([role='tab']):focus-visible,
 .dashboard-page input:focus-visible,
 .dashboard-page select:focus-visible {
   outline: 3px solid var(--color-focus);
@@ -126,7 +95,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   padding: var(--space-5);
 }
 
@@ -147,10 +116,6 @@
   line-height: 1.2;
 }
 
-.dashboard-summary-card.is-completion {
-  border-left: 4px solid var(--dashboard-accent);
-}
-
 .dashboard-summary-card.is-completion strong {
   color: var(--color-action-primary);
   font-size: clamp(2.125rem, 4vw, 3rem);
@@ -162,7 +127,7 @@
   width: 100%;
   height: 8px;
   margin-top: var(--space-2);
-  accent-color: var(--color-action-primary);
+  accent-color: var(--color-selection);
 }
 
 .dashboard-panel {
@@ -181,7 +146,7 @@
   gap: var(--space-4);
   margin-bottom: var(--space-4);
   padding-bottom: var(--space-3);
-  border-bottom: 2px solid var(--dashboard-accent);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .dashboard-section-heading h2 {
@@ -191,6 +156,12 @@
 
 .dashboard-section-heading p {
   margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.dashboard-workload-guidance {
+  margin: var(--space-3) 0 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-small);
 }
@@ -246,12 +217,6 @@
   min-width: 0;
 }
 
-.dashboard-project-name small {
-  display: block;
-  margin-top: 2px;
-  color: var(--color-text-secondary);
-}
-
 .dashboard-project-link {
   padding: 0;
   border: 0;
@@ -282,42 +247,21 @@
   color: var(--color-text-secondary);
 }
 
-.dashboard-notice {
-  margin-top: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-muted);
-}
-
-.dashboard-notice p {
-  margin: 0 0 var(--space-2);
-}
-
-.dashboard-notice.is-error {
-  border-color: var(--color-status-danger-border);
-  background: var(--color-status-danger-bg);
-  color: var(--color-status-danger);
-}
-
-.dashboard-notice.is-empty {
+/* 沿用改用共用 .notice 之前的外觀：虛線框加柔和底色，與錯誤、成功提示
+   區隔，也與白色面板分得出來。 */
+.dashboard-empty-notice {
+  margin-block: var(--space-3);
   border-style: dashed;
-}
-
-.dashboard-button {
-  min-height: 44px;
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.dashboard-button:hover {
   background: var(--color-bg-muted);
+}
+
+/* 頁面層級的失敗提示（摘要、專案清單）與上方區塊保留 12px 距離。 */
+.dashboard-page > .notice {
+  margin-top: var(--space-3);
+}
+
+.dashboard-empty-notice p {
+  margin-bottom: var(--space-2);
 }
 
 .dashboard-load-row {
@@ -326,23 +270,9 @@
   padding-top: var(--space-4);
 }
 
-.dashboard-page [hidden] {
-  display: none !important;
-}
-
-.dashboard-page .visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  clip-path: inset(50%);
-}
-
 @media (max-width: 760px) {
   .dashboard-page {
-    padding: var(--space-5) var(--space-4) var(--space-8);
+    padding: 0 0 var(--space-8);
   }
 
   .dashboard-heading {

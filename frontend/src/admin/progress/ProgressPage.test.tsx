@@ -313,7 +313,7 @@ it('does not render a task from a different project', async () => {
       name: '找不到這筆任務',
     }),
   ).toBeVisible()
-  expect(screen.getByRole('link', { name: '回首頁' })).toBeVisible()
+  expect(screen.getByRole('link', { name: '回到我的首頁' })).toBeVisible()
 })
 
 it.each([404, 422])(
@@ -439,4 +439,30 @@ it('returns to the saved filter and cards after opening read only detail', async
     ).toHaveAttribute('aria-current', 'true'),
   )
   expect(mocks.list).toHaveBeenCalledTimes(1)
+})
+
+it.each([
+  ['COMPLETED', false],
+  ['CANCELLED', false],
+  ['PENDING', true],
+  ['PENDING', false],
+] as const)('進度頁停用提醒依 %s、封存 %s 判斷', async (status, archived) => {
+  const value = task()
+  value.status = status
+  value.plan.archived = archived
+  value.assignee = {
+    id: 'inactive',
+    username: 'demo-inactive',
+    name_zh: '示範同事',
+    is_active: false,
+  }
+  mocks.list.mockResolvedValue({ items: [value], next_cursor: null })
+  mocks.detail.mockResolvedValue(value)
+  page(`/projects/${projectId}/progress/tasks/${taskId}?status=${status}`)
+  const warning = !archived && status === 'PENDING'
+  expect(
+    (await screen.findAllByText(warning ? '（已停用，請改派）' : '（已停用）'))
+      .length,
+  ).toBeGreaterThan(0)
+  if (!warning) expect(screen.queryByText(/請改派/)).toBeNull()
 })

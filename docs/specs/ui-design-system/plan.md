@@ -22,6 +22,7 @@
 | T10 | 補齊元件規範、使用指引、設計系統回饋及跨頁視覺／無障礙驗收；追蹤各功能頁的套用範圍 | `docs/`、`frontend/src/components/`、相關測試 | T1～T9；前端主要路由已套用 | UDS-AC01、09～16 | 待開 task |
 | T11 | #734 回饋擺放範圍變更：共用 ConfirmBox／Form 捲動與焦點、Notice、BatchActionBar、scroll-margin；帳號與權限區套用，補元件／頁面與四種視窗主題驗收 | `frontend/src/ui/`、`frontend/src/styles.css`、帳號／權限／角色／公司／紀錄頁及測試、相關規格與審查準則 | [負責人直接指示](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)；承接既有元件，其他草案任務維持原凍結關卡 | UDS-AC17；ADM-AC27 | #735 |
 | T12 | 將 overview 品牌頁首外框移至共用 AppHeader 樣式；修正品牌 hover、焦點環、鎖定文字與觸控狀態，驗收全站兩主題 | `frontend/src/styles/g7-shell.css`、`styles.css` 頁首段、`DashboardPage.css`、`AdminPage.tsx` 外殼條件、`layout/AppHeader*`、`styles.test.ts`、本規格與計畫 | 既有品牌 token／AppHeader；#737 負責人直接指示，承接 #734 裁定；不改 #739 內頁與 ui/ | UDS-AC18、09 | #737 |
+| T13 | 將品牌主題套用內頁元件：主要按鈕尺寸／字重／留白層級（含外框強調與外框紅）、共用 PageTabs、分段與晶片選取、區塊標題，淺深色同一層級；補主要按鈕、PageTabs 的測試與真頁矩陣對比驗收 | `frontend/src/styles/tokens.css`、`styles.css`、`components/`、`admin/dashboard/`、`admin/people/`、`admin/roles/`、`admin/projects/`、`admin/module-permissions/`、`field/field-redesign.css`、本規格與計畫、對應測試 | T1、T2、T12；[負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308) | UDS-AC03、04、09 | #738 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收。
 - 每個任務至少對應一條 AC；每條 AC 至少被一個任務涵蓋。
@@ -74,3 +75,7 @@ modal 預設不 reveal；背景 Notice 可關閉自動捲動與聚焦，主動�
 ### #737 範圍變更
 
 品牌頁首獨立於內頁元件，T12 依[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/734#issuecomment-6385278650)與 #737 工作單先行落地；其他草案任務維持原凍結關卡。UDS-AC18 以共用樣式來源與 AdminPage 外殼來源回歸檢查、對比計算及真瀏覽器五個正式路由及 AppHeader 鎖定狀態元件的兩組尺寸主題截圖驗證。
+
+### #738 範圍
+
+依[負責人裁定（#534，2026-10-26）](https://github.com/speko-tw/inspect-flow/issues/534#issuecomment-6410354308)，T13 在 T12 之後把品牌主題套進內頁元件；UDS-AC03 以主要按鈕實測尺寸、真瀏覽器 1280／360 淺深色矩陣與對比量測驗證，不重拍使用說明圖片（另案整批重拍）。

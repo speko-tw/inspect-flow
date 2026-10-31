@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router'
 
 import type { CurrentUser } from '../../auth/api'
@@ -14,11 +13,16 @@ import {
   type DashboardSummary,
 } from './api'
 import './DashboardPage.css'
+import { PageTabs } from '../../components/PageTabs'
+import { Notice } from '../../ui/Notice'
 
 type LoadState = 'loading' | 'ready' | 'error'
 type Tab = 'projects' | 'engineers'
 
 const PAGE_SIZE = 10
+const ENGINEER_WORKLOAD_GUIDANCE =
+  '前兩欄依建議指派人計，第三欄依實際開始的人計，' +
+  '最後一欄是實際完成的累計件數；同一件任務可能重複計入，不能加總。'
 
 function formatRate(rate: number): string {
   return new Intl.NumberFormat('zh-TW', {
@@ -61,6 +65,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
   const [engineerState, setEngineerState] = useState<LoadState>('loading')
   const [engineerListKey, setEngineerListKey] = useState('')
   const [retryKey, setRetryKey] = useState(0)
+  // 搜尋、頁籤與重試共用請求身分，切換條件時立即隱藏上一組資料。
   const projectRequestKey = `${projectQuery}:${retryKey}:${tab}`
   const engineerRequestKey = [
     selectedProject,
@@ -74,6 +79,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
     engineerListKey === engineerRequestKey ? engineerState : 'loading'
   const projectRequestKeyRef = useRef(projectRequestKey)
   const engineerRequestKeyRef = useRef(engineerRequestKey)
+  // 在畫面提交時更新身分，讓舊載入更多回應不能插入新條件的清單。
   useLayoutEffect(() => {
     projectRequestKeyRef.current = projectRequestKey
     engineerRequestKeyRef.current = engineerRequestKey
@@ -84,6 +90,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
   const projects =
     projectsResult.key === projectsKey ? projectsResult.items : []
   const summaryKey = `${projectsState}:${retryKey}:${selectedProject}`
+  // 非全域檢視者尚無可選專案時，不以空 ID 請求全域摘要。
   const noProjectScope =
     projectsState === 'ready' && !globalAccess && !selectedProject
   const summaryState =
@@ -163,6 +170,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
   useEffect(() => {
     if (tab !== 'projects') return
     let active = true
+    // 延後搜尋減少逐字請求；清理計時器與 active 各自擋下未送出及晚回應。
     const timer = window.setTimeout(() => {
       setProjectListKey(projectRequestKey)
       setProjectListState('loading')
@@ -234,6 +242,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
 
   async function loadMoreProjects() {
     if (!projectCursor) return
+    // 載入更多不屬於 effect 清理範圍，須另擋搜尋／頁籤切換後的晚回應。
     const requestKey = projectRequestKey
     setProjectListState('loading')
     try {
@@ -254,6 +263,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
 
   async function loadMoreEngineers() {
     if (!engineerCursor) return
+    // 工程師載入更多也綁定專案範圍，避免混入前一專案的工作量。
     const requestKey = engineerRequestKey
     setEngineerState('loading')
     try {
@@ -279,23 +289,6 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
     setRetryKey((key) => key + 1)
   }
 
-  function selectTab(next: Tab) {
-    setTab(next)
-  }
-
-  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-    event.preventDefault()
-    const next = tab === 'projects' ? 'engineers' : 'projects'
-    setTab(next)
-    document.getElementById(`dashboard-tab-${next}`)?.focus()
-  }
-
-  const scopeLabel =
-    globalAccess && !selectedProject
-      ? '全部可查看專案'
-      : (selectedProjectRow?.name ?? '專案進度')
-
   return (
     <section aria-labelledby="dashboard-heading" className="dashboard-page">
       <div className="dashboard-heading">
@@ -309,38 +302,23 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
         </p>
       </div>
 
-      <div
-        aria-label="Dashboard 檢視"
-        className="dashboard-tabs"
-        role="tablist"
-      >
-        <button
-          aria-controls="dashboard-panel-projects"
-          aria-selected={tab === 'projects'}
-          className="dashboard-tab"
-          id="dashboard-tab-projects"
-          onClick={() => selectTab('projects')}
-          onKeyDown={onTabKeyDown}
-          role="tab"
-          tabIndex={tab === 'projects' ? 0 : -1}
-          type="button"
-        >
-          專案進度
-        </button>
-        <button
-          aria-controls="dashboard-panel-engineers"
-          aria-selected={tab === 'engineers'}
-          className="dashboard-tab"
-          id="dashboard-tab-engineers"
-          onClick={() => selectTab('engineers')}
-          onKeyDown={onTabKeyDown}
-          role="tab"
-          tabIndex={tab === 'engineers' ? 0 : -1}
-          type="button"
-        >
-          工程師工作量
-        </button>
-      </div>
+      <PageTabs
+        label="Dashboard 檢視"
+        onChange={(next) => setTab(next as Tab)}
+        tabs={[
+          {
+            id: 'projects',
+            label: '專案進度',
+            panelId: 'dashboard-panel-projects',
+          },
+          {
+            id: 'engineers',
+            label: '工程師工作量',
+            panelId: 'dashboard-panel-engineers',
+          },
+        ]}
+        value={tab}
+      />
 
       <div className="dashboard-scope">
         <label htmlFor="dashboard-project-scope">檢視範圍</label>
@@ -370,12 +348,12 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
         </p>
       )}
       {summaryState === 'error' && (
-        <div className="dashboard-notice is-error" role="alert">
+        <Notice autoReveal={false} variant="error">
           <p>進度摘要載入失敗，請重試。</p>
-          <button className="dashboard-button" onClick={retry} type="button">
+          <button className="btn" onClick={retry} type="button">
             重新載入
           </button>
-        </div>
+        </Notice>
       )}
       {summaryState === 'ready' && summary && (
         <div aria-label="進度摘要" className="dashboard-summary">
@@ -427,7 +405,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
           )}
           {visibleProjectListState === 'ready' &&
             visibleProjects.length === 0 && (
-              <div className="dashboard-notice is-empty">
+              <div className="notice dashboard-empty-notice">
                 <p>
                   {projectQuery.trim()
                     ? `找不到符合「${projectQuery.trim()}」的專案。`
@@ -435,7 +413,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
                 </p>
                 {projectQuery && (
                   <button
-                    className="dashboard-button"
+                    className="btn"
                     onClick={() => setProjectQuery('')}
                     type="button"
                   >
@@ -456,7 +434,6 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
                   )
                 }}
                 projects={visibleProjects}
-                scopeLabel={scopeLabel}
               />
             )}
           {globalAccess &&
@@ -465,7 +442,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
             visibleProjectListState === 'ready' && (
               <div className="dashboard-load-row">
                 <button
-                  className="dashboard-button"
+                  className="btn"
                   onClick={() => void loadMoreProjects()}
                   type="button"
                 >
@@ -485,7 +462,6 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
           <div className="dashboard-section-heading">
             <div>
               <h2 id="dashboard-engineers-heading">工程師工作量</h2>
-              <p>同一人可能在不同歸屬欄位出現；各欄數字不可相加為人數。</p>
             </div>
             <label className="dashboard-search">
               <span className="visually-hidden">搜尋工程師</span>
@@ -510,7 +486,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
           )}
           {visibleEngineerState === 'ready' &&
             visibleEngineers.length === 0 && (
-              <div className="dashboard-notice is-empty">
+              <div className="notice dashboard-empty-notice">
                 <p>
                   {engineerQuery.trim()
                     ? `找不到符合「${engineerQuery.trim()}」的工程師。`
@@ -518,7 +494,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
                 </p>
                 {engineerQuery && (
                   <button
-                    className="dashboard-button"
+                    className="btn"
                     onClick={() => setEngineerQuery('')}
                     type="button"
                   >
@@ -528,12 +504,20 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
               </div>
             )}
           {visibleEngineerState === 'ready' && visibleEngineers.length > 0 && (
-            <EngineerList engineers={visibleEngineers} />
+            <>
+              <EngineerList engineers={visibleEngineers} />
+              <p
+                className="dashboard-workload-guidance"
+                id="dashboard-workload-guidance"
+              >
+                {ENGINEER_WORKLOAD_GUIDANCE}
+              </p>
+            </>
           )}
           {visibleEngineerCursor && visibleEngineerState === 'ready' && (
             <div className="dashboard-load-row">
               <button
-                className="dashboard-button"
+                className="btn"
                 onClick={() => void loadMoreEngineers()}
                 type="button"
               >
@@ -562,11 +546,9 @@ function Metric({ label, value }: { label: string; value: number }) {
 function ProjectList({
   onSelect,
   projects,
-  scopeLabel,
 }: {
   onSelect: (projectId: string) => void
   projects: DashboardProject[]
-  scopeLabel: string
 }) {
   return (
     <div
@@ -579,7 +561,7 @@ function ProjectList({
         <span role="columnheader">待開始</span>
         <span role="columnheader">進行中</span>
         <span role="columnheader">已完成</span>
-        <span role="columnheader">已派出</span>
+        <span role="columnheader">派出總數</span>
         <span role="columnheader">完成率</span>
       </div>
       {projects.map((project) => (
@@ -596,7 +578,6 @@ function ProjectList({
             >
               {project.name}
             </button>
-            <small>{scopeLabel}</small>
           </span>
           <span
             aria-label={`待開始：${project.pending_count}`}
@@ -623,9 +604,9 @@ function ProjectList({
             {project.completed_count.toLocaleString('zh-TW')}
           </span>
           <span
-            aria-label={`已派出：${project.completion_denominator_count}`}
+            aria-label={`派出總數：${project.completion_denominator_count}`}
             className="dashboard-count"
-            data-label="已派出"
+            data-label="派出總數"
             role="cell"
           >
             {project.completion_denominator_count.toLocaleString('zh-TW')}
@@ -655,16 +636,17 @@ function ProjectList({
 function EngineerList({ engineers }: { engineers: DashboardEngineer[] }) {
   return (
     <div
+      aria-describedby="dashboard-workload-guidance"
       aria-label="工程師工作量清單"
       className="dashboard-engineer-list"
       role="table"
     >
       <div className="dashboard-engineer-head" role="row">
         <span role="columnheader">工程師</span>
-        <span role="columnheader">派任待開始</span>
-        <span role="columnheader">派任進行中</span>
-        <span role="columnheader">開始者進行中</span>
-        <span role="columnheader">完成查核</span>
+        <span role="columnheader">待開始</span>
+        <span role="columnheader">進行中</span>
+        <span role="columnheader">實際進行</span>
+        <span role="columnheader">累計完成</span>
       </div>
       {engineers.map((engineer) => (
         <div
@@ -673,19 +655,16 @@ function EngineerList({ engineers }: { engineers: DashboardEngineer[] }) {
           role="row"
         >
           <strong role="cell">{formatPerson(engineer)}</strong>
+          <CountCell label="待開始" value={engineer.assigned_pending_count} />
           <CountCell
-            label="派任待開始"
-            value={engineer.assigned_pending_count}
-          />
-          <CountCell
-            label="派任進行中"
+            label="進行中"
             value={engineer.assigned_in_progress_count}
           />
           <CountCell
-            label="開始者進行中"
+            label="實際進行"
             value={engineer.started_in_progress_count}
           />
-          <CountCell label="完成查核" value={engineer.completed_by_count} />
+          <CountCell label="累計完成" value={engineer.completed_by_count} />
         </div>
       ))}
     </div>
@@ -713,11 +692,11 @@ function RetryNotice({
   text: string
 }) {
   return (
-    <div className="dashboard-notice is-error" role="alert">
+    <Notice autoReveal={false} variant="error">
       <p>{text}</p>
-      <button className="dashboard-button" onClick={onRetry} type="button">
+      <button className="btn" onClick={onRetry} type="button">
         重新載入
       </button>
-    </div>
+    </Notice>
   )
 }

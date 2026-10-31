@@ -5,6 +5,12 @@
   min-width: 0;
 }
 
+/* 還沒選任務時沒有詳情窗格；兩欄 grid 會讓清單只占 1/2.65 寬、右邊
+   留白（#738 設計審查），沒有詳情時清單改占滿整列。 */
+.layout-list-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .layout-list-pane,
 .layout-detail-pane {
   min-width: 0;

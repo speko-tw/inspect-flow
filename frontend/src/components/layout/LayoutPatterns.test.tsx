@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { FormErrorSummary as SharedSummary } from '../forms/FormPatterns'
@@ -46,6 +52,22 @@ describe('ListDetailLayout', () => {
       'list',
     )
     expect(screen.queryByRole('region', { name: '任務詳情' })).toBeNull()
+    // 沒有詳情窗格時清單占滿整列，不留 1/2.65 寬加空白（#738 設計審查）。
+    expect(container.firstElementChild).toHaveClass('layout-list-only')
+  })
+
+  it('drops the list-only layout once a detail pane exists', () => {
+    const { container } = render(
+      <ListDetailLayout
+        listTitle="任務清單"
+        detailTitle="任務詳情"
+        list={<p>待辦任務</p>}
+        detail={<p>內容</p>}
+        onBack={vi.fn()}
+      />,
+    )
+
+    expect(container.firstElementChild).not.toHaveClass('layout-list-only')
   })
 })
 
@@ -146,6 +168,27 @@ describe('ListStatus', () => {
 })
 
 describe('ConfirmationPanel', () => {
+  it('omits subject when the title already identifies the target', () => {
+    render(
+      <ConfirmationPanel
+        tone="neutral"
+        title="開始查核「南港廠區查核」？"
+        impact="現場人員會收到查核任務。"
+        cancelLabel="取消"
+        confirmLabel="確認開始"
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+        returnFocus={vi.fn()}
+      />,
+    )
+
+    const panel = screen.getByRole('region', {
+      name: '開始查核「南港廠區查核」？',
+    })
+    expect(within(panel).queryByText('對象：')).toBeNull()
+    expect(panel).toHaveAccessibleDescription('影響：現場人員會收到查核任務。')
+  })
+
   it('uses a neutral primary confirmation for non-destructive changes', async () => {
     const onCancel = vi.fn()
     const onConfirm = vi.fn()

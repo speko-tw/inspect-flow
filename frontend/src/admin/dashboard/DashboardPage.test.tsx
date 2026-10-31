@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -132,10 +133,16 @@ describe('Dashboard 頁面', () => {
     expect(
       screen.getByText('只顯示進度，不含照片與查核結果。'),
     ).toBeInTheDocument()
-    expect(await screen.findByLabelText('已派出：6')).toHaveTextContent('6')
+    expect(await screen.findByLabelText('派出總數：6')).toHaveTextContent('6')
     expect(
       screen.getAllByRole('columnheader').map((node) => node.textContent),
-    ).toEqual(['專案', '待開始', '進行中', '已完成', '已派出', '完成率'])
+    ).toEqual(['專案', '待開始', '進行中', '已完成', '派出總數', '完成率'])
+    expect(
+      within(screen.getByLabelText('進度摘要')).queryByText(
+        '狀態為完成的任務',
+      ),
+    ).not.toBeInTheDocument()
+    expect(document.querySelector('.dashboard-project-name small')).toBeNull()
 
     fireEvent.change(screen.getByLabelText('檢視範圍'), {
       target: { value: 'project-1' },
@@ -238,10 +245,47 @@ describe('Dashboard 頁面', () => {
     expect(
       await screen.findByText('陳工程師（engineer-1）'),
     ).toBeInTheDocument()
-    expect(screen.getByText('派任待開始')).toBeInTheDocument()
-    expect(screen.getByText('派任進行中')).toBeInTheDocument()
-    expect(screen.getByText('開始者進行中')).toBeInTheDocument()
-    expect(screen.getByText('完成查核')).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: '待開始' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: '進行中' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: '實際進行' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: '累計完成' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '待開始：2' })).toHaveAttribute(
+      'data-label',
+      '待開始',
+    )
+    expect(screen.getByRole('cell', { name: '實際進行：4' })).toHaveAttribute(
+      'data-label',
+      '實際進行',
+    )
+    expect(screen.getByRole('cell', { name: '累計完成：5' })).toHaveAttribute(
+      'data-label',
+      '累計完成',
+    )
+    const workloadGuidance = screen.getByText(
+      '前兩欄依建議指派人計，第三欄依實際開始的人計，最後一欄是實際完成的累計件數；同一件任務可能重複計入，不能加總。',
+    )
+    expect(workloadGuidance).toHaveTextContent(
+      '前兩欄依建議指派人計，第三欄依實際開始的人計，最後一欄是實際完成的累計件數；同一件任務可能重複計入，不能加總。',
+    )
+    const workloadTable = screen.getByRole('table', {
+      name: '工程師工作量清單',
+    })
+    // 說明句同時是表格的描述，輔助科技進表格時會一併讀出。
+    expect(workloadTable).toHaveAccessibleDescription(
+      workloadGuidance.textContent ?? '',
+    )
+    expect(
+      workloadTable.compareDocumentPosition(workloadGuidance) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
     expect(api.listDashboardEngineers).toHaveBeenCalledWith({
       projectId: 'project-1',
       q: '',

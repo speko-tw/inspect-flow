@@ -5,7 +5,14 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useNavigate,
+  useLocation,
+  useNavigationType,
+} from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../../auth/api'
@@ -85,8 +92,7 @@ const TEMPLATE: TemplateItem = {
   ],
 }
 
-// The server decides `has_template_access` and `GET /projects` access
-// from the same rule, so the mock keeps them in step via `canSave`.
+// mock 以 canSave 決定是否回傳跨專案清單，並模擬是否顯示存為範本。
 let managerMock = false
 
 function mockApi(
@@ -307,6 +313,16 @@ function ProjectSwitcher() {
   )
 }
 
+function SaveRouteProbe() {
+  const location = useLocation()
+  const action = useNavigationType()
+  return (
+    <div data-testid="save-route-probe">
+      {JSON.stringify({ action, state: location.state })}
+    </div>
+  )
+}
+
 function renderPage(
   user: CurrentUser = { ...USER, has_template_access: managerMock },
   viewerPermissions = ['project_inspection_item.edit'],
@@ -327,6 +343,7 @@ function renderPage(
       ]}
     >
       <CurrentUserProvider value={{ user, clear: vi.fn() }}>
+        <SaveRouteProbe />
         {showProjectSwitcher && <ProjectSwitcher />}
         <Routes>
           <Route
@@ -377,6 +394,10 @@ describe('專案範本套用與存為範本（#429）', () => {
     mockApi({ canSave: true })
     renderPage({ ...USER, has_template_access: true }, [])
 
+    // #744：標題依賴 /projects 的資料，先等專案載入再驗標題層級。
+    await screen.findByText('試用 A 試用專案 A', {
+      selector: '.tpl-crumb',
+    })
     expect(
       await screen.findByRole('heading', {
         level: 2,
@@ -403,6 +424,10 @@ describe('專案範本套用與存為範本（#429）', () => {
     mockApi({ canSave: true })
     renderPage({ ...USER, has_template_access: true }, [], false, true)
 
+    // #744：獨立頁的 h1 同樣須先等專案資料，不以最終標題代替載入前提。
+    await screen.findByText('試用 A｜試用專案 A', {
+      selector: '.tpl-crumb',
+    })
     expect(
       await screen.findByRole('heading', {
         level: 1,
@@ -1069,6 +1094,16 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(
       screen.queryByRole('button', { name: '存為範本' }),
     ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+    expect(await screen.findByText('PROJECT_DETAIL')).toBeVisible()
+    const route = JSON.parse(
+      screen.getByTestId('save-route-probe').textContent!,
+    )
+    expect(route.action).toBe('REPLACE')
+    expect(route.state).toMatchObject({
+      savedFromItemId: PROJECT_ITEM.id,
+      savedTemplateTitle: '管線查核',
+    })
   })
 
   it('可編輯項目但無範本管理權限時只提示一次存回範本需求', async () => {
@@ -1420,4 +1455,86 @@ describe('專案範本套用與存為範本：防連點（#507）', () => {
 
     expect(container.querySelector('form')).toBeNull()
   })
+})
+
+it('TPL-AC32：停用同名提供恢復連結，啟用同名保留改名提示', async () => {
+  mockApi({
+    projectItems: [{ ...PROJECT_ITEM, is_active: false }],
+  })
+  renderPage()
+  await chooseSystem()
+  const radio = screen.getByLabelText('單一項目：管線查核')
+  expect(radio).toBeDisabled()
+  expect(screen.getByText('同名項目已停用，可在已停用清單恢復')).toBeVisible()
+  const link = screen.getByRole('link', { name: '前往已停用清單' })
+  expect(link).toHaveAttribute('href', '/projects/project-1/inspection-items')
+  expect(screen.queryByText('專案已有同名項目，需要第二份請先改名')).toBeNull()
+  fireEvent.click(link)
+  expect(await screen.findByText('PROJECT_DETAIL')).toBeVisible()
+})
+
+it('TPL-AC32：專案存為範本清單不列停用項目並提示恢復', async () => {
+  mockApi({
+    canSave: true,
+    projectItems: [
+      PROJECT_ITEM,
+      { ...PROJECT_ITEM, id: 'inactive', title: '停用來源', is_active: false },
+    ],
+  })
+  renderPage()
+  expect(await screen.findByRole('button', { name: '存為範本' })).toBeEnabled()
+  expect(screen.queryByText('停用來源')).toBeNull()
+  expect(screen.getByText('停用項目須先恢復，才能存為範本。')).toBeVisible()
+})
+
+it('TPL-AC32：沒有停用項目時不顯示先恢復的提示', async () => {
+  mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
+  renderPage()
+  expect(await screen.findByRole('button', { name: '存為範本' })).toBeEnabled()
+  expect(screen.queryByText('停用項目須先恢復，才能存為範本。')).toBeNull()
+})
+
+it('TPL-AC32：網址帶入停用來源時不進入存檔狀態', async () => {
+  mockApi({
+    canSave: true,
+    projectItems: [{ ...PROJECT_ITEM, is_active: false }],
+  })
+  renderPage(
+    { ...USER, has_template_access: true },
+    [],
+    false,
+    false,
+    false,
+    PROJECT_ITEM.id,
+  )
+  expect(
+    await screen.findByText('停用項目須先恢復，才能存為範本。'),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('heading', { name: /存為範本/ }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '存入這個系統' })).toBeNull()
+})
+
+it('TPL-AC32：存為範本遇來源已停用，說明先恢復而非同名衝突', async () => {
+  mockApi({
+    canSave: true,
+    projectItems: [PROJECT_ITEM],
+    saveResponse: Response.json(
+      { error: { code: 'project_inspection_item.inactive_name' } },
+      { status: 409 },
+    ),
+  })
+  renderPage()
+  const row = (await screen.findByText('管線查核')).closest(
+    'li',
+  ) as HTMLElement
+  fireEvent.click(within(row).getByRole('button', { name: '存為範本' }))
+  const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+  fireEvent.click(await within(nav).findByRole('button', { name: '建築工程' }))
+  fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
+  fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '來源項目已停用，請先到已停用清單恢復，才能存為範本。',
+  )
 })

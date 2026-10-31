@@ -19,10 +19,20 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import DateTime, create_engine, insert, inspect, text
+from sqlalchemy import (
+    Column,
+    DateTime,
+    MetaData,
+    Table,
+    create_engine,
+    insert,
+    inspect,
+    text,
+)
 from sqlalchemy.orm import Session
 
 from alembic import command
+from app.models import ProjectInspectionItem
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
@@ -30,6 +40,25 @@ _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
 
 def _alembic_config() -> Config:
     return Config(str(_ALEMBIC_INI))
+
+
+def _historical_project_item_table(session: Session) -> Table:
+    """只以歷史欄位與綁定型別種資料，不帶入目前 ORM 的新預設值。"""
+    model = ProjectInspectionItem.__table__
+    assert isinstance(model, Table)
+    existing = {
+        column["name"]
+        for column in inspect(session.connection()).get_columns(model.name)
+    }
+    return Table(
+        model.name,
+        MetaData(),
+        *(
+            Column(column.name, column.type)
+            for column in model.columns
+            if column.name in existing
+        ),
+    )
 
 
 def _stamped_version(db_url: str) -> str | None:
@@ -186,7 +215,6 @@ def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
         InspectionPlan,
         InspectionTask,
         Project,
-        ProjectInspectionItem,
         ProjectInspectionPoint,
         ProjectMeasurementField,
         ProjectNumericStandard,
@@ -280,7 +308,7 @@ def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
         session.flush()
         project_item_id = uuid4()
         session.execute(
-            insert(ProjectInspectionItem).values(
+            insert(_historical_project_item_table(session)).values(
                 id=project_item_id,
                 project_id=project.id,
                 sequence=1,
@@ -558,7 +586,6 @@ def test_planning_list_index_migration_adds_and_drops_only_indexes(db_url):
     from app.models import (
         InspectionPlan,
         Project,
-        ProjectInspectionItem,
     )
     from tests.db.conftest import create_root_user_with_company
 
@@ -611,7 +638,7 @@ def test_planning_list_index_migration_adds_and_drops_only_indexes(db_url):
             },
         )
         session.execute(
-            insert(ProjectInspectionItem).values(
+            insert(_historical_project_item_table(session)).values(
                 id=uuid4(),
                 project_id=project.id,
                 sequence=1,
@@ -670,7 +697,6 @@ def test_evidence_unique_migration_keeps_largest_min_count_per_point(
     from app.models import (
         Project,
         ProjectEvidenceRequirement,
-        ProjectInspectionItem,
         ProjectInspectionPoint,
         TemplateCategory,
         TemplateEvidenceRequirement,
@@ -734,7 +760,7 @@ def test_evidence_unique_migration_keeps_largest_min_count_per_point(
         session.flush()
         project_item_id = uuid4()
         session.execute(
-            insert(ProjectInspectionItem).values(
+            insert(_historical_project_item_table(session)).values(
                 id=project_item_id,
                 project_id=project.id,
                 sequence=1,

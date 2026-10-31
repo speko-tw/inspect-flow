@@ -30,7 +30,10 @@ describe('AccessDeniedPage', () => {
       screen.getByRole('heading', { level: 2, name: '無權限' }),
     ).toBeVisible()
     expect(screen.getByRole('status')).toHaveTextContent(
-      '你沒有使用這個頁面的權限',
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
+    expect(screen.getByRole('heading', { name: '無權限' })).toHaveClass(
+      'access-denied-heading',
     )
     expect(screen.getByRole('status')).toHaveClass('notice-info')
     expect(screen.queryByRole('alert')).toBeNull()
@@ -38,5 +41,41 @@ describe('AccessDeniedPage', () => {
       'href',
       expectedPath,
     )
+  })
+
+  it('uses the supplied message without the default follow-up', () => {
+    render(
+      <CurrentUserProvider
+        value={{ user: currentUserFixture(), clear: vi.fn() }}
+      >
+        <MemoryRouter>
+          <AccessDeniedPage message="新增帳號只有系統管理者能操作。" />
+        </MemoryRouter>
+      </CurrentUserProvider>,
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '新增帳號只有系統管理者能操作。',
+    )
+    expect(screen.getByRole('status')).not.toHaveTextContent(
+      '如需使用，請洽系統管理者',
+    )
+  })
+
+  it('treats an empty custom message as the default message', () => {
+    render(
+      <CurrentUserProvider
+        value={{ user: currentUserFixture(), clear: vi.fn() }}
+      >
+        <MemoryRouter>
+          <AccessDeniedPage message="" />
+        </MemoryRouter>
+      </CurrentUserProvider>,
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限。如需使用，請洽系統管理者。',
+    )
+    expect(screen.getByRole('status')).not.toHaveTextContent(/^。/)
   })
 })

@@ -9,6 +9,8 @@ export type TaskStatus =
 
 /** 專案項目及點位的目前資料；更新時保留既有識別。 */
 export interface ProjectItemData {
+  /** IP-R23：新 API 一律回傳；舊的唯讀契約資料缺值時視為啟用。 */
+  is_active?: boolean
   id: string
   project_id: string
   sequence: number
@@ -143,7 +145,7 @@ export const projectItemApi: ProjectItemApi = {
     if (!item) throw new ManagementApiError(404, 'resource.not_found')
     // IP-R04 的「使用」涵蓋同專案所有 Plan，不限目前頁面。
     let tasks: ImpactTask[] = []
-    let readOnly = false
+    let readOnly = item.is_active === false
     try {
       tasks = await listAllPages<ImpactTask>(`${path}/${itemId}/tasks`)
     } catch (caught) {
@@ -187,4 +189,17 @@ export const projectItemApi: ProjectItemApi = {
       }),
     })
   },
+}
+
+/** IP-R23：停用與恢復只改選用旗標，既有任務不受影響。 */
+export function setProjectItemActive(
+  projectId: string,
+  itemId: string,
+  active: boolean,
+): Promise<ProjectItemData> {
+  const action = active ? 'activate' : 'deactivate'
+  return request(
+    `/projects/${projectId}/inspection-items/${itemId}:${action}`,
+    { method: 'POST' },
+  )
 }

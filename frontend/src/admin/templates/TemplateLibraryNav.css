@@ -1,0 +1,5 @@
+.tpl-selected-marker {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-weight: 700;
+}

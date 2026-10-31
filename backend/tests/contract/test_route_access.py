@@ -132,7 +132,7 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     }
     project_update = ("PATCH", "/api/v1/projects/{project_id}")
     create_project = ("POST", "/api/v1/projects")
-    template_admin_list = ("GET", "/api/v1/projects")
+    cross_project_list = ("GET", "/api/v1/projects")
     planning_project_get = ("GET", "/api/v1/projects/{project_id}")
     workflow_summary = (
         "GET",
@@ -189,6 +189,16 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
             "/api/v1/projects/{project_id}/inspection-items/"
             "{project_inspection_item_id}",
         ),
+        (
+            "POST",
+            "/api/v1/projects/{project_id}/inspection-items/"
+            "{project_inspection_item_id}:deactivate",
+        ),
+        (
+            "POST",
+            "/api/v1/projects/{project_id}/inspection-items/"
+            "{project_inspection_item_id}:activate",
+        ),
     }
 
     assert (
@@ -197,7 +207,7 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         | {
             project_update,
             create_project,
-            template_admin_list,
+            cross_project_list,
             planning_project_get,
             workflow_summary,
             batch_member_roles,
@@ -215,10 +225,10 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     assert declaration is not None
     assert declaration.level is AccessLevel.MODULE_PERMISSION_REQUIRED
     assert declaration.module_permission_code == "project.create"
-    declaration = routes[template_admin_list]
+    declaration = routes[cross_project_list]
     assert declaration is not None
-    assert declaration.level is AccessLevel.MODULE_PERMISSION_REQUIRED
-    assert declaration.module_permission_code == "template.manage"
+    # #728：登入後由端點透過人員 Service 檢查兩個模組權限的聯集。
+    assert declaration.level is AccessLevel.LOGIN_REQUIRED
     declaration = routes[planning_project_get]
     assert declaration is not None
     assert declaration.level is AccessLevel.PROJECT_PERMISSION
@@ -269,7 +279,7 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
             assert (
                 declaration.permission_code == "project_inspection_item.edit"
             )
-        elif route[0] in {"PATCH", "DELETE"} and (
+        elif route[0] in {"POST", "PATCH", "DELETE"} and (
             "/inspection-items/" in route[1]
         ):
             assert declaration.level is AccessLevel.PROJECT_PERMISSION

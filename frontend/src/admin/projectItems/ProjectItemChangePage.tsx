@@ -101,6 +101,10 @@ function errorMessage(error: unknown): string {
   return httpErrorMessage(error, {
     codes: {
       'inspection_plan.archived': ARCHIVED_PLAN_ERROR,
+      'project_inspection_item.inactive_name':
+        '同名項目已停用，可在已停用清單恢復。',
+      'project_inspection_item.inactive':
+        '此查核項目已停用，請先在已停用清單恢復。',
       'project_inspection_item.duplicate_name':
         '這個專案已有同名查核項目，請換個名稱。',
       'project_inspection_item.structure_locked': [
@@ -466,7 +470,11 @@ export default function ProjectItemChangePage({
         if (loaded.readOnly) {
           setReadOnly(true)
           setFocusSaveError(false)
-          setError('你沒有權限修改此專案查核項目。')
+          setError(
+            loaded.item.is_active === false
+              ? '此查核項目已停用，請先在已停用清單恢復。'
+              : '你沒有權限修改此專案查核項目。',
+          )
         }
         if (loaded.affectedTasks.some((task) => task.planArchived)) {
           setReadOnly(true)
@@ -664,6 +672,20 @@ export default function ProjectItemChangePage({
           await reloadPreview()
         } catch {
           // 保留後端回報的封存訊息。
+        }
+      } else if (
+        caught instanceof ManagementApiError &&
+        caught.status === 409 &&
+        caught.code === 'project_inspection_item.inactive'
+      ) {
+        // IP-R23：載入後項目才被停用；停用項目須先恢復才可修改，
+        // 所以和封存一樣改為唯讀並收起確認框，保留後端回報的訊息。
+        setReadOnly(true)
+        setConfirming(false)
+        try {
+          await reloadPreview()
+        } catch {
+          // 保留後端回報的停用訊息。
         }
       } else if (isReinspectionChoiceRequired(caught)) {
         try {
@@ -1026,8 +1048,9 @@ export default function ProjectItemChangePage({
                     (task) => task.status !== 'DRAFT',
                   ) && (
                     <p>
-                      已派出任務的舊結果與照片會依重新查核規則作廢；
-                      已取消任務於恢復時套用目前標準。
+                      {/* 串接字串避免 JSX 換行在兩句中文間插入空白。 */}
+                      {'已派出任務的舊結果與照片會依重新查核規則作廢；' +
+                        '已取消任務於恢復時套用目前標準。'}
                     </p>
                   )}
                 </>

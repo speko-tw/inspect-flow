@@ -219,7 +219,10 @@ def test_draft_task_items_are_replaced_with_current_snapshots_and_audited(
     )
     assert audit is not None
     assert audit.before == {"items": {str(first.id): "舊項目"}}
-    assert audit.after == {"items": {str(second.id): "新項目"}}
+    assert audit.after == {
+        "items": {str(second.id): "新項目"},
+        "task_name": task.name,
+    }
 
 
 def test_draft_task_item_updates_reject_invalid_state_archive_and_permissions(
@@ -831,6 +834,12 @@ def test_task_snapshot_location_state_and_restore_audit(session, operator):
     assert "inspection_task.location_updated" in event_types
     assert "inspection_task.cancelled" in event_types
     assert "inspection_task.restored" in event_types
+    for event in events:
+        if event.event_type in {
+            "inspection_task.location_updated",
+            "inspection_task.restored",
+        }:
+            assert event.after["task_name"] == "示範任務"
     assert all(event.project_id == project.id for event in events)
     assert all(
         "project_id" not in (payload or {})
@@ -1233,6 +1242,7 @@ def test_draft_task_hard_delete_is_audited_and_plan_rederived(
     )
     assert event is not None
     assert event.project_id == project.id
+    assert event.before["task_name"] == "示範任務"
 
 
 def test_new_draft_task_rederives_cancelled_plan(session, operator):

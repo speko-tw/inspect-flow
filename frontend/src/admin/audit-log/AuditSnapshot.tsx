@@ -2,6 +2,7 @@ import permissionCodeContract from '../../permissionCodeContract'
 
 // T13：只解讀事件目錄的常用欄位；不猜不認得的識別碼或歷史名稱。
 const FIELD_LABELS: Record<string, string> = {
+  role_ids: '專案角色',
   name: '名稱',
   title: '名稱',
   username: '帳號名稱',
@@ -66,6 +67,7 @@ const permissionNames = new Map(
 const UUID = /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/i
 
 type Lookup = {
+  roleName?: (id: string) => string | null
   userName: (id: string) => string | null
   projectName: (id: string) => string | null
 }
@@ -77,6 +79,8 @@ function record(value: unknown): Record<string, unknown> {
   return value == null ? {} : { status: value }
 }
 
+// 把值轉成固定寫法再比較：物件鍵依字母排序，內容相同但鍵順序不同
+// 的值視為沒有變動，不會被誤列成差異。
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
   if (value && typeof value === 'object') {
@@ -88,6 +92,11 @@ function canonical(value: unknown): string {
   return JSON.stringify(value) ?? 'undefined'
 }
 
+/**
+ * 把紀錄中的欄位值轉成白話文字；回傳 `null` 表示這個值不該顯示
+ * （查不到名稱的識別碼、不認得的代碼）。原始 UUID 與識別碼一律不外露
+ * （ALG-R22），寧可省略該欄也不猜。
+ */
 function readable(
   value: unknown,
   field: string,
@@ -115,6 +124,11 @@ function readable(
     return items.length ? items.join('、') : value.length ? null : '無'
   }
   if (typeof value !== 'string') return null
+  // ALG-R22：角色以目前名稱呈現；角色清單載入成功仍查不到才是已刪除，
+  // 載入中或失敗的說明由 roleName 自己回傳。
+  if (field === 'role_ids') {
+    return lookup.roleName?.(value) ?? '已刪除的角色'
+  }
   if (field.endsWith('user_id')) return lookup.userName(value)
   if (field === 'project_id') return lookup.projectName(value)
   if (field.endsWith('_id') || field.endsWith('_ids') || UUID.test(value)) {
@@ -131,16 +145,33 @@ function readable(
   return value || '未設定'
 }
 
-/** T13：差異表只列變動欄位；新增／刪除保留白話內容，不露原始識別碼。 */
+/**
+ * T13：差異表只列變動欄位；新增／刪除保留白話內容，不露原始識別碼。
+ *
+ * `before` 為空是新增事件、`after` 為空是刪除事件（ALG-R09），這兩種
+ * 改列單欄清單而不是改前改後對照。密碼事件不顯示任何欄位內容，只說
+ * 明是設定臨時密碼還是變更密碼（ALG-R22、ALG-R08）。
+ */
 export function AuditChanges({
   before,
   after,
   lookup,
+  eventType,
 }: {
+  eventType?: string
   before: unknown
   after: unknown
   lookup: Lookup
 }) {
+  if (eventType === 'user.password_set') {
+    return (
+      <p role="status">
+        {record(after).is_temporary === false
+          ? '已變更密碼（不記錄密碼內容）'
+          : '已重設臨時密碼（不記錄密碼內容）'}
+      </p>
+    )
+  }
   const previous = record(before)
   const current = record(after)
   const keys = [

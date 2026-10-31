@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router'
 
-import { ConfirmBox } from '../../ui/ConfirmBox'
 import type { User } from '../api'
 import { listAllPages, managementErrorMessage } from '../api'
 import { FormErrorSummary, FormField, FormGroup } from '../../components'
@@ -12,13 +10,14 @@ import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import {
   createProject,
   DEFAULT_COMPANY_ROLE,
-  hasDuplicateCodeWarning,
   listCompanyRoles,
   type CompanyRole,
   type Project,
   type ProjectInput,
 } from './api'
 
+// 表單草稿：日期與建立者角色人選用字串保存（輸入框的值）。送出時
+// 日期轉成 null；建立者角色人選沒選就不送該欄位。
 type ProjectDraft = Omit<
   ProjectInput,
   'planned_start_date' | 'planned_completion_date' | 'creator_role_user_id'
@@ -39,39 +38,44 @@ const EMPTY_DRAFT: ProjectDraft = {
   creator_role_user_id: '',
 }
 
-/** ADM-R32：開設專案；Admin 可選填建立者角色人選。 */
+/**
+ * ADM-R32：開設專案；Admin 可選填建立者角色人選。
+ *
+ * 表單頁父層負責離頁確認與成功導向，這裡只回報送出結果。
+ */
 export function ProjectCreationForm({
   isAdmin,
   onDirtyChange,
-  cancelWithParentGuard = false,
-  formSession = 0,
   onCancel,
   onCreated,
 }: {
   isAdmin: boolean
   onDirtyChange?: (dirty: boolean) => void
-  cancelWithParentGuard?: boolean
-  formSession?: number
-  onCancel?: () => void
-  onCreated?: (project: Project, formSession: number) => void
+  onCancel: () => void
+  onCreated: (project: Project) => void
 }) {
-  const navigate = useNavigate()
   const guard = useSubmitGuard()
   const [draft, setDraft] = useState(EMPTY_DRAFT)
   const [roles, setRoles] = useState<CompanyRole[]>([])
   const [people, setPeople] = useState<User[]>([])
   const [loadError, setLoadError] = useState('')
   const [optionsLoading, setOptionsLoading] = useState(true)
+  const [optionsRetry, setOptionsRetry] = useState(0)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
-  const [confirmCancel, setConfirmCancel] = useState(false)
+  const headingRef = useRef<HTMLHeadingElement | null>(null)
   const requestErrorRef = useRef<HTMLParagraphElement | null>(null)
+  const Heading = isAdmin ? 'h2' : 'h1'
   const dirty = Object.keys(EMPTY_DRAFT).some(
     (field) =>
       draft[field as keyof ProjectDraft] !==
       EMPTY_DRAFT[field as keyof ProjectDraft],
   )
+
+  useEffect(() => {
+    headingRef.current?.focus({ preventScroll: true })
+  }, [])
 
   useEffect(() => {
     onDirtyChange?.(dirty)
@@ -93,11 +97,15 @@ export function ProjectCreationForm({
     let active = true
     Promise.all([
       listCompanyRoles(),
+      // 只有 Admin 能列全部人員（非 Admin 呼叫 GET /users 會 403），也
+      // 只有 Admin 能指定建立者角色人選（DOM-R65）。
       isAdmin ? listAllPages<User>('/users') : Promise.resolve([]),
     ])
       .then(([companyRoles, users]) => {
         if (!active) return
         setRoles(companyRoles)
+        // 建立者角色人選限啟用、非系統帳號、非外部協作人員（DOM-R65、
+        // DOM-R71）；後端同樣會檢查。
         setPeople(
           users.filter(
             (user) =>
@@ -116,7 +124,7 @@ export function ProjectCreationForm({
     return () => {
       active = false
     }
-  }, [isAdmin])
+  }, [isAdmin, optionsRetry])
 
   function change(field: keyof ProjectDraft, value: string) {
     setDraft((current) => ({ ...current, [field]: value }))
@@ -128,7 +136,6 @@ export function ProjectCreationForm({
     setError('')
     setFieldErrors({})
     setSaving(true)
-    const submittedSession = formSession
     const input: ProjectInput = {
       project_code: draft.project_code.trim(),
       name: draft.name.trim(),
@@ -137,20 +144,18 @@ export function ProjectCreationForm({
       company_role: draft.company_role,
       planned_start_date: draft.planned_start_date || null,
       planned_completion_date: draft.planned_completion_date || null,
+      // 非 Admin 開專案自己就是建立者；帶這個欄位後端會回 422
+      // （DOM-R65），所以只有 Admin 且有選人時才送。
       ...(isAdmin && draft.creator_role_user_id
         ? { creator_role_user_id: draft.creator_role_user_id }
         : {}),
     }
     try {
       const project = await createProject(input)
-      if (onCreated) onCreated(project, submittedSession)
-      else
-        navigate(`/projects/${project.id}`, {
-          state: hasDuplicateCodeWarning(project)
-            ? { duplicateProjectCode: project.project_code }
-            : null,
-        })
+      onCreated(project)
     } catch (caught) {
+      // 帶欄位指標的 422 顯示在對應欄位旁；對不上欄位的錯誤才放在
+      // 表單一般訊息區，不讓錯誤只剩一句通用說明。
       if (caught instanceof HttpError && caught.fields?.length) {
         const mapped = mapFieldErrors(caught.fields, [
           { path: '/project_code', key: 'project_code' },
@@ -177,12 +182,7 @@ export function ProjectCreationForm({
   }
 
   function cancel() {
-    if (cancelWithParentGuard) {
-      onCancel?.()
-      return
-    }
-    if (dirty) setConfirmCancel(true)
-    else onCancel?.()
+    onCancel()
   }
 
   return (
@@ -191,8 +191,25 @@ export function ProjectCreationForm({
       onKeyDown={blockImeEnter}
       onSubmit={submit}
     >
-      <h2>新增專案</h2>
-      {loadError && <p role="alert">無法載入選項：{loadError}</p>}
+      <Heading ref={headingRef} tabIndex={-1}>
+        新增專案
+      </Heading>
+      {loadError && (
+        <div>
+          <p role="alert">無法載入選項：{loadError}</p>
+          <button
+            disabled={optionsLoading}
+            onClick={() => {
+              setOptionsLoading(true)
+              setLoadError('')
+              setOptionsRetry((value) => value + 1)
+            }}
+            type="button"
+          >
+            重新載入選項
+          </button>
+        </div>
+      )}
       <FormErrorSummary
         errors={[
           ['project_code', 'project-code', '專案代號'],
@@ -211,7 +228,7 @@ export function ProjectCreationForm({
           id="company-role"
           label="本公司在這個案子的角色"
           required
-          description="會決定報表種類。同工地的另一種角色請另開專案。"
+          description="選您公司在這個工地的身分，會決定報表種類。同一工地要用另一種身分，請另開專案。"
           error={fieldErrors.company_role}
         >
           {(control) => (
@@ -224,6 +241,11 @@ export function ProjectCreationForm({
               {roles.map((role) => (
                 <option key={role.value} value={role.value}>
                   {role.label}
+                  {role.inspection_level === 'self_inspection'
+                    ? '（一級自主檢查）'
+                    : role.inspection_level === 'spot_check'
+                      ? '（二級抽查（驗））'
+                      : ''}
                 </option>
               ))}
             </select>
@@ -321,7 +343,7 @@ export function ProjectCreationForm({
           <FormField
             id="creator-role-user"
             label="建立者角色人選"
-            description="不選則不指定建立者角色人選。"
+            description="選一位人員，以建立者角色加入這個專案；不選的話專案先沒有成員，之後到『成員』頁再加入。"
           >
             {(control) => (
               <select
@@ -348,11 +370,9 @@ export function ProjectCreationForm({
         </p>
       )}
       <div className="card-actions">
-        {onCancel && (
-          <button onClick={cancel} type="button">
-            取消
-          </button>
-        )}
+        <button disabled={saving} onClick={cancel} type="button">
+          取消
+        </button>
         <button
           className="btn-primary"
           disabled={saving || optionsLoading || Boolean(loadError)}
@@ -361,18 +381,6 @@ export function ProjectCreationForm({
           {saving ? '建立中…' : '新增專案'}
         </button>
       </div>
-      {confirmCancel && (
-        <ConfirmBox
-          cancelLabel="保留編輯"
-          confirmLabel="捨棄"
-          label="未儲存變更"
-          onCancel={() => setConfirmCancel(false)}
-          onConfirm={() => onCancel?.()}
-          variant="danger"
-        >
-          <p>目前的專案內容尚未儲存，要保留編輯或捨棄？</p>
-        </ConfirmBox>
-      )}
     </form>
   )
 }

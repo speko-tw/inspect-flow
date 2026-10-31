@@ -11,7 +11,8 @@
 .save-template-steps {
   display: grid;
   gap: 1.25rem;
-  padding-inline-start: 1.5rem;
+  list-style: none;
+  padding-inline-start: 0;
 }
 
 .save-template-steps > li {
@@ -23,7 +24,9 @@
 .save-template-steps ul {
   display: grid;
   gap: 0.5rem;
-  padding-inline-start: 1rem;
+  /* 巢狀 ul 預設的空心圓像不能點的單選鈕。 */
+  list-style: none;
+  padding-inline-start: 0;
 }
 
 .save-template-target {
@@ -42,4 +45,36 @@
   .save-template-target {
     grid-template-columns: 1fr;
   }
+}
+
+.save-template-steps button[aria-pressed='true'] {
+  border-width: 2px;
+  border-color: var(--primary);
+  background: var(--surface-alt);
+  box-shadow: inset 0 0 0 2px var(--primary);
+  font-weight: 700;
+}
+
+.save-template-selected-marker {
+  flex: 0 0 auto;
+  margin-inline-start: var(--space-2);
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.save-template-page > .back-link {
+  justify-self: start;
+}
+
+.save-template-steps > li > ul button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: start;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
+.save-template-item-label {
+  display: grid;
+  gap: var(--space-1);
 }

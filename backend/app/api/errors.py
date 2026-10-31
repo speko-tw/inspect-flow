@@ -328,6 +328,14 @@ class ErrorCode(DescribedStrEnum):
         "inspection_task.reason_required",
         "A cancellation reason is required.",
     )
+    PROJECT_INSPECTION_ITEM_INACTIVE = (
+        "project_inspection_item.inactive",
+        "Restore the inactive inspection item before using or editing it.",
+    )
+    PROJECT_INSPECTION_ITEM_INACTIVE_NAME = (
+        "project_inspection_item.inactive_name",
+        "An inactive project inspection item already uses this name.",
+    )
     PROJECT_INSPECTION_ITEM_IN_USE = (
         "project_inspection_item.in_use",
         "The inspection item is referenced by a task.",
@@ -431,6 +439,7 @@ def _non_null_types(annotation: Any) -> tuple[Any, ...]:
 
 
 def _json_pointer(parts: list[str | int]) -> str:
+    """跳脫路徑片段，避免欄位名稱的斜線被誤認為下一層。"""
     return "".join(
         "/" + str(part).replace("~", "~0").replace("/", "~1") for part in parts
     )
@@ -452,6 +461,7 @@ def _body_field_error(
     generic = False
     while remaining:
         choices = _non_null_types(annotation)
+        # API-R10：無法確定 union 分支時停在已知父欄位，不猜子欄位。
         if len(choices) > 1:
             generic = True
             break
@@ -521,6 +531,7 @@ def _request_field_errors(
     """轉換可定位的 JSON 本文錯誤，並在 API-R10 上限前先去重。"""
     route = request.scope.get("route")
     body_field = getattr(route, "body_field", None)
+    # 僅 JSON 模型能安全對應本文欄位；表單與壞 JSON 不套用欄位路徑。
     if isinstance(getattr(body_field, "field_info", None), Form):
         return None
     content_type = request.headers.get("content-type", "").split(";", 1)[0]

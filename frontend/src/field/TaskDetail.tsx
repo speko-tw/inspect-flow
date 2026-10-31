@@ -1,3 +1,4 @@
+import { SuggestedAssignee } from '../ui/SuggestedAssignee'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
@@ -170,7 +171,13 @@ export default function TaskDetail({
                 label="建議指派"
                 value={
                   <span className="field-detail-values">
-                    <span>{task.suggested_assignee?.name_zh ?? '未指定'}</span>
+                    <span>
+                      <SuggestedAssignee
+                        person={task.suggested_assignee}
+                        status={task.status}
+                        archived={Boolean(task.plan_archived)}
+                      />
+                    </span>
                     {task.status === 'PENDING' &&
                       task.suggested_assignee &&
                       !task.suggested_assignee.is_me && (
@@ -188,6 +195,24 @@ export default function TaskDetail({
               />
             </div>
           </Card>
+          <section className="field-action-panel" aria-label="任務操作">
+            <h2 className="visually-hidden">任務操作</h2>
+            <Card className="field-action-card">
+              <StartAction
+                task={task}
+                title={heading}
+                back={back}
+                onTask={setTask}
+                onListChange={onListChange}
+                onUnauthorized={() =>
+                  navigate(ROUTES.login.path, {
+                    state: { from: location.pathname + location.search },
+                  })
+                }
+              />
+              <small>填寫結果與照片上傳將在後續版本提供。</small>
+            </Card>
+          </section>
           <SectionHeader
             className="field-section-head"
             title="查核需求"
@@ -237,24 +262,6 @@ export default function TaskDetail({
               </Card>
             </article>
           ))}
-          <section className="field-action-panel" aria-label="任務操作">
-            <Card className="field-action-card">
-              <SectionHeader title="任務操作" />
-              <StartAction
-                task={task}
-                title={heading}
-                back={back}
-                onTask={setTask}
-                onListChange={onListChange}
-                onUnauthorized={() =>
-                  navigate(ROUTES.login.path, {
-                    state: { from: location.pathname + location.search },
-                  })
-                }
-              />
-              <p>填寫結果與照片上傳將在後續版本提供。</p>
-            </Card>
-          </section>
         </>
       )}
     </>
