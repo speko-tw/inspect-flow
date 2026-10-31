@@ -85,6 +85,7 @@ def test_aut_ac54_creates_only_system_rows_and_prints_one_code(
         assert roles["專案查閱人員"].is_assignable is True
         assert roles["專案查閱人員"].is_external_allowed is True
         expected_read_codes = {
+            "evidence.read",
             "project.read",
             "project_inspection_item.read",
             "project_zone.read",
@@ -92,6 +93,8 @@ def test_aut_ac54_creates_only_system_rows_and_prints_one_code(
             "inspection_task.read",
         }
         expected_engineer_codes = {
+            "evidence.read",
+            "evidence.manage",
             "project_member.manage",
             "project.update",
             "project.read",
@@ -117,7 +120,9 @@ def test_aut_ac54_creates_only_system_rows_and_prints_one_code(
         } == expected_engineer_codes
         assert {
             item.code for item in roles["現場工程師"].permission_codes
-        } == expected_read_codes | {"inspection_task.inspect"}
+        } == (expected_read_codes - {"evidence.read"}) | {
+            "inspection_task.inspect"
+        }
         assert {
             item.code for item in roles["專案查閱人員"].permission_codes
         } == expected_read_codes
