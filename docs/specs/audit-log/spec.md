@@ -374,6 +374,16 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 <a id="alg-q6"></a>
 - **ALG-Q6：本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）的判讀**（已裁定，負責人確認（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））。負責人裁定了「哪些事要寫稽核」，事件的做法是本規格的判讀，已由負責人確認：（1）`user.password_set` 標為「得為系統事件」由呼叫端宣告，而不是整個事件固定為系統事件，理由是它另有需要登入者的來源（本人變更、Admin 設臨時密碼）；（2）`user.company_changed` 只在 `company_id` 改變時寫，並一律記錄四個欄位；（3）事件代碼取名 `user.username_changed`、`user.company_changed`，沿用 `user.admin_changed` 的形式；（4）首次設定與 `admin` 重設指令共用 `user.password_set`，紀錄本身分不出兩者，只看得出操作者是系統事件的 `admin`，需要區分時再加欄位。都不影響資料表。
 
+## 照片圖層事件（field-evidence）
+
+由 FEV-R24／AC36 的後續 T5 實作驗收；此目錄登記不宣稱產品事件已實作。
+
+| 事件代碼 | 什麼時候寫 | `entity_type`／`entity_id` | 標記 | `before` | `after` |
+|---|---|---|---|---|---|
+| `evidence.layer_updated` | 每次實際圖層設定或三欄覆寫變動；無變動不寫 | `evidence`／照片 UUID | `project_scoped`；`project_id` 取照片所屬專案 | 完整 `layer` 設定與解析後五欄 | 同左，保存修改後完整值 |
+
+與圖層資料及 OFFICE 重產同一交易；失敗回滾。操作者、伺服器時間及身分快照沿用共用寫入入口。`layer` 作為一個變更欄位保留完整設定與覆寫，不能只比較影像文字或四捨五入的顯示值；五欄解析結果一併保留供閱讀。來源快照不改，姓名／時間不可覆寫；既有 `office_version_edited` 仍每次套用寫入。事件具有專案脈絡，依 ALG-R24 必填 `AuditLog.project_id`。
+
 ## 變更紀錄
 
 - 維護者決定（#624，2026-10-16）：新增操作者與事件類型複合索引及 migration 驗收。
@@ -421,3 +431,5 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 - 範圍變更跟進（負責人既有裁定，#314）：在 template-system 事件目錄增列五種建議／審核專屬事件，核准串接既有 template_item.created；沿用共用同交易與回滾規則，驗收由 TPL-AC39、AC42 承接，未新增跨模組慣例。依據：[版本與審核留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)。
 
 - 第 2 輪 #314 審查修正：建立即送審、移除 created；五種建議事件補 entity_type／project_scoped 與 ALG-R24 分類理由，revised／submitted 只列變更；既有 template_item.created 形狀與空 project_id 保持不變，關聯只記 approved。依據：[負責人版本留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)及本輪定案。
+
+- 範圍變更（負責人裁定，#795）：登記照片圖層實際變更事件與完整前後值，同交易與權限沿用既有規則。[負責人裁定 #795](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540663667)、[現場簡化追加](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540752753)。

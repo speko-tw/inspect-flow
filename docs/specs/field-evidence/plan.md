@@ -16,18 +16,18 @@
 |---|---|---|---|---|---|
 | T0 | 實作前只讀核對既有意圖基準：`docs/intents/README.md` 第 3 條已由 #765 對齊兩版模型，不再重做意圖同步；確認 `completion-validation` 規格已合併，使 `inspection-planning` 的 IP-R04、IP-R07、IP-R13、IP-R14 與 `has_result` 定義生效。`field-ui`（FUI-R05、FUI-R08）、`domain-model`、`state-machines` 與 `docs/intents/04-glossary.md` 已隨本規格的 PR 依負責人直接指示同步，不再另開任務 | `docs/intents/README.md`（只讀核對） | #765 已整合；`completion-validation` 規格合併 | 無（既有前置核對；不新增 AC） | 不另開 task |
 | T1 | 資料表與儲存基礎：`evidence`、`evidence_variants`、`evidence_point_links` 與 migration；`Storage` 抽象介面與本機實作；設定（儲存位置、單檔上限、解碼像素上限）與 `.env.example`；登記 `evidence.read`、`evidence.manage`（屬查核模組，`external_allowed` 依 DOM-R35）；存取分類：`evidence.manage` 是內業碼；`evidence.read` 沿用 #576 已落地的 `.read` 唯讀碼分類，不新增已不需要的過渡例外；預建角色初始內容：專案工程師含 `evidence.read`、`evidence.manage`，現場工程師不含 `evidence.read`，專案查閱人員含 `evidence.read`；`evidence` 加上傳者身分快照與 `label_source` 五欄來源 metadata；加入影像處理套件 | `backend/app/models/evidence.py`、`backend/app/models/__init__.py`、新增 Alembic migration、`backend/app/storage/`（新增）、`backend/app/permission_codes.py`、`backend/app/services/access_summary.py`（只加分類）、`backend/tests/api/test_access_summary.py`、`backend/pyproject.toml`、`backend/uv.lock`、`.env.example`、`backend/tests/db/`、`backend/tests/storage/`（新增）、`backend/tests/contract/test_permission_codes.py` | 本規格合併；[#576](https://github.com/speko-tw/inspect-flow/issues/576)（authentication 任務 P：模組權限存取層級與兩層檢查，存取分類依其規則）；`completion-validation` T1（兩個任務共改 `permission_codes.py` 與 migration 鏈，`completion-validation` T1 先做，本任務的 migration 接在其後）；身分快照的格式與寫入函式依 [#550](https://github.com/speko-tw/inspect-flow/issues/550)（未合併時先以同欄位結構實作並於 #550 對齊）；本任務的 lockfile 規則見風險（不等 T0，實體以本規格為準） | FEV-AC01（儲存與資料表）、FEV-AC07（設定可調）、FEV-AC19、AC32（來源欄位） | #? |
-| T2 | 上傳 API：multipart、冪等鍵與請求指紋、`sha256` 核對、大小與 JPEG 驗證、鎖定 Task 項目明細並重驗快照修訂、同一交易寫入現場版與初版內業版（內業版依標示規則寫入工程標示，預設啟用定案五欄、固定標示來源快照；含中文字型）、失敗清理檔案；依檢查順序處理任務狀態、權限與 DRAFT 隱藏；錯誤碼登記；請求上限登記 | `backend/app/api/v1/evidence.py`（新增）、`backend/app/services/evidence.py`（新增）、`backend/app/services/evidence_images.py`（新增）、`backend/app/services/evidence_labels.py`（新增，標示規則與繪製）、`backend/app/assets/fonts/`（新增，隨後端打包的中文字型與授權說明）、`backend/tests/services/test_evidence_labels.py`（新增）、`backend/app/api/errors.py`（只加錯誤碼）、`backend/app/api/limits.py`（只加註記上限）、`backend/app/main.py`（只加一行路由註冊）、`backend/tests/api/test_evidence_upload.py`（新增）、`backend/tests/contract/test_route_access.py`（本規格的存取層級宣告只由 T2 登記一次）、`backend/tests/contract/test_multipart_conventions.py`（補真實端點驗證，API-AC06）、`backend/tests/contract/test_error_envelope.py`（`evidence.*` 錯誤碼加入 `ErrorCode` 後，把本規格與計畫加入 `ALLOWED_CODE_MENTIONS`，沿用 `template-system` 的先例，否則「不得另有手寫錯誤碼表」的檢查會因 Markdown 表格列出現錯誤碼而失敗） | T1；[field-ui](../field-ui/plan.md) T1（Field 安全詳情與 DRAFT 隱藏契約） | FEV-AC01、AC05～AC09、AC12（上傳部分）、AC13（上傳部分）、AC06（寫入）、AC28（上傳側）、AC29（`captured_at`）、AC30（工程標示）、AC32（來源／時區／缺值）、AC33（窄圖與缺字）、AC34（來源分支單元） | #791 |
+| T2 | 上傳 API 與圖層資料：只接受現場旋轉／亮度摘要及 layer 開關／四角，拒絕現場精細參數；冪等指紋含正規化 layer；同交易固定五欄來源、圖層資料與兩版，FIELD 乾淨、OFFICE 依圖層合成。新增 label_layer 欄位的 migration 屬本任務，不修改 T1／PR #800。保留 multipart、雜湊、大小、JPEG、快照鎖定、權限、失敗清理、字型／缺字、錯誤碼與上限登記。 | `backend/app/api/v1/evidence.py`（新增）、`backend/app/services/evidence.py`（新增）、`backend/app/services/evidence_images.py`（新增）、`backend/app/services/evidence_labels.py`（新增，標示規則與繪製）、`backend/app/assets/fonts/`（新增，隨後端打包的中文字型與授權說明）、`backend/tests/services/test_evidence_labels.py`（新增）、`backend/app/api/errors.py`（只加錯誤碼）、`backend/app/api/limits.py`（只加註記上限）、`backend/app/main.py`（只加一行路由註冊）、`backend/tests/api/test_evidence_upload.py`（新增）、`backend/tests/contract/test_route_access.py`（本規格的存取層級宣告只由 T2 登記一次）、`backend/tests/contract/test_multipart_conventions.py`（補真實端點驗證，API-AC06）、`backend/tests/contract/test_error_envelope.py`（`evidence.*` 錯誤碼加入 `ErrorCode` 後，把本規格與計畫加入 `ALLOWED_CODE_MENTIONS`，沿用 `template-system` 的先例，否則「不得另有手寫錯誤碼表」的檢查會因 Markdown 表格列出現錯誤碼而失敗）、`backend/app/models/evidence.py`（只加 `label_layer`）、新增一支 Alembic migration（接 T1 最新 head）、`backend/tests/db/test_evidence_layer.py`（新增） | T1；[field-ui](../field-ui/plan.md) T1（Field 安全詳情與 DRAFT 隱藏契約） | FEV-AC01、AC05～AC09、AC12（上傳部分）、AC13（上傳部分）、AC06（寫入）、AC28（上傳側）、AC29（`captured_at`）、AC30（工程標示）、AC32（來源／時區／缺值）、AC33（窄圖與缺字）、AC34（來源分支單元）、AC35（現場設定與非法鍵） | #791 |
 | T3 | 讀取 API：現場覆蓋狀態與現場清單、內業清單與詳情、圖片串流與即時縮圖；已刪除與已作廢照片的讀取行為；覆蓋計算寫成可被 0.7.x 沿用的 service 函式 | `backend/app/api/v1/evidence_read.py`（新增）、`backend/app/services/evidence_queries.py`（新增）、`backend/app/main.py`（只加一行路由註冊）、`backend/tests/api/test_evidence_read.py`（新增）、`backend/tests/api/test_evidence_query_counts.py`（新增）、`backend/tests/contract/test_evidence_read_access.py`（新增，不改 `test_route_access.py`） | T2 | FEV-AC04、AC06（讀取）、AC13、AC19、AC20、AC29（讀取與 `max_edge`） | #792 |
-| T4 | 內業版編修 API：以參數從現場版重新產生、新檔寫入後切換並刪舊檔、預設參數等同重設、回應依呼叫者權限；編修後重新寫入工程標示；依 FEV-R22 接受更正／改善照片來源；標示規則改變時重新產生內業版的維運指令（沿用編修參數，跳過被核發報告引用的照片，每張寫稽核事件） | `backend/app/api/v1/evidence_office.py`（新增）、`backend/app/services/evidence_office.py`（新增）、`backend/app/cli/regenerate_office_versions.py`（新增，維運指令；實際位置依既有指令慣例）、`backend/app/main.py`（只加一行路由註冊）、`backend/tests/api/test_evidence_office.py`（新增）、`backend/tests/contract/test_evidence_office_access.py`（新增，不改 `test_route_access.py`） | T2 | FEV-AC02、AC06（編修後註記不變）、AC13（編修權限）、AC29（編修回應）、AC30（編修後標示仍在）、AC31（重新產生）、AC32（來源穩定）、AC33（字級／缺字重產）、AC34（更正／改善來源整合） | #793 |
-| T5 | 修改註記與對應、軟刪除、三個稽核事件（`photo_deleted`、`office_version_edited` 每次都寫，`photo_updated` 只記有變動，皆填 `project_id`）、刪除守門（完成後、作廢、核發報告引用的檢查註冊點）、KD-55 作廢連動（被修改的項目；只有照片也作廢）與 `has_result`（納入有效照片）、已取消 Task 恢復時作廢、點位穩定身分與相關規則（IP-R13：PATCH 保留點位與實測欄位 `id`；選「不要」時不接受增減項次或實測欄位，也不接受變更既有欄位類型；選「要」時被刪除的點位隨項目作廢。PATCH 身分與結構鎖已由 #595 完成，作廢連動仍屬本任務。IP-R14：PATCH 擋下零項次已由 #595 完成；建立 Task 擋下零項次仍屬本任務）、取消與封存唯讀、上傳與作廢並行的鎖定 | `backend/app/api/v1/evidence.py`、`backend/app/services/evidence.py`、`backend/app/services/evidence_office.py`（只補稽核呼叫）、`backend/app/api/v1/inspection_planning.py`（PATCH 點位保留 `id`、`:restore` 路徑）、`backend/app/api/errors.py`（`structure_locked`、`points_required`）、`frontend/src/admin/projectItems/api.ts`、`ProjectItemChangePage.tsx` 與對應測試、`backend/tests/db/test_project_item_edit_concurrency.py`（PostgreSQL 項次互換）、`backend/app/services/inspection_planning.py`（作廢連動、恢復時作廢與 `has_result`，只動本規格相關函式）、`backend/app/services/inspection_planning_snapshots.py`（快照點位對應與作廢）、`backend/app/services/audit.py`（登記事件）、`docs/specs/audit-log/spec.md`（只新增本規格專屬事件區段，沿用既有規格的登記做法）、`backend/tests/api/test_evidence_mutations.py`（新增）、`backend/tests/api/test_inspection_planning_api.py`（補作廢、恢復與 `has_result`）、`backend/tests/api/test_planning_query_counts.py`（確認查詢數不隨照片成長） | T3、T4（同改 `evidence.py` 與 `evidence_office.py`，須在其後）；**`completion-validation` 規格已合併**（`inspection-planning` 的 IP-R04、IP-R07、IP-R13、IP-R14 與 `has_result` 定義）；#538 的規格 PR 已合併（同改 `audit-log` 規格） | FEV-AC12（其餘狀態）、AC13、AC14～AC18、AC21、AC26（後端）、AC27、AC28、AC29（`PATCH`、刪除與讀取行為） | #794 |
-| T6 | 【人工關卡】現場拍照編修與內業照片頁的可點互動原型與試用腳本，先與顧問討論並以「好用、業界常見、不易犯錯」評選方案，負責人親手操作核可；腳本涵蓋拍照、編修、選項次與註記、失敗重送、修改、刪除、內業編修、手機與鍵盤操作；內業照片頁展示底部延伸白底黑字五欄表格與長文字、橫直照片情境；比例與字型先依 FEV-R22，原型給負責人看後可調（欄位與來源不重開待決） | `docs/specs/field-evidence/ui-field-prototype.html`、`docs/specs/field-evidence/ui-office-prototype.html`（新增）；試用腳本寫入本檔「UI 原型與試用腳本」段 | 本規格合併 | 無（取得核可後 FEV-AC22、AC23 的畫面細節才定案） | #795 |
-| T7 | 現場拍照與編修 UI：相機擷取、前端影像編修（縮放平移預覽、旋轉、裁切、亮度、重設）、壓縮、項次與註記選擇、上傳狀態清單、自動重試與手動重送、冪等鍵、修改與刪除入口、離開提示；接真實 API | `frontend/src/field/evidence/`（新增）、`frontend/src/field/TaskDetail.tsx`（加入照片區）、`frontend/src/field/api.ts`、`frontend/src/ui/ConfirmBox.tsx`（只沿用，不改）、`frontend/src/styles.css`（只加本畫面樣式）、前端測試 | T6 核可；T2、T3、T5（真 API，故在 T5 之後）；[field-ui](../field-ui/plan.md) T3、T4 | FEV-AC03、AC10、AC11、AC22、AC24（現場部分）、AC06（畫面） | #796 |
-| T8 | 內業照片頁：依查核項目分組、現場版與內業版比較、作廢與已刪除篩選、內業版編修與頁內確認、刪除；接真實 API | `frontend/src/admin/evidence/`（新增）、`frontend/src/App.tsx`（只加一行路由）、內業任務頁的照片頁籤入口（`frontend/src/admin/planning/PlanningPage.tsx`，依 `inspection-planning` #363 的檔案責任安排）、`frontend/src/styles.css`（只加本畫面樣式）、前端測試 | T6 核可；T3、T4、T5（真 API）；#363（內業任務頁）；T7 先合併 `styles.css` 後 rebase | FEV-AC23、AC24（內業部分） | #797 |
+| T4 | 內業完整編修 API：90°旋轉、±15°拉直、裁切、−100～+100亮度及圖層合成可重現；設定含開關／角落／偏移／大小／三樣式及三欄覆寫，姓名／時間鎖定。FIELD／label_source 不變，圖層資料與 OFFICE 新檔切換同交易；維運沿用每張設定及覆寫，鎖定照片跳過。T5 稽核接上前不得把圖層修改列為完整對外寫入驗收。 | `backend/app/api/v1/evidence_office.py`（新增）、`backend/app/services/evidence_office.py`（新增）、`backend/app/cli/regenerate_office_versions.py`（新增，維運指令；實際位置依既有指令慣例）、`backend/app/main.py`（只加一行路由註冊）、`backend/tests/api/test_evidence_office.py`（新增）、`backend/tests/contract/test_evidence_office_access.py`（新增，不改 `test_route_access.py`） | T2 | FEV-AC02、AC06（編修後註記不變）、AC13（編修權限）、AC29（編修回應）、AC30（編修後標示仍在）、AC31（重新產生）、AC32（來源穩定）、AC33（字級／缺字重產）、AC34（更正／改善來源整合）、AC36（資料／重產／拒絕與回滾）、AC37（後端重現） | #793 |
+| T5 | 修改註記與對應、軟刪除、四個稽核事件（`photo_deleted`、`office_version_edited` 每次都寫，`photo_updated` 只記有變動，新增 `evidence.layer_updated` 只記實際圖層變動，完整設定與五欄改前／改後、操作者與伺服器時間，皆填 `project_id`）、刪除守門（完成後、作廢、核發報告引用的檢查註冊點）、KD-55 作廢連動（被修改的項目；只有照片也作廢）與 `has_result`（納入有效照片）、已取消 Task 恢復時作廢、點位穩定身分與相關規則（IP-R13：PATCH 保留點位與實測欄位 `id`；選「不要」時不接受增減項次或實測欄位，也不接受變更既有欄位類型；選「要」時被刪除的點位隨項目作廢。PATCH 身分與結構鎖已由 #595 完成，作廢連動仍屬本任務。IP-R14：PATCH 擋下零項次已由 #595 完成；建立 Task 擋下零項次仍屬本任務）、取消與封存唯讀、上傳與作廢並行的鎖定；圖層資料、OFFICE 與稽核失敗同交易回滾 | `backend/app/api/v1/evidence.py`、`backend/app/services/evidence.py`、`backend/app/services/evidence_office.py`（只補稽核呼叫）、`backend/app/api/v1/inspection_planning.py`（PATCH 點位保留 `id`、`:restore` 路徑）、`backend/app/api/errors.py`（`structure_locked`、`points_required`）、`frontend/src/admin/projectItems/api.ts`、`ProjectItemChangePage.tsx` 與對應測試、`backend/tests/db/test_project_item_edit_concurrency.py`（PostgreSQL 項次互換）、`backend/app/services/inspection_planning.py`（作廢連動、恢復時作廢與 `has_result`，只動本規格相關函式）、`backend/app/services/inspection_planning_snapshots.py`（快照點位對應與作廢）、`backend/app/services/audit.py`（登記事件）、`docs/specs/audit-log/spec.md`（只新增本規格專屬事件區段，沿用既有規格的登記做法）、`backend/tests/api/test_evidence_mutations.py`（新增）、`backend/tests/api/test_inspection_planning_api.py`（補作廢、恢復與 `has_result`）、`backend/tests/api/test_planning_query_counts.py`（確認查詢數不隨照片成長） | T3、T4（同改 `evidence.py` 與 `evidence_office.py`，須在其後）；**`completion-validation` 規格已合併**（`inspection-planning` 的 IP-R04、IP-R07、IP-R13、IP-R14 與 `has_result` 定義）；#538 的規格 PR 已合併（同改 `audit-log` 規格） | FEV-AC12（其餘狀態）、AC13、AC14～AC18、AC21、AC26（後端）、AC27、AC28、AC29（`PATCH`、刪除與讀取行為）、AC36（圖層稽核與回滾） | #794 |
+| T6 | 【人工關卡，待負責人再次核可】現場簡化編修與內業完整三分頁原型；現場只旋轉／亮度／比較、圖層開關／四角，內業裁切／拉直／完整圖層設定與三欄更正／稽核。展示深色照片三樣式、兩行省略與完整資料、乾淨 FIELD／合成 OFFICE；依 #795 及追加裁定更新連續試用腳本。 | `docs/specs/field-evidence/ui-field-prototype.html`、`docs/specs/field-evidence/ui-office-prototype.html`（新增）；試用腳本寫入本檔「UI 原型與試用腳本」段；本輪負責人 #795 範圍變更另同步本 `spec.md`、本 `plan.md` 與 `docs/specs/audit-log/spec.md` 的照片圖層事件登記 | 本規格合併 | 無（取得核可後 FEV-AC22、AC23 的畫面細節才定案） | #795 |
+| T7 | 現場簡化拍照 UI：只90°旋轉、−100～+100亮度與長按比較，圖層只開關／四角（預設左下），五欄唯讀。無裁切／比例／拉直／拖曳微調／大小／樣式／文字修改；壓縮乾淨 FIELD，傳 layer 子集，清單前端合成圖層預覽，不取 OFFICE 檔或改權限。項次／註記、重試／手動重送、修改／刪除、離開提示與真 API 整合照原。 | `frontend/src/field/evidence/`（新增）、`frontend/src/field/TaskDetail.tsx`（加入照片區）、`frontend/src/field/api.ts`、`frontend/src/ui/ConfirmBox.tsx`（只沿用，不改）、`frontend/src/styles.css`（只加本畫面樣式）、前端測試 | T6 核可；T2、T3、T5（真 API，故在 T5 之後）；[field-ui](../field-ui/plan.md) T3、T4 | FEV-AC03、AC10、AC11、AC22、AC24（現場部分）、AC06（畫面）、AC35（現場範圍與請求） | #796 |
+| T8 | 內業照片頁保留分組、比較、篩選、刪除；編修器完整三分頁：直接裁切框與八把手、雙指縮放／拖移、比例鎖、±15°拉直、重設／復原／比較，調整只亮度。圖層有完整顯示設定與前三欄文字更正，姓名／時間鎖定；頁內確認後顯示修改前後及操作者／時間，接真 API。 | `frontend/src/admin/evidence/`（新增）、`frontend/src/App.tsx`（只加一行路由）、內業任務頁的照片頁籤入口（`frontend/src/admin/planning/PlanningPage.tsx`，依 `inspection-planning` #363 的檔案責任安排）、`frontend/src/styles.css`（只加本畫面樣式）、前端測試 | T6 核可；T3、T4、T5（真 API）；#363（內業任務頁）；T7 先合併 `styles.css` 後 rebase | FEV-AC23、AC24（內業部分）、AC36（完整圖層）、AC37（編修器） | #797 |
 | T9 | v0.3.1 走查補充：確認「已完成」標籤在現場任務詳情與內業計畫頁都走 `statusBadge` 的 `badge-success`，不一致處修正（現場清單的「近期已完成」區由 `field-ui` T1、T2 實作，本任務只驗收該區的標籤顏色）；重查說明文字依 `has_result` 顯示 | `frontend/src/ui/statusBadge.ts`（必要時）、現場詳情與內業計畫頁中直接寫狀態樣式的元件、`frontend/src/admin/projectItems/ProjectItemChangePage.tsx`、前端測試 | T5（`has_result`）；T7；T8 先合併（兩者都動內業任務頁，不同波）；`field-ui` T1、T2（近期已完成區） | FEV-AC25、AC26 | #798 |
-| T10 | 真後端走查與示範資料：SQLite 真後端、Vite、無頭瀏覽器從登入開始只靠點擊走完「現場拍照上傳 → 內業編修 → 內業改標準選要重查 → 補拍」，保存桌面與 360px 淺色模式截圖；為 #381 的 demo 補照片示範資料；重跑 AC01～AC34 彙整證據 | 走查腳本與截圖放置位置依 #381 實際責任區（`demo/`）；後端 seed；不改產品程式碼 | T1～T9 | FEV-AC01～AC34（彙整）；重點 AC22～AC34 | #799 |
+| T10 | 真後端走查與示範資料：保留原照片主線，增加現場簡化／內業完整圖層、鎖定欄位、三樣式省略、前後值稽核、關閉圖層下載及拉直重現；SQLite、Vite、無頭瀏覽器登入後操作，桌面／360淺色截圖，補 #381 demo；彙整 AC01～AC37。 | 走查腳本與截圖放置位置依 #381 實際責任區（`demo/`）；後端 seed；不改產品程式碼 | T1～T9 | FEV-AC01～AC37（彙整）；重點 AC22～AC37、AC35～AC37 | #799 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收；T0 與 T6 沒有產品程式碼。
-- 每個任務至少對應一條 AC；每條 AC 至少被一個任務涵蓋（AC01～AC34 的覆蓋見上表，T10 為總驗收）。
+- 每個任務至少對應一條 AC；每條 AC 至少被一個任務涵蓋（AC01～AC37 的覆蓋見上表，T10 為總驗收）。
 - 跨規格依賴寫 issue 編號；T1～T5 的後端任務完成條件含真實後端契約測試，不以前端 mock 代替（[RG-M22](../../review-guidelines.md)）。
 - 全部任務合併後，把本規格改為「已完成」並更新索引（最後一個任務的 PR 內一併修改；T10 沒有產品程式碼時另開收尾 task）。
 
@@ -48,7 +48,7 @@
 
 - **錯誤碼對照表檢查**：`test_no_hand_written_error_code_table_exists` 會掃描已追蹤的文件，Markdown 表格列只要含 `ErrorCode` 成員就會被判為手寫對照表。本規格的錯誤碼段已改為條列、AC 表避免直接寫既有共用錯誤碼；`evidence.*` 進入 `ErrorCode` 的 T2 必須同步調整允許清單。
 - **lockfile 與影像套件**：T1 新增影像處理套件會動 `uv.lock`，依共用檔案規則先合併，其他分支再 rebase 並重新產生，不手動合併衝突。
-- **migration 鏈**：T1 是唯一新增 migration 的任務（一個 PR 最多一支）；若 T5 需要補欄位，改在 T1 一併設計，或待 T1 合併後新增並接到最新 head。
+- **migration 鏈**：T1／PR #800 保持原樣；T2 新增圖層 JSON 欄位的 migration，接 T1 最新 head，每 PR 最多一支、不留多 head。後續新增欄位依共用規則串行。
 - **同步產生內業版拖慢上傳**：照片已由前端壓縮；預設啟用工程標示，T2 要量測重新編碼、中文字型與長文字換行的成本，不能只量測不加標示的位元組複製。試用若顯示過慢，依 FEV-Q10 評估非同步。T3 的圖片串流與即時縮圖（`max_edge`）會吃 CPU，需快取標頭與合理的 `max_edge` 上限，並在 T3 以測試確認。
 - **孤兒檔案**：先寫檔、後寫資料庫；程序在兩步之間當掉會留下孤兒檔。MVP 以失敗時清理為主，T1 提供可列出「儲存有檔、資料庫無記錄」的檢查指令（只讀）供維運。
 - **預覽與後端結果不一致**：內業編修預覽在前端、結果由後端產生。亮度公式與處理順序在規格固定，AC02 以尺寸與雜湊驗證，T8 另在走查中目視比對。
@@ -58,49 +58,43 @@
 - **權限模型變動**：#538 把權限改成兩層。本規格只引用專案角色動作代碼；兩層判斷落地後，T2～T5 的存取宣告改用新入口，AC13 的人員矩陣要補「未開通模組」案例，該案例由 #538 規格負責定義。
 - **0.7.x 銜接**：完成驗證沿用 T3 的覆蓋 service 函式，不得另寫第二份計算；完成後的現場版與註記更正由 0.7.x 負責（FEV-Q3）。
 - **工程標示的中文字型**：標示由伺服器端寫進影像像素，需要中文字型。字型必須隨後端一起打包提交（開源授權，授權文字與來源放在 `backend/app/assets/fonts/`），不得依賴主機或容器剛好安裝的字型，否則開發機、CI 與試用主機畫出的標示會不同；CJK 字型檔偏大（數 MB 到十幾 MB），要評估 repo 大小與是否只放子集；繪製須是確定性的（同一輸入與規則得到相同位元組），測試才能用雜湊比對與判斷是否需要重新產生；要有「缺字」測試（含繁體中文與常用符號），確認以 `?` 繪製、記錄缺字碼位警示且不阻斷交易。影像處理套件的文字繪製能力與字型授權在 T1 評估套件時一併確認。
-- **標示來源與版面**：五欄依 [#588 修正裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6231300749)；T2 在上傳交易保存 `label_source`，測試來源、缺值、時區與跨日。T4 重產不得回查目前名稱或改用重產時間。T6 以定案欄位展示底部延伸表格、長文字換行及直橫照片，原型給負責人看後可調；手機拍攝時間仍存 metadata，但不印入標示。 CMV-R11 更正取代切換到更正者／更正時間，CMV-R13 改善照片沿 `result_id` 找到有效不符合結果，依其項目識別與快照修訂取標題、依同一結果所屬 Task 取位置；不得以照片未直接填項目識別為由改印任務名稱。0.6.x T2／T4 先以單元輸入驗證來源契約，0.7.x CMV 真流程整合時重驗；不在 0.6.x 提早實作完成後更正或改善登記。
+- **標示來源與版面**：五欄依 [#588 修正裁定](https://github.com/speko-tw/inspect-flow/issues/588#issuecomment-6231300749)；T2 在上傳交易保存 `label_source`，測試來源、缺值、時區與跨日。T4 重產不得回查目前名稱或改用重產時間。T6 以定案欄位展示照片內圖層、兩行省略及直橫照片，原型給負責人看後可調；手機拍攝時間仍存 metadata，但不印入標示。 CMV-R11 更正取代切換到更正者／更正時間，CMV-R13 改善照片沿 `result_id` 找到有效不符合結果，依其項目識別與快照修訂取標題、依同一結果所屬 Task 取位置；不得以照片未直接填項目識別為由改印任務名稱。0.6.x T2／T4 先以單元輸入驗證來源契約，0.7.x CMV 真流程整合時重驗；不在 0.6.x 提早實作完成後更正或改善登記。
 - **身分快照依賴 #550**：照片的拍照者是上傳者的身分快照，格式與寫入函式屬 [#550](https://github.com/speko-tw/inspect-flow/issues/550)；#550 未合併前，T1 先以同欄位結構實作，合併後對齊，避免兩處各存一份。
 - **跨規格依賴**：`inspection-planning` 的修改（IP-R04、IP-R07、IP-R13、IP-R14、`has_result`）放在 `completion-validation` 的規格 PR，避免兩個 PR 改同一份凍結規格；T5 必須等它合併。兩個 PR 都改 `docs/specs/README.md` 規格索引相鄰的兩列，後合併者要先 rebase。
 - **未裁定議題**：[OQ-19](../../intents/05-open-questions.md#oq-19) 與缺圖時能否出報表、圖片選用細節（[OQ-07](../../intents/05-open-questions.md#oq-07)）屬 0.8.x，本計畫不實作任何報告端行為。
 
 ## UI 原型與試用腳本
 
-原型：[現場拍照與編修](ui-field-prototype.html)、[內業照片頁](ui-office-prototype.html)。兩份均為單一 HTML，可下載到同一資料夾後直接離線開啟，不需服務或帳號。示意圖代替相機，所有資料與上傳均為模擬；不是 API、影像服務或裝置相機的產品驗收。
+原型：[現場簡化編修](ui-field-prototype.html)、[內業照片與完整編修](ui-office-prototype.html)。兩份為離線單檔假資料原型；不是 API、相機、儲存或權限的產品驗收。
 
-**關卡狀態：顧問意見已依本次工作單修正，尚待負責人親手操作核可。** 本段是待核可的試用腳本，不代表已取得核可；T7、T8 在核可紀錄留下之前不得開工。工程標示五欄與來源已定案，比例、字型及換行依 FEV-R22，原型給負責人看後可調。
+**T6 關卡：待負責人再次核可。** 本輪依 [#795 圖層裁定](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540663667)與[現場簡化追加](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540752753)重做；前輪核可不代表新圖層／編修器已核可，T7、T8 仍不得開工。
 
-每一輪從不帶網址片段的現場原型開始，先在頁首上方 40px 原型工具列選淺色或深色；「說明」預設收合，可展開閱讀試用範圍。現場姓名選單為張先生，主導覽為「任務、專案」；內業姓名選單為林小姐，依一般內業規劃身分顯示「專案」。然後依下列順序操作。整輪內不要重新載入或重開另一份檔案；改用頁首「切換到內業原型／現場原型」，讓後續步驟沿用先前的示意照片、註記、編修、刪除與作廢狀態。網址片段只傳遞已上傳示意資料與參數，不含圖片位元組或待上傳草稿；後退或重開舊網址會回到該次傳遞的狀態，並不模擬多人即時同步。照片草稿只留在記憶體，關頁會遺失。
+每輪從不帶網址片段的現場原型開始，選淺／深色。張先生為現場、林小姐為內業；用 40px 工具列切換，後續步驟沿用前面的照片、圖層、文字覆寫、編修、刪除與作廢狀態。網址片段只傳遞已上傳假資料及參數，不含照片位元組或草稿；重新載入舊網址不是多人同步。
 
-1. 檢視任務名稱、分區／補充地點與「進行中」，確認鋼筋兩個項次尚缺照片、混凝土項次已有照片。點鋼筋間距項次下的「拍照」，選「使用橫向示意圖」。
-2. 在編修頁調整縮放，向左／右及上／下平移，也試拖曳預覽；旋轉、選「自由框」調整寬高，拖曳裁切框圖或用水平／垂直位置滑桿移動，再試正方形或 4：3、縮小「保留範圍」、調亮度。確認預覽隨操作改變；縮放平移只供預覽；裁切框圖與位置滑桿才改變輸出範圍。
-3. 點「重設」，確認回到原方向、原比例、100% 範圍與置中裁切框、亮度 0、縮放 1 與平移 0；再選 4：3、保留 90%、亮度 10，點「確認編修」。這些編修會沿用到後續上傳與內業比較。
-4. 取消所有項次選取後試上傳，確認錯誤出現在項次旁並聚焦第一個可選項。接著複選「鋼筋間距」與「續接器鎖固」，填「梁柱接頭補拍：兩個項次共用」，上傳情境選「前三次失敗，自動重試後成功」。
-5. 上傳後檢視同頁狀態：照片留在畫面、自動重試依約 1、2、4 秒退避，第三次重試後成功；只有一張新照片，兩個項次各增加一張且變成「已齊全」。
-6. 在剛上傳照片點「修改說明與項次」，將註記改成「梁柱接頭補拍：已確認鎖固」，保留兩項次後儲存。確認同一張照片的文字更新，沒有新增照片。
-7. 點「拍總覽照（選拍）」，使用直向示意圖，確認編修後看總覽已勾選、項次不可選。填「工作平台總覽」，正常上傳，確認兩個項次的覆蓋張數不增加。
-8. 對剛上傳的「工作平台總覽」點「刪除照片」。先取消一次，確認照片仍在；再刪除並確認後果，確認它從現場清單移除，其他照片及項次張數不變。
-9. 再從鋼筋間距項次的「拍照」使用示意圖並確認，複選兩個項次、填「網路不穩試拍」，上傳情境選「持續失敗，改用手動重送」。等三次自動重試用完，確認仍保留照片且出現手動重送。點「手動重送（模擬網路恢復）」，確認只新增一張；隨後修改它的項次，取消第二項並儲存，確認只有第二項的覆蓋數下降一張。
-10. 再拍一張，填「放棄上傳試拍」，用持續失敗情境；點「放棄這張照片」，先取消確認並保留，接著確認放棄。它不得出現在已上傳清單；任務仍保有前面成功的照片。
-11. 再進入拍照編修，變更亮度後點「返回任務」；在放棄未儲存提示先取消、確認編修仍在，再返回並確認放棄。已上傳照片不受影響。
-12. 用頁首按鈕切換到內業原型。確認原先修改的註記、兩張成功的新照片及刪除紀錄都沿用，依查核項目分組，未把全部照片混成一組。
-13. 篩選「已刪除」，確認能找到「工作平台總覽」，且只能開啟比較，沒有編修與刪除入口。恢復「全部照片」。
-14. 開啟最早的橫向總覽，檢視兩版。桌面並排，手機可用「現場版／內業版」切換。確認內業版底部延伸白底黑字五欄，長工程名稱、項目與地點自然換行，沒有遮住照片；現場版沒有標示。點「放大檢視標示」或內業版圖片，確認以同一張影像的標示區放大，不改五欄或比例；用倍率、方向按鈕或捲動查看長內容，Esc 或「關閉放大檢視」返回比較。保留「下載原尺寸」供另存整張圖片。
-15. 返回清單，開啟混凝土工程的直向照片，確認同一五欄規則依照片寬度排版；長文字完整，深色外觀也不反轉照片或白底黑字標示。再開「放大檢視標示」，確認直照片的文字也可讀，預設至少約 18px 的檢視字級；放大只改顯示倍率，不重畫標示。再返回並開啟第 6 步改過註記的補拍照片，確認可辨認相同照片與現場編修成果。
-16. 點「編修內業版」，先旋轉、裁切或調亮度。點「返回兩版比較」時先取消放棄，確認變更仍在，再返回並確認放棄；比較頁的內業版應保持編修前結果。
-17. 再進編修，旋轉、裁切與亮度調整後按「套用內業版」。閱讀「直接更新、不保留舊內業版、現場版不變」；先取消一次確認，再套用並確認。比較新的內業版，確認現場版不變、標示仍在底部且沒有被裁掉。
-18. 返回清單，對第 9 步的「網路不穩試拍」執行內業刪除，先取消後確認；「已刪除」篩選應同時保留它與第 8 步的總覽。回到全部照片。
-19. 在「重查情境試用」按「模擬標準變更與重查」，確認說明後選「確認依新標準重新查核」。鋼筋有效照片改為作廢、混凝土照片不變；篩選「標準變更作廢」查看剛才的照片，確認歷史仍可比較但不能編修或刪除。
-20. 用頁首切回現場，確認「標準已更新，請補拍」提示；鋼筋舊照片不再列入現場，也不計入覆蓋，兩個項次都缺圖。重新拍一張並複選兩項次、填「新標準補拍」、正常上傳，確認兩個項次再度齊全，混凝土照片與已刪除紀錄未被恢復。
-21. 再切回內業，篩選有效、作廢、已刪除，確認第 20 步的新照片有效、舊照片仍作廢、刪除紀錄仍存在。這一步必須沿用前面操作結果，不能用重新開啟原型的初始資料代替。
-22. 以桌面 1280px 及手機 360px，各跑一輪淺色及深色。再從初始資料以鍵盤 Tab／Shift+Tab、Enter／Space、方向鍵、Home／End 跑同一順序；檢查每個焦點可見、範圍控制可調、確認初始焦點在取消、Esc 可取消、沒有只靠拖曳才能完成的動作，也沒有水平頁面捲動。核可時另請負責人用實際手機親手操作；無頭走查不能代替人的核可或產品實機驗收。
+1. 檢視任務與缺圖張數，從鋼筋間距項次按「拍照」，選橫向示意圖。確認左上取消、右上確認，按鈕至少 44px。
+2. 現場只試「旋轉 90°」、亮度滑桿 −100／+100 及 20，按住比較按鈕或長按照片後放開；確認畫面切換編修前／後。沒有裁切、比例、拉直、拖曳微調、大小／樣式或文字編輯入口。旋轉四次回原方向。
+3. 圖層預設開啟、左下；切到右上再回左下，關閉再開啟，觀察即時預覽。展開完整文字，五欄都唯讀，檢驗時間明示「上傳後以伺服器時間填入」。現場不能改三欄文字。
+4. 右上確認後，先取消所有項次送出，檢查欄旁錯誤與聚焦；再複選兩項次、填「梁柱接頭補拍」，選前三次失敗、自動重試後成功的情境上傳。
+5. 狀態清單保留照片，約 1／2／4 秒退避後成功，只新增一張。兩項次變齊全，現場縮圖有圖層；這是 FIELD 加資料的預覽，不代表 FIELD 已燒入標示。
+6. 修改剛上傳照片的註記為「梁柱接頭補拍：已確認」，維持兩項次，儲存後不新增照片。
+7. 拍一張直向總覽，填「工作平台總覽」、正常上傳；覆蓋數不增加。先取消刪除一次，再確認刪除；其他照片不受影響。
+8. 再拍「網路不穩試拍」，兩項次都選，持續失敗三次後手動重送；只新增一張。修改對應時取消第二項，只有第二項的覆蓋數下降。
+9. 再拍「放棄試拍」，失敗後點放棄，先取消保留，再確認放棄；它不進已上傳清單。
+10. 再進現場編修調亮度，按左上取消，先取消放棄提示、確認編修仍在，再取消並確認放棄。已上傳資料保留。
+11. 切到內業，確認林小姐姓名選單及照片分組，前面註記／圖層／刪除狀態沿用。篩選已刪除找到總覽，只能比較，不能編修／再次刪除；回全部。
+12. 開啟補拍照片比較：FIELD 乾淨、OFFICE 帶疊在照片內的圖層；尺寸不延伸，五欄長文字最多兩行加省略號。開放大檢視及下載原尺寸，完整值仍能在編修欄位讀到。
+13. 進內業編修，確認底部分頁裁切／調整／圖層、左上取消／右上確認。裁切直接拖八個框角與邊；框內拖移，試原始／自由／1:1／4:3／16:9 與比例鎖，對比鎖定與解鎖時拉框的結果。
+14. 以雙指縮放及拖移預覽；再用鍵盤的預覽放大／縮小／移動按鈕操作。裁切框焦點方向鍵移動、把手方向鍵調邊界，Shift 加速。試 90° 旋轉、−15°／+15° 拉直，再停在 5°；按復原一步，確認回前一狀態。重設影像只重設影像參數，不清掉圖層資料。
+15. 調整分頁只有亮度，試 −100／+100，再調至 15。按住比較編修前，放開返回；不新增版本、不呼叫後端。取消離開提示先取消後再確認，檢查未套用變更不影響已存內業版。
+16. 重新編修補拍照片，圖層分頁試四角、拖曳微調與鍵盤方向／按鈕微調，小／中／大及開關。偏移與大小受照片邊界限制；不延伸畫布。完整文字仍保留，影像中超長值兩行加省略號。
+17. 在內業只修改工程名稱為「修正工程名稱」、檢驗項目為「修正檢驗項目」、檢驗位置為「修正檢驗位置」。姓名／時間鎖定。按確認後先取消套用，再確認套用；查看「已修改圖層資訊」紀錄，誰為林小姐、示意時間及三欄／設定完整前後值皆可查，FIELD 與原來源快照不變。
+18. 開啟原有深色直圖，進圖層分頁，依序試半透明深底白字、透明底白字加描邊、白底黑字；確認三種樣式可讀、長文字省略但完整資料沒丟。最後套用白底黑字，新增一次實際圖層異動示意；沒有新增第三張永久圖片。
+19. 回補拍照片，把圖層關閉後套用，內業版與下載都沒有標示（若影像參數有改，照片本體仍保留那些編修）；五欄資料沒有被刪除。再開啟並套用，可恢復相同圖層資訊與覆寫。
+20. 刪除「網路不穩試拍」，先取消後確認；篩選已刪除同時看到它與總覽。回全部後，模擬鋼筋標準變更選「要」重查，確認只有鋼筋有效照片作廢，混凝土深色直圖不變。
+21. 切回現場看補拍提示；舊鋼筋照片不計覆蓋，重新拍一張、開圖層並選左下、複選兩項次上傳。兩項次重新齊全；現場仍不能調精細工具。
+22. 再切內業查有效／作廢／已刪除，新補拍與舊圖層稽核狀態皆沿用。以 360 淺／深、1280 淺／深各跑一輪，另用 Tab／Enter／Space／方向鍵完整跑同流程。每種拖曳在鍵盤路徑重做；無水平溢出、錯誤、外部網路請求。無頭結果不代替實際手機雙指與負責人再次核可。
 
-**請負責人回饋的問題**：
-
-- 從項次開始拍攝、編修後才選複數項次，是否符合現場節奏？自由框寬高、位置滑桿與拖曳框圖是否容易理解，是否需調整工具擺放？
-- 上傳失敗資訊、手動重送與放棄確認是否找得到？一次處理一張是否可接受，是否需在核可前調整成多張暫存的視覺？不因此新增離線佇列。
-- 桌面兩版並排、手機按鈕切換是否容易比較？內業套用說明是否足以避免誤以為可回復舊內業版？
-- 五欄表格的字級、比例、位置、長字換行及橫直照片閱讀效果是否合適？欄位與資料來源不重開裁定；比例與字型原型給負責人看後可調。
-- 作廢與已刪除的篩選、現場補拍提示是否清楚？顧問有無其他易誤操作的情境需補進本原型？
+**請負責人回饋**：現場四種簡單操作是否足夠、是否容易確認？內業裁切把手／比例鎖／拉直與復原的精度是否合適？三種圖層樣式、小中大短邊比例與兩行省略在深色照片是否可讀？圖層微調及三欄更正的確認／前後值紀錄是否清楚？這些版面與精確比例是規格設計，依試用再調，不重開已裁定的角色權限與五欄來源。
 
 
 ## 驗證（Proof）
@@ -111,7 +105,7 @@
 |---|---|
 | FEV-AC01 | `backend/tests/api/test_evidence_upload.py`：上傳後查資料庫只有一筆 `evidence`、兩筆 `evidence_variants`，儲存只多兩個檔案、儲存鍵為 UUID、schema 沒有 BLOB 欄位、回應不含儲存鍵；`backend/tests/db/` 檢查資料表約束；`backend/tests/storage/` 檢查儲存抽象介面 |
 | FEV-AC02 | `backend/tests/api/test_evidence_office.py`：連續編修與重設，驗證檔案數、現場版雜湊不變、輸出尺寸、重設後雜湊、舊檔移除、非法參數 422 與內業版不變 |
-| FEV-AC03 | 前端元件測試驗證編修狀態與輸出參數；無頭瀏覽器在真實 Vite 驗證縮放平移、旋轉、裁切、亮度、重設與確認後的上傳內容；人工檢查沒有對比、標註等控制項；檢查上傳前後應用程式沒有把原圖寫入 IndexedDB、localStorage 或 Cache API |
+| FEV-AC03 | 前端元件與真後端走查：現場只有旋轉／亮度／比較／圖層開關四角，驗證亮度端點、乾淨 FIELD 與壓縮，不提供精細工具、不持久化原圖。 |
 | FEV-AC04 | `backend/tests/api/test_evidence_read.py`：逐步上傳並讀覆蓋狀態，涵蓋 `min_count` 為 2、跨項次共用、總覽不計、一百張以上 |
 | FEV-AC05 | `test_evidence_upload.py`：四種不合法對應皆 422 且無記錄與檔案 |
 | FEV-AC06 | `test_evidence_upload.py`、`test_evidence_read.py`、`test_evidence_office.py`：註記經兩種視圖一致、編修內業版後不變、超長 422 |
@@ -138,11 +132,15 @@
 | FEV-AC27 | `test_inspection_planning_api.py` 與 `test_evidence_mutations.py`：已取消 Task 修改標準後，取消期間照片唯讀、恢復的同一交易才作廢並標待重查、恢復失敗時回滾 |
 | FEV-AC28 | `test_evidence_upload.py` 與 `test_evidence_mutations.py`：以可控的交錯順序模擬上傳與作廢並行與舊修訂上傳，驗證 409 `evidence.requirement_changed`、無孤兒檔、無指向舊需求的有效照片；SQLite 與 PostgreSQL 各跑一次 |
 | FEV-AC29 | `test_evidence_upload.py`（`captured_at`）、`test_evidence_read.py`（`max_edge`、已刪除與作廢的讀取、排序）、`test_evidence_mutations.py`（`PATCH` 部分欄位）、`test_evidence_office.py`（回應視圖） |
-| FEV-AC30 | `backend/tests/services/test_evidence_labels.py` 與 `test_evidence_upload.py`、`test_evidence_office.py`：以定案五欄規則驗證標示寫進內業版像素（比對標示區與照片本體）、現場版無標示且雜湊不變、中文無缺字（基準圖比對）、編修後標示仍在且未被裁切、明確關閉的相容／測試情境下內業版與現場版位元組相同、儲存仍只有兩個檔案；無頭瀏覽器目視比對內業頁的內業版 |
-| FEV-AC31 | `backend/tests/api/test_evidence_office.py`（維運指令）：改變規則後重新產生，編修參數沿用、現場版不變、被引用（測試替身）者跳過、稽核事件、重複執行結果相同、舊檔移除 |
-| FEV-AC32 | T2 的 `test_evidence_labels.py`、`test_evidence_upload.py` 及 T4 的 `test_evidence_office.py`：逐欄核對來源、缺值、預設／另設時區跨日、來源後續改名不影響重產、承攬／監造同欄、長文字換行、缺字替代符號與碼位警示、交易照常完成；T6／T10 提供畫面比對，規格示意圖不代替產品測試。 |
-| FEV-AC33 | T2／T4 的標示測試涵蓋 320／1200 px、14 px 下限與 480 px 畫布，確認置中／不遮照片；以 U+0378 強制缺字，斷言替代符號、碼位警示及上傳／重產交易成功；T6／T10 目視驗證。 |
+| FEV-AC30 | T2 上傳與 T4 重產：開啟／關閉、三種樣式、同尺寸照片內合成、FIELD 雜湊不變、預設影像且關閉時位元組相同、始終兩檔；T6／T10 畫面比較。 |
+| FEV-AC31 | `backend/tests/api/test_evidence_office.py`（維運指令）：改變規則後重新產生，編修參數與每張圖層設定／覆寫沿用、不重開已關閉圖層、現場版不變、被引用（測試替身）者跳過、稽核事件、重複執行結果相同、舊檔移除 |
+| FEV-AC32 | 來源／缺值／時區／跨日及改名不影響來源保持；逐格兩行省略、資料及畫面完整文字，內業三欄覆寫與鎖定兩欄；T2／T4測試，T6／T10走查。 |
+| FEV-AC33 | T2／T4以320×480及1200px照片驗證14px下限、照片內定位、無延伸；U+0378 替代?及碼位警示、不阻斷交易；幾何容納錯誤另驗，不與缺字混淆。 |
 | FEV-AC34 | T2／T4 單元與整合測試驗證更正者／更正時間切換、更正照片的同任務工程／項目／地點來源、改善照片的 `result_id` → 有效不符合結果 → 項目識別／快照修訂 → 快照標題與同一結果所屬 Task 位置，以及失敗回滾；涵蓋照片未直接填項目識別但可由結果追溯的合法情境，斷言不印任務名稱；缺少有效不符合結果不得當正常改善上傳驗收；0.7.x CMV-R11／R13 實作接上真流程後再次驗收，不以單元測試冒充該流程已實作。 |
+| FEV-AC35 | T2 真請求拒絕現場精細設定；T7 真契約傳 layer 子集，FIELD 乾淨、清單合成預覽及四角開關；T6 原型只驗畫面。 |
+| FEV-AC36 | T4／T5 真後端驗設定、三欄覆寫、鎖定兩欄、完整前後值、同交易重產／稽核與失敗回滾；T8契約及UI，T6可點示意。 |
+| FEV-AC37 | T4以同一FIELD與旋轉／拉直／裁切／亮度參數重產比對；T8／T6以八把手、雙指與鍵盤替代、比例鎖、復原一步、長按比較走查。 |
+
 
 ## 考慮過但沒採用的做法
 
