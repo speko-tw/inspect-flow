@@ -20,6 +20,8 @@
 
 **不包含**：
 
+- 0.6.x `Template Suggestion` 的待審／退回／核准／撤回狀態由 [template-system 專節](../template-system/spec.md#template-suggestions)負責（TPL-R31、AC35）；它是獨立待審件，不是 Inspection Template 的狀態或版本，不改 STM-R06，也不擴大本規格凍結範圍。依據：[負責人 #314 裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)。
+
 - 實體欄位、關聯與完整資料模型（由 [domain-model](../domain-model/spec.md) 負責）。
 - API 的共通格式（由 [api-conventions](../api-conventions/spec.md) 負責）。
 - 計畫與任務的建立、組成、指派、派出操作及任務產生規則（由 `inspection-planning` 規格負責）；本規格定義派出後的狀態效果及計畫狀態彙總。`inspection-planning` 亦負責計畫登記及相關操作契約。

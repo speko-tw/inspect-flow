@@ -24,7 +24,7 @@
   - `Project` 的業務欄位：依 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)，見 [`Project` 業務欄位](#project-business-fields)。
   - `ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯與 `Task Requirement Snapshot`（DOM-R56～DOM-R58、DOM-AC51～DOM-AC53）。
 - 草稿（本次不凍結，不拆任務）：
-  - `Template Item`、`Evidence Requirement`、`Evidence`、`Evidence Variant`、`Result`、`Report` 等其餘實體依各自開工門檻維持草稿，見[其他實體](#draft-others)（`Evidence`、`Evidence Variant` 的欄位由 [`field-evidence`](../field-evidence/spec.md) 定義，`Result` 由 `completion-validation` 定義）；`Inspection Template` 由 `template-system` 定義。
+  - `Template Item`、`Evidence Requirement`、`Evidence`、`Evidence Variant`、`Result`、`Report` 等其餘實體依各自開工門檻維持草稿，見[其他實體](#draft-others)（`Evidence`、`Evidence Variant` 的欄位由 [`field-evidence`](../field-evidence/spec.md) 定義，`Result` 由 `completion-validation` 定義）；`Inspection Template` 由 `template-system` 定義。0.6.x `Template Suggestion` 及其不可變修訂／審核／狀態歷程由 [template-system 專節](../template-system/spec.md#template-suggestions)定義，與正式範本分離，不新增 Template Version；只引用既有 User／Project／專案項目識別，不改本規格其他實體或凍結範圍。依據：[負責人 #314 版本留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)。
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
