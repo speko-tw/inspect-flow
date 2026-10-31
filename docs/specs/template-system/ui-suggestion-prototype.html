@@ -1434,7 +1434,9 @@
           const r = latest(s),
             ret = s.events.findLast((e) => e.status === "RETURNED");
           return `<li data-suggestion="${s.id}"><div class="list-row"><div>
-      ${badge(s.status)}<h2>${escapeHtml(r.content.title)}</h2>
+      ${badge(s.status)}<h2>${
+        escapeHtml(r.content.title) || "（未填名稱）"
+      }</h2>
       <p>${escapeHtml(s.project)}／${escapeHtml(s.sourceName)}</p>
       <p>提議人：${names[s.proposer]} · 最新第 ${r.no} 版${managerMark(r)}</p>
       ${kind === "review" ? `<p>最近送審：${lastSubmitted(s)}</p>` : ""}
@@ -1532,7 +1534,9 @@
           detailKind,
           "link",
         )}
-    <h1>${escapeHtml(latest(s).content.title)}</h1>${badge(s.status)}
+    <h1>${escapeHtml(latest(s).content.title) || "（未填名稱）"}</h1>${badge(
+      s.status,
+    )}
     <p>提議人：${names[s.proposer]} · 來源：${escapeHtml(s.project)}／
     ${escapeHtml(s.sourceName)}</p><p class="muted">建議保存提出時的項目結構，
     不會因來源後續修改而改變。</p><div id="feedback"></div>
@@ -1997,7 +2001,9 @@
           "detail",
           "link",
         )}
-    <h1>比較前後兩版</h1><p>${escapeHtml(latest(s).content.title)}</p>
+    <h1>比較前後兩版</h1><p>${
+      escapeHtml(latest(s).content.title) || "（未填名稱）"
+    }</p>
     <label for="compare-pair">相鄰版本</label><select id="compare-pair">
     ${pairs
       .map(
@@ -2179,9 +2185,15 @@
         draft = null;
         screen = "detail";
         render();
+        if (state.role === "wu") checkNameConflict();
         const message =
           state.role === "wu"
-            ? "已存第 " + latest(s).no + " 版，目的地已保留，可再按核准"
+            ? (changed
+                ? "已存第 " + latest(s).no + " 版，"
+                : "內容沒有變更，沿用原版本；") +
+              (targets[s.id]?.system
+                ? "目的地已保留，可再按核准。"
+                : "請選擇目的地後再按核准。")
             : changed
               ? "已保存第 " + latest(s).no + " 版，尚未送審。"
               : "內容沒有變更，沿用原版本；尚未送審。";
@@ -2406,6 +2418,7 @@
         );
       }
       function render(moveFocus = true) {
+        if (screen !== "editor") nameOnly = false;
         shell();
         const pages = {
           project: projectPage,
@@ -2529,6 +2542,7 @@
         if (name === "latest-version") {
           selectedVersion = latest(chosen()).no;
           render();
+          checkNameConflict();
           reveal($("#approval-area"));
           return $("#approval-title").focus({ preventScroll: true });
         }
@@ -2663,6 +2677,19 @@
           return editAgain();
         }
       }
+      // 聚焦改名只是初始收合策略；尊重使用者後續展開的編修意圖。
+      document.addEventListener(
+        "toggle",
+        (event) => {
+          if (
+            screen === "editor" &&
+            event.target.matches?.(".point-editor") &&
+            event.target.open
+          )
+            nameOnly = false;
+        },
+        true,
+      );
       document.addEventListener("click", (event) => {
         const el = event.target.closest("[data-action]");
         if (el && !el.disabled) action(el.dataset.action);
