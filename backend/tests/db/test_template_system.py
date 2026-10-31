@@ -289,9 +289,21 @@ def test_tpl_ac03_ac04_and_ac07_template_is_structural_and_unversioned(
     assert not any(
         forbidden & table_columns for table_columns in columns.values()
     )
+    # TPL-R02 僅限制正式範本；TPL-R32 的建議修訂另存 JSON 快照。
     template_tables = {
-        table for table in table_names if table.startswith("template_")
+        model.__tablename__
+        for model in (
+            TemplateCategory,
+            TemplateSystem,
+            TemplateItem,
+            TemplateInspectionPoint,
+            TemplateTextStandard,
+            TemplateNumericStandard,
+            TemplateMeasurementField,
+            TemplateEvidenceRequirement,
+        )
     }
+    assert template_tables <= table_names
     assert not any(
         isinstance(column["type"], JSON)
         for table in template_tables

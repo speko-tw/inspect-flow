@@ -36,6 +36,12 @@ from app.models.project import Project
 from app.models.project_member import ProjectMember, ProjectMemberRole
 from app.models.role import Role, RolePermission
 from app.models.setup_code import SetupCode
+from app.models.template_suggestions import (
+    TemplateSuggestion,
+    TemplateSuggestionReview,
+    TemplateSuggestionRevision,
+    TemplateSuggestionTransition,
+)
 from app.models.template_system import (
     ProjectEvidenceRequirement,
     ProjectInspectionItem,
@@ -94,6 +100,10 @@ __all__ = [
     "ProjectMeasurementField",
     "ProjectNumericStandard",
     "ProjectTextStandard",
+    "TemplateSuggestion",
+    "TemplateSuggestionRevision",
+    "TemplateSuggestionReview",
+    "TemplateSuggestionTransition",
     "TemplateCategory",
     "TemplateEvidenceRequirement",
     "TemplateInspectionPoint",
