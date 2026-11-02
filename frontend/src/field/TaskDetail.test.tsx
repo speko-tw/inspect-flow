@@ -111,7 +111,7 @@ describe('現場任務詳情', () => {
     const requirements = screen.getByRole('heading', { name: '查核需求' })
     expect(action.compareDocumentPosition(requirements) & 4).toBe(4)
     expect(
-      within(action).getByText('填寫結果與照片上傳將在後續版本提供。').tagName,
+      within(action).getByText('填寫結果將在後續版本提供。').tagName,
     ).toBe('SMALL')
     expect(await screen.findByText('依圖面查核')).toBeInTheDocument()
     expect(
@@ -139,6 +139,60 @@ describe('現場任務詳情', () => {
     expect(screen.getByText('5 ± 0.5 mm')).toBeInTheDocument()
     expect(screen.getAllByText('至少 2 張')).toHaveLength(2)
     expect(screen.getByRole('button', { name: '開始查核' })).toBeEnabled()
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('未開始只說明何時能拍照；進行中顯示照片區與拍照入口', async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/evidence')) {
+        return Response.json({
+          all_points_satisfied: false,
+          items: [
+            {
+              item_id: 'item-a',
+              title: '外牆鋼筋查核',
+              overview_count: 0,
+              points: [
+                {
+                  point_id: 'point-1',
+                  sequence: 1,
+                  title: '鋼筋間距',
+                  min_count: 2,
+                  covered_count: 1,
+                  satisfied: false,
+                },
+              ],
+            },
+          ],
+        })
+      }
+      if (url.includes('/photos')) {
+        return Response.json({ items: [], next_cursor: null })
+      }
+      return Response.json({ ...detail, status: 'IN_PROGRESS' })
+    })
+    vi.stubGlobal('fetch', fetcher)
+    renderDetail()
+    const section = await screen.findByRole('region', { name: '照片佐證' })
+    expect(
+      await within(section).findByRole('group', { name: '1. 鋼筋間距' }),
+    ).toHaveTextContent('已有 1／需要 2 張')
+    expect(
+      within(section).getByRole('button', { name: '拍照，1. 鋼筋間距' }),
+    ).toBeEnabled()
+    expect(
+      within(section).getByRole('button', { name: '從相簿選，1. 鋼筋間距' }),
+    ).toBeEnabled()
+  })
+
+  it('未開始的任務不讀照片 API，只說明開始後才能拍照', async () => {
+    const fetcher = vi.fn(async () => Response.json(detail))
+    vi.stubGlobal('fetch', fetcher)
+    renderDetail()
+    expect(
+      await screen.findByText('開始查核後，才能依項次拍照上傳。'),
+    ).toBeInTheDocument()
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 

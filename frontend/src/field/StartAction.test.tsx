@@ -8,6 +8,8 @@ import {
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { CurrentUserProvider } from '../auth/useCurrentUser'
+import { currentUserFixture } from '../testing/contractFixtures'
 import TaskDetail from './TaskDetail'
 
 type Detail = Record<string, unknown>
@@ -81,19 +83,41 @@ function setup(routes: StartRoutes) {
       return next instanceof Response ? next : Response.json(next)
     },
   )
-  vi.stubGlobal('fetch', fetcher)
+  // 開始後出現的照片區會另外讀照片 API；這裡只驗證開始查核，所以照片
+  // 請求回空資料，且不計入 `fetcher` 的呼叫紀錄。
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (/\/evidence(\?|$)/.test(url)) {
+      return Promise.resolve(
+        Response.json({ items: [], all_points_satisfied: false }),
+      )
+    }
+    if (/\/photos(\?|$)/.test(url)) {
+      return Promise.resolve(Response.json({ items: [], next_cursor: null }))
+    }
+    return fetcher(input, init)
+  })
   const onListChange = vi.fn()
   render(
-    <MemoryRouter initialEntries={['/tasks/task-1?scope=all']}>
-      <Routes>
-        <Route
-          path="/tasks/:id"
-          element={<TaskDetail taskId="task-1" onListChange={onListChange} />}
-        />
-        <Route path="/tasks/" element={<p>任務清單</p>} />
-        <Route path="/login" element={<p>登入頁</p>} />
-      </Routes>
-    </MemoryRouter>,
+    <CurrentUserProvider
+      value={{
+        user: currentUserFixture({ has_field_access: true }),
+        clear: vi.fn(),
+      }}
+    >
+      <MemoryRouter initialEntries={['/tasks/task-1?scope=all']}>
+        <Routes>
+          <Route
+            path="/tasks/:id"
+            element={
+              <TaskDetail taskId="task-1" onListChange={onListChange} />
+            }
+          />
+          <Route path="/tasks/" element={<p>任務清單</p>} />
+          <Route path="/login" element={<p>登入頁</p>} />
+        </Routes>
+      </MemoryRouter>
+    </CurrentUserProvider>,
   )
   const posts = () =>
     fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')

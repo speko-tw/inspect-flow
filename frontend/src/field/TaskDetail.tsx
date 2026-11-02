@@ -18,6 +18,7 @@ import {
   FieldApiError,
   type FieldTaskDetail,
 } from './api'
+import EvidenceSection from './evidence/EvidenceSection'
 import StartAction, { type TaskListChange } from './StartAction'
 
 function displayTime(value: string) {
@@ -210,9 +211,15 @@ export default function TaskDetail({
                   })
                 }
               />
-              <small>填寫結果與照片上傳將在後續版本提供。</small>
+              <small>填寫結果將在後續版本提供。</small>
             </Card>
           </section>
+          <EvidenceSection
+            location={task.location}
+            projectName={task.project_name}
+            status={task.status}
+            taskId={task.id}
+          />
           <SectionHeader
             className="field-section-head"
             title="查核需求"
