@@ -160,6 +160,8 @@ Corporate SSO                            檢查時機／停留點
                                          串接文件管理系統
 ```
 
+照片在 0.6.x **得**於壓縮前只讀取拍攝時間，原 EXIF **不得**保存；完整解析與保存 EXIF 仍為延後能力（依據：架構基準 §35；[負責人照片來源裁定](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6542925874)）。理由是內業需要辨識照片來源與時間差，只讀拍攝時間即可提供提示，無須提前引入完整 EXIF 能力。
+
 資料庫與儲存體遷移**應**維持 API 契約，見 [KD-08](03-decisions-and-stack.md#kd-08)、[KD-02](03-decisions-and-stack.md#kd-02)（依據：架構基準 §10、§32–33）。
 
 ## 架構占位（placeholder）與業務決策的界線
@@ -308,5 +310,3 @@ flowchart TB
 - 每一張圖背後的規則與理由，見 [02-principles.md](02-principles.md)；決策與技術棧見 [03-decisions-and-stack.md](03-decisions-and-stack.md)。
 - 名詞定義見 [04-glossary.md](04-glossary.md)。
 - 遇到看似未定案或前後矛盾的地方，先查 [05-open-questions.md](05-open-questions.md)，不要把自己的假設 當成定案。
-
-照片在 0.6.x **得**於壓縮前只讀取拍攝時間，原 EXIF **不得**保存；完整解析與保存 EXIF 仍為延後能力（依據：架構基準 §35；[負責人照片來源裁定](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6542925874)）。
