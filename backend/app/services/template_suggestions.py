@@ -13,7 +13,11 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.api.errors import APIError, ErrorCode, FieldErrorCode
-from app.api.pagination import encode_page_cursor, page_cursor_key
+from app.api.pagination import (
+    encode_page_cursor,
+    ilike_contains,
+    page_cursor_key,
+)
 from app.api.time_format import format_utc
 from app.db.base import uuid7
 from app.models import (
@@ -24,17 +28,22 @@ from app.models import (
     ProjectMeasurementField,
     ProjectNumericStandard,
     ProjectTextStandard,
+    TemplateCategory,
+    TemplateItem,
     TemplateSuggestion,
     TemplateSuggestionReview,
     TemplateSuggestionRevision,
     TemplateSuggestionTransition,
+    TemplateSystem,
 )
 from app.services.audit import record_audit_event
 from app.services.batch_load import load_grouped
 from app.services.inspection_planning import project_permissions_for
 from app.services.operator import get_current_operator
+from app.services.permissions import calculate_effective_access
 from app.services.template_library import (
     InvalidTemplateError,
+    create_template,
     validate_template_structure,
 )
 from app.template_structure import TemplateBody
@@ -213,6 +222,36 @@ def _owned(db: Session, suggestion_id: UUID, *, lock: bool = False):
         statement = statement.where(TemplateSuggestion.proposer_id == actor.id)
     if lock:
         _write_lock(db)
+        statement = statement.with_for_update().execution_options(
+            populate_existing=True
+        )
+    row = db.scalar(statement)
+    if row is None:
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    return row
+
+
+def _can_review(db: Session) -> bool:
+    actor = get_current_operator(db)
+    access = calculate_effective_access(db, user_id=actor.id)
+    return access.is_admin or "template.manage" in access.module_permissions
+
+
+def _require_review(db: Session) -> None:
+    if not _can_review(db):
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+
+
+def _visible(db: Session, suggestion_id: UUID, *, lock: bool = False):
+    # TPL-R36：審核可見權不授予撤回他人件或修改來源專案的權限。
+    if not _can_review(db):
+        return _owned(db, suggestion_id, lock=lock)
+    if lock:
+        _write_lock(db)
+    statement = select(TemplateSuggestion).where(
+        TemplateSuggestion.id == suggestion_id
+    )
+    if lock:
         statement = statement.with_for_update().execution_options(
             populate_existing=True
         )
@@ -419,14 +458,22 @@ def revise(
     expected_revision_id: UUID,
     expected_status: str,
 ):
-    """TPL-R31、R32：本人只編輯退回件，無變更沿用原版且不留事件。"""
-    row = _owned(db, suggestion_id, lock=True)
-    _require_edit(db, row.source_project_original_id)
+    """TPL-R31、R32：本人編輯退回稿、審核者編輯待審稿，無變更不留事件。"""
+    row = _visible(db, suggestion_id, lock=True)
+    # TPL-R32／R33：PENDING 僅審核者可改，RETURNED 仍走本人兩層權限。
+    reviewing = row.status == "PENDING" and _can_review(db)
+    if not reviewing:
+        if row.proposer_id != get_current_operator(db).id:
+            if not get_current_operator(db).is_admin:
+                # 可審核者已通過動作授權，非待審件屬非法狀態而非失權。
+                _expected(row, expected_revision_id, expected_status)
+                _state(row, {"PENDING"})
+        _require_edit(db, row.source_project_original_id)
     _expected(row, expected_revision_id, expected_status)
-    _state(row, {"RETURNED"})
+    _state(row, {"PENDING"} if reviewing else {"RETURNED"})
     current = db.get(TemplateSuggestionRevision, row.current_revision_id)
     assert current is not None
-    normalized = validate_content(content, complete=False)
+    normalized = validate_content(content, complete=reviewing)
     digest = content_hash(normalized)
     if digest == current.content_sha256 and normalized == current.content:
         return row, False
@@ -624,7 +671,9 @@ def _summaries(
 
 def detail(db: Session, suggestion_id: UUID) -> dict:
     """TPL-R36：只提供本人／Admin 的歷史快照，不重讀來源項目。"""
-    return _summaries(db, [_owned(db, suggestion_id)], include_content=True)[0]
+    return _summaries(db, [_visible(db, suggestion_id)], include_content=True)[
+        0
+    ]
 
 
 def list_mine(
@@ -692,7 +741,7 @@ def revisions(
     db: Session, suggestion_id: UUID, *, cursor: str | None, limit: int
 ) -> dict:
     """TPL-R32：依版本遞增分頁，批次附上各版的狀態、審核與操作者。"""
-    row = _owned(db, suggestion_id)
+    row = _visible(db, suggestion_id)
     statement = select(TemplateSuggestionRevision).where(
         TemplateSuggestionRevision.suggestion_id == row.id
     )
@@ -814,3 +863,351 @@ def revisions(
         else None
     )
     return {"items": items, "next_cursor": next_cursor}
+
+
+def list_review(
+    db: Session,
+    *,
+    cursor: str | None,
+    limit: int,
+    status: str | None,
+    q: str | None,
+) -> dict:
+    """TPL-R34：管理清單可跨來源專案，搜尋／分頁不影響全體待審數。"""
+    _require_review(db)
+    statement = select(TemplateSuggestion)
+    if status is not None:
+        statement = statement.where(TemplateSuggestion.status == status)
+    if q and q.strip():
+        statement = statement.join(
+            TemplateSuggestionRevision,
+            TemplateSuggestionRevision.id
+            == TemplateSuggestion.current_revision_id,
+        ).where(
+            or_(
+                ilike_contains(
+                    TemplateSuggestionRevision.content["title"].as_string(),
+                    q.strip(),
+                ),
+                ilike_contains(
+                    TemplateSuggestion.source_project_name, q.strip()
+                ),
+                ilike_contains(
+                    TemplateSuggestion.source_item_title, q.strip()
+                ),
+            )
+        )
+    key = page_cursor_key(cursor)
+    if key is not None:
+        statement = statement.where(
+            or_(
+                TemplateSuggestion.created_at < key[0],
+                and_(
+                    TemplateSuggestion.created_at == key[0],
+                    TemplateSuggestion.id < key[1],
+                ),
+            )
+        )
+    rows = db.scalars(
+        statement.order_by(
+            TemplateSuggestion.created_at.desc(), TemplateSuggestion.id.desc()
+        ).limit(limit + 1)
+    ).all()
+    page = rows[:limit]
+    return {
+        "items": _summaries(db, page),
+        "next_cursor": encode_page_cursor(page[-1].created_at, page[-1].id)
+        if len(rows) > limit
+        else None,
+    }
+
+
+def pending_count(db: Session) -> dict:
+    """TPL-AC40：依主件狀態計全部 PENDING，不使用任何清單條件。"""
+    _require_review(db)
+    return {
+        "pending_count": db.scalar(
+            select(func.count())
+            .select_from(TemplateSuggestion)
+            .where(TemplateSuggestion.status == "PENDING")
+        )
+    }
+
+
+def compare_revisions(
+    db: Session,
+    suggestion_id: UUID,
+    from_revision_id: UUID,
+    to_revision_id: UUID,
+) -> dict:
+    """TPL-AC36：只比較本件相鄰版本，按邏輯 ID 分辨增刪改與重排。"""
+    _require_review(db)
+    _visible(db, suggestion_id)
+    rows = {
+        r.id: r
+        for r in db.scalars(
+            select(TemplateSuggestionRevision).where(
+                TemplateSuggestionRevision.suggestion_id == suggestion_id,
+                TemplateSuggestionRevision.id.in_(
+                    [from_revision_id, to_revision_id]
+                ),
+            )
+        )
+    }
+    if from_revision_id not in rows or to_revision_id not in rows:
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    before, after = rows[from_revision_id], rows[to_revision_id]
+    if after.revision_no != before.revision_no + 1:
+        # API-R14：query 指定的版本錯誤不使用本文欄位路徑。
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    changes: list[dict] = []
+
+    def scalar_data(data, excluded):
+        return {k: v for k, v in data.items() if k not in excluded}
+
+    def change(kind, entity, identifier, old, new, parent=None):
+        changes.append(
+            {
+                "kind": kind,
+                "entity": entity,
+                "logical_id": identifier,
+                "parent_logical_id": parent,
+                "before": old,
+                "after": new,
+            }
+        )
+
+    def collection(old, new, entity, parent=None):
+        old_map = {r["logical_id"]: r for r in old}
+        new_map = {r["logical_id"]: r for r in new}
+        for identifier in sorted(old_map.keys() - new_map.keys()):
+            change(
+                "removed",
+                entity,
+                identifier,
+                old_map[identifier],
+                None,
+                parent,
+            )
+        for identifier in sorted(new_map.keys() - old_map.keys()):
+            change(
+                "added", entity, identifier, None, new_map[identifier], parent
+            )
+        common = old_map.keys() & new_map.keys()
+        old_order = [r["logical_id"] for r in old if r["logical_id"] in common]
+        new_order = [r["logical_id"] for r in new if r["logical_id"] in common]
+        if old_order != new_order:
+            change("reordered", entity, None, old_order, new_order, parent)
+        for identifier in sorted(common):
+            left, right = old_map[identifier], new_map[identifier]
+            excluded = {"measurement_fields", "sequence", "sort_order"}
+            a, b = scalar_data(left, excluded), scalar_data(right, excluded)
+            if a != b:
+                change("modified", entity, identifier, a, b, parent)
+            if entity == "inspection_point":
+                collection(
+                    left.get("measurement_fields", []),
+                    right.get("measurement_fields", []),
+                    "measurement_field",
+                    identifier,
+                )
+
+    a = scalar_data(before.content, {"inspection_points"})
+    b = scalar_data(after.content, {"inspection_points"})
+    if a != b:
+        change("modified", "item", None, a, b)
+    collection(
+        before.content.get("inspection_points", []),
+        after.content.get("inspection_points", []),
+        "inspection_point",
+    )
+
+    def version(r):
+        return {
+            "id": r.id,
+            "revision_no": r.revision_no,
+            "content": r.content,
+            "editor_id": r.created_by,
+            "created_at": format_utc(r.created_at),
+        }
+
+    return {
+        "from_revision": version(before),
+        "to_revision": version(after),
+        "changes": changes,
+    }
+
+
+def _review_target(db, suggestion_id, expected_revision_id, expected_status):
+    _require_review(db)
+    row = _visible(db, suggestion_id, lock=True)
+    _expected(row, expected_revision_id, expected_status)
+    _state(row, {"PENDING"})
+    return row
+
+
+def _finish_review(db, row, review, *, template_id=None):
+    # TPL-R35：先建立不可變審核，事件與狀態歷程均連回同一受審版本。
+    db.add(review)
+    db.flush()
+    actor = get_current_operator(db)
+    after = {
+        "status": review.decision,
+        "review_id": review.id,
+        "reviewed_revision_id": review.revision_id,
+        "reviewer_id": actor.id,
+    }
+    if review.decision == "RETURNED":
+        after["reason"] = review.reason
+        event_type = "template_suggestion.returned"
+    else:
+        after.update(
+            template_id=template_id,
+            category_id=review.target_category_id,
+            system_id=review.target_system_id,
+        )
+        event_type = "template_suggestion.approved"
+        row.approved_template_id = template_id
+    # 稽核入口會 flush；先把主件投影更新完整，避免中間狀態違反 CHECK。
+    row.status = review.decision
+    row.updated_by = actor.id
+    log = record_audit_event(
+        db,
+        event_type,
+        entity_id=row.id,
+        before={"status": "PENDING"},
+        after=after,
+        project_id=row.source_project_original_id,
+    )
+    db.add(
+        TemplateSuggestionTransition(
+            suggestion_id=row.id,
+            revision_id=review.revision_id,
+            from_status="PENDING",
+            to_status=review.decision,
+            review_id=review.id,
+            audit_log_id=log.id,
+            created_by=actor.id,
+            updated_by=actor.id,
+        )
+    )
+    db.flush()
+    return row
+
+
+def return_suggestion(
+    db: Session,
+    suggestion_id: UUID,
+    reason: str,
+    expected_revision_id: UUID,
+    expected_status: str,
+):
+    """TPL-R32：沿 T15 模型正規化原因，非法原因不留下審核或事件。"""
+    row = _review_target(
+        db, suggestion_id, expected_revision_id, expected_status
+    )
+    actor = get_current_operator(db)
+    review = TemplateSuggestionReview(
+        suggestion_id=row.id,
+        revision_id=row.current_revision_id,
+        decision="RETURNED",
+        reason=reason,
+        created_by=actor.id,
+        updated_by=actor.id,
+    )
+    if review.reason is None or not 1 <= len(review.reason) <= 1000:
+        raise _invalid("/reason")
+    return _finish_review(db, row, review)
+
+
+def _template_payload(content, system_id, sequence):
+    data = deepcopy(validate_content(content, complete=True))
+    for point in data["inspection_points"]:
+        point.pop("logical_id")
+        for field in point["measurement_fields"]:
+            field["client_id"] = field.pop("logical_id")
+            field.pop("sort_order", None)
+        if point["numeric_standard"] is not None:
+            numeric = point["numeric_standard"]
+            numeric["measurement_field_client_id"] = numeric.pop(
+                "measurement_field_logical_id"
+            )
+        for requirement in point["evidence_requirements"]:
+            for key in ("evidence_type", "required", "max_count"):
+                requirement.pop(key, None)
+    return TemplateBody.model_validate(
+        {
+            **data,
+            "system_id": system_id,
+            "sequence": sequence,
+        }
+    ).model_dump()
+
+
+def approve(
+    db: Session,
+    suggestion_id: UUID,
+    category_id: UUID,
+    system_id: UUID,
+    expected_revision_id: UUID,
+    expected_status: str,
+):
+    """TPL-R33：核准只使用受審快照，建庫與審核／兩筆稽核同交易。"""
+    row = _review_target(
+        db, suggestion_id, expected_revision_id, expected_status
+    )
+    # TPL-AC38：鎖目標系統序列化 max+1，亦防止配號後目的地被改刪。
+    category = db.scalar(
+        select(TemplateCategory)
+        .where(TemplateCategory.id == category_id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    )
+    system = db.scalar(
+        select(TemplateSystem)
+        .where(TemplateSystem.id == system_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if category is None or system is None:
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    if system.category_id != category.id:
+        raise _invalid("/system_id")
+    revision = db.get(TemplateSuggestionRevision, row.current_revision_id)
+    assert revision is not None
+    content = validate_content(revision.content, complete=True)
+    names = db.scalars(
+        select(TemplateItem.title).where(TemplateItem.system_id == system.id)
+    ).all()
+    if content["title"].strip().casefold() in {
+        name.strip().casefold() for name in names
+    }:
+        raise APIError(ErrorCode.TEMPLATE_NAME_CONFLICT, 409)
+    sequence = (
+        db.scalar(
+            select(func.max(TemplateItem.sequence)).where(
+                TemplateItem.system_id == system.id
+            )
+        )
+        or 0
+    ) + 1
+    if sequence > 32767:
+        raise _invalid("/system_id")
+    template = create_template(
+        db, _template_payload(content, system.id, sequence)
+    )
+    actor = get_current_operator(db)
+    review = TemplateSuggestionReview(
+        suggestion_id=row.id,
+        revision_id=revision.id,
+        decision="APPROVED",
+        approved_template_id=template.id,
+        approved_template_title=template.title,
+        target_category_id=category.id,
+        target_category_name=category.name,
+        target_system_id=system.id,
+        target_system_name=system.name,
+        created_by=actor.id,
+        updated_by=actor.id,
+    )
+    return _finish_review(db, row, review, template_id=template.id)

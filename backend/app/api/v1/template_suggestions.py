@@ -1,4 +1,4 @@
-"""TPL T16：提議人提出、修訂、重送、撤回與歷史查詢。"""
+"""TPL T16／T17：提議與管理審核的業務動作及不可變歷史查詢。"""
 
 from typing import Any, Literal
 from uuid import UUID
@@ -6,9 +6,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
+from app.api.v1.template_library import template_write_call
 from app.auth.access import (
     require_login_access,
     require_module_and_project_permission,
+    require_module_permission,
 )
 from app.auth.dependencies import get_db
 from app.services import template_suggestions as service
@@ -17,6 +19,9 @@ from app.template_structure import StrictBody
 router = APIRouter(tags=["template-suggestions"])
 _db: Any = Depends(get_db, scope="function")
 _login = Depends(require_login_access, scope="function")
+_review = Depends(
+    require_module_permission("template.manage"), scope="function"
+)
 # TPL-R29：僅初次提出由路徑專案宣告兩層權限；歷史可在失權後讀取。
 _create_access = Depends(
     require_module_and_project_permission(
@@ -74,6 +79,26 @@ def list_mine(
         status=status,
         source_project_id=source_project_id,
     )
+
+
+@router.get("/template-suggestions", dependencies=[_review])
+def list_review(
+    cursor: str | None = Query(default=None, max_length=512),
+    limit: int = Query(default=50, ge=1, le=100),
+    status: SuggestionStatus | None = "PENDING",
+    q: str | None = Query(default=None, max_length=256),
+    db: Session = _db,
+) -> dict:
+    """TPL-R34：跨專案管理清單，預設只列待審件。"""
+    return service.list_review(
+        db, cursor=cursor, limit=limit, status=status, q=q
+    )
+
+
+@router.get("/template-suggestions:pending-count", dependencies=[_review])
+def pending_count(db: Session = _db) -> dict:
+    """TPL-AC40：回全部待審主件數，不受搜尋／分頁影響。"""
+    return service.pending_count(db)
 
 
 @router.get("/template-suggestions/{suggestion_id}", dependencies=[_login])
@@ -141,3 +166,71 @@ def withdraw(
         db, suggestion_id, body.expected_revision_id, body.expected_status
     )
     return service.detail(db, row.id)
+
+
+class ReturnBody(ExpectedBody):
+    """TPL-R32：原因在模型正規化後才驗長度，保留合法的 1000 字。"""
+
+    reason: str
+
+
+class ApproveBody(ExpectedBody):
+    """TPL-R33：明選目的地，不接受未保存內容或冒用審核人。"""
+
+    category_id: UUID
+    system_id: UUID
+
+
+@router.get(
+    "/template-suggestions/{suggestion_id}/revisions:compare",
+    dependencies=[_review],
+)
+def compare_revisions(
+    suggestion_id: UUID,
+    from_revision_id: UUID,
+    to_revision_id: UUID,
+    db: Session = _db,
+) -> dict:
+    """TPL-AC36：限本件相鄰兩版，回完整版本與邏輯識別差異。"""
+    return service.compare_revisions(
+        db, suggestion_id, from_revision_id, to_revision_id
+    )
+
+
+@router.post(
+    "/template-suggestions/{suggestion_id}:return", dependencies=[_review]
+)
+def return_suggestion(
+    suggestion_id: UUID,
+    body: ReturnBody,
+    db: Session = _db,
+) -> dict:
+    """TPL-R33：待審件附原因退回，全部變更同交易。"""
+    row = service.return_suggestion(
+        db,
+        suggestion_id,
+        body.reason,
+        body.expected_revision_id,
+        body.expected_status,
+    )
+    return service.detail(db, row.id)
+
+
+@router.post(
+    "/template-suggestions/{suggestion_id}:approve", dependencies=[_review]
+)
+def approve(suggestion_id: UUID, body: ApproveBody, db: Session = _db) -> dict:
+    """TPL-R33：沿既有範本錯誤轉譯與建庫入口核准，不覆蓋正式範本。"""
+    row = template_write_call(
+        service.approve,
+        db,
+        suggestion_id,
+        body.category_id,
+        body.system_id,
+        body.expected_revision_id,
+        body.expected_status,
+    )
+    result = service.detail(db, row.id)
+    result["template_id"] = row.approved_template_id
+    result["reviewed_revision_id"] = row.current_revision_id
+    return result
