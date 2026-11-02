@@ -51,6 +51,8 @@ class Evidence(AuditMixin, TimestampedBase):
     )
     snapshot_revision: Mapped[int] = mapped_column(nullable=False)
     upload_key: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    # FEV-R07：來源供冪等指紋與後續內業衍生標示使用。
+    capture_source: Mapped[str | None] = mapped_column(String(8))
     # FEV-R07：T2 比對完整請求指紋，不能只比照片雜湊。
     request_fingerprint: Mapped[str] = mapped_column(
         String(64), nullable=False
@@ -64,6 +66,20 @@ class Evidence(AuditMixin, TimestampedBase):
     label_source: Mapped[dict] = mapped_column(
         JSON(none_as_null=True), nullable=False
     )
+    # FEV-R22：保留可完整重現 OFFICE 的設定與前三欄覆寫。
+    label_layer: Mapped[dict] = mapped_column(
+        JSON(none_as_null=True),
+        nullable=False,
+        default=lambda: {
+            "enabled": True,
+            "corner": "bottom_left",
+            "offset_x": 0,
+            "offset_y": 0,
+            "size": "medium",
+            "style": "dark",
+            "overrides": {},
+        },
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     deleted_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id")
@@ -73,6 +89,11 @@ class Evidence(AuditMixin, TimestampedBase):
 
     __table_args__ = (
         UniqueConstraint("task_id", "upload_key"),
+        CheckConstraint(
+            "capture_source IS NULL OR "
+            "capture_source IN ('camera', 'library')",
+            name="capture_source_valid",
+        ),
         ForeignKeyConstraint(
             ["task_id", "project_id"],
             ["inspection_tasks.id", "inspection_tasks.project_id"],

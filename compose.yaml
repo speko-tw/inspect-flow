@@ -48,6 +48,7 @@ services:
         host_ip: "${INSPECTFLOW_BIND_ADDRESS:-127.0.0.1}"
     environment:
       INSPECTFLOW_DATABASE_URL: sqlite:////data/inspectflow.db
+      INSPECTFLOW_EVIDENCE_STORAGE_ROOT: /uploads
       INSPECTFLOW_BASE_PATH: ${INSPECTFLOW_BASE_PATH:-}
       # YAML 續行不插入空白，讓巢狀插值保持完整並符合行寬限制。
       INSPECTFLOW_FORWARDED_ALLOW_IPS: "\

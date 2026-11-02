@@ -264,6 +264,38 @@ class ErrorCode(DescribedStrEnum):
         "inspection_plan.archived",
         "The inspection plan is archived.",
     )
+    EVIDENCE_FILE_TOO_LARGE = (
+        "evidence.file_too_large",
+        "The evidence image exceeds the configured size limit.",
+    )
+    EVIDENCE_INVALID_IMAGE = (
+        "evidence.invalid_image",
+        "The evidence image must be a valid JPEG within the pixel limit.",
+    )
+    EVIDENCE_SHA256_MISMATCH = (
+        "evidence.sha256_mismatch",
+        "The uploaded image does not match the supplied SHA-256 digest.",
+    )
+    EVIDENCE_INVALID_TARGET = (
+        "evidence.invalid_target",
+        "The selected item or points do not belong to this task snapshot.",
+    )
+    EVIDENCE_IDEMPOTENCY_CONFLICT = (
+        "evidence.idempotency_conflict",
+        "The idempotency key was already used for a different request.",
+    )
+    EVIDENCE_REQUIREMENT_CHANGED = (
+        "evidence.requirement_changed",
+        "The task requirement changed while the image was uploading.",
+    )
+    EVIDENCE_TASK_LOCKED = (
+        "evidence.task_locked",
+        "The task does not accept evidence uploads in its current state.",
+    )
+    EVIDENCE_PHOTO_DELETED = (
+        "evidence.photo_deleted",
+        "A deleted photo cannot be replayed with the same idempotency key.",
+    )
     INSPECTION_TASK_NOT_FOUND = (
         "inspection_task.not_found",
         "The inspection task was not found.",

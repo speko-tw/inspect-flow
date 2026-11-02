@@ -104,7 +104,7 @@
 - **提示與內業主動修改圖層的錯誤分支**：所有通用容納路徑的 `omitted_too_small` 均在內業詳情顯示「照片太小，標示未合成」；`fallback_small` 顯示實際以小尺寸合成。內業主動送出新的完整 `layer` 設定（正規化後相對保存設定有變動）時才不自動改大小；圖層啟用且各欄型別、列舉、數值範圍均合法，但幾何放不下，才回 422 `evidence.invalid_layer` 並保留原設定與兩版，提示改用小尺寸、放大裁切範圍或關閉圖層。未知鍵、型別錯誤、非法列舉或圖層數值超界一律為 `request.validation_failed`，不是幾何錯誤；此分界適用所有寫入。合法圖層在自動路徑放不下不得使用 `evidence.invalid_layer`。
 - 樣式：`dark` 半透明深底白字；`outline` 透明底白字加黑色描邊；`paper` 白底黑字。預設深底 alpha 0.66、線寬 1px、描邊 3px 為規格設計；以淺／深照片驗證可讀性。使用者關閉是每張照片的資料狀態，不限相容／測試用途。維運規則更新沿用每張的開關、位置、大小、樣式與覆寫，不自動重新開啟圖層。
 - 文字覆寫可空白（依原缺值規則顯示），`null`／移除覆寫回到來源；每欄上限 1000 字元，完整值不因影像省略而截斷。人員與時間不可在任何寫入端點修改。更正取代與改善照片仍依上述來源分支重新固定五欄，再套用圖層；普通內業更正前三欄只改覆寫。稽核與讀取的五欄具名為 `project_name`、`item_title`、`location`、`uploader_name`、`uploaded_at`；三個覆寫鍵依序對應前三欄，姓名／時間仍取來源。`uploaded_at` 保留 API-R09 UTC 原值，只有影像顯示時轉時區到分鐘。
-- 字型固定為隨後端打包的 Noto Sans CJK TC Regular，附上游授權；字型版本與繪製套件在實作時固定並寫入規則摘要。不得以作業系統 fallback 偷換字型；字型缺少字形時，以替代符號 `?`（U+003F）繪製該字，並寫應用程式 WARNING 警示紀錄，至少含 Evidence ID、字型版本及缺字 Unicode 碼位（例如 U+0378），不記整段人名或內容。**不得因缺字讓上傳失敗**；圖片與交易照常完成。替代符號、碼位記錄與不阻斷理由為規格設計：標示字型涵蓋不足不能阻擋現場保存證據；警示供後續補齊字型，不新增業務稽核事件。字型分發來源見[上游專案](https://github.com/notofonts/noto-cjk)，規格不在本單加入字型檔。
+- 字型固定為隨後端打包的 Noto Sans TC（上游繁中區域版）Regular，附上游授權；字型版本與繪製套件在實作時固定並寫入規則摘要。不得以作業系統 fallback 偷換字型；字型缺少字形時，以替代符號 `?`（U+003F）繪製該字，並寫應用程式 WARNING 警示紀錄，至少含 Evidence ID、字型版本及缺字 Unicode 碼位（例如 U+0378），不記整段人名或內容。**不得因缺字讓上傳失敗**；圖片與交易照常完成。替代符號、碼位記錄與不阻斷理由為規格設計：標示字型涵蓋不足不能阻擋現場保存證據；警示供後續補齊字型，不新增業務稽核事件。字型分發來源見[上游專案](https://github.com/notofonts/noto-cjk)，規格不在本單加入字型檔。
 - 圖層永遠在影像編修後最後合成，不被裁切工具直接切掉；關閉只影響合成，不刪五欄資料。不加檢驗現況、實測值、公司名稱或項次編號。圖層可能遮住照片，位置／大小供內業調整；不再承諾「不遮照片」。
 
 ## 資料
@@ -177,7 +177,7 @@
 **錯誤**（遵守 [API-R07](../api-conventions/spec.md#需求)；以條列呈現，不另設錯誤碼對照表，錯誤碼的唯一清單是程式內的 `ErrorCode`）：
 
 - 413 `evidence.file_too_large`：超過單檔上限
-- 422 `evidence.invalid_image`：不是可解碼的 JPEG、超過解碼像素上限，`error.details.reason` 區分
+- 422 `evidence.invalid_image`：不是可解碼的 JPEG、超過解碼像素上限，`error.details` 為字串陣列，第一項 `error.details[0]` 以 `format`／`pixels`／`decode` 區分
 - 422 `evidence.sha256_mismatch`：請求雜湊與收到的內容不符（常見於傳輸中斷）
 - 422 `evidence.invalid_target`：項目不屬於該 Task、項次不屬於該項目、非總覽未帶項次、總覽帶了項次
 - 422 `evidence.invalid_edit`：編修參數超出範圍
@@ -188,7 +188,7 @@
 - 409 `evidence.photo_deleted`：以已被刪除照片的冪等鍵重放
 - 409 `evidence.task_locked`：Task 狀態不允許此動作（見狀態矩陣）
 - 409 `inspection_plan.archived`：所屬 Plan 已封存
-- 409 `evidence.photo_locked`：照片本身不允許刪除或編修：已作廢、已被核發報告引用或已刪除，`error.details.reason` 為 `voided`、`referenced_by_report`、`deleted`；Task 已完成、已取消或封存 Plan 不用此碼（見檢查順序）
+- 409 `evidence.photo_locked`：照片本身不允許刪除或編修：已作廢、已被核發報告引用或已刪除，`error.details[0]` 為 `voided`、`referenced_by_report`、`deleted`；Task 已完成、已取消或封存 Plan 不用此碼（見檢查順序）
 - 403 `permission.denied`：缺少所需專案權限或不是拍照者
 - 404 `resource.not_found`：Task 或照片不存在、`DRAFT` 對現場隱藏、照片不屬於該 Task
 
@@ -251,7 +251,7 @@
 | FEV-AC12 | Task 分別為 `DRAFT`、`PENDING`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`，及 Plan 封存（含封存且 Task 已完成的組合） | 現場上傳、修改、刪除；內業編修內業版；讀取 | 依[檢查順序](#檢查順序)：`DRAFT` 對現場回 404；封存 Plan 回 409 與共用的封存錯誤碼（優先於 Task 狀態，見錯誤清單）；`PENDING`、`COMPLETED`、`CANCELLED` 的現場寫入（含 `COMPLETED` 的刪除）回 409 `evidence.task_locked`；內業版編修在 `IN_PROGRESS`、`COMPLETED` 成功，其餘拒絕；各狀態的讀取皆可；這些情境都不回 `evidence.photo_locked`；被拒絕時資料不變 | FEV-R09 |
 | FEV-AC13 | 專案成員 U1 具 `inspection_task.inspect`、U2 只有 `inspection_task.read`、U3 為非成員、內業 U4 具 `evidence.read` 與 `evidence.manage`、檢視者 U5 只有 `evidence.read`、Admin、U7（專案角色含 `inspection_task.inspect`，但沒有查核模組「可使用」）| 各自呼叫上傳、現場讀取、內業讀取、內業版圖片、編修、刪除他人照片 | U1 可上傳與現場讀取，只能取得現場版圖片；U2、U3 在一般端點回 403 與共用的權限不足錯誤碼，在 `/field/` 端點與 `DRAFT` 情境依 [FUI-R06](../field-ui/spec.md#需求) 回 404；U4 可讀兩版、編修、刪除他人照片；U5 可讀兩版但不能編修或刪除；Admin 全部放行；U7 一律回 403（兩層都要通過）；任何回應都不含儲存鍵；圖片只能經登入後的 API 取得，沒有公開網址 | FEV-R12、R13 |
 | FEV-AC14 | 照片由 U1 上傳；同專案另一位具 `inspection_task.inspect` 的 U6；`IN_PROGRESS` Task | U6 修改或刪除 U1 的照片；U1 修改註記與刪除；內業 U4 刪除 | U6 回 403；U1 成功修改註記與對應；U1 與 U4 的刪除成功且為軟刪除：資料庫與檔案保留、寫入 `evidence.photo_deleted` 稽核事件、不計入覆蓋數與現場清單、內業以 `deleted=true` 仍可查到 | FEV-R10、R12、R14 |
-| FEV-AC15 | `IN_PROGRESS` Task 內的照片分別為：已標作廢、已被（測試替身註冊的）核發報告引用、已刪除 | 嘗試刪除與現場修改；對已作廢與已刪除者嘗試內業版編修 | 皆回 409 `evidence.photo_locked`，`error.details.reason` 依序為 `voided`、`referenced_by_report`、`deleted`；資料與檔案不變；「任務已完成」不屬此碼，回 `evidence.task_locked`（見 FEV-AC12）；引用檢查未註冊時視為未被引用 | FEV-R10、R11 |
+| FEV-AC15 | `IN_PROGRESS` Task 內的照片分別為：已標作廢、已被（測試替身註冊的）核發報告引用、已刪除 | 嘗試刪除與現場修改；對已作廢與已刪除者嘗試內業版編修 | 皆回 409 `evidence.photo_locked`，`error.details[0]` 依序為 `voided`、`referenced_by_report`、`deleted`；資料與檔案不變；「任務已完成」不屬此碼，回 `evidence.task_locked`（見 FEV-AC12）；引用檢查未註冊時視為未被引用 | FEV-R10、R11 |
 | FEV-AC16 | 專案查核項目 X 被已派出 Task 使用，X 的項次已有照片、任務尚無結果，另一項目 Y 也有照片 | 內業修改 X 並選「要」重新查核 | 同一交易內 X 的全部照片（含總覽）標示 `STANDARD_CHANGED` 作廢並保留檔案；X 標待重查；不計入覆蓋數；現場清單看不到；內業可用 `voided=true` 找到並看到作廢標示、能檢視兩版但不能編修或刪除；Y 的照片不變；請求中途失敗時作廢與項目修改一併回滾；作廢對象是被修改的項目，不是整個 Task | FEV-R11 |
 | FEV-AC17 | 專案查核項目 X 的已有照片；PATCH 的點位帶 `id` | 內業修改 X 的文字、調整項次順序並選「不要」重新查核；另送增減項次或實測欄位集合的請求 | 照片、對應與覆蓋數不變，原照片仍對應同一項次；增減項次或改實測欄位集合的請求回 422 並提示改選「要」，資料不變（[IP-R13](../inspection-planning/spec.md#需求)，後端以真實 PATCH 驗證）；選「要」時被刪除的點位連同項目一併作廢，其照片作廢 | FEV-R04、R11 |
 | FEV-AC18 | 任務被取消後恢復 | 取消前後檢視照片 | 取消期間照片保留、內業可讀、一律唯讀；恢復至取消前狀態後現場又可寫入 | FEV-R09 |
@@ -302,7 +302,7 @@
 | D17 | 畫面配置、文案與互動細節 | 實作前依原型關卡由負責人核可後定案 |
 | D18 | 檢查順序固定為權限、可見性、冪等重放、Plan 封存、Task 狀態、需求變更、照片層級、欄位驗證；`evidence.photo_locked` 只用於照片本身的狀態 | 避免同一情境出現兩種錯誤碼，前端只需對應一種說明 |
 | D19 | 上傳與作廢以鎖定 Task 項目明細並重驗快照修訂處理並行 | 避免上傳與重查交錯後留下指向舊需求的有效照片 |
-| D20 | 固定Noto Sans CJK TC Regular、字型／規則版本、時區、14px下限與缺字?／碼位警示；短邊比例、三樣式、兩行省略及完整文字另存 | 隨後端打包且固定版本可避免主機fallback差異，配合確定性輸入與編碼提供逐位元重現；完整值另存保留可追溯性，缺字不擋上傳，幾何困難按通用容納／主動新圖層分支處理 |
+| D20 | 固定Noto Sans TC（上游繁中區域版）Regular、字型／規則版本、時區、14px下限與缺字?／碼位警示；短邊比例、三樣式、兩行省略及完整文字另存 | 隨後端打包且固定版本可避免主機fallback差異，配合確定性輸入與編碼提供逐位元重現；完整值另存保留可追溯性，缺字不擋上傳，幾何困難按通用容納／主動新圖層分支處理 |
 | D21 | 標示規則改變後的重新產生由維運指令觸發（不在 HTTP 請求中執行，操作者依 [AUT-R09](../authentication/spec.md#需求) 記為內建 `admin`）；每張寫既有的 `evidence.office_version_edited` 事件，內容記錄原因（標示規則變更）與規則摘要；已作廢、已刪除、取消中 Task、封存 Plan 下的照片，以及被核發報告引用的照片都不重新產生；合法圖層容納不足依通用規則改試 small，仍不足保存但暫不合成並提示，沿用原設定／基準，不因幾何中止重產 | 規則變更不常發生，指令比畫面入口單純；沿用既有事件不新增代碼；不改動唯讀或鎖定中的照片 |
 | D22 | 非即時拍攝門檻為絕對時間差 >600 秒，恰好 600 秒不觸發；library／時間空值另各自觸發。門檻試用後可調。DateTimeOriginal 有原檔時區偏移則據此轉 UTC，無偏移時依目前裝置時區解讀；無法解析為空。相簿優先顯示相簿匯入，其餘真值顯示非即時拍攝。 | 來源與時間屬用戶端回報，不是防弊證明；只做內業提示，不影響上傳接受或 #588 檢驗時間。依負責人裁定，精確門檻／時區回退為規格設計 |
 
@@ -380,3 +380,7 @@
 - 範圍變更（負責人裁定，#795）：即拍為主、可用相簿並在內業標示；0.6.x 維持線上，離線下一版另案 #811。依據：[照片來源與離線裁定](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6542925874)。
 
 - 規格設計（非負責人裁定，試用後可調）：R26～R27、AC38～AC39 採必填 `capture_source` 與冪等指紋、壓縮前最小讀取 EXIF `DateTimeOriginal`（不保存 EXIF）、空時間或絕對差超過 10 分鐘的內業標示；上傳中也提示離頁，站內頁內確認與 `beforeunload` 分流。移除原 `captured_at` 晚於伺服器超過 5 分鐘回 422 的限制，是為了不因手機時鐘差異阻擋現場上傳，改由 R27 提示；格式錯誤仍回 422，#588 標示板檢驗時間仍為該次伺服器上傳時間。首次／更正／改善均使用該次來源與時間；新 FIELD 與同 FIELD 尺寸基準、預選尺寸與只開面板不寫回的驗收同步補齊。
+
+- 規格澄清（#791）：錯誤原因沿用 APIError 的字串陣列 details，原因位於 `error.details[0]`，不另設 reason 物件；不改錯誤碼、HTTP 狀態或檢查順序。
+
+- 規格澄清（負責人裁定，#791）：工程標示改用上游未修改的 Noto Sans TC 繁中區域版 Regular（Sans2.004），取代完整 CJK TC 字庫；字型與 OFL、來源／SHA-256 一起打包。罕用姓名字及簡體／日文專有字形若不在字庫內，仍以 `?` 替代並記缺字 Unicode 碼位警示，不阻斷上傳，完整來源文字保留；不啟用系統 fallback，不改既有缺字／隱私規則。

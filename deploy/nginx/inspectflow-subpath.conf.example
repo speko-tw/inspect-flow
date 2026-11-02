@@ -9,8 +9,8 @@ server {
     server_name inspectflow.example.internal;
     ssl_certificate /etc/nginx/tls/inspectflow-fullchain.pem;
     ssl_certificate_key /etc/nginx/tls/inspectflow-key.pem;
-    # 目前照片 API 尚未完成；先預留 25 MiB，日後依 API 上限調整。
-    client_max_body_size 25m;
+    # 比後端照片單檔 30 MiB 多留 multipart 欄位與標頭空間。
+    client_max_body_size 32m;
     # 相對 Location 保留外部連線的非預設 port。
     absolute_redirect off;
     location = /inspectflow { return 308 /inspectflow/; }
