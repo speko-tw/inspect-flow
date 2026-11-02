@@ -4,6 +4,7 @@ import hashlib
 import io
 import logging
 from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import uuid4
 
 from PIL import Image
@@ -269,13 +270,13 @@ def test_regional_font_covers_common_and_uncommon_name_characters():
     assert hashlib.sha256(path.read_bytes()).hexdigest() == (
         "5bab0cb3c1cf89dde07c4a95a4054b195afbcfe784d69d75c340780712237537"
     )
-    missing = bytes(font.getmask("\u0378"))
+    missing = bytes(cast(Any, font.getmask("\u0378")))
     names = (
         "陳林張吳黃李王劉蔡楊許鄭謝郭洪邱曾廖賴徐周"
         "葉蘇蕭羅龔鍾堃喆璿𡘙祐翊璟瑋琮"
     )
     for char in names:
-        assert bytes(font.getmask(char)) != missing, char
+        assert bytes(cast(Any, font.getmask(char))) != missing, char
 
 
 def test_regional_missing_glyphs_render_question_marks_without_failure(caplog):
