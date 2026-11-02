@@ -30,6 +30,9 @@ from app.api.v1.template_library import (
     system_router,
     template_router,
 )
+from app.api.v1.template_suggestions import (
+    router as template_suggestions_router,
+)
 from app.api.v1.users import (
     admin_router as admin_users_router,
 )
@@ -100,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(category_router, prefix="/api/v1")
     app.include_router(system_router, prefix="/api/v1")
     app.include_router(template_router, prefix="/api/v1")
+    app.include_router(template_suggestions_router, prefix="/api/v1")
     mount_frontend(app)
     return app
 

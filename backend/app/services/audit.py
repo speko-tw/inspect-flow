@@ -1251,3 +1251,51 @@ register_audit_event(
     fields=("source_type", "source_id", "source_name", "item_count"),
     project_scoped=True,
 )
+
+
+# TPL-R35、ALG-R24：五種事件一次登記，T17 僅接續寫審核事件。
+for _suggestion_event, _suggestion_fields in (
+    ("revised", ("revision_id", "content_sha256")),
+    (
+        "submitted",
+        (
+            "proposer_id",
+            "source_project_id",
+            "source_item_id",
+            "revision_id",
+            "content_sha256",
+            "status",
+        ),
+    ),
+    (
+        "returned",
+        (
+            "status",
+            "review_id",
+            "reviewed_revision_id",
+            "reviewer_id",
+            "reason",
+        ),
+    ),
+    (
+        "approved",
+        (
+            "status",
+            "review_id",
+            "reviewed_revision_id",
+            "reviewer_id",
+            "template_id",
+            "category_id",
+            "system_id",
+        ),
+    ),
+    ("withdrawn", ("status",)),
+):
+    register_audit_event(
+        f"template_suggestion.{_suggestion_event}",
+        entity_type="template_suggestion",
+        kind=AuditEventKind.UPDATED,
+        fields=_suggestion_fields,
+        before_optional=_suggestion_event == "submitted",
+        project_scoped=True,
+    )

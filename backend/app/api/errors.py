@@ -369,6 +369,15 @@ class ErrorCode(DescribedStrEnum):
         "The system still contains template items.",
     )
 
+    TEMPLATE_SUGGESTION_CHANGED = (
+        "template_suggestion.changed",
+        "The suggestion status or current revision has changed.",
+    )
+    TEMPLATE_SUGGESTION_INVALID_STATE = (
+        "template_suggestion.invalid_state",
+        "The action is not allowed in the current suggestion state.",
+    )
+
 
 class FieldErrorCode(DescribedStrEnum):
     """Stable codes for request-body field errors (API-R12)."""
