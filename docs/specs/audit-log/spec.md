@@ -243,6 +243,20 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 
 `inspection_task.location_updated` 的 `zone_id` 與 `location_text` 可為空值，以表達移除分區或補充文字。`inspection_task.items_updated` 的 `items` 用 `{項目 ID: 名稱}` 對照而非陣列，因為 ALG-R10 會把陣列排序，元素為物件時無法比較；對照表同時保留 ID 與名稱且不依賴順序。Task 刪除、取消、恢復、地點修改、名稱修改、草稿 Task 查核項目替換及專案查核項目修改、刪除、停用與恢復事件，均須與對應資料變更在同一交易內寫入；草稿 Task 查核項目替換失敗或回滾時不留事件。`project_inspection_item.updated` 每次都記錄重新查核選擇；未改變的標準文字欄位不重複記錄。
 
+<a id="field-evidence-事件"></a>
+## `field-evidence` 照片圖層事件
+
+由 [FEV-R24／AC36](../field-evidence/spec.md#需求) 的 T5 實作驗收；目錄登記不宣稱產品事件已實作。其餘三個照片事件 `evidence.photo_deleted`、`evidence.photo_updated`、`evidence.office_version_edited` 由 T5 在本事件區登記，寫入時機沿用 FEV-R14。
+
+| 事件代碼 | 什麼時候寫 | `entity_type`／`entity_id` | 標記 | `before` | `after` |
+|---|---|---|---|---|---|
+| `evidence.layer_updated` | 實際圖層顯示設定或三欄覆寫變動時；無變動不寫 | `evidence`／照片 UUID | `project_scoped`；`project_id` 取照片所屬專案 | `layer: {enabled, corner, offset_x, offset_y, size, style, overrides: {project_name, item_name, inspection_location}}`；`labels: {project_name, item_title, location, uploader_name, uploaded_at}`，保存修改前完整值 | 同名 `layer` 與 `labels`，保存修改後完整值 |
+
+- 依 ALG-R09 的事件欄位例外，實際圖層異動事件的 `before`／`after` **一律記錄**完整 `layer`（含三欄覆寫）與解析後五欄 `labels`，即使其中個別欄位未改也保留，不只記影像顯示文字或取整後數值。未覆寫的鍵依 FEV 契約省略，明確空字串保留；不改來源快照，姓名／時間不可覆寫。
+- `labels.uploaded_at` **必須**是原始 UTC ISO 8601 時間（舊資料無來源為 `null`），遵守 API-R09，**不得**存照片上的時區／分鐘顯示字串。事件時間沿用 `AuditLog.created_at`，照片詳情的 `occurred_at` 亦回 UTC；操作者及寫入當下身分快照沿用共用入口與 ALG-R29。
+- 與圖層資料及 OFFICE 重產同一交易；失敗回滾。既有 `evidence.office_version_edited` 每次套用仍寫入，不因 layer 無變動而省略。依 ALG-R24 必填 `project_id`。
+- 專案內照片詳情可按 FEV 的 evidence.read 權限回傳此照片的圖層歷程，含非 Admin；這不放寬 ALG-R22 的 Admin 全域稽核查詢。詳情 API 的分頁與照片／Task／專案隔離由 FEV 規格定義。
+
 <a id="authentication-事件"></a>
 ## `authentication` 事件
 
@@ -421,3 +435,7 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 - 範圍變更跟進（負責人既有裁定，#314）：在 template-system 事件目錄增列五種建議／審核專屬事件，核准串接既有 template_item.created；沿用共用同交易與回滾規則，驗收由 TPL-AC39、AC42 承接，未新增跨模組慣例。依據：[版本與審核留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)。
 
 - 第 2 輪 #314 審查修正：建立即送審、移除 created；五種建議事件補 entity_type／project_scoped 與 ALG-R24 分類理由，revised／submitted 只列變更；既有 template_item.created 形狀與空 project_id 保持不變，關聯只記 approved。依據：[負責人版本留存裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)及本輪定案。
+
+- 範圍變更（負責人裁定，#795）：登記照片圖層實際變更事件與完整前後值，同交易與權限沿用既有規則。[負責人裁定 #795](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540663667)、[現場簡化追加](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6540746073)。
+
+- 規格澄清（#795）：照片圖層事件移至事件區；具名完整 layer／labels 一律記錄、檢驗時間保存 UTC；其餘三事件由 T5 登記，專案內照片歷程與 Admin 全域查詢分開。依據：[#795 審查決定](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6541659296)。
