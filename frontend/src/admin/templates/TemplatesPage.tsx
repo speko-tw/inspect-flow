@@ -23,6 +23,7 @@ import { managementErrorMessage } from '../api'
 import { InspectionPointCard } from './InspectionPointCard'
 import { TemplateItemEditor } from './TemplateItemEditor'
 import { validateItemFields } from './itemFieldValidation'
+import { PendingSuggestionsLink } from './suggestions'
 import { TemplateLibraryNav } from './TemplateLibraryNav'
 import {
   blankPoint,
@@ -1295,6 +1296,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
             從專案存為範本
           </Link>
         )}
+        {canManage && <PendingSuggestionsLink />}
       </header>
       {wizardNotice && (
         <p className="notice-success" role="status">
