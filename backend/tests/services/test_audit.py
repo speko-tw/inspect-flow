@@ -327,6 +327,11 @@ def test_project_scoped_catalog_covers_all_project_event_families():
         "project_inspection_item.deactivated",
         "project_inspection_item.reactivated",
         "template_item.created_from_project",
+        "template_suggestion.revised",
+        "template_suggestion.submitted",
+        "template_suggestion.returned",
+        "template_suggestion.approved",
+        "template_suggestion.withdrawn",
     }
     project_entities = {
         "project",
@@ -334,6 +339,7 @@ def test_project_scoped_catalog_covers_all_project_event_families():
         "project_zone",
         "inspection_task",
         "project_inspection_item",
+        "template_suggestion",
     }
     actual = {
         event_type
