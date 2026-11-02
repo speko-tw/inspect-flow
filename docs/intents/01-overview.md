@@ -150,7 +150,7 @@ Distributed Transaction          完整 Offline Sync Engine
 離線模式 / 完整 Offline Sync              NCR / 缺失（Defect）追蹤
 QR Code 掃描                             Re-inspection（複查）
 GPS                                      Approval Workflow（簽核流程）
-EXIF                                     Push Notification
+EXIF 完整解析／保存                       Push Notification
 數位簽章 / Electronic Approval            Audit Trail（完整事件記錄）
 Voice Note（語音備註）                    WBS 整合
 文件上傳                                  Drawing Linkage（圖說關聯）
@@ -308,3 +308,5 @@ flowchart TB
 - 每一張圖背後的規則與理由，見 [02-principles.md](02-principles.md)；決策與技術棧見 [03-decisions-and-stack.md](03-decisions-and-stack.md)。
 - 名詞定義見 [04-glossary.md](04-glossary.md)。
 - 遇到看似未定案或前後矛盾的地方，先查 [05-open-questions.md](05-open-questions.md)，不要把自己的假設 當成定案。
+
+照片在 0.6.x **得**於壓縮前只讀取拍攝時間，原 EXIF **不得**保存；完整解析與保存 EXIF 仍為延後能力（依據：架構基準 §35；[負責人照片來源裁定](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6542925874)）。
