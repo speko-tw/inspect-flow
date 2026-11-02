@@ -1000,7 +1000,9 @@ def compare_revisions(
             change("reordered", entity, None, old_order, new_order, parent)
         for identifier in sorted(common):
             left, right = old_map[identifier], new_map[identifier]
-            excluded = {"measurement_fields", "sequence", "sort_order"}
+            # TPL-AC36：項次實際順序由 sequence 決定；陣列未搬動
+            # 時仍須保留前後序號，避免核准後順序已改但比較沒有差異。
+            excluded = {"measurement_fields", "sort_order"}
             a, b = scalar_data(left, excluded), scalar_data(right, excluded)
             if a != b:
                 change("modified", entity, identifier, a, b, parent)

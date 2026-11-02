@@ -874,3 +874,49 @@ def test_ac38_parallel_distinct_suggestions_allocate_system_sequence(
     ).all()
     assert sequences == [1, 2]
     assert _template_count(db_session) == 2
+
+
+def test_ac36_compare_sequence_only_reordering(review_world):
+    """TPL-AC36：陣列位置不變的合法序號變更也必須顯示差異。"""
+    w = review_world
+    first = _create(w)
+    content = deepcopy(first["content"])
+    points = content["inspection_points"]
+    points[0]["sequence"], points[1]["sequence"] = (
+        points[1]["sequence"],
+        points[0]["sequence"],
+    )
+    response = _revise(w, first, content)
+    assert response.status_code == 201, response.text
+    second = response.json()
+    original_points = first["content"]["inspection_points"]
+    revised_points = second["content"]["inspection_points"]
+    assert [p["logical_id"] for p in revised_points] == [
+        p["logical_id"] for p in original_points
+    ]
+    result = _compare(
+        w, second, first["current_revision_id"], second["current_revision_id"]
+    )
+    assert result.status_code == 200, result.text
+    compared = result.json()
+    assert compared["from_revision"]["content"] == first["content"]
+    assert compared["to_revision"]["content"] == second["content"]
+    changes = compared["changes"]
+    assert len(changes) == 2
+    by_id = {c["logical_id"]: c for c in changes}
+    for before, after in zip(original_points, revised_points, strict=True):
+        change = by_id[before["logical_id"]]
+        assert change["entity"] == "inspection_point"
+        assert change["kind"] == "modified"
+        assert change["before"]["sequence"] == before["sequence"]
+        assert change["after"]["sequence"] == after["sequence"]
+        assert before["sequence"] != after["sequence"]
+    approved = _approve(w, second)
+    assert approved.status_code == 200, approved.text
+    template = w["clients"]["manager"].get(
+        "/api/v1/templates/" + approved.json()["template_id"]
+    )
+    assert template.status_code == 200, template.text
+    assert [p["title"] for p in template.json()["inspection_points"]] == [
+        p["title"] for p in reversed(original_points)
+    ]
