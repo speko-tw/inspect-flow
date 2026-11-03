@@ -1,15 +1,20 @@
 """FEV-R12、R13：登入後的照片查詢與兩版本圖片串流。"""
 
+import logging
 from collections.abc import Iterator
+from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Literal
+from typing import Any, BinaryIO, Literal
 from uuid import UUID
 
+from anyio import CapacityLimiter, to_thread
+from anyio.lowlevel import RunVar
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response, StreamingResponse
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.errors import APIError, ErrorCode
 from app.auth.access import require_login_access
@@ -23,11 +28,15 @@ from app.services.evidence_queries import (
 )
 from app.services.permissions import calculate_effective_access
 from app.storage import LocalStorage, get_storage_settings
+from app.storage.settings import StorageSettings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["evidence"])
 _db: Any = Depends(get_db, scope="function")
 _login: Any = Depends(require_login_access, scope="function")
 _limit: Any = Query(default=50, ge=1, le=100)
+# Query 會保存參數 alias；歷程使用不同名稱，不能共用同一實例。
+_history_limit: Any = Query(default=50, ge=1, le=100)
 _edge: Any = Query(default=None, ge=64, le=4096)
 
 
@@ -154,7 +163,7 @@ def get_photo_detail(
     task_id: UUID,
     photo_id: UUID,
     layer_history_cursor: str | None = None,
-    layer_history_limit: int = _limit,
+    layer_history_limit: int = _history_limit,
     db: Session = _db,
     user: User = _login,
 ) -> dict:
@@ -170,8 +179,109 @@ def get_photo_detail(
     return data
 
 
+@dataclass(frozen=True)
+class _PreparedImage:
+    """只保留檔案與尺寸值，排隊及縮圖不攜帶 ORM 或資料庫連線。"""
+
+    source: BinaryIO
+    width: int
+    height: int
+    byte_size: int
+
+
+_thumbnail_limiters: RunVar[dict[int, CapacityLimiter]] = RunVar(
+    "evidence_thumbnail_limiters"
+)
+
+
+def _thumbnail_limiter(limit: int) -> CapacityLimiter:
+    """依 plan.md:53 隔離縮圖名額；等待者不占用預設 worker。"""
+    # 與 T2 同樣延遲建立，避免跨 TestClient／事件迴圈共用喚醒狀態。
+    try:
+        limiters = _thumbnail_limiters.get()
+    except LookupError:
+        limiters = {}
+        _thumbnail_limiters.set(limiters)
+    if limit not in limiters:
+        limiters[limit] = CapacityLimiter(limit)
+    return limiters[limit]
+
+
+def _prepare_image(
+    db: Session,
+    task_id: UUID,
+    photo_id: UUID,
+    user: User,
+    variant: str,
+    settings: StorageSettings,
+) -> _PreparedImage:
+    task, office = _read_access(db, task_id, user, variant=variant)
+    _photo(db, task, photo_id, office=office)
+    storage = LocalStorage(settings.root)
+    for attempt in range(2):
+        version = db.scalar(
+            select(EvidenceVariant)
+            .where(
+                EvidenceVariant.evidence_id == photo_id,
+                EvidenceVariant.variant_type == variant.upper(),
+            )
+            .execution_options(populate_existing=True)
+        )
+        if version is None:
+            logger.warning(
+                "Evidence image unavailable: evidence_id=%s", photo_id
+            )
+            raise _not_found()
+        key = version.storage_key
+        width, height, byte_size = (
+            version.width,
+            version.height,
+            version.byte_size,
+        )
+        # plan.md:53／FEV-R17：先提交登入 touch 並釋放連線，才讀檔／等名額。
+        db.commit()
+        try:
+            source = storage.open(key)
+            return _PreparedImage(source, width, height, byte_size)
+        except FileNotFoundError:
+            # FEV-R17：T4 可已切換新鍵並刪舊檔，換新交易重讀一次。
+            if attempt == 0:
+                continue
+            logger.warning(
+                "Evidence image unavailable: evidence_id=%s", photo_id
+            )
+            raise _not_found() from None
+    raise AssertionError("unreachable image retry")
+
+
+def _thumbnail(image: _PreparedImage, max_edge: int, max_pixels: int) -> bytes:
+    """FEV-R01、R17：解碼前覆核像素，縮圖只留記憶體且不改原檔。"""
+    try:
+        with Image.open(image.source) as decoded:
+            if decoded.width * decoded.height > max_pixels:
+                raise APIError(
+                    ErrorCode.EVIDENCE_INVALID_IMAGE, 422, details=["pixels"]
+                )
+            if decoded.format != "JPEG":
+                raise APIError(
+                    ErrorCode.EVIDENCE_INVALID_IMAGE, 422, details=["format"]
+                )
+            decoded.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+            output = BytesIO()
+            decoded.convert("RGB").save(output, "JPEG", quality=90)
+            return output.getvalue()
+    except Image.DecompressionBombError as exc:
+        raise APIError(
+            ErrorCode.EVIDENCE_INVALID_IMAGE, 422, details=["pixels"]
+        ) from exc
+    except (OSError, UnidentifiedImageError) as exc:
+        raise APIError(
+            ErrorCode.EVIDENCE_INVALID_IMAGE, 422, details=["decode"]
+        ) from exc
+
+
 @router.get("/inspection-tasks/{task_id}/photos/{photo_id}/image")
-def get_photo_image(
+async def get_photo_image(
     task_id: UUID,
     photo_id: UUID,
     variant: Literal["field", "office"] = "field",
@@ -179,41 +289,33 @@ def get_photo_image(
     db: Session = _db,
     user: User = _login,
 ) -> Response:
-    """FEV-R01、R13：授權後串流或即時縮圖，不新增儲存版本。"""
-    task, office = _read_access(db, task_id, user, variant=variant)
-    photo = _photo(db, task, photo_id, office=office)
-    version = db.scalar(
-        select(EvidenceVariant).where(
-            EvidenceVariant.evidence_id == photo.id,
-            EvidenceVariant.variant_type == variant.upper(),
-        )
+    """FEV-R01、R13、R17：授權後限流即時縮圖，原尺寸走登入串流。"""
+    settings = get_storage_settings()
+    image = await run_in_threadpool(
+        _prepare_image, db, task_id, photo_id, user, variant, settings
     )
-    if version is None:
-        raise _not_found()
-    storage = LocalStorage(get_storage_settings().root)
-    try:
-        source = storage.open(version.storage_key)
-    except FileNotFoundError as exc:
-        raise _not_found() from exc
     headers = {
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
     }
-    if max_edge is not None and max_edge < max(version.width, version.height):
-        with source, Image.open(source) as image:
-            image.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
-            output = BytesIO()
-            image.convert("RGB").save(output, "JPEG", quality=90)
-        return Response(
-            output.getvalue(), media_type="image/jpeg", headers=headers
-        )
-    headers["Content-Length"] = str(version.byte_size)
-    headers["ETag"] = f'"{version.sha256}"'
+    if max_edge is not None and max_edge < max(image.width, image.height):
+        try:
+            content = await to_thread.run_sync(
+                _thumbnail,
+                image,
+                max_edge,
+                settings.max_decode_pixels,
+                limiter=_thumbnail_limiter(settings.max_concurrent_uploads),
+            )
+            return Response(content, media_type="image/jpeg", headers=headers)
+        finally:
+            image.source.close()
+    headers["Content-Length"] = str(image.byte_size)
 
     def chunks() -> Iterator[bytes]:
-        # scope=function 的資料庫連線在開始串流前釋放（FEV-R21）。
-        with source:
-            while chunk := source.read(65536):
+        # FEV-R13、R17：串流只持有檔案，登入交易已在準備階段提交。
+        with image.source:
+            while chunk := image.source.read(65536):
                 yield chunk
 
     return StreamingResponse(

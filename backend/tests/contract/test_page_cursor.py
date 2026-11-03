@@ -72,3 +72,21 @@ def test_page_cursor_key_rejects_malformed_input(bad_cursor: str) -> None:
         page_cursor_key(bad_cursor)
     assert exc_info.value.status_code == 422
     assert exc_info.value.code is ErrorCode.REQUEST_VALIDATION_FAILED
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        json.dumps({"t": "0001-01-01T00:00:00+14:00", "id": str(CURSOR_ID)}),
+        "[" * 10000 + "0" + "]" * 10000,
+    ],
+    ids=["time-overflow", "recursive-json"],
+)
+def test_page_cursor_rejects_time_overflow_and_recursive_json(
+    raw: str,
+) -> None:
+    """API-R08：共享解析器不得讓非可信排序鍵變成未處理例外。"""
+    with pytest.raises(APIError) as error:
+        page_cursor_key(_encode_raw_bytes(raw.encode()))
+    assert error.value.status_code == 422
+    assert error.value.code is ErrorCode.REQUEST_VALIDATION_FAILED

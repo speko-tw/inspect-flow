@@ -26,6 +26,9 @@ from app.models import (
     TaskSnapshotPoint,
 )
 
+# FEV-R27／D22：10 分鐘是試用後可調的設計門檻。
+NON_REALTIME_CAPTURE_SECONDS = 600
+
 
 def calculate_photo_coverage(db: Session, task_id: UUID) -> dict:
     """FEV-R04：依目前快照及穩定項次識別計數，供完成驗證沿用。"""
@@ -252,7 +255,7 @@ def serialize_photos(
                                 photo.created_at - photo.captured_at
                             ).total_seconds()
                         )
-                        > 600
+                        > NON_REALTIME_CAPTURE_SECONDS
                     ),
                     "variants": {
                         name.lower(): {

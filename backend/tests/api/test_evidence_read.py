@@ -3,6 +3,7 @@
 import io
 import os
 from collections.abc import Generator
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import timedelta
 from pathlib import Path
@@ -13,6 +14,7 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy import func, select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from alembic import command
@@ -35,12 +37,40 @@ from app.models import (
 from app.storage import LocalStorage
 from tests.api.test_evidence_upload import _jpeg, _upload
 from tests.api.test_evidence_upload_review import _ready
-from tests.db.reset_postgres_schema import reset_public_schema
+
+
+@contextmanager
+def _read_database(url: str, postgres: bool):
+    """PG 每例只建刪自己的 schema，不觸碰共用 public（#792）。"""
+    if not postgres:
+        yield url
+        return
+    schema = "w792_" + uuid4().hex
+    control = create_engine_from_settings(url)
+    try:
+        with control.begin() as connection:
+            assert connection.scalar(text("SELECT current_database()")) == (
+                "inspectflow_test"
+            )
+            connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        isolated = (
+            make_url(url)
+            .update_query_dict({"options": f"-csearch_path={schema}"})
+            .render_as_string(hide_password=False)
+        )
+        try:
+            yield isolated
+        finally:
+            with control.begin() as connection:
+                connection.execution_options(audit_log_ddl_allowed=True)
+                connection.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+    finally:
+        control.dispose()
 
 
 @pytest.fixture(params=["sqlite", "postgresql"])
 def read_world(request, tmp_path, monkeypatch) -> Generator[dict, None, None]:
-    """同一真實 API 驗收在 SQLite 與明確指定的測試 PG 執行。"""
+    """同一真實 API 驗收在 SQLite 與專用 PG schema 執行。"""
     postgres = request.param == "postgresql"
     url = (
         os.environ.get("INSPECTFLOW_TEST_POSTGRES_URL")
@@ -50,53 +80,53 @@ def read_world(request, tmp_path, monkeypatch) -> Generator[dict, None, None]:
     if not url:
         pytest.skip("INSPECTFLOW_TEST_POSTGRES_URL is not set")
     dispose_engine()
-    monkeypatch.setenv("INSPECTFLOW_DATABASE_URL", url)
     root = tmp_path / "photos"
     monkeypatch.setenv("INSPECTFLOW_EVIDENCE_STORAGE_ROOT", str(root))
-    engine = create_engine_from_settings(url)
-    if postgres:
-        with engine.connect() as connection:
-            # 必須在破壞性 reset 前核對實機，不能只相信 URL 名稱。
-            assert connection.scalar(text("SELECT current_database()")) == (
-                "inspectflow_test"
-            )
-        engine.dispose()
-        reset_public_schema(url)
-    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
-    command.upgrade(config, "head")
-    engine = create_engine_from_settings(url)
-    try:
-        with Session(engine) as db:
-
-            def client():
-                return TestClient(create_app(), base_url="https://testserver")
-
-            world, task, item, point = _ready(db, client)
-            # U5 只有 evidence.read；不把普通讀取驗收綁在 Admin 特例。
-            role = db.scalar(
-                select(Role).where(Role.name == "API planning reader")
-            )
-            assert role is not None
-            role.permission_codes.append(RolePermission(code="evidence.read"))
-            db.commit()
-            world.update(
-                db=db,
-                engine=engine,
-                root=root,
-                task=task,
-                item_id=item,
-                point_id=point,
-                make_client=client,
-            )
-            yield world
-            for value in world.values():
-                if isinstance(value, TestClient):
-                    value.close()
-    finally:
-        dispose_engine()
-        engine.dispose()
+    with _read_database(url, postgres) as isolated_url:
+        monkeypatch.setenv("INSPECTFLOW_DATABASE_URL", isolated_url)
+        config = Config(
+            str(Path(__file__).resolve().parents[2] / "alembic.ini")
+        )
+        command.upgrade(config, "head")
+        engine = create_engine_from_settings(isolated_url)
         if postgres:
-            reset_public_schema(url)
+            with engine.connect() as connection:
+                schema = connection.scalar(text("SELECT current_schema()"))
+                assert schema is not None and schema.startswith("w792_")
+        try:
+            with Session(engine) as db:
+
+                def client():
+                    return TestClient(
+                        create_app(), base_url="https://testserver"
+                    )
+
+                world, task, item, point = _ready(db, client)
+                # U5 只有 evidence.read；不把普通讀取驗收綁在 Admin 特例。
+                role = db.scalar(
+                    select(Role).where(Role.name == "API planning reader")
+                )
+                assert role is not None
+                role.permission_codes.append(
+                    RolePermission(code="evidence.read")
+                )
+                db.commit()
+                world.update(
+                    db=db,
+                    engine=engine,
+                    root=root,
+                    task=task,
+                    item_id=item,
+                    point_id=point,
+                    make_client=client,
+                )
+                yield world
+                for value in world.values():
+                    if isinstance(value, TestClient):
+                        value.close()
+        finally:
+            dispose_engine()
+            engine.dispose()
 
 
 def _add_photo(world, **changes) -> dict:
@@ -741,3 +771,298 @@ def test_ac20_ac29_item_group_order_precedes_overview_and_tied_uploads(
             )
             == 1
         )
+
+
+@pytest.mark.parametrize("target", ["office", "field", "history"])
+@pytest.mark.parametrize("malformation", ["overflow", "recursion"])
+def test_tampered_inner_cursor_is_validation_error(
+    read_world, target, malformation
+):
+    import base64
+    import json
+
+    w = read_world
+    photo = _add_photo(w)
+    _add_photo(w)
+    base, field, detail = _paths(w, photo)
+    if target == "history":
+        db = w["db"]
+        actor, project = w["admin_user"].id, w["project"].id
+        db.add_all(
+            AuditLog(
+                created_by=actor,
+                actor_snapshot="測試操作者",
+                project_id=project,
+                entity_type="evidence",
+                entity_id=UUID(photo["id"]),
+                event_type="evidence.layer_updated",
+                before=None,
+                after=None,
+            )
+            for _ in range(2)
+        )
+        db.commit()
+        path, param, limit = (
+            detail,
+            "layer_history_cursor",
+            "layer_history_limit",
+        )
+        client = w["reader"]
+        cursor = client.get(path, params={limit: 1}).json()["layer_history"][
+            "next_cursor"
+        ]
+    else:
+        path = field + "/photos" if target == "field" else base
+        client = w["field"] if target == "field" else w["reader"]
+        param, limit = "cursor", "limit"
+        cursor = client.get(path, params={limit: 1}).json()["next_cursor"]
+    assert cursor
+    payload = json.loads(
+        base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+    )
+    if malformation == "overflow":
+        raw = json.dumps(
+            {"t": "0001-01-01T00:00:00+14:00", "id": str(uuid4())}
+        )
+    else:
+        # 內層本身超過 JSON 解碼深度；外層仍是合法且未超長的游標。
+        raw = "[" * 1040 + "0" + "]" * 1040
+    inner = base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+    payload["keys"][0] = inner
+    if target != "history" and malformation == "recursion":
+        # 先測第一個內層鍵；壓縮後面的無關鍵，保留外層長度預算。
+        payload["keys"][2] = ""
+    encoded = (
+        base64.urlsafe_b64encode(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
+    assert len(encoded) <= 4096
+    with TestClient(
+        client.app,
+        base_url="https://testserver",
+        raise_server_exceptions=False,
+    ) as observed:
+        observed.cookies.update(client.cookies)
+        response = observed.get(path, params={param: encoded})
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "request.validation_failed"
+
+
+def test_thumbnail_releases_login_transaction_before_decoding(
+    read_world, monkeypatch
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from app.auth.dependencies import get_db
+    from app.db.unit_of_work import unit_of_work
+
+    w = read_world
+    photo = _add_photo(w)
+    ready, release = Event(), Event()
+    request_databases, active_transactions = [], []
+    original = Image.open
+
+    def observed_db():
+        with unit_of_work() as db:
+            request_databases.append(db)
+            yield db
+
+    def paused_open(*args, **kwargs):
+        active_transactions.append(request_databases[-1].in_transaction())
+        ready.set()
+        assert release.wait(10)
+        return original(*args, **kwargs)
+
+    app = w["reader"].app
+    app.dependency_overrides[get_db] = observed_db
+    monkeypatch.setattr(Image, "open", paused_open)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            pending = executor.submit(
+                w["reader"].get, _paths(w, photo)[2] + "/image?max_edge=600"
+            )
+            try:
+                assert ready.wait(5)
+                assert active_transactions == [False]
+                # 真正的另一個登入請求會 UPDATE last_seen_at，不能被縮圖擋住。
+                other = executor.submit(w["admin"].get, "/api/v1/auth/me")
+                assert other.result(2).status_code == 200
+            finally:
+                release.set()
+            assert pending.result(5).status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+        release.set()
+
+
+@pytest.mark.parametrize("capacity", [1, 2])
+def test_thumbnail_concurrency_uses_bounded_dedicated_workers(
+    read_world, monkeypatch, capacity
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, Lock
+
+    from sqlalchemy import event
+
+    from app.auth.sessions import SESSION_COOKIE_NAME
+
+    w = read_world
+    photo = _add_photo(w)
+    monkeypatch.setenv(
+        "INSPECTFLOW_EVIDENCE_MAX_CONCURRENT_UPLOADS", str(capacity)
+    )
+    entered, prepared, release = Event(), Event(), Event()
+    lock = Lock()
+    active, peak = 0, 0
+    committed = set()
+    original = Image.Image.thumbnail
+
+    def after_commit(db):
+        with lock:
+            committed.add(id(db))
+            if len(committed) == 4:
+                prepared.set()
+
+    def paused_thumbnail(image, *args, **kwargs):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            if active >= capacity:
+                entered.set()
+        try:
+            assert release.wait(10)
+            return original(image, *args, **kwargs)
+        finally:
+            with lock:
+                active -= 1
+
+    monkeypatch.setattr(Image.Image, "thumbnail", paused_thumbnail)
+    event.listen(Session, "after_commit", after_commit)
+    try:
+        with TestClient(
+            w["reader"].app, base_url="https://testserver"
+        ) as shared:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                pending = [
+                    executor.submit(
+                        shared.get,
+                        _paths(w, photo)[2] + "/image?max_edge=600",
+                        headers={
+                            "Cookie": (
+                                f"{SESSION_COOKIE_NAME}="
+                                f"{w[name].cookies.get(SESSION_COOKIE_NAME)}"
+                            )
+                        },
+                    )
+                    for name in (
+                        "field",
+                        "field_two",
+                        "field_reader",
+                        "reader",
+                    )
+                ]
+                try:
+                    assert entered.wait(5)
+                    # 排隊的請求也先完成授權並提交，不能持有 SQLite 寫鎖。
+                    assert prepared.wait(5)
+                    assert shared.get("/api/v1/health").status_code == 200
+                    assert peak == capacity
+                finally:
+                    release.set()
+                assert all(job.result(5).status_code == 200 for job in pending)
+        assert peak == capacity
+    finally:
+        release.set()
+        event.remove(Session, "after_commit", after_commit)
+
+
+def test_thumbnail_checks_actual_decode_pixel_limit(read_world, monkeypatch):
+    w = read_world
+    photo = _add_photo(w)
+    monkeypatch.setenv("INSPECTFLOW_EVIDENCE_MAX_DECODE_PIXELS", "1000")
+    response = w["reader"].get(_paths(w, photo)[2] + "/image?max_edge=64")
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "evidence.invalid_image"
+    assert response.json()["error"]["details"] == ["pixels"]
+
+
+def test_image_response_does_not_disclose_field_hash_in_etag(read_world):
+    w = read_world
+    photo = _add_photo(w)
+    response = w["field"].get(_paths(w, photo)[2] + "/image")
+    assert response.status_code == 200
+    assert "etag" not in response.headers
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_image_reloads_variant_once_when_old_storage_key_disappears(
+    read_world, monkeypatch, caplog
+):
+    w = read_world
+    photo = _add_photo(w)
+    db = w["db"]
+    variant = db.scalar(
+        select(EvidenceVariant).where(
+            EvidenceVariant.evidence_id == UUID(photo["id"]),
+            EvidenceVariant.variant_type == "OFFICE",
+        )
+    )
+    old_key, variant_id = variant.storage_key, variant.id
+    storage = LocalStorage(w["root"])
+    with storage.open(old_key) as source:
+        data = source.read()
+    new_key = storage.save(io.BytesIO(data))
+    original = LocalStorage.open
+    calls = []
+
+    def replace_after_first_lookup(store, key):
+        calls.append(key)
+        if len(calls) == 1:
+            # 真正提交 T4 式新鍵切換，確保重試必須讀到資料庫新值。
+            with Session(w["engine"]) as changing:
+                row = changing.get(EvidenceVariant, variant_id)
+                assert row is not None
+                row.storage_key = new_key
+                changing.commit()
+            storage.delete(old_key)
+        return original(store, key)
+
+    monkeypatch.setattr(LocalStorage, "open", replace_after_first_lookup)
+    response = w["reader"].get(_paths(w, photo)[2] + "/image?variant=office")
+    assert response.status_code == 200, response.text
+    assert response.content == data
+    assert calls == [old_key, new_key]
+    assert "Evidence image unavailable" not in caplog.text
+
+
+def test_missing_image_retries_only_once_and_logs_no_storage_key(
+    read_world, monkeypatch, caplog
+):
+    w = read_world
+    photo = _add_photo(w)
+    version = w["db"].scalar(
+        select(EvidenceVariant).where(
+            EvidenceVariant.evidence_id == UUID(photo["id"]),
+            EvidenceVariant.variant_type == "FIELD",
+        )
+    )
+    key = version.storage_key
+    LocalStorage(w["root"]).delete(key)
+    original = LocalStorage.open
+    calls = []
+
+    def observed(store, requested_key):
+        calls.append(requested_key)
+        return original(store, requested_key)
+
+    monkeypatch.setattr(LocalStorage, "open", observed)
+    response = w["field"].get(_paths(w, photo)[2] + "/image")
+    assert response.status_code == 404
+    assert calls == [key, key]
+    assert photo["id"] in caplog.text
+    assert str(key) not in caplog.text
