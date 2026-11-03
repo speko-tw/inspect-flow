@@ -478,7 +478,22 @@ def test_t16_suggestion_routes_have_exact_access_declarations() -> None:
         ("POST", "/api/v1/template-suggestions/{suggestion_id}:submit"),
         ("POST", "/api/v1/template-suggestions/{suggestion_id}:withdraw"),
     }
-    assert set(routes) == {creation, *logged_in}
+    reviewing = {
+        ("GET", "/api/v1/template-suggestions"),
+        ("GET", "/api/v1/template-suggestions:pending-count"),
+        (
+            "GET",
+            "/api/v1/template-suggestions/{suggestion_id}/revisions:compare",
+        ),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}:return"),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}:approve"),
+    }
+    assert set(routes) == {creation, *logged_in, *reviewing}
+    for key in reviewing:
+        declaration = routes[key]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.MODULE_PERMISSION_REQUIRED
+        assert declaration.module_permission_code == "template.manage"
     declaration = routes[creation]
     assert declaration is not None
     assert declaration.level is AccessLevel.MODULE_AND_PROJECT_PERMISSION
