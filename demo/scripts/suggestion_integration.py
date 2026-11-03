@@ -80,6 +80,11 @@ def code_of(response) -> str | None:
     return None
 
 
+def has_code(response, code: str) -> bool:
+    """回應的 error.code 是否為指定值（斷言用，不維護錯誤碼對照）。"""
+    return code_of(response) == code
+
+
 def check(ac: str, label: str, condition: bool, detail: str = "") -> bool:
     """記錄一筆斷言；失敗不中斷，最後統一以非零退出碼回報。"""
     RESULTS.append(
@@ -694,7 +699,7 @@ def scenario_ac35_ac36(f: Flow) -> str:
     check(
         "TPL-AC35",
         "退回後未改內容不能重送",
-        got[0] == 409 and code_of(got) == "template_suggestion.invalid_state",
+        got[0] == 409 and has_code(got, "template_suggestion.invalid_state"),
         f"狀態 {got[0]} {code_of(got)}",
     )
     got = f.revise("lin", detail, edited(detail["content"], title="第二版"))
@@ -831,7 +836,7 @@ def scenario_ac35_ac36(f: Flow) -> str:
             "TPL-AC35",
             f"已核准件不能 {verb}",
             got[0] == 409
-            and code_of(got) == "template_suggestion.invalid_state",
+            and has_code(got, "template_suggestion.invalid_state"),
             f"狀態 {got[0]} {code_of(got)}",
         )
     got = f.approve(sid, "A")
@@ -953,8 +958,8 @@ def scenario_ac38_ac39(f: Flow) -> None:
     got = f.approve(sid, "A")
     check(
         "TPL-AC38",
-        "同名核准回 409 template.name_conflict",
-        got[0] == 409 and code_of(got) == "template.name_conflict",
+        "同名核准回 409（名稱衝突錯誤碼）",
+        got[0] == 409 and has_code(got, "template.name_conflict"),
         f"狀態 {got[0]} {code_of(got)}",
     )
     detail = f.get("wu", sid)
@@ -1150,10 +1155,10 @@ def scenario_ac38_ac39(f: Flow) -> None:
     stale = f.revise("lin", detail, edited(detail["content"], title="版三"))
     check(
         "TPL-AC39",
-        "過期 expected 欄位回 409 template_suggestion.changed",
+        "過期 expected 欄位回 409（已變更錯誤碼）",
         first[0] == 201
         and stale[0] == 409
-        and code_of(stale) == "template_suggestion.changed",
+        and has_code(stale, "template_suggestion.changed"),
         f"{first[0]}/{stale[0]} {code_of(stale)}",
     )
 
