@@ -183,6 +183,29 @@ def test_upgrade_downgrade_preserves_existing_rows(db_url):
     engine.dispose()
 
 
+def test_label_layer_upgrade_keeps_unrecorded_capture_source_null(world):
+    """FEV-R07：舊 row 沒有來源欄位時不得推測為 camera。"""
+    session, *_ = world
+    photo = _photo(world, capture_source=None)
+    session.commit()
+    photo_id = photo.id
+    engine = session.get_bind()
+    session.close()
+
+    command.downgrade(Config(str(_CONFIG)), "e802a1b2c3d4")
+    command.upgrade(Config(str(_CONFIG)), "head")
+
+    with Session(engine) as migrated_session:
+        capture_source, label_layer = migrated_session.execute(
+            select(Evidence.capture_source, Evidence.label_layer).where(
+                Evidence.id == photo_id
+            )
+        ).one()
+    assert capture_source is None
+    assert label_layer is not None
+    engine.dispose()
+
+
 def test_two_versions_trace_to_original_snapshot_and_stable_metadata(world):
     session, actor, project, plan, task, detail, snapshot, point = world
     photo = _photo(world)

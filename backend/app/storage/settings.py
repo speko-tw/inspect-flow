@@ -14,6 +14,7 @@ class StorageSettings:
     root: Path
     max_file_bytes: int
     max_decode_pixels: int
+    max_concurrent_uploads: int
 
 
 def _positive_integer(name: str, default: int) -> int:
@@ -37,6 +38,9 @@ def get_storage_settings() -> StorageSettings:
         root=root,
         max_file_bytes=_positive_integer(
             "INSPECTFLOW_EVIDENCE_MAX_FILE_BYTES", 30 * 1024 * 1024
+        ),
+        max_concurrent_uploads=_positive_integer(
+            "INSPECTFLOW_EVIDENCE_MAX_CONCURRENT_UPLOADS", 2
         ),
         max_decode_pixels=_positive_integer(
             "INSPECTFLOW_EVIDENCE_MAX_DECODE_PIXELS", 50_000_000

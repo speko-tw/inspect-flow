@@ -305,23 +305,47 @@ def test_issue_361_plan_and_task_routes_declare_login_access() -> None:
         assert declaration.level is AccessLevel.LOGIN_REQUIRED
 
 
-def test_issue_361_does_not_expose_result_photo_or_manual_reopen_routes() -> (
-    None
-):
+def test_issue_361_does_not_expose_results_or_manual_reopen_routes() -> None:
     app = create_app()
-    paths = {
-        info.path
+    routes = {
+        (info.method, info.path)
         for info in iter_route_access(app)
         if "inspection-task" in info.path
     }
-    assert paths
+    assert routes
+    # T2 一次宣告規格介面表的照片路由，T3～T5 不再修改此檔。
+    prefix = "/api/v1/inspection-tasks/{task_id}/photos"
+    allowed_photos = {
+        ("POST", prefix),
+        ("GET", prefix),
+        ("GET", prefix + "/{photo_id}"),
+        ("GET", prefix + "/{photo_id}/image"),
+        ("PATCH", prefix + "/{photo_id}"),
+        ("DELETE", prefix + "/{photo_id}"),
+        ("PUT", prefix + "/{photo_id}/office-version"),
+        ("GET", "/api/v1/field/inspection-tasks/{task_id}/photos"),
+    }
+    assert ("POST", prefix) in routes
     assert not any(
         "/results" in path
-        or "/photos" in path
         or ":reopen" in path
         or "reopen" in path
-        for path in paths
+        or ("/photos" in path and (method, path) not in allowed_photos)
+        for method, path in routes
     )
+
+
+def test_field_evidence_upload_declares_login_access() -> None:
+    """FEV-AC13: register the T2 upload route access contract once."""
+    app = create_app()
+    route = next(
+        info
+        for info in iter_route_access(app)
+        if info.method == "POST"
+        and info.path == "/api/v1/inspection-tasks/{task_id}/photos"
+    )
+    assert route.declaration is not None
+    assert route.declaration.level is AccessLevel.LOGIN_REQUIRED
 
 
 def test_system_role_assignment_routes_are_removed() -> None:
