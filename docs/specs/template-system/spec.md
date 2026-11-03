@@ -267,7 +267,7 @@ stateDiagram-v2
 | `template_suggestion.approved` | 核准並建立新範本 | `template_suggestion` | true | status=PENDING | status=APPROVED、review_id、reviewed_revision_id、reviewer_id、template_id、category_id、system_id |
 | `template_suggestion.withdrawn` | 本人撤回未核准件 | `template_suggestion` | true | status=PENDING／RETURNED | status=WITHDRAWN |
 
-下列 AC 的 API、DB 與 UI 實跑由 0.6.x 實作任務提供；本次文件驗收不宣稱已實作通過。
+下列 AC 已由 0.6.x 任務 T15～T20 以真後端驗收；逐條證據見 [plan 的 T20 證據](plan.md#t20範本建議整合驗收證據807)。
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
@@ -295,6 +295,7 @@ stateDiagram-v2
 - 範圍變更（負責人試用回饋，#666，2026-10-15）：全數已套用時改為只顯示一句說明並停用套用；409 訊息使用「」— [#666](https://github.com/speko-tw/inspect-flow/issues/666)
 - 規格澄清（#728）：`GET /projects` 授權條件統一引用 domain-model 專案管理 API — [#728](https://github.com/speko-tw/inspect-flow/issues/728)
 - TPL-R22／TPL-AC20：依第 3 輪審查明確手風琴展開狀態轉移與輸入期間的穩定性 — [PR #453 第 3 輪審查](https://github.com/speko-tw/inspect-flow/pull/453#pullrequestreview-5411083162)。
+- 規格澄清（#807）：TPL-AC33～AC43 的驗收證據指向計畫的 T20 證據表；需求、範圍與行為不變 — [#807](https://github.com/speko-tw/inspect-flow/issues/807)
 - 對齊 #375 路線圖，將 Report Delivery 更新為 P8，並將範本建議、審核與核准流程更新為 0.6.x — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 - 單位規則的意圖已由 [#332](https://github.com/speko-tw/inspect-flow/issues/332)／[PR #333](https://github.com/speko-tw/inspect-flow/pull/333) 記錄（KD-54 已合併；原始來源為負責人[#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965931420)）。本規格依此將數值標準綁定一個數字欄位，並在 TPL-Q8 定案具體欄位關聯；單位換算仍由現場處理且不在本規格範圍。
