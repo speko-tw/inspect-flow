@@ -2255,3 +2255,31 @@ describe('template forms guard (#507)', () => {
     ).toHaveLength(1)
   })
 })
+
+describe('TPL-AC40 待審建議入口', () => {
+  it('範本管理者在範本頁看到「待審建議（N）」並連到審核清單', async () => {
+    const fetchMock = templateFetch()
+    const base = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input, init) =>
+      new URL(String(input), 'http://localhost').pathname ===
+      '/api/v1/template-suggestions:pending-count'
+        ? Response.json({ pending_count: 3 })
+        : base(input, init),
+    )
+    render(<TemplatesPage canManage />)
+    const link = await screen.findByRole('link', { name: '待審建議（3）' })
+    expect(link).toHaveAttribute('href', '/templates/suggestions')
+  })
+
+  it('唯讀瀏覽者看不到入口，也不讀待審數量', async () => {
+    const fetchMock = templateFetch()
+    render(<TemplatesPage canManage={false} />)
+    await screen.findByRole('heading', { name: '查核範本' })
+    expect(screen.queryByRole('link', { name: /待審建議/ })).toBeNull()
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes('template-suggestions'),
+      ),
+    ).toBe(false)
+  })
+})

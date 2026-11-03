@@ -35,6 +35,7 @@ from app.models import (
     TemplateSuggestionRevision,
     TemplateSuggestionTransition,
     TemplateSystem,
+    User,
 )
 from app.services.audit import record_audit_event
 from app.services.batch_load import load_grouped
@@ -560,7 +561,37 @@ def withdraw(
     return row
 
 
-def _review_data(row) -> dict:
+def _actor_names(db: Session, identifiers) -> dict:
+    # TPL-R36：只投影可見建議引用的人員，不開放全域帳號查詢能力。
+    ids = set(identifiers)
+    return (
+        {
+            user.id: user.name_zh or user.username
+            for user in db.scalars(select(User).where(User.id.in_(ids)))
+        }
+        if ids
+        else {}
+    )
+
+
+def _submission_times(db: Session, identifiers) -> dict:
+    # TPL-R34：最近送審取歷程的 PENDING，不使用管理者保存修訂的時間。
+    return dict(
+        db.execute(
+            select(
+                TemplateSuggestionTransition.suggestion_id,
+                func.max(TemplateSuggestionTransition.created_at),
+            )
+            .where(
+                TemplateSuggestionTransition.suggestion_id.in_(identifiers),
+                TemplateSuggestionTransition.to_status == "PENDING",
+            )
+            .group_by(TemplateSuggestionTransition.suggestion_id)
+        ).all()
+    )
+
+
+def _review_data(row, names: dict) -> dict:
     return {
         key: getattr(row, key)
         for key in (
@@ -577,6 +608,7 @@ def _review_data(row) -> dict:
         )
     } | {
         "reviewer_id": row.created_by,
+        "reviewer_name": names.get(row.created_by, "帳號已移除"),
         "reviewed_at": format_utc(row.created_at),
     }
 
@@ -629,6 +661,19 @@ def _summaries(
         .where(ranked.c.position == 1)
     ):
         reviews.setdefault(review.suggestion_id, []).append(review)
+    names = _actor_names(
+        db,
+        {
+            *[row.proposer_id for row in rows],
+            *[revision.created_by for revision in revisions.values()],
+            *[
+                review.created_by
+                for group in reviews.values()
+                for review in group
+            ],
+        },
+    )
+    submitted = _submission_times(db, [row.id for row in rows])
     result = []
     for row in rows:
         revision = revisions[row.current_revision_id]
@@ -643,6 +688,13 @@ def _summaries(
         data = {
             "id": row.id,
             "proposer_id": row.proposer_id,
+            "proposer_name": names.get(row.proposer_id, "帳號已移除"),
+            "title": revision.content.get("title", ""),
+            "last_editor_id": revision.created_by,
+            "last_editor_name": names.get(revision.created_by, "帳號已移除"),
+            "last_submitted_at": format_utc(
+                submitted.get(row.id) or row.first_submitted_at
+            ),
             "source_project_id": row.source_project_original_id,
             "source_item_id": row.source_item_original_id,
             "source_project_name": row.source_project_name,
@@ -653,11 +705,11 @@ def _summaries(
             "content_sha256": revision.content_sha256,
             "return_reason": latest_return.reason if latest_return else None,
             "latest_review": _review_data(
-                max(all_reviews, key=lambda r: (r.created_at, r.id))
+                max(all_reviews, key=lambda r: (r.created_at, r.id)), names
             )
             if all_reviews
             else None,
-            "approval": _review_data(approval) if approval else None,
+            "approval": _review_data(approval, names) if approval else None,
             "approved_template_id": row.approved_template_id,
             "first_submitted_at": format_utc(row.first_submitted_at),
             "created_at": format_utc(row.created_at),
@@ -828,6 +880,14 @@ def revisions(
         if ids
         else {}
     )
+    names = _actor_names(
+        db,
+        {
+            *[revision.created_by for revision in page],
+            *[r.created_by for group in reviews.values() for r in group],
+            *[t.created_by for group in transitions.values() for t in group],
+        },
+    )
     items = []
     for revision in page:
         items.append(
@@ -839,16 +899,19 @@ def revisions(
                 "content": revision.content,
                 "content_sha256": revision.content_sha256,
                 "editor_id": revision.created_by,
+                "editor_name": names.get(revision.created_by, "帳號已移除"),
                 "created_at": format_utc(revision.created_at),
                 "status": states.get(revision.id),
                 "reviews": [
-                    _review_data(r) for r in reviews.get(revision.id, [])
+                    _review_data(r, names)
+                    for r in reviews.get(revision.id, [])
                 ],
                 "transitions": [
                     {
                         "from_status": t.from_status,
                         "to_status": t.to_status,
                         "operator_id": t.created_by,
+                        "operator_name": names.get(t.created_by, "帳號已移除"),
                         "created_at": format_utc(t.created_at),
                         "review_id": t.review_id,
                         "audit_log_id": t.audit_log_id,
@@ -875,7 +938,23 @@ def list_review(
 ) -> dict:
     """TPL-R34：管理清單可跨來源專案，搜尋／分頁不影響全體待審數。"""
     _require_review(db)
-    statement = select(TemplateSuggestion)
+    submitted = (
+        select(
+            TemplateSuggestionTransition.suggestion_id.label("suggestion_id"),
+            func.max(TemplateSuggestionTransition.created_at).label(
+                "submitted_at"
+            ),
+        )
+        .where(TemplateSuggestionTransition.to_status == "PENDING")
+        .group_by(TemplateSuggestionTransition.suggestion_id)
+        .subquery()
+    )
+    latest = func.coalesce(
+        submitted.c.submitted_at, TemplateSuggestion.first_submitted_at
+    )
+    statement = select(TemplateSuggestion, latest).outerjoin(
+        submitted, submitted.c.suggestion_id == TemplateSuggestion.id
+    )
     if status is not None:
         statement = statement.where(TemplateSuggestion.status == status)
     if q and q.strip():
@@ -901,22 +980,23 @@ def list_review(
     if key is not None:
         statement = statement.where(
             or_(
-                TemplateSuggestion.created_at < key[0],
+                latest < key[0],
                 and_(
-                    TemplateSuggestion.created_at == key[0],
+                    latest == key[0],
                     TemplateSuggestion.id < key[1],
                 ),
             )
         )
-    rows = db.scalars(
-        statement.order_by(
-            TemplateSuggestion.created_at.desc(), TemplateSuggestion.id.desc()
-        ).limit(limit + 1)
+    entries = db.execute(
+        statement.order_by(latest.desc(), TemplateSuggestion.id.desc()).limit(
+            limit + 1
+        )
     ).all()
+    rows = [row for row, _time in entries]
     page = rows[:limit]
     return {
         "items": _summaries(db, page),
-        "next_cursor": encode_page_cursor(page[-1].created_at, page[-1].id)
+        "next_cursor": encode_page_cursor(entries[limit - 1][1], page[-1].id)
         if len(rows) > limit
         else None,
     }
@@ -1024,12 +1104,15 @@ def compare_revisions(
         "inspection_point",
     )
 
+    names = _actor_names(db, [before.created_by, after.created_by])
+
     def version(r):
         return {
             "id": r.id,
             "revision_no": r.revision_no,
             "content": r.content,
             "editor_id": r.created_by,
+            "editor_name": names.get(r.created_by, "帳號已移除"),
             "created_at": format_utc(r.created_at),
         }
 

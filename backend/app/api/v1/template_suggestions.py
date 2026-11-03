@@ -31,6 +31,7 @@ _create_access = Depends(
 )
 # TPL-R31：expected 狀態也必須使用同一組狀態機名稱。
 SuggestionStatus = Literal["PENDING", "RETURNED", "APPROVED", "WITHDRAWN"]
+ReviewStatus = Literal["PENDING", "RETURNED", "APPROVED", "WITHDRAWN", "ALL"]
 
 
 class ProposeBody(StrictBody):
@@ -85,13 +86,17 @@ def list_mine(
 def list_review(
     cursor: str | None = Query(default=None, max_length=512),
     limit: int = Query(default=50, ge=1, le=100),
-    status: SuggestionStatus | None = "PENDING",
+    status: ReviewStatus = "PENDING",
     q: str | None = Query(default=None, max_length=256),
     db: Session = _db,
 ) -> dict:
     """TPL-R34：跨專案管理清單，預設只列待審件。"""
     return service.list_review(
-        db, cursor=cursor, limit=limit, status=status, q=q
+        db,
+        cursor=cursor,
+        limit=limit,
+        status=None if status == "ALL" else status,
+        q=q,
     )
 
 

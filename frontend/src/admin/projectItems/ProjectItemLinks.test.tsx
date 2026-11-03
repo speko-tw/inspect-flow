@@ -18,6 +18,44 @@ import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { currentUserFixture } from '../../testing/contractFixtures'
 import ProjectItemLinks from './ProjectItemLinks'
 
+// 範本建議入口（件數、提出確認）自己讀寫 API，由 suggestions 目錄的
+// 元件測試涵蓋；這裡只驗證它們在哪些人、哪些位置出現，以及提出成功後
+// 會通知清單重讀件數。
+vi.mock('../templates/suggestions/ProjectSuggestionLink', async () => {
+  const { createElement } = await import('react')
+  return {
+    ProjectSuggestionLink: ({
+      projectId,
+      refreshKey,
+    }: {
+      projectId: string
+      refreshKey: number
+    }) =>
+      createElement(
+        'a',
+        { href: '#suggestions' },
+        `我的範本建議 ${projectId} 重讀 ${refreshKey}`,
+      ),
+  }
+})
+vi.mock('../templates/suggestions/ProposeSuggestion', async () => {
+  const { createElement } = await import('react')
+  return {
+    ProposeSuggestion: ({
+      itemTitle,
+      onProposed,
+    }: {
+      itemTitle: string
+      onProposed: () => void
+    }) =>
+      createElement(
+        'button',
+        { onClick: onProposed, type: 'button' },
+        `建議加入範本庫：${itemTitle}`,
+      ),
+  }
+})
+
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ProjectItemLinks', () => {
@@ -544,4 +582,65 @@ it('存檔提示只顯示一次，清 history state 並保留其他欄位', asyn
   fireEvent.click(screen.getByRole('button', { name: '返回前頁' }))
   await screen.findByText('來源項目')
   expect(screen.queryByRole('link', { name: '到範本庫查看' })).toBeNull()
+})
+
+describe('TPL-AC33 範本建議入口只給可編輯者', () => {
+  function renderList(permissions: string[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          items: [
+            {
+              id: 'i1',
+              title: '鋼筋綁紮',
+              task_count: 0,
+              inspection_points: [],
+              source_template_name: '示範',
+              applied_at: '2026-10-22T00:00:00Z',
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+    )
+    render(
+      <CurrentUserProvider
+        value={{ user: currentUserFixture(), clear: vi.fn() }}
+      >
+        <MemoryRouter>
+          <ProjectItemLinks projectId="p1" viewerPermissions={permissions} />
+        </MemoryRouter>
+      </CurrentUserProvider>,
+    )
+  }
+
+  it('可編輯者看到專案連結與每個項目的提議入口', async () => {
+    renderList(['project_inspection_item.edit'])
+    expect(
+      await screen.findByRole('button', {
+        name: '建議加入範本庫：鋼筋綁紮',
+      }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: /我的範本建議/ })).toBeVisible()
+  })
+
+  it('提出成功後通知連結重讀本案件數', async () => {
+    renderList(['project_inspection_item.edit'])
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: '建議加入範本庫：鋼筋綁紮',
+      }),
+    )
+    expect(
+      screen.getByRole('link', { name: '我的範本建議 p1 重讀 1' }),
+    ).toBeVisible()
+  })
+
+  it('只有唯讀權限者看不到任何提議入口', async () => {
+    renderList([])
+    await screen.findByText('鋼筋綁紮')
+    expect(screen.queryByText(/建議加入範本庫/)).toBeNull()
+    expect(screen.queryByRole('link', { name: /我的範本建議/ })).toBeNull()
+  })
 })
