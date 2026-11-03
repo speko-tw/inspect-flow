@@ -69,8 +69,15 @@ type Props = {
   cancelLabel?: string
   /** 有值時取消改成導覽連結，離開前由外層的未儲存攔截處理。 */
   cancelHref?: string
+  /** AC42：由呼叫端保留離開編輯頁時的目的地等脈絡，預設不傳。 */
+  cancelState?: unknown
   /** 以 clientKey／id 而非索引組錯誤 key，避免刪除項次後錯誤錯位。 */
   stablePointErrorKeys?: boolean
+  /** TPL-AC36：由建議頁選擇初始展開項次；null 表示全部收合。 */
+  initialOpenPoint?: number | null
+  /** T19 才傳入重排操作；正式範本與結構鎖定流程不受影響。 */
+  movePoint?: (from: number, to: number) => void
+  moveField?: (point: number, from: number, to: number) => void
 }
 
 /**
@@ -110,9 +117,13 @@ export function TemplateItemEditor({
   saveLabel = '儲存查核項目',
   cancelLabel = '取消',
   cancelHref,
+  cancelState,
   stablePointErrorKeys = false,
+  initialOpenPoint = 0,
+  movePoint,
+  moveField,
 }: Props) {
-  const [openPoint, setOpenPoint] = useState<number | null>(0)
+  const [openPoint, setOpenPoint] = useState<number | null>(initialOpenPoint)
   const [errorOpen, setErrorOpen] = useState<Set<number>>(new Set())
   const completedFocusRequest = useRef(0)
   const scheduledFocusRequest = useRef(0)
@@ -240,7 +251,12 @@ export function TemplateItemEditor({
           </h2>
         </div>
         {cancelHref ? (
-          <Link aria-label={cancelLabel} className="btn" to={cancelHref}>
+          <Link
+            aria-label={cancelLabel}
+            className="btn"
+            state={cancelState}
+            to={cancelHref}
+          >
             {cancelLabel}
           </Link>
         ) : (
@@ -383,6 +399,31 @@ export function TemplateItemEditor({
                       </span>
                     )}
                   </summary>
+                  {movePoint && (
+                    <div className="suggestion-actions" aria-label="項次排序">
+                      {([-1, 1] as const).map((direction) => (
+                        <button
+                          key={direction}
+                          type="button"
+                          disabled={
+                            structureLocked ||
+                            index + direction < 0 ||
+                            index + direction >=
+                              itemDraft.inspection_points.length
+                          }
+                          onClick={() => {
+                            const to = index + direction
+                            movePoint(index, to)
+                            setOpenPoint(to)
+                            setErrorOpen(new Set())
+                            focusPointTitle(to)
+                          }}
+                        >
+                          {direction < 0 ? '上移項次' : '下移項次'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <label htmlFor={`point-${index}-title`}>
                     項次標題 <RequiredMark />
                   </label>
@@ -458,6 +499,7 @@ export function TemplateItemEditor({
                     updateField={updateFieldAndPreserveErrors}
                     updatePoint={updatePointAndPreserveErrors}
                     structureLocked={structureLocked}
+                    moveField={moveField}
                   />
                   <NumericStandardEditor
                     errors={errors}
@@ -569,7 +611,12 @@ export function TemplateItemEditor({
           </p>
         )}
         {cancelHref ? (
-          <Link aria-label={cancelLabel} className="btn" to={cancelHref}>
+          <Link
+            aria-label={cancelLabel}
+            className="btn"
+            state={cancelState}
+            to={cancelHref}
+          >
             {cancelLabel}
           </Link>
         ) : (

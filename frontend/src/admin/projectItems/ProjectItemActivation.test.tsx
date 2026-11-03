@@ -12,6 +12,14 @@ import { currentUserFixture } from '../../testing/contractFixtures'
 import ProjectItemLinks from './ProjectItemLinks'
 import { setProjectItemActive } from './api'
 
+// 範本建議入口會自己讀 API，另有專屬測試；這裡只驗停用與恢復。
+vi.mock('../templates/suggestions/ProjectSuggestionLink', () => ({
+  ProjectSuggestionLink: () => null,
+}))
+vi.mock('../templates/suggestions/ProposeSuggestion', () => ({
+  ProposeSuggestion: () => null,
+}))
+
 const item = {
   id: 'item-717',
   project_id: 'p',
