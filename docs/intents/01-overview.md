@@ -150,7 +150,7 @@ Distributed Transaction          完整 Offline Sync Engine
 離線模式 / 完整 Offline Sync              NCR / 缺失（Defect）追蹤
 QR Code 掃描                             Re-inspection（複查）
 GPS                                      Approval Workflow（簽核流程）
-EXIF                                     Push Notification
+EXIF 完整解析／保存                       Push Notification
 數位簽章 / Electronic Approval            Audit Trail（完整事件記錄）
 Voice Note（語音備註）                    WBS 整合
 文件上傳                                  Drawing Linkage（圖說關聯）
@@ -159,6 +159,8 @@ PostgreSQL（取代 SQLite）                 MinIO / S3 / NAS（取代本機儲
 Corporate SSO                            檢查時機／停留點
                                          串接文件管理系統
 ```
+
+照片在 0.6.x **得**於壓縮前只讀取拍攝時間，原 EXIF **不得**保存；完整解析與保存 EXIF 仍為延後能力（依據：架構基準 §35；[負責人照片來源裁定](https://github.com/speko-tw/inspect-flow/issues/795#issuecomment-6542925874)）。理由是內業需要辨識照片來源與時間差，只讀拍攝時間即可提供提示，無須提前引入完整 EXIF 能力。
 
 資料庫與儲存體遷移**應**維持 API 契約，見 [KD-08](03-decisions-and-stack.md#kd-08)、[KD-02](03-decisions-and-stack.md#kd-02)（依據：架構基準 §10、§32–33）。
 

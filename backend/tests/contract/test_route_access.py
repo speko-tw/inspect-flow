@@ -214,6 +214,7 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
             apply_template,
             save_template,
             list_inspection_items,
+            ("POST", "/api/v1/projects/{project_id}/template-suggestions"),
         }
         | planning_routes
     )
@@ -398,7 +399,10 @@ def test_issue_290_my_projects_route_requires_login() -> None:
         if info.path.startswith("/api/v1/me")
     }
 
-    assert set(declarations) == {("GET", "/api/v1/me/projects")}
+    assert set(declarations) == {
+        ("GET", "/api/v1/me/projects"),
+        ("GET", "/api/v1/me/template-suggestions"),
+    }
     declaration = declarations[("GET", "/api/v1/me/projects")]
     assert declaration is not None
     assert declaration.level is AccessLevel.LOGIN_REQUIRED
@@ -432,3 +436,48 @@ def test_issue_416_field_routes_declare_their_access_contract() -> None:
     assert listing.permission_code == "inspection_task.inspect"
     assert detail is not None
     assert detail.level is AccessLevel.LOGIN_REQUIRED
+
+
+def test_t16_suggestion_routes_have_exact_access_declarations() -> None:
+    """TPL-R29、R36：初次提出宣告兩層權限，歷史／撤回不綁來源權限。"""
+    routes = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(create_app())
+        if "template-suggestions" in info.path
+    }
+    creation = ("POST", "/api/v1/projects/{project_id}/template-suggestions")
+    logged_in = {
+        ("GET", "/api/v1/me/template-suggestions"),
+        ("GET", "/api/v1/template-suggestions/{suggestion_id}"),
+        ("GET", "/api/v1/template-suggestions/{suggestion_id}/revisions"),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}/revisions"),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}:submit"),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}:withdraw"),
+    }
+    reviewing = {
+        ("GET", "/api/v1/template-suggestions"),
+        ("GET", "/api/v1/template-suggestions:pending-count"),
+        (
+            "GET",
+            "/api/v1/template-suggestions/{suggestion_id}/revisions:compare",
+        ),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}:return"),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}:approve"),
+    }
+    assert set(routes) == {creation, *logged_in, *reviewing}
+    for key in reviewing:
+        declaration = routes[key]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.MODULE_PERMISSION_REQUIRED
+        assert declaration.module_permission_code == "template.manage"
+    declaration = routes[creation]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.MODULE_AND_PROJECT_PERMISSION
+    assert declaration.module_permission_code == "inspection.use"
+    assert (
+        declaration.project_permission_code == "project_inspection_item.edit"
+    )
+    for key in logged_in:
+        declaration = routes[key]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.LOGIN_REQUIRED
