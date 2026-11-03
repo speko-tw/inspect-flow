@@ -17,6 +17,7 @@ export async function preloadLazyRoutes(): Promise<void> {
     import('../admin/AdminPage'),
     import('../admin/audit-log/AuditLogPage'),
     import('../admin/templates/TemplatesPage'),
+    import('../admin/templates/suggestions/SuggestionRoutes'),
     import('../admin/projects/ProjectTemplatesPage'),
     import('../admin/projectItems/ProjectItemChangePage'),
     import('../admin/planning/PlanningPage'),

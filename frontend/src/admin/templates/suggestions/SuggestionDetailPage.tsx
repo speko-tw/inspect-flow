@@ -82,11 +82,10 @@ export default function SuggestionDetailPage({
       .catch(() => setPendingCount(null))
   }, [mode])
 
-  const fetchAll = useCallback(
-    () =>
-      Promise.all([getSuggestion(suggestionId), listRevisions(suggestionId)]),
-    [suggestionId],
-  )
+  const fetchAll = useCallback(() => {
+    const history = listRevisions(suggestionId)
+    return Promise.all([getSuggestion(suggestionId, history), history])
+  }, [suggestionId])
 
   const apply = useCallback(
     ([detail, list]: [SuggestionDetail, SuggestionRevision[]]) => {
@@ -130,7 +129,6 @@ export default function SuggestionDetailPage({
   useEffect(() => {
     if (notice) {
       revealElement(noticeRef.current)
-      noticeRef.current?.focus({ preventScroll: true })
     }
   }, [notice])
 

@@ -70,7 +70,6 @@ export function ProposeSuggestion({
     onProposed()
     window.setTimeout(() => {
       revealElement(noticeRef.current)
-      noticeRef.current?.focus({ preventScroll: true })
     }, 0)
   }
 

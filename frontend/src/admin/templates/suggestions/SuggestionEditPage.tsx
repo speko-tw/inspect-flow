@@ -12,7 +12,7 @@ import {
   saveRevision,
   type SuggestionDetail,
 } from './api'
-import { sameContent, type SuggestionContent } from './content'
+import { type SuggestionContent } from './content'
 import { suggestionErrorMessage } from './messages'
 import {
   suggestionPath,
@@ -49,7 +49,8 @@ export default function SuggestionEditPage({
 
   useEffect(() => {
     let active = true
-    Promise.all([getSuggestion(suggestionId), listRevisions(suggestionId)])
+    const history = listRevisions(suggestionId)
+    Promise.all([getSuggestion(suggestionId, history), history])
       .then(([detail, revisions]) => {
         if (!active) return
         setSuggestion(detail)
@@ -135,16 +136,14 @@ export default function SuggestionEditPage({
     next: SuggestionContent,
     submitAfter: boolean,
   ): Promise<SaveOutcome> {
-    const unchanged = sameContent(next, current.content)
     try {
-      const revision = unchanged
-        ? current
-        : await saveRevision(suggestion!.id, next, {
-            expected_revision_id: current.id,
-            expected_status: suggestion!.status,
-          })
-      // 後端對「內容沒有變更」回原版，以修訂 ID 判斷是否真的新增了一版。
-      const changed = revision.id !== current.id
+      const saved = await saveRevision(suggestion!.id, next, {
+        expected_revision_id: current.id,
+        expected_status: suggestion!.status,
+      })
+      // TPL-R32：必須由伺服器正規化及覆核權限，不能跳過無變更的請求。
+      const changed = saved.current_revision_id !== current.id
+      const revision = { revision_no: saved.revision_no }
       const head = changed
         ? mode === 'review'
           ? `已存第 ${revision.revision_no} 版，`

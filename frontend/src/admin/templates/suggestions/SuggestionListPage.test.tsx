@@ -257,15 +257,26 @@ describe('TPL-AC40 管理者待審清單', () => {
     fireEvent.change(screen.getByLabelText('名稱或來源專案'), {
       target: { value: '較新' },
     })
+    vi.mocked(listReviewSuggestions).mockResolvedValue({
+      items: [items[1]],
+      next_cursor: null,
+    })
     fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    await waitFor(() =>
+      expect(listReviewSuggestions).toHaveBeenLastCalledWith({
+        status: 'PENDING',
+        cursor: null,
+        q: '較新',
+      }),
+    )
     expect(await screen.findByText('符合條件 1 件')).toBeVisible()
     expect(screen.getByText('待審建議（3）')).toBeVisible()
     expect(getPendingCount).toHaveBeenCalledTimes(1)
   })
 
-  it('依最近送審時間排序，較舊件剛重送時排在新件之前', async () => {
+  it('保留後端最近送審時間排序，不只重排已載入的頁面', async () => {
     vi.mocked(listReviewSuggestions).mockResolvedValue({
-      items: [...items].reverse(),
+      items,
       next_cursor: null,
     })
     renderList('review', '/templates/suggestions')

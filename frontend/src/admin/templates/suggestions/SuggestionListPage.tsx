@@ -34,7 +34,7 @@ type StatusFilter = SuggestionStatus | 'all'
  *
  * 計數都來自後端：本人的各狀態件數用 `total_count`，管理者的待審數用
  * `pending-count`，兩者都不受目前頁次與搜尋影響（TPL-AC40）。搜尋只
- * 過濾已載入的件，規格的清單契約沒有關鍵字參數。
+ * 在管理清單送後端 q，本人清單依目前契約只過濾已載入的件。
  */
 export default function SuggestionListPage({
   mode,
@@ -53,7 +53,7 @@ export default function SuggestionListPage({
   const [queryDraft, setQueryDraft] = useState('')
   const [query, setQuery] = useState('')
   // 讀到的件綁定篩選條件；條件一換，舊件立即視為未載入，不混進新條件。
-  const key = `${mode}|${projectId ?? ''}|${status}`
+  const key = `${mode}|${projectId ?? ''}|${status}|${mode === 'review' ? query : ''}`
   const [loaded, setLoaded] = useState<{
     key: string
     items: SuggestionSummary[]
@@ -82,9 +82,10 @@ export default function SuggestionListPage({
       return listReviewSuggestions({
         status: status === 'all' ? 'ALL' : status,
         cursor,
+        q: query || undefined,
       })
     },
-    [mode, projectId, status],
+    [mode, projectId, status, query],
   )
 
   useEffect(() => {
@@ -163,26 +164,16 @@ export default function SuggestionListPage({
   }
 
   const shown = useMemo(() => {
+    if (mode === 'review') return items
     const needle = query.trim().toLowerCase()
-    const matched = needle
+    return needle
       ? items.filter((item) =>
-          [
-            item.title,
-            item.source_project_name,
-            item.source_item_title,
-            item.proposer_name,
-          ]
+          [item.title, item.source_project_name, item.source_item_title]
             .join('\n')
             .toLowerCase()
             .includes(needle),
         )
       : items
-    // 待審清單依最近送審時間排序：較舊件剛重送時排在前面（TPL-R34）。
-    return mode === 'review'
-      ? [...matched].sort((a, b) =>
-          b.last_submitted_at.localeCompare(a.last_submitted_at),
-        )
-      : matched
   }, [items, mode, query])
 
   if (denied) return <AccessDeniedPage />
@@ -293,7 +284,9 @@ export default function SuggestionListPage({
           </button>
         </p>
       )}
-      {query && <p className="muted-text">搜尋只比對已載入的件。</p>}
+      {query && mode === 'mine' && (
+        <p className="muted-text">搜尋只比對已載入的件。</p>
+      )}
       {error && <p role="alert">{error}</p>}
       {loading ? (
         <p>載入中…</p>

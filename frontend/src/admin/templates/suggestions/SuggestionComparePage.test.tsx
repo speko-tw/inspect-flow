@@ -18,6 +18,7 @@ import {
   type SuggestionRevision,
 } from './api'
 import {
+  comparisonResponse,
   event,
   IDS,
   LIN,
@@ -56,11 +57,11 @@ function renderCompare(revisions: SuggestionRevision[]) {
     makeDetail({ current_revision: revisions.at(-1)! }),
   )
   vi.mocked(listRevisions).mockResolvedValue(revisions)
-  vi.mocked(compareRevisions).mockImplementation(
-    async (_id, fromId, toId) => ({
-      from: revisions.find((r) => r.id === fromId)!,
-      to: revisions.find((r) => r.id === toId)!,
-    }),
+  vi.mocked(compareRevisions).mockImplementation(async (_id, fromId, toId) =>
+    comparisonResponse(
+      revisions.find((r) => r.id === fromId)!,
+      revisions.find((r) => r.id === toId)!,
+    ),
   )
   return render(
     <CurrentUserProvider

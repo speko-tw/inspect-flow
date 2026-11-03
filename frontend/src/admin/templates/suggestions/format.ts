@@ -1,5 +1,6 @@
 /** 時間顯示：站內一律本地時區的「年/月/日 時:分」。 */
-export function formatTime(value: string): string {
+export function formatTime(value: string | null): string {
+  if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '時間未記錄'
   const day = new Intl.DateTimeFormat('zh-TW', {

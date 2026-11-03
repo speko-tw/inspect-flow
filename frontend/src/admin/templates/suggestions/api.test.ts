@@ -14,7 +14,7 @@ import {
   submitSuggestion,
   withdrawSuggestion,
 } from './api'
-import { makeContent } from './fixtures'
+import { makeContent, revisionResponse } from './fixtures'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -98,12 +98,12 @@ describe('範本建議 API 契約（TPL-R29～R36）', () => {
       Response.json({ items: [], next_cursor: null }),
     )
     await listReviewSuggestions()
-    await listReviewSuggestions({ status: 'ALL' })
+    await listReviewSuggestions({ status: 'ALL', q: '鋼筋' })
     expect(call(fetchMock, 0).url).toBe(
       '/api/v1/template-suggestions?limit=50',
     )
     expect(call(fetchMock, 1).url).toBe(
-      '/api/v1/template-suggestions?status=ALL&limit=50',
+      '/api/v1/template-suggestions?status=ALL&limit=50&q=%E9%8B%BC%E7%AD%8B',
     )
   })
 
@@ -117,8 +117,14 @@ describe('範本建議 API 契約（TPL-R29～R36）', () => {
 
   it('各版沿游標取完並保留順序', async () => {
     const fetchMock = stub(
-      Response.json({ items: [{ id: 'a' }], next_cursor: 'n' }),
-      Response.json({ items: [{ id: 'b' }], next_cursor: null }),
+      Response.json({
+        items: [revisionResponse(1, { id: 'a' })],
+        next_cursor: 'n',
+      }),
+      Response.json({
+        items: [revisionResponse(2, { id: 'b' })],
+        next_cursor: null,
+      }),
     )
     const items = await listRevisions('s1')
     expect(items.map((r) => r.id)).toEqual(['a', 'b'])

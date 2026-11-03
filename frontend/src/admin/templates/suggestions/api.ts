@@ -1,16 +1,16 @@
 import { request } from '../../api'
 import type { SuggestionContent } from './content'
 
-// 範本建議 API 用戶端（TPL-R29～R36「資料與 API」）。
-//
-// 後端 T16（#803）、T17（#804）尚未合併，下列型別與端點依
-// spec.md 的 API 契約撰寫；欄位名稱在 #803／#804 合併後以真 API 核對。
-// 只有以下幾處是規格沒有逐字定義、由前端暫定的契約，核對時優先檢查：
-//   - 審核清單 `status=ALL` 代表「完整歷程」（規格只寫預設 PENDING 與
-//     可切換各狀態）。
-//   - 修訂回應內的 `events`、詳情的 `approval`／`latest_return`。
-//   - 保存修訂無變更時（200）回傳原版，前端以回傳的修訂 ID 是否等於
-//     `expected_revision_id` 判斷「內容沒有變更」。
+import { detailView, revisionView, summaryView } from './wire'
+import type {
+  ComparisonResponse,
+  DetailResponse,
+  RevisionResponse,
+  SummaryResponse,
+} from './wire'
+
+// TPL-R29～R36：HTTP DTO 在 wire.ts；本檔的事件與核准型別是畫面模型。
+// 顯示模型由真實 transitions／reviews 衍生，不假設後端存在 events。
 
 /** TPL-R31 狀態機的四種狀態。 */
 export type SuggestionStatus =
@@ -47,7 +47,7 @@ export interface SuggestionApproval {
   category_name: string
   system_name: string
   sequence: number | null
-  revision_no: number
+  revision_no: number | null
   reviewer_name: string
   reviewed_at: string
 }
@@ -55,9 +55,9 @@ export interface SuggestionApproval {
 /** 退回事件摘要，供清單與詳情直接顯示最新退回原因。 */
 export interface SuggestionReturn {
   reason: string
-  revision_no: number
+  revision_no: number | null
   reviewer_name: string
-  returned_at: string
+  returned_at: string | null
 }
 
 /** 本人清單與管理清單的每一筆。 */
@@ -119,6 +119,7 @@ export interface ReviewSuggestionQuery {
   status?: SuggestionStatus | 'ALL'
   cursor?: string | null
   limit?: number
+  q?: string
 }
 
 function query(params: Record<string, string | number | null | undefined>) {
@@ -132,11 +133,17 @@ function query(params: Record<string, string | number | null | undefined>) {
   return text ? `?${text}` : ''
 }
 
+/** 寫入回傳完整 DetailResponse；操作流程只使用這組真實主件欄位。 */
+export type SuggestionResult = Pick<
+  DetailResponse,
+  'id' | 'status' | 'current_revision_id' | 'revision_no'
+>
+
 /** TPL-R29：從專案查核項目提出建議，建立即送審。 */
 export function createSuggestion(
   projectId: string,
   projectInspectionItemId: string,
-): Promise<SuggestionDetail> {
+): Promise<SuggestionResult> {
   return request(`/projects/${projectId}/template-suggestions`, {
     method: 'POST',
     body: JSON.stringify({
@@ -146,10 +153,14 @@ export function createSuggestion(
 }
 
 /** TPL-R34：本人清單；`total_count` 是篩選後的本人件數。 */
-export function listMySuggestions(
+export async function listMySuggestions(
   params: MySuggestionQuery = {},
 ): Promise<MySuggestionPage> {
-  return request(
+  const page = await request<{
+    items: SummaryResponse[]
+    next_cursor: string | null
+    total_count: number
+  }>(
     `/me/template-suggestions${query({
       status: params.status,
       source_project_id: params.source_project_id,
@@ -157,19 +168,25 @@ export function listMySuggestions(
       limit: params.limit ?? 50,
     })}`,
   )
+  return { ...page, items: page.items.map(summaryView) }
 }
 
 /** TPL-R33：管理者清單，只列曾送審件。 */
-export function listReviewSuggestions(
+export async function listReviewSuggestions(
   params: ReviewSuggestionQuery = {},
 ): Promise<SuggestionPage> {
-  return request(
+  const page = await request<{
+    items: SummaryResponse[]
+    next_cursor: string | null
+  }>(
     `/template-suggestions${query({
       status: params.status,
       cursor: params.cursor,
       limit: params.limit ?? 50,
+      q: params.q,
     })}`,
   )
+  return { ...page, items: page.items.map(summaryView) }
 }
 
 /** TPL-R34：全部 PENDING 主件數，不受頁次與搜尋影響。 */
@@ -178,8 +195,15 @@ export function getPendingCount(): Promise<{ pending_count: number }> {
 }
 
 /** TPL-R36：本人或對曾送審件具 template.manage 者讀詳情；其餘回 404。 */
-export function getSuggestion(id: string): Promise<SuggestionDetail> {
-  return request(`/template-suggestions/${id}`)
+export async function getSuggestion(
+  id: string,
+  history: Promise<SuggestionRevision[]> = listRevisions(id),
+): Promise<SuggestionDetail> {
+  const [row, revisions] = await Promise.all([
+    request<DetailResponse>(`/template-suggestions/${id}`),
+    history,
+  ])
+  return detailView(row, revisions)
 }
 
 /** 依 `revision_no` 升冪取完所有修訂（每頁 100 筆，沿用共用上限）。 */
@@ -189,31 +213,36 @@ export async function listRevisions(
   const items: SuggestionRevision[] = []
   let cursor: string | null = null
   do {
-    const page: { items: SuggestionRevision[]; next_cursor: string | null } =
+    const page: { items: RevisionResponse[]; next_cursor: string | null } =
       await request(
         `/template-suggestions/${id}/revisions${query({
           limit: 100,
           cursor,
         })}`,
       )
-    items.push(...page.items)
+    items.push(...page.items.map(revisionView))
     cursor = page.next_cursor
   } while (cursor)
   return items
 }
 
 /** 兩版必須是相鄰修訂，否則後端回 422。 */
-export function compareRevisions(
+export async function compareRevisions(
   id: string,
   fromRevisionId: string,
   toRevisionId: string,
-): Promise<{ from: SuggestionRevision; to: SuggestionRevision }> {
-  return request(
+) {
+  const response = await request<ComparisonResponse>(
     `/template-suggestions/${id}/revisions:compare${query({
       from_revision_id: fromRevisionId,
       to_revision_id: toRevisionId,
     })}`,
   )
+  return {
+    from: response.from_revision,
+    to: response.to_revision,
+    changes: response.changes,
+  }
 }
 
 /** 不同內容回新修訂；內容沒有變更時後端回原版。 */
@@ -221,7 +250,7 @@ export function saveRevision(
   id: string,
   content: SuggestionContent,
   expected: Expected,
-): Promise<SuggestionRevision> {
+): Promise<SuggestionResult> {
   return request(`/template-suggestions/${id}/revisions`, {
     method: 'POST',
     body: JSON.stringify({ content, ...expected }),
@@ -232,7 +261,7 @@ export function saveRevision(
 export function submitSuggestion(
   id: string,
   expected: Expected,
-): Promise<SuggestionDetail> {
+): Promise<SuggestionResult> {
   return request(`/template-suggestions/${id}:submit`, {
     method: 'POST',
     body: JSON.stringify(expected),
@@ -243,7 +272,7 @@ export function submitSuggestion(
 export function withdrawSuggestion(
   id: string,
   expected: Expected,
-): Promise<SuggestionDetail> {
+): Promise<SuggestionResult> {
   return request(`/template-suggestions/${id}:withdraw`, {
     method: 'POST',
     body: JSON.stringify(expected),
@@ -255,7 +284,7 @@ export function returnSuggestion(
   id: string,
   reason: string,
   expected: Expected,
-): Promise<SuggestionDetail> {
+): Promise<SuggestionResult> {
   return request(`/template-suggestions/${id}:return`, {
     method: 'POST',
     body: JSON.stringify({ reason, ...expected }),
@@ -270,7 +299,7 @@ export function approveSuggestion(
   id: string,
   target: { category_id: string; system_id: string },
   expected: Expected,
-): Promise<SuggestionDetail> {
+): Promise<SuggestionResult> {
   return request(`/template-suggestions/${id}:approve`, {
     method: 'POST',
     body: JSON.stringify({ ...target, ...expected }),

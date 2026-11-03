@@ -12,7 +12,7 @@ import {
   type SuggestionDetail,
   type SuggestionRevision,
 } from './api'
-import { computeDifferences, DIFFERENCE_LABELS, displayTitle } from './content'
+import { backendDifferences, DIFFERENCE_LABELS, displayTitle } from './content'
 import { formatTime } from './format'
 import { suggestionErrorMessage } from './messages'
 import { suggestionPath, type SuggestionNavState } from './paths'
@@ -22,8 +22,8 @@ import './Suggestions.css'
 type Side = 'before' | 'after'
 
 /**
- * 管理者比較相鄰兩版（TPL-R32、TPL-AC36）。差異依兩版快照的穩定邏輯
- * 識別計算；非相鄰的兩版不提供選項，也不會送出請求。手機寬度預設收合
+ * 管理者比較相鄰兩版（TPL-R32、TPL-AC36）。差異由後端依穩定邏輯
+ * 識別判定，前端只格式化呈現；非相鄰的兩版不提供選項，也不會送出請求。手機寬度預設收合
  * 兩份完整內容，先看差異摘要，再按「看前版／看後版」跳到同一項次。
  */
 export default function SuggestionComparePage() {
@@ -33,10 +33,9 @@ export default function SuggestionComparePage() {
   const [suggestion, setSuggestion] = useState<SuggestionDetail | null>(null)
   const [revisions, setRevisions] = useState<SuggestionRevision[]>([])
   const [pairNo, setPairNo] = useState<number | null>(null)
-  const [pair, setPair] = useState<{
-    from: SuggestionRevision
-    to: SuggestionRevision
-  } | null>(null)
+  const [pair, setPair] = useState<Awaited<
+    ReturnType<typeof compareRevisions>
+  > | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [denied, setDenied] = useState(false)
@@ -49,7 +48,8 @@ export default function SuggestionComparePage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([getSuggestion(suggestionId), listRevisions(suggestionId)])
+    const history = listRevisions(suggestionId)
+    Promise.all([getSuggestion(suggestionId, history), history])
       .then(([detail, list]) => {
         if (!active) return
         setSuggestion(detail)
@@ -120,9 +120,7 @@ export default function SuggestionComparePage() {
     )
   }
 
-  const differences = pair
-    ? computeDifferences(pair.from.content, pair.to.content)
-    : []
+  const differences = pair ? backendDifferences(pair) : []
   const narrow =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(max-width: 640px)').matches
@@ -223,10 +221,13 @@ export default function SuggestionComparePage() {
               <p>
                 {revision.editor_name} · {formatTime(revision.created_at)}
               </p>
-              {revision.events.length === 0 ? (
+              {(revisions.find((row) => row.id === revision.id)?.events ?? [])
+                .length === 0 ? (
                 <p>修訂已保存，尚無此版的審核決定。</p>
               ) : (
-                revision.events.map((event) => (
+                (
+                  revisions.find((row) => row.id === revision.id)?.events ?? []
+                ).map((event) => (
                   <p key={`${event.status}-${event.created_at}`}>
                     {event.actor_name} · {formatTime(event.created_at)}
                     {event.reason && (

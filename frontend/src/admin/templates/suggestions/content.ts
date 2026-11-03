@@ -67,8 +67,9 @@ export function displayTitle(title: string): string {
 
 /** 轉成共用編輯器使用的項目草稿；`clientKey` 即穩定邏輯識別。 */
 export function toEditorItem(content: SuggestionContent): TemplateItem {
-  const points: InspectionPoint[] = content.inspection_points.map(
-    (point, index) => ({
+  const points: InspectionPoint[] = [...content.inspection_points]
+    .sort((a, b) => a.sequence - b.sequence)
+    .map((point, index) => ({
       clientKey: point.logical_id,
       sequence: index + 1,
       title: point.title,
@@ -99,8 +100,7 @@ export function toEditorItem(content: SuggestionContent): TemplateItem {
       evidence_requirements: point.evidence_requirements.map((entry) => ({
         min_count: entry.min_count,
       })),
-    }),
-  )
+    }))
   return {
     system_id: '',
     sequence: 1,
@@ -263,121 +263,121 @@ function boundName(point: SuggestionPoint): string {
   )
 }
 
-/**
- * 依穩定邏輯識別比對相鄰兩版，列出項次與欄位的新增、刪除、修改、重排
- * （TPL-AC36）。只比對兩版都有的識別，缺的一側算新增或刪除，所以改名
- * 的項次是「修改」而不是「刪一增一」。
- */
-export function computeDifferences(
-  before: SuggestionContent,
-  after: SuggestionContent,
-): Difference[] {
-  const out: Difference[] = []
-  const add = (
-    kind: DifferenceKind,
-    label: string,
-    from: string,
-    to: string,
-    pointId: string | null,
-  ) => out.push({ kind, label, before: from, after: to, pointId })
-  const changed = (
-    label: string,
-    from: string,
-    to: string,
-    pointId: string | null,
-  ) => {
-    if (from !== to) add('modified', label, from, to, pointId)
-  }
-  changed('查核項目名稱', before.title, after.title, null)
-  changed('檢查說明', before.instruction, after.instruction, null)
-
-  const ids = (points: SuggestionPoint[]) => points.map((p) => p.logical_id)
-  const beforeIds = new Set(ids(before.inspection_points))
-  const afterIds = new Set(ids(after.inspection_points))
-  const sharedBefore = before.inspection_points.filter((p) =>
-    afterIds.has(p.logical_id),
-  )
-  const sharedAfter = after.inspection_points.filter((p) =>
-    beforeIds.has(p.logical_id),
-  )
-  if (ids(sharedBefore).join() !== ids(sharedAfter).join()) {
-    add(
-      'reordered',
-      '查核項次',
-      sharedBefore.map((p) => p.title).join('／'),
-      sharedAfter.map((p) => p.title).join('／'),
-      null,
-    )
-  }
-  for (const point of before.inspection_points) {
-    if (!afterIds.has(point.logical_id)) {
-      add('removed', '查核項次', point.title, '（已移除）', point.logical_id)
+/** TPL-AC36：後端決定有差異的對象，前端只拆成可讀的欄位文字。 */
+export function backendDifferences(pair: {
+  from: { content: SuggestionContent }
+  to: { content: SuggestionContent }
+  changes: import('./wire').DifferenceResponse[]
+}): Difference[] {
+  const oldPoints = pair.from.content.inspection_points
+  const newPoints = pair.to.content.inspection_points
+  return pair.changes.flatMap((change): Difference[] => {
+    const pointId =
+      change.entity === 'measurement_field'
+        ? change.parent_logical_id
+        : change.logical_id
+    const oldPoint = oldPoints.find((p) => p.logical_id === pointId)
+    const newPoint = newPoints.find((p) => p.logical_id === pointId)
+    const rows: Difference[] = []
+    const add = (
+      kind: DifferenceKind,
+      label: string,
+      before: string,
+      after: string,
+    ) => {
+      rows.push({ kind, label, before, after, pointId })
     }
-  }
-  for (const point of after.inspection_points) {
-    const id = point.logical_id
-    const old = before.inspection_points.find((p) => p.logical_id === id)
-    if (!old) {
-      add('added', '查核項次', '（無）', point.title, id)
-      continue
+    const changed = (label: string, before: string, after: string) => {
+      if (before !== after) add('modified', label, before, after)
     }
-    const name = point.title || '（未填標題）'
-    changed(`${name}／標題`, old.title, point.title, id)
-    changed(`${name}／說明`, old.instruction, point.instruction, id)
-    changed(`${name}／標準`, standardText(old), standardText(point), id)
-    changed(`${name}／綁定欄位`, boundName(old), boundName(point), id)
-    changed(
-      `${name}／照片張數`,
-      String(old.evidence_requirements[0]?.min_count ?? ''),
-      String(point.evidence_requirements[0]?.min_count ?? ''),
-      id,
-    )
-    const oldFieldIds = new Set(
-      old.measurement_fields.map((f) => f.logical_id),
-    )
-    const newFieldIds = new Set(
-      point.measurement_fields.map((f) => f.logical_id),
-    )
-    const byOrder = (fields: SuggestionField[]) =>
-      [...fields].sort((a, b) => a.sort_order - b.sort_order)
-    const oldShared = byOrder(old.measurement_fields).filter((f) =>
-      newFieldIds.has(f.logical_id),
-    )
-    const newShared = byOrder(point.measurement_fields).filter((f) =>
-      oldFieldIds.has(f.logical_id),
-    )
-    if (
-      oldShared.map((f) => f.logical_id).join() !==
-      newShared.map((f) => f.logical_id).join()
-    ) {
-      add(
-        'reordered',
-        `${name}／實測欄位`,
-        oldShared.map((f) => f.name).join('／'),
-        newShared.map((f) => f.name).join('／'),
-        id,
+    if (change.entity === 'item') {
+      changed('查核項目名稱', pair.from.content.title, pair.to.content.title)
+      changed(
+        '檢查說明',
+        pair.from.content.instruction,
+        pair.to.content.instruction,
       )
-    }
-    for (const field of old.measurement_fields) {
-      if (!newFieldIds.has(field.logical_id)) {
-        add('removed', `${name}／欄位`, field.name, '（已移除）', id)
-      }
-    }
-    for (const field of point.measurement_fields) {
-      const original = old.measurement_fields.find(
-        (f) => f.logical_id === field.logical_id,
-      )
-      if (!original) {
-        add('added', `${name}／欄位`, '（無）', field.name, id)
-      } else {
+    } else if (change.entity === 'inspection_point') {
+      if (change.kind === 'reordered') {
+        const describe = (ids: string[], points: SuggestionPoint[]) =>
+          ids
+            .map(
+              (id) =>
+                points.find((p) => p.logical_id === id)?.title ?? '（無）',
+            )
+            .join('／')
+        add(
+          'reordered',
+          '查核項次',
+          describe(change.before as string[], oldPoints),
+          describe(change.after as string[], newPoints),
+        )
+      } else if (change.kind === 'added') {
+        add('added', '查核項次', '（無）', newPoint?.title ?? '（未填標題）')
+      } else if (change.kind === 'removed') {
+        add(
+          'removed',
+          '查核項次',
+          oldPoint?.title ?? '（未填標題）',
+          '（已移除）',
+        )
+      } else if (oldPoint && newPoint) {
+        const name = newPoint.title || '（未填標題）'
+        if (oldPoint.sequence !== newPoint.sequence) {
+          // #813：只交換 sequence 也由後端回報 modified，仍須呈現重排。
+          add(
+            'reordered',
+            `${name}／序號`,
+            String(oldPoint.sequence),
+            String(newPoint.sequence),
+          )
+        }
+        changed(`${name}／標題`, oldPoint.title, newPoint.title)
+        changed(`${name}／說明`, oldPoint.instruction, newPoint.instruction)
         changed(
-          `${name}／欄位`,
-          fieldDescription(original),
-          fieldDescription(field),
-          id,
+          `${name}／標準`,
+          standardText(oldPoint),
+          standardText(newPoint),
+        )
+        changed(`${name}／綁定欄位`, boundName(oldPoint), boundName(newPoint))
+        changed(
+          `${name}／照片張數`,
+          String(oldPoint.evidence_requirements[0]?.min_count ?? ''),
+          String(newPoint.evidence_requirements[0]?.min_count ?? ''),
+        )
+      }
+    } else {
+      const label = `${newPoint?.title ?? oldPoint?.title ?? '查核項次'}／實測欄位`
+      if (change.kind === 'reordered') {
+        const describe = (ids: string[], point?: SuggestionPoint) =>
+          ids
+            .map(
+              (id) =>
+                point?.measurement_fields.find((f) => f.logical_id === id)
+                  ?.name ?? '（無）',
+            )
+            .join('／')
+        add(
+          'reordered',
+          label,
+          describe(change.before as string[], oldPoint),
+          describe(change.after as string[], newPoint),
+        )
+      } else {
+        const oldField = oldPoint?.measurement_fields.find(
+          (f) => f.logical_id === change.logical_id,
+        )
+        const newField = newPoint?.measurement_fields.find(
+          (f) => f.logical_id === change.logical_id,
+        )
+        add(
+          change.kind,
+          label,
+          oldField ? fieldDescription(oldField) : '（無）',
+          newField ? fieldDescription(newField) : '（已移除）',
         )
       }
     }
-  }
-  return out
+    return rows
+  })
 }

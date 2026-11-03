@@ -173,6 +173,7 @@ describe('TPL-AC42 提出建議的事前確認', () => {
     fireEvent.click(await screen.findByRole('button', { name: '確認提出' }))
     const notice = await screen.findByRole('status')
     expect(notice).toHaveTextContent('「鋼筋綁紮」已送審')
+    expect(notice).not.toHaveFocus()
     expect(
       within(notice).getByRole('link', { name: '查看我的範本建議' }),
     ).toHaveAttribute(

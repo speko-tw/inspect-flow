@@ -27,6 +27,7 @@ import {
   makeContent,
   makeDetail,
   makeRevision,
+  saveResult,
   WU,
 } from './fixtures'
 import { SUGGESTION_BASE, type SuggestionMode } from './paths'
@@ -115,10 +116,12 @@ describe('TPL-R32 審核者修改待審內容', () => {
     const { detail, revisions } = pendingCase()
     renderEdit('review', WU.id, detail, revisions)
     vi.mocked(saveRevision).mockResolvedValue(
-      makeRevision(2, {
-        editor_id: WU.id,
-        content: makeContent({ title: '鋼筋綁紮通用版' }),
-      }),
+      saveResult(
+        makeRevision(2, {
+          editor_id: WU.id,
+          content: makeContent({ title: '鋼筋綁紮通用版' }),
+        }),
+      ),
     )
     await screen.findByText(/目前已存第 1 版；本次修改另存新版本/)
     fireEvent.change(titleInput(), { target: { value: '鋼筋綁紮通用版' } })
@@ -137,7 +140,7 @@ describe('TPL-R32 審核者修改待審內容', () => {
 
   it('已選目的地時提示目的地已保留', async () => {
     const { detail, revisions } = pendingCase()
-    vi.mocked(saveRevision).mockResolvedValue(makeRevision(2))
+    vi.mocked(saveRevision).mockResolvedValue(saveResult(makeRevision(2)))
     renderEdit('review', WU.id, detail, revisions, '', {
       target: { category_id: 'c', system_id: 's' },
     })
@@ -152,13 +155,16 @@ describe('TPL-R32 審核者修改待審內容', () => {
     expect(state.target).toEqual({ category_id: 'c', system_id: 's' })
   })
 
-  it('內容沒有變更時不增版、不送出，訊息以「內容沒有變更」開頭', async () => {
+  it('內容沒有變更仍送後端覆核，回原版時顯示「內容沒有變更」', async () => {
     const { detail, revisions } = pendingCase()
+    vi.mocked(saveRevision).mockResolvedValue(
+      saveResult(detail.current_revision),
+    )
     renderEdit('review', WU.id, detail, revisions)
     await screen.findByText(/目前已存第 1 版/)
     fireEvent.click(screen.getByRole('button', { name: '儲存新版本' }))
     await screen.findByText('詳情頁')
-    expect(saveRevision).not.toHaveBeenCalled()
+    expect(saveRevision).toHaveBeenCalledTimes(1)
     const state = JSON.parse(
       screen.getByTestId('location').textContent!.split('|')[1],
     )
@@ -169,7 +175,9 @@ describe('TPL-R32 審核者修改待審內容', () => {
 
   it('後端回原版（無變更）時同樣不稱已存新版', async () => {
     const { detail, revisions } = pendingCase()
-    vi.mocked(saveRevision).mockResolvedValue(detail.current_revision)
+    vi.mocked(saveRevision).mockResolvedValue(
+      saveResult(detail.current_revision),
+    )
     renderEdit('review', WU.id, detail, revisions)
     await screen.findByText(/目前已存第 1 版/)
     fireEvent.change(titleInput(), { target: { value: '改了又保存' } })
@@ -258,6 +266,39 @@ describe('TPL-R32 審核者修改待審內容', () => {
     )
   })
 
+  it('上下移保留邏輯識別、數值綁定與各項照片草稿', async () => {
+    const { detail, revisions } = pendingCase()
+    renderEdit('review', WU.id, detail, revisions)
+    vi.mocked(saveRevision).mockResolvedValue(saveResult(makeRevision(2)))
+    await screen.findByText(/目前已存第 1 版/)
+    fireEvent.change(screen.getAllByLabelText(/照片至少幾張/)[0], {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: '下移欄位' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: '下移項次' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '儲存新版本' }))
+    await screen.findByText('詳情頁')
+    const content = vi.mocked(saveRevision).mock.calls[0][1]
+    expect(content.inspection_points.map((p) => p.logical_id)).toEqual([
+      IDS.coupler,
+      IDS.spacing,
+    ])
+    const spacing = content.inspection_points[1]
+    expect(spacing.sequence).toBe(2)
+    expect(spacing.measurement_fields.map((f) => f.logical_id)).toEqual([
+      IDS.notesField,
+      IDS.spacingField,
+    ])
+    expect(spacing.measurement_fields.map((f) => f.sort_order)).toEqual([0, 1])
+    expect(spacing.numeric_standard?.measurement_field_logical_id).toBe(
+      IDS.spacingField,
+    )
+    expect(spacing.evidence_requirements).toEqual([{ min_count: 3 }])
+    expect(content.inspection_points[0].evidence_requirements).toEqual([
+      { min_count: 2 },
+    ])
+  })
+
   it('「修改名稱」捷徑：焦點直達名稱、其他項次收合，之後可手動展開', async () => {
     const { detail, revisions } = pendingCase()
     renderEdit('review', WU.id, detail, revisions, '?rename=1&focus=title')
@@ -305,7 +346,7 @@ describe('TPL-R36 提議人修改退回件', () => {
   it('退回件可先保存未完成內容，訊息明寫尚未送審', async () => {
     const { detail, revisions } = returnedCase()
     vi.mocked(saveRevision).mockResolvedValue(
-      makeRevision(2, { content: makeContent({ title: '' }) }),
+      saveResult(makeRevision(2, { content: makeContent({ title: '' }) })),
     )
     renderEdit('mine', LIN.id, detail, revisions)
     await screen.findByText(/目前已存第 1 版/)
@@ -361,7 +402,7 @@ describe('TPL-R36 提議人修改退回件', () => {
 
   it('完整時先存新版再回詳情，要求開啟重送確認', async () => {
     const { detail, revisions } = returnedCase()
-    vi.mocked(saveRevision).mockResolvedValue(makeRevision(2))
+    vi.mocked(saveRevision).mockResolvedValue(saveResult(makeRevision(2)))
     renderEdit('mine', LIN.id, detail, revisions)
     await screen.findByText(/目前已存第 1 版/)
     fireEvent.change(titleInput(), { target: { value: '補好了' } })

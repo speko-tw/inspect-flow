@@ -7,7 +7,7 @@ import type {
 } from './api'
 import type { SuggestionContent } from './content'
 
-// 元件與契約測試共用的假資料（mock-first；真 API 接上後以 E2E 驗證）。
+// 元件 mock 使用轉換後的畫面模型；HTTP 契約測試使用下方 Response 工廠。
 // 人名只使用示範人物，不放真實公司或個人。
 
 export const IDS = {
@@ -167,4 +167,139 @@ export function makeDetail(
     current_revision: revision,
     ...overrides,
   }
+}
+
+/** 測試用真 HTTP 清單 DTO；元件顯示模型與原始回應必須分開。 */
+export function summaryResponse(
+  overrides: Partial<import('./wire').SummaryResponse> = {},
+): import('./wire').SummaryResponse {
+  const summary = makeSummary()
+  return {
+    id: summary.id,
+    status: summary.status,
+    proposer_id: LIN.id,
+    proposer_name: LIN.name,
+    source_project_id: IDS.project,
+    source_project_name: summary.source_project_name,
+    source_item_id: IDS.sourceItem,
+    source_item_title: summary.source_item_title,
+    title: summary.title,
+    current_revision_id: 'rev-1',
+    revision_no: 1,
+    content_sha256: 'a'.repeat(64),
+    last_editor_id: LIN.id,
+    last_editor_name: LIN.name,
+    last_submitted_at: summary.last_submitted_at,
+    return_reason: null,
+    latest_review: null,
+    approval: null,
+    approved_template_id: null,
+    first_submitted_at: summary.last_submitted_at,
+    created_at: summary.last_submitted_at,
+    updated_at: summary.last_submitted_at,
+    ...overrides,
+  }
+}
+
+/** 真 revisions DTO：reviews 與 transitions 分開，不以 events 偽裝 HTTP。 */
+export function revisionResponse(
+  no: number,
+  overrides: Partial<import('./wire').RevisionResponse> = {},
+): import('./wire').RevisionResponse {
+  const revision = makeRevision(no)
+  return {
+    id: revision.id,
+    suggestion_id: IDS.suggestion,
+    revision_no: no,
+    based_on_revision_id: revision.based_on_revision_id,
+    content: revision.content,
+    content_sha256: 'a'.repeat(64),
+    editor_id: LIN.id,
+    editor_name: LIN.name,
+    created_at: revision.created_at,
+    status: 'PENDING',
+    reviews: [],
+    transitions: [],
+    ...overrides,
+  }
+}
+
+/** 真詳情與寫入回應為平面主件加 content。 */
+export function detailResponse(
+  overrides: Partial<import('./wire').DetailResponse> = {},
+): import('./wire').DetailResponse {
+  return { ...summaryResponse(), content: makeContent(), ...overrides }
+}
+
+/** 元件保存 mock 沿真寫入回應使用 current_revision_id，而非修訂 id。 */
+export function saveResult(revision: SuggestionRevision) {
+  return {
+    id: IDS.suggestion,
+    current_revision_id: revision.id,
+    status: 'PENDING' as const,
+    revision_no: revision.revision_no,
+  }
+}
+
+/** 比較元件用的後端差異 fixture，不在產品程式重新計算差異。 */
+export function comparisonResponse(
+  from: SuggestionRevision,
+  to: SuggestionRevision,
+) {
+  const changes: import('./wire').DifferenceResponse[] = []
+  if (
+    from.content.title !== to.content.title ||
+    from.content.instruction !== to.content.instruction
+  ) {
+    changes.push({
+      kind: 'modified',
+      entity: 'item',
+      logical_id: null,
+      parent_logical_id: null,
+      before: {
+        title: from.content.title,
+        instruction: from.content.instruction,
+      },
+      after: { title: to.content.title, instruction: to.content.instruction },
+    })
+  }
+  for (const old of from.content.inspection_points) {
+    const next = to.content.inspection_points.find(
+      (p) => p.logical_id === old.logical_id,
+    )
+    if (!next)
+      changes.push({
+        kind: 'removed',
+        entity: 'inspection_point',
+        logical_id: old.logical_id,
+        parent_logical_id: null,
+        before: old,
+        after: null,
+      })
+    else if (JSON.stringify(old) !== JSON.stringify(next))
+      changes.push({
+        kind: 'modified',
+        entity: 'inspection_point',
+        logical_id: old.logical_id,
+        parent_logical_id: null,
+        before: old,
+        after: next,
+      })
+  }
+  for (const next of to.content.inspection_points) {
+    if (
+      !from.content.inspection_points.some(
+        (p) => p.logical_id === next.logical_id,
+      )
+    )
+      changes.push({
+        kind: 'added',
+        entity: 'inspection_point',
+        logical_id: next.logical_id,
+        parent_logical_id: null,
+        before: null,
+        after: next,
+      })
+  }
+  return { from, to, changes }
 }

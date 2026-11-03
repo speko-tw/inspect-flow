@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   completenessErrors,
-  computeDifferences,
+  backendDifferences,
   fromEditorItem,
   photoDraftOf,
   sameContent,
@@ -74,78 +74,90 @@ describe('TPL-R32 重送前的完整性檢查', () => {
   })
 })
 
-describe('TPL-AC36 相鄰兩版差異', () => {
-  it('標準與標題的修改以項次為單位列出', () => {
-    const before = makeContent()
-    const after = makeContent({ title: '鋼筋綁紮與間距檢查' })
-    after.inspection_points[0].numeric_standard!.value = '180'
-    after.inspection_points[1].evidence_requirements = [{ min_count: 3 }]
-    const kinds = computeDifferences(before, after).map(
-      (d) => `${d.kind}:${d.label}`,
-    )
-    expect(kinds).toEqual([
-      'modified:查核項目名稱',
-      'modified:鋼筋間距／標準',
-      'modified:續接器檢查／照片張數',
-    ])
-  })
-
-  it('新增、刪除與重排項次，並帶可跳轉的項次識別', () => {
+describe('TPL-AC36 後端差異呈現', () => {
+  it('只改序號、不搬陣列也呈現後端回報的重排', () => {
     const before = makeContent()
     const after = makeContent()
-    after.inspection_points = [
-      after.inspection_points[1],
-      {
-        ...structuredClone(before.inspection_points[0]),
-        logical_id: 'new-point',
-        title: '保護層厚度',
-        measurement_fields: [],
-        numeric_standard: null,
-      },
-    ]
-    const differences = computeDifferences(before, after)
-    expect(differences.map((d) => d.kind)).toEqual(['removed', 'added'])
-    expect(differences[0].pointId).toBe(IDS.spacing)
-    expect(differences[1].pointId).toBe('new-point')
-
-    const swapped = makeContent()
-    swapped.inspection_points.reverse()
-    expect(computeDifferences(before, swapped)).toEqual([
-      expect.objectContaining({ kind: 'reordered', label: '查核項次' }),
+    after.inspection_points[0].sequence = 2
+    after.inspection_points[1].sequence = 1
+    const differences = backendDifferences({
+      from: { content: before },
+      to: { content: after },
+      changes: before.inspection_points.map((point, index) => ({
+        kind: 'modified',
+        entity: 'inspection_point',
+        logical_id: point.logical_id,
+        parent_logical_id: null,
+        before: point,
+        after: after.inspection_points[index],
+      })),
+    })
+    expect(differences).toEqual([
+      expect.objectContaining({
+        kind: 'reordered',
+        pointId: IDS.spacing,
+        before: '1',
+        after: '2',
+      }),
+      expect.objectContaining({
+        kind: 'reordered',
+        pointId: IDS.coupler,
+        before: '2',
+        after: '1',
+      }),
     ])
+    expect(
+      toEditorItem(after).inspection_points.map((p) => p.clientKey),
+    ).toEqual([IDS.coupler, IDS.spacing])
   })
 
-  it('實測欄位的新增、刪除、修改、重排與綁定變更', () => {
-    const before = makeContent()
-    const after = makeContent()
-    const point = after.inspection_points[0]
-    point.measurement_fields = [
-      { ...point.measurement_fields[1], sort_order: 0 },
-      { ...point.measurement_fields[0], name: '鋼筋間距', sort_order: 1 },
-      {
-        logical_id: 'field-new',
-        name: '覆核間距',
-        field_type: 'number',
-        unit: 'mm',
-        sort_order: 2,
-      },
-    ]
-    point.numeric_standard!.measurement_field_logical_id = 'field-new'
-    const labels = computeDifferences(before, after).map(
-      (d) => `${d.kind}:${d.label}`,
-    )
-    expect(labels).toEqual(
-      expect.arrayContaining([
-        'modified:鋼筋間距／綁定欄位',
-        'reordered:鋼筋間距／實測欄位',
-        'added:鋼筋間距／欄位',
-        'modified:鋼筋間距／欄位',
-      ]),
-    )
+  it('後端未回報的差異不由前端自行補判', () => {
+    expect(
+      backendDifferences({
+        from: { content: makeContent() },
+        to: { content: makeContent({ title: '不同名稱' }) },
+        changes: [],
+      }),
+    ).toEqual([])
   })
 
-  it('兩版相同時沒有差異', () => {
-    expect(computeDifferences(makeContent(), makeContent())).toEqual([])
+  it('欄位重排採後端識別順序，新增移除保留項次跳轉', () => {
+    const content = makeContent()
+    const point = content.inspection_points[0]
+    const field = point.measurement_fields[0]
+    const other = point.measurement_fields[1]
+    const changes = backendDifferences({
+      from: { content },
+      to: { content },
+      changes: [
+        {
+          kind: 'reordered',
+          entity: 'measurement_field',
+          logical_id: null,
+          parent_logical_id: point.logical_id,
+          before: [field.logical_id, other.logical_id],
+          after: [other.logical_id, field.logical_id],
+        },
+        {
+          kind: 'removed',
+          entity: 'inspection_point',
+          logical_id: point.logical_id,
+          parent_logical_id: null,
+          before: point,
+          after: null,
+        },
+      ],
+    })
+    expect(changes[0]).toMatchObject({
+      kind: 'reordered',
+      before: '間距／備註',
+      after: '備註／間距',
+      pointId: IDS.spacing,
+    })
+    expect(changes[1]).toMatchObject({
+      kind: 'removed',
+      pointId: IDS.spacing,
+    })
   })
 
   it('標準文字帶出綁定欄位的單位', () => {

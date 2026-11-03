@@ -115,14 +115,6 @@ export function SuggestionContentEditor({
     ? validateItemFields(draft, photoDraft, { stablePointErrorKeys: true })
     : {}
 
-  // 「修改名稱」捷徑：進頁後只收合預設展開的第一個項次一次。
-  useEffect(() => {
-    if (!nameOnly) return
-    rootRef.current
-      ?.querySelector<HTMLElement>('.tpl-point-card[open] > summary')
-      ?.click()
-  }, [nameOnly])
-
   useEffect(() => {
     if (!requestError) return
     requestErrorRef.current?.scrollIntoView?.({ block: 'nearest' })
@@ -240,6 +232,33 @@ export function SuggestionContentEditor({
         目前已存第 {revisionNo} 版；本次修改另存新版本，前版與審核紀錄保留。
       </p>
       <TemplateItemEditor
+        initialOpenPoint={nameOnly ? null : 0}
+        movePoint={(from, to) => {
+          const order = points.map((_point, index) => index)
+          ;[order[from], order[to]] = [order[to], order[from]]
+          setPoints(order.map((index) => points[index]))
+          setPhotoDraft((current) =>
+            Object.fromEntries(
+              order.map((index, position) => [
+                String(position),
+                current[String(index)] ?? '1',
+              ]),
+            ),
+          )
+          setServerErrors({})
+          setConfirmField('')
+        }}
+        moveField={(pointIndex, from, to) => {
+          setPoints((current) =>
+            current.map((point, index) => {
+              if (index !== pointIndex) return point
+              const fields = [...point.measurement_fields]
+              ;[fields[from], fields[to]] = [fields[to], fields[from]]
+              return { ...point, measurement_fields: fields }
+            }),
+          )
+          setServerErrors({})
+        }}
         addPoint={() =>
           setPoints((current) => [
             ...current,

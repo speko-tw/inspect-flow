@@ -23,9 +23,6 @@ beforeAll(async () => {
 
 afterEach(() => vi.unstubAllGlobals())
 
-// 管理外殼第一次渲染較重，負載高時會超過 findBy 預設的 1 秒。
-const SLOW = { timeout: 5000 }
-
 const NO_ACCESS = currentUserFixture({
   has_project_access: false,
   can_inspect_tasks: false,
@@ -144,11 +141,7 @@ describe('管理外殼註冊', () => {
     renderAt('/templates/suggestions', admin)
     // 外殼第一次渲染較重，負載高時超過預設的 1 秒。
     expect(
-      await screen.findByRole(
-        'heading',
-        { name: '範本建議審核' },
-        { timeout: 5000 },
-      ),
+      await screen.findByRole('heading', { name: '範本建議審核' }),
     ).toBeVisible()
   })
 
@@ -162,14 +155,14 @@ describe('管理外殼註冊', () => {
       }),
     )
     expect(
-      await screen.findByRole('heading', { name: '範本建議審核' }, SLOW),
+      await screen.findByRole('heading', { name: '範本建議審核' }),
     ).toBeVisible()
   })
 
   it('沒有 template.manage 的人開審核網址看到無權限，不載入任何建議', async () => {
     renderAt('/templates/suggestions', NO_ACCESS)
     expect(
-      await screen.findByRole('heading', { name: '無權限' }, SLOW),
+      await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
     expect(fetch).not.toHaveBeenCalledWith(
       expect.stringContaining('/template-suggestions'),
@@ -183,21 +176,21 @@ describe('管理外殼註冊', () => {
       currentUserFixture({ can_inspect_tasks: true, has_field_access: true }),
     )
     expect(
-      await screen.findByRole('heading', { name: '我的範本建議' }, SLOW),
+      await screen.findByRole('heading', { name: '我的範本建議' }),
     ).toBeVisible()
   })
 
   it('個人清單沒有根路徑別名，也不提供比較頁', async () => {
     const { unmount } = renderAt('/template-suggestions', admin)
-    expect(await screen.findByText(/找不到/, undefined, SLOW)).toBeVisible()
+    expect(await screen.findByText(/找不到/, undefined)).toBeVisible()
     unmount()
     renderAt(`/settings/template-suggestions/${IDS.suggestion}/compare`, admin)
-    expect(await screen.findByText(/找不到/, undefined, SLOW)).toBeVisible()
+    expect(await screen.findByText(/找不到/, undefined)).toBeVisible()
   })
 
   it('怪異的建議識別不會拼進 API 路徑', async () => {
     renderAt('/settings/template-suggestions/..%2Fcompanies', admin)
-    expect(await screen.findByText(/找不到/, undefined, SLOW)).toBeVisible()
+    expect(await screen.findByText(/找不到/, undefined)).toBeVisible()
     expect(fetch).not.toHaveBeenCalledWith(
       expect.stringContaining('companies'),
       expect.anything(),
