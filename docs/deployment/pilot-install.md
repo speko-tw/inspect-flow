@@ -66,7 +66,7 @@ cd inspectflow
 )
 ```
 
-80 轉 443；VPN 環境不須對網際網路開放。換證時替換 Nginx 的 fullchain 與私鑰，重新 `nginx -t` 及 reload。手機顯示不安全時，檢查完整憑證鏈、公司 CA 信任與 VPN DNS。範例預留 25 MiB 上傳大小及 60 秒讀取逾時；照片 API 尚未完成，啟用後須依後端上限調整。
+80 轉 443；VPN 環境不須對網際網路開放。換證時替換 Nginx 的 fullchain 與私鑰，重新 `nginx -t` 及 reload。手機顯示不安全時，檢查完整憑證鏈、公司 CA 信任與 VPN DNS。範例上限為 32 MiB，大於後端照片單檔預設 30 MiB，預留 multipart 欄位與標頭空間；讀取逾時為 60 秒。Compose 將照片寫入已掛載的 `/uploads`，下方手動備份會同時打包 `/data` 與 `/uploads`。
 
 ### 子路徑 `/inspectflow/`
 
@@ -96,7 +96,7 @@ docker compose run --rm --no-deps app python -m app.cli.reset_admin_password
 
 ## 4. 手動備份
 
-先停止所有寫入，再由容器 tar 將資料庫與預留的上傳目錄打包到主機，不需要 sudo 或查 volume 名稱。具名與 bind 模式使用完全相同的指令。保留原本 `.env` 及相同版本的 Compose（另行安全備份）。
+先停止所有寫入，再由容器 tar 將資料庫與照片上傳目錄打包到主機，不需要 sudo 或查 volume 名稱。具名與 bind 模式使用完全相同的指令。保留原本 `.env` 及相同版本的 Compose（另行安全備份）。
 
 ```sh
 ( set -eu
