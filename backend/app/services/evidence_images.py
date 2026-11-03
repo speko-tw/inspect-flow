@@ -201,10 +201,17 @@ def render_office(
     source: dict,
     layer: dict,
     evidence_id: str,
+    *,
+    image: Image.Image | None = None,
 ) -> tuple[bytes, dict]:
     """FEV-R18／R22：不延伸照片畫布，並保存確切合成結果摘要。"""
-    with Image.open(io.BytesIO(data)) as opened:
-        image = opened.convert("RGB")
+    # FEV-D5：T4 傳入未編碼工作圖，避免編修後再多壓一次 JPEG。
+    edited = image is not None
+    if image is None:
+        with Image.open(io.BytesIO(data)) as opened:
+            image = opened.convert("RGB")
+    else:
+        image = image.copy()
     timezone_name = os.environ.get(
         "INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "Asia/Taipei"
     )
@@ -228,7 +235,13 @@ def render_office(
         ),
     }
     if state in {"disabled", "omitted_too_small"}:
-        return data, rule
+        if not edited:
+            return data, rule
+        output = io.BytesIO()
+        image.save(
+            output, format="JPEG", quality=90, subsampling=0, optimize=False
+        )
+        return output.getvalue(), rule
 
     font_path = _FONT_PATH / _FONT_NAME
     font_size = max(
