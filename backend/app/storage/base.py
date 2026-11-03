@@ -24,3 +24,7 @@ class Storage(ABC):
     @abstractmethod
     def iter_keys(self) -> Iterator[UUID]:
         """只讀列出儲存鍵，供孤兒檔案盤點使用。"""
+
+    @abstractmethod
+    def restore(self, key: UUID, source: BinaryIO) -> None:
+        """FEV-D4：回滾取代時恢復已移除的舊鍵；禁止覆寫既有檔。"""

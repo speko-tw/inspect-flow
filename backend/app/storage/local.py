@@ -26,8 +26,13 @@ class LocalStorage(Storage):
 
     def save(self, source: BinaryIO) -> UUID:
         """FEV-R06：獨占建立新檔，串流中途失敗時清除不完整檔。"""
-        self.root.mkdir(parents=True, exist_ok=True)
         key = uuid4()
+        self.restore(key, source)
+        return key
+
+    def restore(self, key: UUID, source: BinaryIO) -> None:
+        """FEV-D4：以原 UUID 回滾舊版，不覆寫仍存在的檔案。"""
+        self.root.mkdir(parents=True, exist_ok=True)
         path = self._path(key)
         # O_EXCL 防止碰撞覆寫；O_NOFOLLOW 防止以連結導向儲存區外。
         fd = os.open(
@@ -42,7 +47,6 @@ class LocalStorage(Storage):
         except BaseException:
             path.unlink(missing_ok=True)
             raise
-        return key
 
     def open(self, key: UUID) -> BinaryIO:
         """FEV-R13：僅提供內部唯讀串流，API 另行檢查登入與權限。"""
