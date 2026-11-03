@@ -29,6 +29,7 @@ import {
   getSuggestion,
   listRevisions,
   returnSuggestion,
+  saveRevision,
   submitSuggestion,
   withdrawSuggestion,
   type SuggestionDetail,
@@ -41,10 +42,13 @@ import {
   LIN,
   makeDetail,
   makeRevision,
+  saveResult,
   WU,
 } from './fixtures'
 import { SUGGESTION_BASE, type SuggestionMode } from './paths'
+import { DataMemoryRouter } from '../../../testing/DataMemoryRouter'
 import SuggestionDetailPage from './SuggestionDetailPage'
+import SuggestionEditPage from './SuggestionEditPage'
 
 vi.mock('./api')
 vi.mock('../api')
@@ -442,6 +446,69 @@ describe('TPL-R33 管理者審核', () => {
       target: { value: 'sys-structure' },
     })
   }
+
+  it('選目的地後切到歷史版再回最新，保留目前選值', async () => {
+    const latest = makeRevision(2)
+    load(makeDetail({ current_revision: latest }), [makeRevision(1), latest])
+    renderDetail('review', WU.id)
+    await chooseTarget()
+    fireEvent.change(screen.getByLabelText('檢視版本'), {
+      target: { value: '1' },
+    })
+    await screen.findByText('請切回最新版才能核准')
+    fireEvent.click(screen.getByRole('button', { name: '切回最新第 2 版' }))
+    await screen.findByRole('option', { name: '結構工程' })
+    expect(screen.getByLabelText(/目標工程類別/)).toHaveValue('cat-building')
+    expect(screen.getByLabelText(/目標系統/)).toHaveValue('sys-structure')
+  })
+
+  it('選目的地後由一般修改連結進編輯頁，保存返回仍保留選值', async () => {
+    const latest = makeRevision(2)
+    load(makeDetail({ current_revision: latest }), [makeRevision(1), latest])
+    render(
+      <CurrentUserProvider
+        value={{ user: currentUserFixture({ id: WU.id }), clear: vi.fn() }}
+      >
+        <DataMemoryRouter
+          initialEntries={[`/templates/suggestions/${IDS.suggestion}`]}
+        >
+          <Probe />
+          <Routes>
+            <Route
+              path="/templates/suggestions/:suggestionId"
+              element={<SuggestionDetailPage mode="review" />}
+            />
+            <Route
+              path="/templates/suggestions/:suggestionId/edit"
+              element={<SuggestionEditPage mode="review" />}
+            />
+          </Routes>
+        </DataMemoryRouter>
+      </CurrentUserProvider>,
+    )
+    await chooseTarget()
+    fireEvent.click(screen.getByRole('link', { name: '修改建議內容' }))
+    await screen.findByText(/目前已存第 2 版/)
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: '修改後保留目標' },
+    })
+    const saved = makeRevision(3, {
+      content: makeContent({ title: '修改後保留目標' }),
+    })
+    vi.mocked(saveRevision).mockResolvedValue(saveResult(saved))
+    load(makeDetail({ current_revision: saved }), [
+      makeRevision(1),
+      latest,
+      saved,
+    ])
+    fireEvent.click(screen.getByRole('button', { name: '儲存新版本' }))
+    await screen.findByRole('option', { name: '結構工程' })
+    expect(screen.getByLabelText(/目標工程類別/)).toHaveValue('cat-building')
+    expect(screen.getByLabelText(/目標系統/)).toHaveValue('sys-structure')
+    expect(
+      screen.getAllByText('已存第 3 版，目的地已保留，可再按核准。').length,
+    ).toBeGreaterThan(0)
+  })
 
   it('核准前顯示對象與目的地，取消不入庫，確認後送出並重讀', async () => {
     const detail = pending()

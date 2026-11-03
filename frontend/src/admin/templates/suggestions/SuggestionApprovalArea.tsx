@@ -42,20 +42,21 @@ export function SuggestionApprovalArea({
   expected,
   editTo,
   passState,
+  target,
+  onTargetChange,
   onChanged,
 }: {
   suggestion: SuggestionDetail
   expected: () => Expected
   editTo: (query?: string) => To
   passState: SuggestionNavState
+  target: Target
+  onTargetChange: (target: Target) => void
   onChanged: (message: string) => Promise<void>
 }) {
   const titleId = useId()
   const latest = suggestion.current_revision
   const [categories, setCategories] = useState<TemplateCategory[]>([])
-  const [target, setTarget] = useState<Target>(
-    passState.target ?? { category_id: '', system_id: '' },
-  )
   const [categoryError, setCategoryError] = useState('')
   const [systemError, setSystemError] = useState('')
   const [loadError, setLoadError] = useState('')
@@ -144,13 +145,13 @@ export function SuggestionApprovalArea({
         : null
 
   function chooseCategory(id: string) {
-    setTarget({ category_id: id, system_id: '' })
+    onTargetChange({ category_id: id, system_id: '' })
     setCategoryError('')
     setSystemError('')
   }
 
   function chooseSystem(id: string) {
-    setTarget((current) => ({ ...current, system_id: id }))
+    onTargetChange({ ...target, system_id: id })
     setSystemError('')
   }
 

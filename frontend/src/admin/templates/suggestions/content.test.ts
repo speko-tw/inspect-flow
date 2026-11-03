@@ -31,6 +31,40 @@ describe('建議快照與編輯器模型互轉（TPL-R30）', () => {
     ])
   })
 
+  it('照片需求完整往返，修改張數也不丟失其他設定', () => {
+    const content = makeContent()
+    content.inspection_points[0].evidence_requirements = [
+      {
+        evidence_type: 'photo',
+        required: false,
+        min_count: 1,
+        max_count: 8,
+      },
+    ]
+    content.inspection_points[1].evidence_requirements = [
+      {
+        evidence_type: 'photo',
+        required: true,
+        min_count: 2,
+        max_count: null,
+      },
+    ]
+    const item = toEditorItem(content)
+    const back = fromEditorItem(item, photoDraftOf(item))
+    expect(back).toEqual(content)
+    expect(
+      fromEditorItem(item, { '0': '3', '1': '2' }).inspection_points[0]
+        .evidence_requirements,
+    ).toEqual([
+      {
+        evidence_type: 'photo',
+        required: false,
+        min_count: 3,
+        max_count: 8,
+      },
+    ])
+  })
+
   it('不帶來源資料庫主鍵、結果或照片', () => {
     const text = JSON.stringify(
       fromEditorItem(toEditorItem(makeContent()), { '0': '1', '1': '2' }),

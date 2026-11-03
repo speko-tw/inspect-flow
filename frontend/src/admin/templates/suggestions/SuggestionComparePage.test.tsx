@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -123,6 +124,28 @@ describe('TPL-AC36 管理者比較相鄰兩版', () => {
       ),
     )
     expect(await screen.findByText(/鋼筋間距／標準/)).toBeVisible()
+  })
+
+  it('只改 sequence 的比較，前後完整內容各依實際順序顯示', async () => {
+    const first = makeRevision(1)
+    const content = makeContent()
+    content.inspection_points[0].sequence = 2
+    content.inspection_points[1].sequence = 1
+    renderCompare([first, makeRevision(2, { content })])
+    await screen.findByText('鋼筋間距／序號')
+    const sides = document.querySelectorAll('.suggestion-compare-side')
+    const headings = (side: Element) =>
+      within(side as HTMLElement)
+        .getAllByRole('heading', { level: 5, hidden: true })
+        .map((h) => h.textContent)
+    expect(headings(sides[0])).toEqual([
+      '項次 1：鋼筋間距',
+      '項次 2：續接器檢查',
+    ])
+    expect(headings(sides[1])).toEqual([
+      '項次 1：續接器檢查',
+      '項次 2：鋼筋間距',
+    ])
   })
 
   it('兩份完整內容各列編輯者、審核紀錄與退回原因', async () => {

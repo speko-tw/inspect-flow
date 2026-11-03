@@ -98,7 +98,7 @@ export function toEditorItem(content: SuggestionContent): TemplateItem {
           unit: field.unit,
         })),
       evidence_requirements: point.evidence_requirements.map((entry) => ({
-        min_count: entry.min_count,
+        ...entry,
       })),
     }))
   return {
@@ -137,9 +137,18 @@ export function fromEditorItem(
       const count = Number(photos[String(index)] ?? '1')
       return {
         ...point,
-        evidence_requirements: [
-          { min_count: Number.isFinite(count) ? Math.trunc(count) : 0 },
-        ],
+        evidence_requirements: (point.evidence_requirements.length
+          ? point.evidence_requirements
+          : [{ min_count: 1 }]
+        ).map((entry, requirementIndex) => ({
+          ...entry,
+          min_count:
+            requirementIndex === 0
+              ? Number.isFinite(count)
+                ? Math.trunc(count)
+                : 0
+              : entry.min_count,
+        })),
       }
     }),
   })
@@ -176,9 +185,28 @@ export function fromEditorItem(
             sort_order: fieldIndex,
           }),
         ),
-        evidence_requirements: point.evidence_requirements.map((entry) => ({
-          min_count: entry.min_count,
-        })),
+        evidence_requirements: point.evidence_requirements.map(
+          (entry, requirementIndex) => {
+            // TPL-R32：共用 forWire 只送張數；建議須保留原快照的
+            // 照片設定，否則未修改的退回件也會被誤判為新版本。
+            const original =
+              item.inspection_points[index].evidence_requirements[
+                requirementIndex
+              ]
+            return {
+              ...(original?.evidence_type !== undefined
+                ? { evidence_type: original.evidence_type }
+                : {}),
+              ...(original?.required !== undefined
+                ? { required: original.required }
+                : {}),
+              min_count: entry.min_count,
+              ...(original?.max_count !== undefined
+                ? { max_count: original.max_count }
+                : {}),
+            }
+          },
+        ),
       }
     }),
   }

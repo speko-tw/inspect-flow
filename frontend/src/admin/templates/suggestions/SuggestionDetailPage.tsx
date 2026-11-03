@@ -57,6 +57,8 @@ export default function SuggestionDetailPage({
   const location = useLocation()
   const { user } = useCurrentUser()
   const navState = (location.state as SuggestionNavState | null) ?? {}
+  // AC42：目的地屬於整件審核流程，不能跟歷史版切換時的子元件卸載。
+  const [target, setTarget] = useState(navState.target)
   const [suggestion, setSuggestion] = useState<SuggestionDetail | null>(null)
   const [revisions, setRevisions] = useState<SuggestionRevision[]>([])
   const [selectedNo, setSelectedNo] = useState<number | null>(null)
@@ -244,7 +246,7 @@ export default function SuggestionDetailPage({
   const passState: SuggestionNavState = {
     origin: navState.origin,
     listSearch: navState.listSearch,
-    target: navState.target,
+    target,
   }
   const editTo = (query = '') => ({
     pathname: suggestionPath(mode, suggestion.id, 'edit'),
@@ -433,6 +435,8 @@ export default function SuggestionDetailPage({
         <SuggestionApprovalArea
           editTo={editTo}
           expected={expected}
+          target={target ?? { category_id: '', system_id: '' }}
+          onTargetChange={setTarget}
           onChanged={async (message) => {
             await reload()
             setNotice(message)

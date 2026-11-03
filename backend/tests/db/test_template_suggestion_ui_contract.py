@@ -1,6 +1,11 @@
 """TPL-AC36／40：T19 UI 取用的真契約，同時在 SQLite／PostgreSQL 驗證。"""
 
+import json
 from datetime import timedelta
+from pathlib import Path
+from subprocess import run
+
+import pytest
 
 from app.db import clock
 from tests.db.test_template_suggestion_review import (
@@ -163,3 +168,74 @@ def test_ui_wire_history_names_and_recent_submission_paging(
         assert approval["reviewer_name"] == "吳經理"
     finally:
         clock.reset_clock()
+
+
+@pytest.mark.parametrize("returned", [False, True])
+def test_actual_editor_round_trip_keeps_revision(review_world, returned):
+    """TPL-R31／32：真回應經產品 TS 轉換後原樣保存不增版。"""
+    w = review_world
+    row = _create(w)
+    actor = "manager"
+    if returned:
+        response = _return(w, row, "請補充")
+        assert response.status_code == 200, response.text
+        row = response.json()
+        actor = "editor"
+    original = row["content"]
+    requirement = original["inspection_points"][0]["evidence_requirements"][0]
+    assert requirement == {
+        "evidence_type": "photo",
+        "required": True,
+        "min_count": requirement["min_count"],
+        "max_count": None,
+    }
+    # RG-M22：直接載入產品轉換，不能用 Python 複製 TS 的預期邏輯。
+    frontend = Path(__file__).resolve().parents[3] / "frontend"
+    transformed = run(
+        [
+            "node",
+            "--input-type=module",
+            "-e",
+            """
+import { readFileSync } from 'node:fs'
+import { createServer } from 'vite'
+const server = await createServer({
+  configFile: false,
+  logLevel: 'silent',
+  server: { middlewareMode: true, hmr: false },
+})
+try {
+  const { toEditorItem, fromEditorItem, photoDraftOf } =
+    await server.ssrLoadModule('/src/admin/templates/suggestions/content.ts')
+  const item = toEditorItem(JSON.parse(readFileSync(0, 'utf8')))
+  console.log(JSON.stringify(fromEditorItem(item, photoDraftOf(item))))
+} finally {
+  await server.close()
+}
+""",
+        ],
+        cwd=frontend,
+        input=json.dumps(original),
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    assert transformed.returncode == 0, transformed.stderr
+    content = json.loads(transformed.stdout)
+    client = w["clients"][actor]
+    history_url = _url(row, "/revisions")
+    history_before = client.get(history_url).json()
+    response = _revise(w, row, content, actor)
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert saved["current_revision_id"] == row["current_revision_id"]
+    assert saved["revision_no"] == row["revision_no"]
+    assert saved["content"] == original == content
+    assert client.get(history_url).json() == history_before
+    if returned:
+        response = client.post(_url(saved, ":submit"), json=_expected(saved))
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == (
+            "template_suggestion.invalid_state"
+        )
