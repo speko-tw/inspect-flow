@@ -292,6 +292,18 @@ class ErrorCode(DescribedStrEnum):
         "evidence.task_locked",
         "The task does not accept evidence uploads in its current state.",
     )
+    EVIDENCE_INVALID_EDIT = (
+        "evidence.invalid_edit",
+        "The image edit parameters are outside the allowed range.",
+    )
+    EVIDENCE_INVALID_LAYER = (
+        "evidence.invalid_layer",
+        "The requested label layer does not fit the edited image.",
+    )
+    EVIDENCE_PHOTO_LOCKED = (
+        "evidence.photo_locked",
+        "The photo is locked against changes.",
+    )
     EVIDENCE_PHOTO_DELETED = (
         "evidence.photo_deleted",
         "A deleted photo cannot be replayed with the same idempotency key.",
