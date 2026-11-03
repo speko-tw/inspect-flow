@@ -12,6 +12,11 @@ import AppearanceSettings from './AppearanceSettings'
 import ChangePasswordPage from './ChangePasswordPage'
 import { CurrentUserProvider } from './useCurrentUser'
 
+// 這份測試只驗外觀；「我的範本建議」區塊會自己讀 API，另有專屬測試。
+vi.mock('../admin/templates/suggestions/SettingsSuggestionsSection', () => ({
+  SettingsSuggestionsSection: () => null,
+}))
+
 function accountView(appearance: Appearance, id = 'person-a') {
   return (
     <CurrentUserProvider

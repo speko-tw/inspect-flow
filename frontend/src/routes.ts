@@ -139,6 +139,18 @@ export const ROUTES = {
     title: PAGE_TITLES.templates,
     permission: 'template-library-access',
   },
+  // TPL-R34：審核清單在範本管理頁之下；個人清單在 `/settings` 之下。
+  // 兩者都只有子頁面，不新增全域導覽項目。
+  reviewSuggestions: {
+    path: '/templates/suggestions/*',
+    title: PAGE_TITLES.templateSuggestions,
+    permission: 'template-library-access',
+  },
+  mySuggestions: {
+    path: '/settings/template-suggestions/*',
+    title: PAGE_TITLES.mySuggestions,
+    permission: 'authenticated',
+  },
   templateSaveFromProject: {
     path: '/templates/from-project',
     title: PAGE_TITLES.templates,
@@ -314,6 +326,7 @@ const ACCESS_ROUTES: Array<{ route: ProductRoute; end: boolean }> = [
   { route: ROUTES.home, end: true },
   { route: ROUTES.login, end: true },
   { route: ROUTES.setup, end: true },
+  { route: ROUTES.mySuggestions, end: false },
   { route: ROUTES.settings, end: false },
   { route: ROUTES.dashboardTask, end: true },
   { route: ROUTES.dashboardTasks, end: true },
@@ -350,6 +363,7 @@ const ACCESS_ROUTES: Array<{ route: ProductRoute; end: boolean }> = [
   { route: ROUTES.projectHome, end: true },
   { route: ROUTES.adminProjects, end: true },
   { route: ROUTES.templateSaveFromProject, end: true },
+  { route: ROUTES.reviewSuggestions, end: false },
   { route: ROUTES.adminTemplates, end: false },
   { route: ROUTES.fieldTask, end: true },
   { route: ROUTES.fieldTasks, end: true },

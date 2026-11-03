@@ -1,0 +1,218 @@
+/* 範本建議畫面（TPL-R34）：清單、詳情、比較與編修的共用樣式。 */
+
+.suggestions {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 60rem;
+}
+
+.suggestions h1,
+.suggestions h2,
+.suggestions h3,
+.suggestions p {
+  margin: 0;
+}
+
+.suggestions h4,
+.suggestions h5 {
+  margin: 0 0 var(--space-1);
+}
+
+/* 長名稱與長原因自然換行，手機不出現橫向捲動。 */
+.suggestions,
+.suggestions-settings {
+  overflow-wrap: anywhere;
+}
+
+.suggestion-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.suggestion-filter > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.suggestion-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggestion-list > li {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.suggestion-list > li.suggestion-empty {
+  color: var(--text-muted);
+}
+
+.suggestion-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.suggestion-row > div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1 1 16rem;
+}
+
+.suggestion-status-counts {
+  color: var(--text-muted);
+}
+
+.suggestion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.suggestion-version-picker {
+  display: grid;
+  gap: var(--space-1);
+  max-width: 20rem;
+}
+
+.suggestion-content {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.suggestion-point {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.suggestion-point ul {
+  margin: var(--space-1) 0;
+  padding-left: var(--space-5);
+}
+
+.suggestion-point dl {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.suggestion-point dd {
+  margin: 0;
+}
+
+.suggestion-history {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.suggestion-history > article {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.suggestion-inline-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.suggestion-inline-fields > div {
+  display: grid;
+  gap: var(--space-1);
+  flex: 1 1 14rem;
+}
+
+.suggestion-error-summary {
+  padding: var(--space-3);
+  border: 1px solid var(--color-status-danger-border);
+  border-radius: var(--radius);
+  background: var(--color-status-danger-bg);
+}
+
+.suggestion-error-summary ul {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+}
+
+.suggestion-changes {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggestion-changes > li {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.suggestion-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.suggestion-compare-side {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.suggestion-compare-side > summary {
+  min-height: var(--touch-target);
+  font-weight: 600;
+}
+
+.suggestion-resubmit {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+/* 看起來像連結的按鈕（看前版、看後版、顯示全部專案）。 */
+.link-button {
+  min-height: var(--touch-target);
+  padding: 0 var(--space-1);
+  border: 0;
+  background: none;
+  color: var(--color-link);
+  text-decoration: underline;
+}
+
+.suggestions-settings {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.suggestions-settings h2,
+.suggestions-settings p {
+  margin: 0;
+}
+
+@media (max-width: 40rem) {
+  .suggestion-compare-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

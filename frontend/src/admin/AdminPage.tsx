@@ -52,6 +52,9 @@ const TemplatesPage = lazy(() => import('./templates/TemplatesPage'))
 const SaveTemplateFromProjectPage = lazy(
   () => import('./templates/SaveTemplateFromProjectPage'),
 )
+const SuggestionRoutes = lazy(
+  () => import('./templates/suggestions/SuggestionRoutes'),
+)
 const ProjectTemplatesPage = lazy(
   () => import('./projects/ProjectTemplatesPage'),
 )
@@ -579,6 +582,25 @@ function AdminPageContent() {
                 </AdminRouteSuspense>
               }
             />
+            <Route
+              path={nestedRoutePath(
+                ROUTES.reviewSuggestions,
+                ROUTES.adminShell,
+              )}
+              element={
+                <AdminRouteSuspense>
+                  <SuggestionRoutes mode="review" />
+                </AdminRouteSuspense>
+              }
+            />
+            <Route
+              path={nestedRoutePath(ROUTES.mySuggestions, ROUTES.settings)}
+              element={
+                <AdminRouteSuspense>
+                  <SuggestionRoutes mode="mine" />
+                </AdminRouteSuspense>
+              }
+            />
             <Route path="*" element={<RouteNotFound />} />
           </Routes>
         )}
@@ -693,6 +715,27 @@ function MemberAdminShell({
               }
             />
           )}
+          {canAccessRoute(user, ROUTES.reviewSuggestions) && (
+            <Route
+              path={nestedRoutePath(
+                ROUTES.reviewSuggestions,
+                ROUTES.adminShell,
+              )}
+              element={
+                <AdminRouteSuspense>
+                  <SuggestionRoutes mode="review" />
+                </AdminRouteSuspense>
+              }
+            />
+          )}
+          <Route
+            path={nestedRoutePath(ROUTES.mySuggestions, ROUTES.settings)}
+            element={
+              <AdminRouteSuspense>
+                <SuggestionRoutes mode="mine" />
+              </AdminRouteSuspense>
+            }
+          />
           <Route
             path="*"
             element={
