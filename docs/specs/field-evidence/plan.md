@@ -46,6 +46,7 @@
 
 ## 風險
 
+- **照片名額與表單容量**：T2 的影像重作業使用延遲建立的專用 `CapacityLimiter`，在事件迴圈等待，排隊不占預設 worker；便宜的欄位驗證／冪等重放先處理，有效請求排隊前釋放讀交易與連線。正常 server worker 的單一事件迴圈共用 process 上限（預設 2）。multipart 欄位上限由固定欄位數加 `POINTS_MAX` 推導，另驗項次不得超過該上限，避免省略選填欄位繞過限制。
 - **錯誤碼對照表檢查**：`test_no_hand_written_error_code_table_exists` 會掃描已追蹤的文件，Markdown 表格列只要含 `ErrorCode` 成員就會被判為手寫對照表。本規格的錯誤碼段已改為條列、AC 表避免直接寫既有共用錯誤碼；`evidence.*` 進入 `ErrorCode` 的 T2 必須同步調整允許清單。
 - **lockfile 與影像套件**：T1 新增影像處理套件會動 `uv.lock`，依共用檔案規則先合併，其他分支再 rebase 並重新產生，不手動合併衝突。
 - **migration 鏈**：T1／PR #800 保持原樣；T2 新增圖層 JSON 與 capture_source 欄位的 migration，接 T1 最新 head，每 PR 最多一支、不留多 head。後續新增欄位依共用規則串行。
