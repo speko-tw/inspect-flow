@@ -162,6 +162,7 @@ def test_multipart_limits_before_upload(
             # iterator 走 chunked，確認沒有 Content-Length 預檢可依賴。
             content = iter([body[:100], body[100:]])
     else:
+        # 固定欄位與 200 個項次共用推導上限，再多一個 part 就拒絕。
         count = limits.EVIDENCE_MULTIPART_FIELDS_MAX + 1
         value = b"x"
         if boundary == "part":

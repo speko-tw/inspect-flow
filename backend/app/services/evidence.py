@@ -9,7 +9,7 @@ from datetime import datetime
 from io import BytesIO
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -434,15 +434,30 @@ def upload_evidence(
         session.flush()
         # SQLite 的 SELECT FOR UPDATE 不加鎖；先取得寫鎖，再讀純量值，
         # 避免 identity map 留著渲染前的 is_current，提交舊快照照片。
-        current = session.execute(
+        status, archived, current_id, current_revision = session.execute(
             select(
-                TaskRequirementSnapshot.id, TaskRequirementSnapshot.revision
-            ).where(
-                TaskRequirementSnapshot.task_inspection_item_id == item_id,
-                TaskRequirementSnapshot.is_current.is_(True),
+                InspectionTask.status,
+                InspectionPlan.is_archived,
+                TaskRequirementSnapshot.id,
+                TaskRequirementSnapshot.revision,
             )
-        ).one_or_none()
-        if current != (snapshot.id, snapshot.revision):
+            .select_from(InspectionTask)
+            .join(InspectionPlan, InspectionPlan.id == InspectionTask.plan_id)
+            .outerjoin(
+                TaskRequirementSnapshot,
+                and_(
+                    TaskRequirementSnapshot.task_inspection_item_id == item_id,
+                    TaskRequirementSnapshot.is_current.is_(True),
+                ),
+            )
+            .where(InspectionTask.id == task_id)
+        ).one()
+        # 與入口相同的優先序：封存、任務狀態，最後才是需求修訂。
+        if archived:
+            raise _api_error(ErrorCode.INSPECTION_PLAN_ARCHIVED, 409)
+        if status != "IN_PROGRESS":
+            raise _api_error(ErrorCode.EVIDENCE_TASK_LOCKED, 409)
+        if (current_id, current_revision) != (snapshot.id, snapshot.revision):
             raise _api_error(ErrorCode.EVIDENCE_REQUIREMENT_CHANGED, 409)
         session.commit()
         committed = True

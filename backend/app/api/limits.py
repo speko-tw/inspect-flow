@@ -29,4 +29,19 @@ MEASUREMENT_FIELDS_MAX = 50
 # Evidence multipart requests: binary limit plus bounded headers/form overhead.
 EVIDENCE_MULTIPART_OVERHEAD_MAX = 64 * 1024
 EVIDENCE_MULTIPART_FIELD_MAX = 8 * 1024
-EVIDENCE_MULTIPART_FIELDS_MAX = 10
+# 二進位 file 由 max_files 管理；項次以重複表單欄位傳入。
+EVIDENCE_MULTIPART_FIXED_FIELDS = frozenset(
+    {
+        "sha256",
+        "item_id",
+        "is_overview",
+        "caption",
+        "captured_at",
+        "field_edit",
+        "layer",
+        "capture_source",
+    }
+)
+EVIDENCE_MULTIPART_FIELDS_MAX = (
+    len(EVIDENCE_MULTIPART_FIXED_FIELDS) + POINTS_MAX
+)

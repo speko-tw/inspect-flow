@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from threading import BoundedSemaphore, Lock
 from typing import Any
 from uuid import UUID
 
+from anyio import CapacityLimiter, to_thread
+from anyio.lowlevel import RunVar
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -150,18 +152,7 @@ def _single_fields(form: FormData) -> dict[str, str | UploadFile]:
     singles = [name for name, _ in pairs if name != "point_ids"]
     if len(set(singles)) != len(singles):
         raise _invalid_request()
-    allowed = {
-        "file",
-        "sha256",
-        "item_id",
-        "is_overview",
-        "point_ids",
-        "caption",
-        "captured_at",
-        "field_edit",
-        "layer",
-        "capture_source",
-    }
+    allowed = limits.EVIDENCE_MULTIPART_FIXED_FIELDS | {"file", "point_ids"}
     values: dict[str, str | UploadFile] = {}
     for name, value in pairs:
         if name not in allowed or not isinstance(value, (str, UploadFile)):
@@ -172,17 +163,39 @@ def _single_fields(form: FormData) -> dict[str, str | UploadFile]:
     return values
 
 
-_slots_lock = Lock()
-_slots_by_limit: dict[int, BoundedSemaphore] = {}
+_upload_limiters: RunVar[dict[int, CapacityLimiter]] = RunVar(
+    "evidence_upload_limiters"
+)
 
 
-def _upload_slots(limit: int) -> BoundedSemaphore:
-    """限制 process 內影像解碼並行數，避免多張 50MP 同時占滿記憶體。"""
-    # 首次並行呼叫也只能建立一個 semaphore，不能只用 lru_cache。
-    with _slots_lock:
-        if limit not in _slots_by_limit:
-            _slots_by_limit[limit] = BoundedSemaphore(limit)
-        return _slots_by_limit[limit]
+def _upload_limiter(limit: int) -> CapacityLimiter:
+    """worker 的單一事件迴圈共用名額；延遲建立，不占預設 worker 等候。"""
+    # RunVar 隔離 TestClient／不同事件迴圈，避免跨迴圈喚醒等待者。
+    try:
+        limiters = _upload_limiters.get()
+    except LookupError:
+        limiters = {}
+        _upload_limiters.set(limiters)
+    if limit not in limiters:
+        limiters[limit] = CapacityLimiter(limit)
+    return limiters[limit]
+
+
+@dataclass(frozen=True)
+class _PreparedUpload:
+    """只攜帶已驗證表單值；排隊時不保留 ORM 讀交易或資料庫連線。"""
+
+    upload_key: UUID
+    item_id: UUID
+    sha256: str
+    is_overview: bool
+    point_ids: list[UUID]
+    caption: str | None
+    captured_at: datetime | None
+    field_edit: dict | None
+    layer: dict
+    capture_source: str
+    file: UploadFile
 
 
 def _authorize_upload(session: Session, task_id: UUID, user: User) -> UUID:
@@ -198,30 +211,14 @@ def _authorize_upload(session: Session, task_id: UUID, user: User) -> UUID:
     return user_id
 
 
-def _process_upload(
+def _prepare_upload(
     session: Session,
     task_id: UUID,
     user_id: UUID,
     idempotency_key: str,
     form: FormData,
-) -> JSONResponse:
-    settings = get_storage_settings()
-    with _upload_slots(settings.max_concurrent_uploads):
-        return _validated_upload(
-            session, task_id, user_id, idempotency_key, form
-        )
-
-
-def _validated_upload(
-    session: Session,
-    task_id: UUID,
-    user_id: UUID,
-    idempotency_key: str,
-    form: FormData,
-) -> JSONResponse:
-    user = session.get(User, user_id)
-    assert user is not None
-    settings = get_storage_settings()
+) -> JSONResponse | _PreparedUpload:
+    """便宜的驗證與重放先處理，不需要影像名額。"""
     key_error: APIError | None = None
     upload_key: UUID | None = None
     try:
@@ -232,7 +229,7 @@ def _validated_upload(
         fields = _single_fields(form)
     except APIError as exc:
         if upload_key is not None:
-            check_invalid_replay(session, task_id, upload_key, user.id)
+            check_invalid_replay(session, task_id, upload_key, user_id)
         validate_upload_state(session, task_id, None, None)
         raise exc
 
@@ -273,6 +270,8 @@ def _validated_upload(
         if overview_text not in {"true", "false"}:
             raise _invalid_request()
         point_values = form.getlist("point_ids")
+        if len(point_values) > limits.POINTS_MAX:
+            raise _invalid_request()
         if any(not isinstance(value, str) for value in point_values):
             raise _invalid_request()
         points = [UUID(str(value)) for value in point_values]
@@ -334,9 +333,9 @@ def _validated_upload(
 
     if upload_key is not None:
         replay = (
-            replay_upload(session, task_id, upload_key, fingerprint, user.id)
+            replay_upload(session, task_id, upload_key, fingerprint, user_id)
             if fingerprint is not None
-            else check_invalid_replay(session, task_id, upload_key, user.id)
+            else check_invalid_replay(session, task_id, upload_key, user_id)
         )
         if replay is not None:
             return JSONResponse(replay, status_code=200)
@@ -348,15 +347,10 @@ def _validated_upload(
         raise validation_error
 
     assert upload_key is not None and item_uuid is not None
-    content = file.file.read(settings.max_file_bytes + 1)
-    if len(content) > settings.max_file_bytes:
-        raise APIError(ErrorCode.EVIDENCE_FILE_TOO_LARGE, 413)
-    result, replayed = upload_evidence(
-        session,
-        task_id=task_id,
+    prepared = _PreparedUpload(
         upload_key=upload_key,
-        sha256=sha256.lower(),
         item_id=item_uuid,
+        sha256=sha256.lower(),
         is_overview=overview_text == "true",
         point_ids=points,
         caption=caption,
@@ -364,6 +358,39 @@ def _validated_upload(
         field_edit=edit_value,
         layer=normalized_layer,
         capture_source=capture_source,
+        file=file,
+    )
+    # 授權 touch 已先 commit；這裡只有讀取，等影像名額前釋放連線。
+    session.rollback()
+    return prepared
+
+
+def _process_upload(
+    session: Session,
+    task_id: UUID,
+    user_id: UUID,
+    prepared: _PreparedUpload,
+) -> JSONResponse:
+    """只有持有專用名額的 worker 才讀圖片、解碼、產圖與存檔。"""
+    user = session.get(User, user_id)
+    assert user is not None
+    settings = get_storage_settings()
+    content = prepared.file.file.read(settings.max_file_bytes + 1)
+    if len(content) > settings.max_file_bytes:
+        raise APIError(ErrorCode.EVIDENCE_FILE_TOO_LARGE, 413)
+    result, replayed = upload_evidence(
+        session,
+        task_id=task_id,
+        upload_key=prepared.upload_key,
+        sha256=prepared.sha256,
+        item_id=prepared.item_id,
+        is_overview=prepared.is_overview,
+        point_ids=prepared.point_ids,
+        caption=prepared.caption,
+        captured_at=prepared.captured_at,
+        field_edit=prepared.field_edit,
+        layer=prepared.layer,
+        capture_source=prepared.capture_source,
         content=content,
         uploader=user,
     )
@@ -384,14 +411,24 @@ async def upload_photo(
     settings = get_storage_settings()
     form = await _parse_evidence_form(request, settings.max_file_bytes)
     try:
-        # 同步 DB／FOR UPDATE、影像 CPU 與 fsync 不得阻塞事件迴圈。
-        return await run_in_threadpool(
-            _process_upload,
+        prepared = await run_in_threadpool(
+            _prepare_upload,
             session,
             task_id,
             user_id,
             request.headers.get("Idempotency-Key", ""),
             form,
+        )
+        if isinstance(prepared, JSONResponse):
+            return prepared
+        # 專用 limiter 在事件迴圈等候，排隊不借用任何 worker thread。
+        return await to_thread.run_sync(
+            _process_upload,
+            session,
+            task_id,
+            user_id,
+            prepared,
+            limiter=_upload_limiter(settings.max_concurrent_uploads),
         )
     finally:
         await form.close()

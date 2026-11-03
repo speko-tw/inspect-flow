@@ -1081,10 +1081,12 @@ def test_upload_rejects_bad_content_and_hash_without_files(
     invalid_format = post(png_output.getvalue())
     assert invalid_format.status_code == 422
     assert invalid_format.json()["error"]["code"] == ("evidence.invalid_image")
+    assert invalid_format.json()["error"]["details"] == ["format"]
     corrupt = post(b"not a JPEG")
     assert corrupt.status_code == 422
     assert corrupt.json()["error"]["code"] == "evidence.invalid_image"
 
+    assert corrupt.json()["error"]["details"] == ["decode"]
     monkeypatch.setenv("INSPECTFLOW_EVIDENCE_MAX_FILE_BYTES", "128")
     oversized = post(valid)
     assert oversized.status_code == 413
@@ -1094,6 +1096,7 @@ def test_upload_rejects_bad_content_and_hash_without_files(
     over_pixels = post(valid)
     assert over_pixels.status_code == 422
     assert over_pixels.json()["error"]["code"] == "evidence.invalid_image"
+    assert over_pixels.json()["error"]["details"] == ["pixels"]
     assert not storage_root.exists()
     assert (
         db_session.scalar(
