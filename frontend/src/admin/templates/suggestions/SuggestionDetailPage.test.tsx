@@ -90,6 +90,31 @@ function renderDetail(
   )
 }
 
+/** 審核詳情與真正編輯頁往返，不能用導覽探針代替目的地還原。 */
+function renderReviewFlow() {
+  render(
+    <CurrentUserProvider
+      value={{ user: currentUserFixture({ id: WU.id }), clear: vi.fn() }}
+    >
+      <DataMemoryRouter
+        initialEntries={[`/templates/suggestions/${IDS.suggestion}`]}
+      >
+        <Probe />
+        <Routes>
+          <Route
+            path="/templates/suggestions/:suggestionId"
+            element={<SuggestionDetailPage mode="review" />}
+          />
+          <Route
+            path="/templates/suggestions/:suggestionId/edit"
+            element={<SuggestionEditPage mode="review" />}
+          />
+        </Routes>
+      </DataMemoryRouter>
+    </CurrentUserProvider>,
+  )
+}
+
 function load(detail: SuggestionDetail, revisions: SuggestionRevision[]) {
   vi.mocked(getSuggestion).mockResolvedValue(detail)
   vi.mocked(listRevisions).mockResolvedValue(revisions)
@@ -465,27 +490,7 @@ describe('TPL-R33 管理者審核', () => {
   it('選目的地後由一般修改連結進編輯頁，保存返回仍保留選值', async () => {
     const latest = makeRevision(2)
     load(makeDetail({ current_revision: latest }), [makeRevision(1), latest])
-    render(
-      <CurrentUserProvider
-        value={{ user: currentUserFixture({ id: WU.id }), clear: vi.fn() }}
-      >
-        <DataMemoryRouter
-          initialEntries={[`/templates/suggestions/${IDS.suggestion}`]}
-        >
-          <Probe />
-          <Routes>
-            <Route
-              path="/templates/suggestions/:suggestionId"
-              element={<SuggestionDetailPage mode="review" />}
-            />
-            <Route
-              path="/templates/suggestions/:suggestionId/edit"
-              element={<SuggestionEditPage mode="review" />}
-            />
-          </Routes>
-        </DataMemoryRouter>
-      </CurrentUserProvider>,
-    )
+    renderReviewFlow()
     await chooseTarget()
     fireEvent.click(screen.getByRole('link', { name: '修改建議內容' }))
     await screen.findByText(/目前已存第 2 版/)
@@ -509,6 +514,42 @@ describe('TPL-R33 管理者審核', () => {
       screen.getAllByText('已存第 3 版，目的地已保留，可再按核准。').length,
     ).toBeGreaterThan(0)
   })
+
+  it.each([
+    { position: '上方', index: 0, dirty: false },
+    { position: '下方', index: 1, dirty: false },
+    { position: '上方', index: 0, dirty: true },
+    { position: '下方', index: 1, dirty: true },
+  ])(
+    '$position 取消修改保留目的地（未儲存變更：$dirty）',
+    async ({ index, dirty }) => {
+      const latest = makeRevision(2)
+      load(makeDetail({ current_revision: latest }), [makeRevision(1), latest])
+      renderReviewFlow()
+      await chooseTarget()
+      fireEvent.click(screen.getByRole('link', { name: '修改建議內容' }))
+      await screen.findByText(/目前已存第 2 版/)
+      if (dirty) {
+        fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+          target: { value: '取消時不應保存的草稿' },
+        })
+      }
+      fireEvent.click(screen.getAllByRole('link', { name: '取消修改' })[index])
+      if (dirty) {
+        fireEvent.click(
+          within(
+            await screen.findByRole('group', {
+              name: '放棄未儲存變更',
+            }),
+          ).getByRole('button', { name: '放棄修改' }),
+        )
+      }
+      await screen.findByRole('option', { name: '結構工程' })
+      expect(screen.getByLabelText(/目標工程類別/)).toHaveValue('cat-building')
+      expect(screen.getByLabelText(/目標系統/)).toHaveValue('sys-structure')
+      expect(saveRevision).not.toHaveBeenCalled()
+    },
+  )
 
   it('核准前顯示對象與目的地，取消不入庫，確認後送出並重讀', async () => {
     const detail = pending()

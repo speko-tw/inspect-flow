@@ -69,6 +69,8 @@ type Props = {
   cancelLabel?: string
   /** 有值時取消改成導覽連結，離開前由外層的未儲存攔截處理。 */
   cancelHref?: string
+  /** AC42：由呼叫端保留離開編輯頁時的目的地等脈絡，預設不傳。 */
+  cancelState?: unknown
   /** 以 clientKey／id 而非索引組錯誤 key，避免刪除項次後錯誤錯位。 */
   stablePointErrorKeys?: boolean
   /** TPL-AC36：由建議頁選擇初始展開項次；null 表示全部收合。 */
@@ -115,6 +117,7 @@ export function TemplateItemEditor({
   saveLabel = '儲存查核項目',
   cancelLabel = '取消',
   cancelHref,
+  cancelState,
   stablePointErrorKeys = false,
   initialOpenPoint = 0,
   movePoint,
@@ -248,7 +251,12 @@ export function TemplateItemEditor({
           </h2>
         </div>
         {cancelHref ? (
-          <Link aria-label={cancelLabel} className="btn" to={cancelHref}>
+          <Link
+            aria-label={cancelLabel}
+            className="btn"
+            state={cancelState}
+            to={cancelHref}
+          >
             {cancelLabel}
           </Link>
         ) : (
@@ -603,7 +611,12 @@ export function TemplateItemEditor({
           </p>
         )}
         {cancelHref ? (
-          <Link aria-label={cancelLabel} className="btn" to={cancelHref}>
+          <Link
+            aria-label={cancelLabel}
+            className="btn"
+            state={cancelState}
+            to={cancelHref}
+          >
             {cancelLabel}
           </Link>
         ) : (

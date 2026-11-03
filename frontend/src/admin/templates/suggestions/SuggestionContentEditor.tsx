@@ -47,6 +47,7 @@ export function SuggestionContentEditor({
   focusKey,
   contextLabel,
   cancelHref,
+  cancelState,
   onSave,
 }: {
   content: SuggestionContent
@@ -61,6 +62,8 @@ export function SuggestionContentEditor({
   focusKey?: string | null
   contextLabel: string
   cancelHref: string
+  /** 取消與保存返回共用導覽脈絡，保留已選目的地（AC42）。 */
+  cancelState?: unknown
   onSave: (
     content: SuggestionContent,
     submitAfter: boolean,
@@ -266,6 +269,7 @@ export function SuggestionContentEditor({
           ])
         }
         cancelHref={cancelHref}
+        cancelState={cancelState}
         cancelLabel="取消修改"
         clearPointServerErrors={(index) => {
           const key = points[index]?.clientKey

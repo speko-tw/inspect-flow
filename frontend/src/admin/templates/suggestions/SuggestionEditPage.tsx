@@ -185,6 +185,7 @@ export default function SuggestionEditPage({
       <SuggestionContentEditor
         canResubmit={!strict}
         cancelHref={detailTo}
+        cancelState={detailState}
         content={stableContent}
         contextLabel={`範本建議 / ${suggestion.source_project_name}`}
         focusKey={searchParams.get('focus')}
