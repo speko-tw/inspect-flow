@@ -198,6 +198,7 @@ def _text_page_cursor_key(
         UnicodeDecodeError,
         binascii.Error,
         json.JSONDecodeError,
+        RecursionError,
     ) as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
 

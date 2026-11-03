@@ -774,7 +774,7 @@ def test_ac20_ac29_item_group_order_precedes_overview_and_tied_uploads(
 
 
 @pytest.mark.parametrize("target", ["office", "field", "history"])
-@pytest.mark.parametrize("malformation", ["overflow", "recursion"])
+@pytest.mark.parametrize("malformation", ["overflow", "nested_non_object"])
 def test_tampered_inner_cursor_is_validation_error(
     read_world, target, malformation
 ):
@@ -825,11 +825,13 @@ def test_tampered_inner_cursor_is_validation_error(
             {"t": "0001-01-01T00:00:00+14:00", "id": str(uuid4())}
         )
     else:
-        # 內層本身超過 JSON 解碼深度；外層仍是合法且未超長的游標。
+        # 巢狀非物件 JSON 驗非法型別拒絕，不會觸發 RecursionError。
+        # 遞迴例外由 tests/contract/test_page_cursor.py 的 10000 層案例覆蓋；
+        # API 外層 4096 字元上限無法送入該深度。
         raw = "[" * 1040 + "0" + "]" * 1040
     inner = base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
     payload["keys"][0] = inner
-    if target != "history" and malformation == "recursion":
+    if target != "history" and malformation == "nested_non_object":
         # 先測第一個內層鍵；壓縮後面的無關鍵，保留外層長度預算。
         payload["keys"][2] = ""
     encoded = (

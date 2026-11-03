@@ -90,3 +90,14 @@ def test_page_cursor_rejects_time_overflow_and_recursive_json(
         page_cursor_key(_encode_raw_bytes(raw.encode()))
     assert error.value.status_code == 422
     assert error.value.code is ErrorCode.REQUEST_VALIDATION_FAILED
+
+
+def test_text_page_cursor_rejects_recursive_json() -> None:
+    """API-R08：文字排序游標也必須把深層 JSON 例外轉為 422。"""
+    from app.api.pagination import _text_page_cursor_key
+
+    cursor = _encode_raw_bytes(("[" * 10000 + "0" + "]" * 10000).encode())
+    with pytest.raises(APIError) as error:
+        _text_page_cursor_key(cursor, "name")
+    assert error.value.status_code == 422
+    assert error.value.code is ErrorCode.REQUEST_VALIDATION_FAILED

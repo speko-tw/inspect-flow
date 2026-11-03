@@ -195,7 +195,10 @@ _thumbnail_limiters: RunVar[dict[int, CapacityLimiter]] = RunVar(
 
 
 def _thumbnail_limiter(limit: int) -> CapacityLimiter:
-    """依 plan.md:53 隔離縮圖名額；等待者不占用預設 worker。"""
+    """依 T3 縮圖取捨隔離名額，等待者不占用預設 worker。
+
+    依據：docs/specs/field-evidence/plan.md#t3-thumbnail-tradeoffs。
+    """
     # 與 T2 同樣延遲建立，避免跨 TestClient／事件迴圈共用喚醒狀態。
     try:
         limiters = _thumbnail_limiters.get()
@@ -238,7 +241,8 @@ def _prepare_image(
             version.height,
             version.byte_size,
         )
-        # plan.md:53／FEV-R17：先提交登入 touch 並釋放連線，才讀檔／等名額。
+        # 依 docs/specs/field-evidence/plan.md#t3-thumbnail-tradeoffs：
+        # 先釋放登入寫鎖再讀檔／等名額，避免擋住 SQLite 寫入（FEV-R17）。
         db.commit()
         try:
             source = storage.open(key)
