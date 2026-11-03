@@ -14,6 +14,7 @@ from app.api.v1.audit_logs import router as audit_logs_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.companies import router as companies_router
 from app.api.v1.evidence import router as evidence_router
+from app.api.v1.evidence_office import router as evidence_office_router
 from app.api.v1.health import router as health_router
 from app.api.v1.inspection_planning import router as inspection_planning_router
 from app.api.v1.me import router as me_router
@@ -94,6 +95,7 @@ def create_app() -> FastAPI:
     app.include_router(project_inspection_items_router, prefix="/api/v1")
     app.include_router(inspection_planning_router, prefix="/api/v1")
     app.include_router(evidence_router, prefix="/api/v1")
+    app.include_router(evidence_office_router, prefix="/api/v1")
     app.include_router(roles_router, prefix="/api/v1")
     app.include_router(setup_router, prefix="/api/v1")
     app.include_router(users_router, prefix="/api/v1")
