@@ -2,8 +2,12 @@
 
 import hashlib
 import io
+import logging
+import subprocess
+import sys
 from copy import deepcopy
 from datetime import timedelta
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -670,3 +674,107 @@ def test_saved_small_baseline_legacy_inference_and_source_never_refreshes(
     assert _state(db_session, world)["variants"]["OFFICE"][6]["base_size"] == (
         "medium"
     )
+
+
+@pytest.mark.parametrize("operation", ["put", "put_missing_delete", "cli"])
+def test_missing_office_is_rebuilt_from_field(
+    db_session,
+    make_client,
+    monkeypatch,
+    tmp_path,
+    caplog,
+    operation,
+):
+    world = _office_world(db_session, make_client, monkeypatch, tmp_path)
+    if operation == "cli":
+        make_system_admin(world["admin_user"])
+        db_session.commit()
+    before = _state(db_session, world)
+    old_key = before["variants"]["OFFICE"][1]
+    field_key = before["variants"]["FIELD"][1]
+    store = LocalStorage(world["root"])
+    store.delete(old_key)
+    assert set(store.iter_keys()) == {field_key}
+    if operation == "put_missing_delete":
+        original_delete = LocalStorage.delete
+
+        def missing_delete(self, key):
+            if key == old_key:
+                raise FileNotFoundError("missing old OFFICE")
+            return original_delete(self, key)
+
+        monkeypatch.setattr(LocalStorage, "delete", missing_delete)
+    if operation == "cli":
+        result = subprocess.run(
+            [sys.executable, "-m", "app.cli.regenerate_office_versions"],
+            cwd=Path(__file__).resolve().parents[2],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "Regenerated: 1; skipped locked: 0"
+        warnings = [
+            line
+            for line in result.stderr.splitlines()
+            if "evidence_office_missing_file" in line
+        ]
+    else:
+        caplog.set_level(logging.WARNING, logger=office_service.__name__)
+        response = world["admin"].put(world["url"], json={})
+        assert response.status_code == 200, response.text
+        warnings = [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == office_service.__name__
+        ]
+    assert len(warnings) == 1
+    assert str(world["photo_id"]) in warnings[0]
+    assert str(old_key) not in warnings[0]
+    assert str(field_key) not in warnings[0]
+    after = _state(db_session, world)
+    assert after["variants"]["FIELD"] == before["variants"]["FIELD"]
+    assert after["variants"]["OFFICE"][0] == before["variants"]["OFFICE"][0]
+    assert after["variants"]["OFFICE"][2] == before["variants"]["OFFICE"][2]
+    new_key = after["variants"]["OFFICE"][1]
+    assert new_key != old_key
+    assert set(after["files"]) == {field_key, new_key}
+    assert after["files"][field_key] == before["files"][field_key]
+    assert after["files"][new_key] == before["files"][old_key]
+    assert after["source"] == before["source"]
+    assert after["layer"] == before["layer"]
+
+
+def test_missing_office_failed_commit_does_not_restore_a_phantom_file(
+    db_session,
+    make_client,
+    monkeypatch,
+    tmp_path,
+):
+    world = _office_world(db_session, make_client, monkeypatch, tmp_path)
+    before = _state(db_session, world)
+    old_key = before["variants"]["OFFICE"][1]
+    LocalStorage(world["root"]).delete(old_key)
+    before = _state(db_session, world)
+
+    def fail_commit(*args):
+        raise RuntimeError("injected missing OFFICE commit failure")
+
+    original_restore = LocalStorage.restore
+
+    def unexpected_restore(self, key, source):
+        if key == old_key:
+            pytest.fail("a missing OFFICE has no backup to restore")
+        return original_restore(self, key, source)
+
+    monkeypatch.setattr(LocalStorage, "restore", unexpected_restore)
+    event.listen(db_session, "before_commit", fail_commit, once=True)
+    with pytest.raises(RuntimeError, match="injected missing OFFICE"):
+        office_service.edit_office(
+            db_session,
+            task_id=world["task_id"],
+            photo_id=world["photo_id"],
+            operator_id=world["admin_user"].id,
+            raw={"brightness": 100},
+        )
+    assert _state(db_session, world) == before

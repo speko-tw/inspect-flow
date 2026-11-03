@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 from collections.abc import Callable
+from contextlib import suppress
 from copy import deepcopy
 from datetime import datetime
 from io import BytesIO
@@ -31,6 +33,8 @@ from app.services.evidence_images import (
 )
 from app.storage import LocalStorage, get_storage_settings
 from app.storage.base import Storage
+
+logger = logging.getLogger(__name__)
 
 # FEV-AC15：報告模組尚未落地；以註冊介面接入引用檢查，不依賴報告表。
 ReportChecker = Callable[[Session, Evidence], bool]
@@ -393,7 +397,7 @@ def edit_office(
     old_removed = False
     committed = False
     old_key = None
-    old_bytes = b""
+    old_bytes: bytes | None = None
     try:
         # SQLite 無列鎖，必須先取得寫鎖，避免兩個取代者讀到同一舊鍵。
         # FEV-D4：否則後提交者會把先提交的新檔遺留為第三個檔案。
@@ -444,8 +448,14 @@ def edit_office(
         if rule["effective_size"] == "small" and layer["size"] != "small":
             rule["render_state"] = "fallback_small"
         old_key = office.storage_key
-        with store.open(old_key) as stream:
-            old_bytes = stream.read()
+        # FEV-AC02／AC31：OFFICE 可由 FIELD 修復，遺失的舊檔無須備份。
+        try:
+            with store.open(old_key) as stream:
+                old_bytes = stream.read()
+        except FileNotFoundError:
+            logger.warning(
+                "evidence_office_missing_file evidence_id=%s", photo.id
+            )
         new_key = store.save(BytesIO(data))
         photo.label_layer = layer
         photo.updated_by = operator_id
@@ -496,7 +506,8 @@ def edit_office(
             reason="label_rule_change" if maintenance else "edit",
         )
         # FEV-D4：刪除失敗先回滾 DB；commit 失敗可由記憶體復原原鍵。
-        store.delete(old_key)
+        with suppress(FileNotFoundError):
+            store.delete(old_key)
         old_removed = True
         session.commit()
         committed = True
@@ -505,7 +516,11 @@ def edit_office(
         if not committed:
             session.rollback()
             try:
-                if old_removed and old_key is not None:
+                if (
+                    old_removed
+                    and old_key is not None
+                    and old_bytes is not None
+                ):
                     store.restore(old_key, BytesIO(old_bytes))
             finally:
                 if new_key is not None:
