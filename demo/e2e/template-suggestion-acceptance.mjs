@@ -692,7 +692,7 @@ async function flowKeyboard() {
     200,
   )
   await say(wuPage, '已核准第')
-  note('keyboard: reviewer chooses destination with arrow keys and approves')
+  note('keyboard: reviewer picks destination by typing and approves')
 
   await linPage.goto(projectItems)
   await tabTo(
@@ -752,11 +752,201 @@ async function flowKeyboard() {
   note('keyboard: withdraw with Escape cancel then confirm')
 }
 
+// ---------------------------------------------------------------------
+// D：360px、純鍵盤——版本比較、管理者改版後核准、個人各版歷史。
+// ---------------------------------------------------------------------
+async function keyboardPress(page, role, name, key = 'Enter') {
+  const target = page.getByRole(role, { name, exact: true }).first()
+  await tabTo(page, target, name)
+  await page.keyboard.press(key)
+}
+
+async function keyboardTitle(page, text) {
+  const field = page.getByLabel('查核項目名稱', { exact: false })
+  await tabTo(page, field, 'title field')
+  await page.keyboard.press('Meta+A')
+  await page.keyboard.type(text)
+}
+
+async function focusId(page) {
+  return page.evaluate(() => document.activeElement?.id ?? '')
+}
+
+async function flowKeyboardReview() {
+  const linPage = await lin()
+  const wuPage = await wu()
+  const title = '素材6'
+  await resize(360)
+
+  // 前置：提議、退回、本人修改重送，全部只用鍵盤。
+  await linPage.goto(projectItems)
+  await keyboardPress(linPage, 'button', `建議「${title}」加入範本庫`)
+  await linPage.getByRole('heading', { name: '確認提出建議' }).waitFor()
+  await linPage.keyboard.press('Tab')
+  await postAnd(
+    linPage,
+    () => linPage.keyboard.press('Enter'),
+    `/projects/${world.project}/template-suggestions`,
+    201,
+  )
+  const id = await suggestionFor(title, ['PENDING'])
+  await wuPage.goto(reviewPath(id))
+  await keyboardPress(wuPage, 'button', '附原因退回')
+  await tabTo(wuPage, wuPage.getByLabel('退回原因'), 'reason field')
+  await wuPage.keyboard.type('鍵盤二：請補充說明')
+  await keyboardPress(wuPage, 'button', '退回建議')
+  await tabTo(
+    wuPage,
+    wuPage.getByRole('button', { name: '確認退回', exact: true }),
+    'confirm return',
+  )
+  await postAnd(
+    wuPage,
+    () => wuPage.keyboard.press('Enter'),
+    `/template-suggestions/${id}:return`,
+    200,
+  )
+  await linPage.goto(minePath(id))
+  await keyboardPress(linPage, 'link', '修改退回件')
+  await keyboardTitle(linPage, `${title} 鍵盤二版`)
+  await tabTo(
+    linPage,
+    linPage.getByRole('button', { name: '儲存新版本', exact: true }),
+    'save revision',
+  )
+  await postAnd(
+    linPage,
+    () => linPage.keyboard.press('Enter'),
+    `/template-suggestions/${id}/revisions`,
+    201,
+  )
+  await keyboardPress(linPage, 'button', '重新送審')
+  await tabTo(
+    linPage,
+    linPage.getByRole('button', { name: '確認重新送審', exact: true }),
+    'confirm resubmit',
+  )
+  await postAnd(
+    linPage,
+    () => linPage.keyboard.press('Enter'),
+    `/template-suggestions/${id}:submit`,
+    200,
+  )
+  note('keyboard D: setup propose, return, revise and resubmit')
+
+  // 版本比較：看前版／看後版／返回差異摘要。
+  await wuPage.goto(reviewPath(id))
+  await keyboardPress(wuPage, 'link', '比較前後兩版')
+  await say(wuPage, '差異摘要')
+  assert.equal(
+    await wuPage.locator('details[open]').count(),
+    0,
+    'content collapsed at 360px',
+  )
+  await keyboardPress(wuPage, 'button', '看前版')
+  assert(
+    (await focusId(wuPage)).startsWith('compare-before-'),
+    `focus moved into the before side, got ${await focusId(wuPage)}`,
+  )
+  assert.equal(
+    await wuPage.locator('details#compare-before').evaluate((e) => e.open),
+    true,
+  )
+  await snap(wuPage, 'kbd-07-compare-before')
+  await keyboardPress(wuPage, 'button', '返回差異摘要')
+  assert.equal(
+    await focusId(wuPage),
+    'suggestion-compare-summary',
+    'back to the summary heading',
+  )
+  await keyboardPress(wuPage, 'button', '看後版')
+  assert(
+    (await focusId(wuPage)).startsWith('compare-after-'),
+    `focus moved into the after side, got ${await focusId(wuPage)}`,
+  )
+  await snap(wuPage, 'kbd-08-compare-after')
+  note('keyboard D: compare before/after/back-to-summary with focus checks')
+
+  // 管理者保存修訂後核准。
+  await keyboardPress(wuPage, 'link', '返回建議詳情')
+  await wuPage.getByRole('heading', { name: '各版歷程', exact: true }).waitFor()
+  await keyboardPress(wuPage, 'link', '修改建議內容')
+  await keyboardTitle(wuPage, `${title} 管理者改`)
+  await tabTo(
+    wuPage,
+    wuPage.getByRole('button', { name: '儲存新版本', exact: true }),
+    'save manager revision',
+  )
+  const saved = await postAnd(
+    wuPage,
+    () => wuPage.keyboard.press('Enter'),
+    `/template-suggestions/${id}/revisions`,
+    201,
+  )
+  assert.equal(saved.revision_no, 3)
+  await say(wuPage, '已存第 3 版')
+  const category = wuPage.getByLabel('目標工程類別')
+  await tabTo(wuPage, category, 'category select')
+  await pickByTyping(
+    wuPage,
+    category,
+    `QA-${world.tag}-main`,
+    world.categories.main,
+  )
+  const system = wuPage.getByLabel('目標系統')
+  await wuPage.waitForFunction(
+    () => document.querySelector('select[id$="-system"]').options.length > 1,
+  )
+  await tabTo(wuPage, system, 'system select')
+  await pickByTyping(wuPage, system, `QA-${world.tag}-B`, world.systems.B)
+  await keyboardPress(wuPage, 'button', '核准入庫')
+  await tabTo(
+    wuPage,
+    wuPage.getByRole('button', { name: '確認核准入庫', exact: true }),
+    'confirm approve',
+  )
+  const approved = await postAnd(
+    wuPage,
+    () => wuPage.keyboard.press('Enter'),
+    `/template-suggestions/${id}:approve`,
+    200,
+  )
+  assert.equal(approved.reviewed_revision_id, approved.current_revision_id)
+  await say(wuPage, '已核准第 3 版')
+  await snap(wuPage, 'kbd-09-manager-revision-approved')
+  const template = await api(
+    wuPage,
+    `/templates/${approved.template_id}`,
+  )
+  assert.equal(template.data.title, `${title} 管理者改`)
+  note('keyboard D: manager saves revision 3 then approves it by keyboard')
+
+  // 個人各版歷史：設定頁入口 → 清單 → 詳情 → 各版。
+  await linPage.goto(`${base}/settings`)
+  await keyboardPress(linPage, 'link', '開啟我的範本建議')
+  await say(linPage, `${title} 管理者改`)
+  const row = linPage.getByRole('link', { name: /管理者改/ }).first()
+  await tabTo(linPage, row, 'suggestion row')
+  await linPage.keyboard.press('Enter')
+  await linPage.getByRole('heading', { name: '各版歷程', exact: true }).waitFor()
+  await keyboardPress(linPage, 'button', '查看第 1 版')
+  await say(linPage, '第 1 版內容')
+  await say(linPage, '歷史唯讀')
+  await say(linPage, '鍵盤二：請補充說明')
+  await snap(linPage, 'kbd-10-personal-history-v1')
+  await keyboardPress(linPage, 'button', '查看第 3 版')
+  await say(linPage, '第 3 版內容')
+  await say(linPage, '最新')
+  await snap(linPage, 'kbd-11-personal-history-v3')
+  note('keyboard D: personal list and per-version history by keyboard')
+}
+
 let failure = null
 try {
   await flowDesktop()
   await flowMobile()
   await flowKeyboard()
+  await flowKeyboardReview()
   assert.equal(pageErrors.length, 0, pageErrors.join('\n'))
   assert.equal(externalRequests.length, 0, externalRequests.join('\n'))
   // 預期的負向回應：登入前的 /auth/me 401，與名稱衝突時真後端回的 409。

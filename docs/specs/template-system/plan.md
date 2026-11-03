@@ -196,7 +196,7 @@
 
 在最終來源（T15～T19 已合併）上以真後端、真瀏覽器驗收 TPL-AC33～AC43；截圖與 log 放 repo 外，不提交。已在 T15～T19 驗過的測試（`backend/tests/db/test_template_suggestion*.py`）在 SQLite 與 PostgreSQL 重跑引用，不重寫。本任務不改產品行為、不新增 migration。
 
-- 工具：`demo/scripts/suggestion-acceptance.sh sqlite|postgres` 建立獨立資料庫、啟動後端與前端、載入示範資料後依序跑 `demo/scripts/suggestion_integration.py`（真 HTTP，各情境以並行請求驗證競爭）與 `demo/e2e/template-suggestion-acceptance.mjs`（桌面 1280、360px、純鍵盤三段）。PostgreSQL 模式只接受名稱含 `test` 或 `e2e` 的資料庫，並清空其 `public` schema。
+- 工具：`demo/scripts/suggestion-acceptance.sh sqlite|postgres` 建立獨立資料庫、啟動後端與前端、載入示範資料後依序跑 `demo/scripts/suggestion_integration.py`（真 HTTP，各情境以並行請求驗證競爭）與 `demo/e2e/template-suggestion-acceptance.mjs`（桌面 1280、360px、純鍵盤三段）。PostgreSQL 模式由 `suggestion_db_guard.py` 檢查最終連線目標（拒絕任何網址查詢參數，只接受本機且名稱含 `test` 或 `e2e` 的資料庫，附反例自測）後才清空其 `public` schema；工作目錄與資料庫各有 mkdir 互斥鎖，拿不到鎖或埠位被占用時不刪任何檔案、不停任何程序。
 - 人員為虛構：林小姐與陳先生（提議人）、吳經理與王主任（只有 `template.manage`、不是來源專案成員的審核者）；來源項目、目標系統與專案每次執行重建，彼此不共用。
 
 | AC | 真後端證據 |
@@ -210,7 +210,7 @@
 | TPL-AC39 | 同上：兩位審核者並行核准、核准對撤回、核准對修訂各 5 輪，皆恰一方成功且範本數與狀態一致；過期 expected 回 `template_suggestion.changed`。各寫入點故障注入與固定交錯引用 T17 `test_ac39_*` |
 | TPL-AC40 | `scenario_ac40`：待審數等於逐頁讀完的待審件、分頁與搜尋不改數量、四個動作後數量依序變動、本人隔離與跨人 404、本案件數含所有狀態、從未提議者為 0、沒有通知端點；畫面為 `desktop-01-empty-list`、`desktop-05-settings-entry` |
 | TPL-AC41 | `scenario_ac41`：失權後仍可讀清單、詳情與各版並可撤回，修改、重送與新提議皆 403；跨件比較不洩漏；請求夾帶身分或狀態欄位回 422；失權中的編輯畫面引用 T19 |
-| TPL-AC42 | `scenario_ac42_trace`：五種事件順序與欄位、來源 `project_id`、無變更與被拒絕無成功事件、`template_item.created` 形狀不變、由範本經核准事件追到建議與受審版本；瀏覽器三段走查含確認、欄位錯誤就近顯示與純鍵盤完成全流程 |
+| TPL-AC42 | `scenario_ac42_trace`：五種事件順序與欄位、來源 `project_id`、無變更與被拒絕無成功事件、`template_item.created` 形狀不變、由範本經核准事件追到建議與受審版本；瀏覽器走查含確認、欄位錯誤就近顯示，並以純鍵盤完成提議、退回、重送、版本比較（看前版、看後版、返回差異摘要）、管理者保存修訂後核准、設定頁進個人清單與逐版歷史、撤回；畫面為 `kbd-01`～`kbd-11` |
 | TPL-AC43 | `scenario_ac34_ac43` 與畫面 `desktop-11-approved-after-source-delete`：核准後先改再刪來源，範本、核准件與各版全部不變；另引用 T17 `test_ac43_*` |
 
 驗證中的觀察：撤回、重送、核准與退回的確認框按取消後，焦點不回到原按鈕（只有提議確認框會回）。ADM-R38 只要求開啟時焦點在「取消」與 Esc 等同取消，因此不算違規；若要改善，另開 task。

@@ -23,43 +23,80 @@ die() { echo "suggestion acceptance: $*" >&2; exit 1; }
 
 [ -x "$REPO/backend/.venv/bin/python" ] || die "先在 $REPO 執行 make setup"
 [ -d "$REPO/frontend/node_modules" ] || die "先在 $REPO 執行 make setup"
+PY="$REPO/backend/.venv/bin/python"
+
+# 互斥鎖：mkdir 是原子操作（macOS 沒有 flock 指令）。任何刪除或停止
+# 程序之前先拿鎖，拿不到就直接退出，不動第一輪的檔案與 PID。
+HELD_LOCKS=()
+acquire_lock() {
+  local dir="$1" owner
+  if mkdir "$dir" 2>/dev/null; then
+    echo "$$" >"$dir/pid"
+    HELD_LOCKS+=("$dir")
+    return 0
+  fi
+  owner="$(cat "$dir/pid" 2>/dev/null || true)"
+  if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
+    die "另一輪（PID ${owner}）正在使用 ${dir}；不會刪除或停止任何東西"
+  fi
+  die "鎖 $dir 是殘留的（PID ${owner:-未知} 已不存在）；確認沒有驗收在跑" \
+    "後手動刪除該目錄再重跑"
+}
+release_locks() {
+  local dir
+  for dir in ${HELD_LOCKS[@]+"${HELD_LOCKS[@]}"}; do
+    rm -f "$dir/pid"
+    rmdir "$dir" 2>/dev/null || true
+  done
+}
+WORK_LOCKED=0
+cleanup() {
+  # 只有持有工作目錄鎖時才停程序，避免拿不到鎖的第二輪動到第一輪。
+  if [ "$WORK_LOCKED" = 1 ]; then
+    "$HERE/stop.sh" >/dev/null 2>&1 || true
+  fi
+  release_locks
+}
+trap cleanup EXIT
 
 case "$BACKEND" in
   sqlite)
-    mkdir -p "$DEMO_WORK_DIR"
     DB_FILE="$DEMO_WORK_DIR/demo.db"
-    rm -f "$DB_FILE" "$DB_FILE-shm" "$DB_FILE-wal"
     DB_URL="sqlite:///$DB_FILE"
     ;;
   postgres)
     DB_URL="${INSPECTFLOW_ACCEPTANCE_POSTGRES_URL:-}"
     [ -n "$DB_URL" ] || die "postgres 模式需要 INSPECTFLOW_ACCEPTANCE_POSTGRES_URL"
-    # 為什麼：下面會清空 public schema；只允許名稱明示為測試的資料庫，
-    # 避免誤指到開發或正式資料。
-    DB_NAME="${DB_URL##*/}"
-    DB_NAME="${DB_NAME%%\?*}"
-    case "$DB_NAME" in
-      *test*|*e2e*) ;;
-      *) die "拒絕清空非測試資料庫：$DB_NAME" ;;
-    esac
+    # 為什麼：下面會清空 public schema；守門檢查最終連線目標（含查詢
+    # 參數覆寫），只允許本機且名稱含 test 或 e2e 的資料庫。
+    "$PY" "$HERE/suggestion_db_guard.py" --self-test >/dev/null \
+      || die "守門自測失敗"
+    DB_NAME="$("$PY" "$HERE/suggestion_db_guard.py" "$DB_URL")" \
+      || die "拒絕清空這個資料庫（見上方原因）"
     ;;
   *) die "第一個參數必須是 sqlite 或 postgres" ;;
 esac
 
-mkdir -p "$DEMO_WORK_DIR" "$EVIDENCE_DIR"
-rm -f "$DEMO_WORK_DIR"/{backend,frontend,init,migrate}.log
-rm -f "$DEMO_WORK_DIR"/{backend,frontend}.pid "$DEMO_WORK_DIR"/*.json
+acquire_lock "$DEMO_WORK_DIR.lock"
+WORK_LOCKED=1
+if [ "$BACKEND" = postgres ]; then
+  # 不同工作目錄也可能指向同一個資料庫，所以資料庫另有一把鎖。
+  acquire_lock "${TMPDIR:-/private/tmp}/inspectflow-suggest-pg-$DB_NAME.lock"
+fi
 
-cleanup() {
-  "$HERE/stop.sh" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
+mkdir -p "$DEMO_WORK_DIR" "$EVIDENCE_DIR"
+# 拿到鎖之後才處理本工作目錄遺留的程序；先確認埠位再刪任何檔案。
 "$HERE/stop.sh" >/dev/null 2>&1 || true
 for port in "$BACKEND_PORT" "$FRONTEND_PORT"; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
-    die "連接埠 $port 已被使用；不會停止其他程序"
+    die "連接埠 $port 已被使用；不會停止其他程序，也不刪除任何檔案"
   fi
 done
+if [ "$BACKEND" = sqlite ]; then
+  rm -f "$DB_FILE" "$DB_FILE-shm" "$DB_FILE-wal"
+fi
+rm -f "$DEMO_WORK_DIR"/{backend,frontend,init,migrate}.log
+rm -f "$DEMO_WORK_DIR"/{backend,frontend}.pid "$DEMO_WORK_DIR"/*.json
 
 if [ "$BACKEND" = postgres ]; then
   (cd "$REPO/backend" && \
@@ -104,7 +141,6 @@ done
 curl -fsS "http://localhost:$FRONTEND_PORT/" >/dev/null \
   || die "前端啟動逾時"
 
-PY="$REPO/backend/.venv/bin/python"
 BASE="http://127.0.0.1:$BACKEND_PORT"
 "$PY" "$HERE/seed.py" --base "$BASE" --code="$CODE" \
   --out "$DEMO_WORK_DIR/seed-result.json" >"$DEMO_WORK_DIR/seed.log"
