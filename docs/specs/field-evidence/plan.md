@@ -176,4 +176,4 @@
 
 - FIELD 與原始來源不變；影像編修在記憶體完成，再由 T2 同一 renderer 一次編碼。以保存的 `base_size` 自動容納，主動的新圖層才驗幾何。
 - 取代 OFFICE 時先保存新檔，記憶體保留舊 OFFICE 位元組，再移除舊檔並提交 DB；寫檔、移除、flush、commit 或 T5 接入點失敗均回滾 metadata、清除新檔，必要時以原鍵恢復舊檔。這是程序內失敗補償，不宣稱 DB／檔案系統具跨資源 crash atomicity；維運重產期間暫停寫入並保留備份。
-- 依負責人對 #793 的裁定，T4 只提供同交易 `record_office_edit` 接入點；`evidence.office_version_edited`／`evidence.layer_updated` 的事件登記與實際稽核寫入由 T5 完成。AC31 的稽核部分、AC21 與 AC36 完整歷程寫入／讀回延後至 T5 整合驗收，本 PR 不稱為完整對外寫入驗收。
+- 依本計畫 T4／T5 分工（#793），T4 只提供同交易 `record_office_edit` 接入點；`evidence.office_version_edited`／`evidence.layer_updated` 的事件登記與實際稽核寫入由 T5 完成。AC31 的稽核部分、AC21 與 AC36 完整歷程寫入／讀回延後至 T5 整合驗收，本 PR 不稱為完整對外寫入驗收。
