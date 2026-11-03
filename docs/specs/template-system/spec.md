@@ -196,7 +196,7 @@
 | TPL-R31 | 建議只能經後端業務動作依下方狀態機轉換：待審、退回、已核准、已撤回；不得 PATCH 任意狀態。提議人可將退回件在同一件修改後重送，不限次數；退回件必須已有退回後新修訂才可重送（**規格設計**：避免未調整內容就反覆送審）；可撤回任何尚未核准的非終止件。已核准／已撤回為終止狀態；待審內容由審核者修改時不離開待審。並行審核、撤回與重送必須以狀態及最新修訂檢查確保只有一個成功。 | 必須／不得 | [退回、撤回與不限次數重送](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)、PR-16；狀態名稱、重送須新修訂、撤回終止與併發控制為規格設計 |
 | TPL-R32 | 每次保存不同內容必須新增不可覆寫的修訂，含版本序號、完整結構、編輯者、時間及所基於的前版；不得覆寫舊內容。提交、退回、核准與撤回的狀態歷程另行追加，退回／核准紀錄固定對應所審版本、審核人、時間及退回原因；退回原因去空白後必填。提議人可讀自己各版內容、狀態與原因；範本管理者可讀曾送審件的完整歷程並對照前後兩版。管理者修改後核准必須保存修改版，再以該版核准，原提交版仍可讀。 | 必須／不得 | [各版不可覆寫與兩版對照裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)、PR-08；修訂／狀態／審核分表與原因長度為規格設計 |
 | TPL-R33 | 審核、退回、審核中修改及核准必須具 `template.manage`（Admin 放行）；模組委派不附帶審核權限，不要求審核者是來源專案成員。審核者可修改待審結構後核准，或附原因退回。核准時必須明選仍存在的目標工程類別／系統，並核對系統屬於該類別；以受審修訂建立一筆獨立 `Template Item`，序號接目標系統最大序號（空系統從 1）。名稱、結構及同名衝突沿用 TPL-R03／R11／R26／R24；同名回既有 409，不覆蓋既有範本。範本建立、核准狀態、審核紀錄與稽核同一交易，任一步失敗全部回滾；同件最多核准並產生一筆範本。 | 必須／不得 | [範本管理權限用語裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6084599859)、[流程範圍](https://github.com/speko-tw/inspect-flow/issues/314)、[版本保留裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)、KD-49；目的地、交易、配號及衝突處理為沿用既有規則的規格設計 |
-| TPL-R34 | 不另做通知、信件、推播或未讀通知功能。具審核權者在範本管理頁看到「待審建議（N）」與待審清單，N 是全部仍待審件數，不受目前頁次或搜尋篩選影響，不計退回、已核准與已撤回。個人清單放在已登入者皆能進入的 `/settings` 下「我的範本建議」區塊，只有曾提出建議者可見；失去來源專案權限或沒有 template.use 時仍能進入。專案查核項目頁對具 `project_inspection_item.edit` 者顯示「我的範本建議（N）」連到 `/settings#template-suggestions`；該 N 是本人在該專案的建議件數，含所有狀態，不是管理頁的待審總數。該區塊顯示最新狀態、核准目的地、退回原因及各版；動作後重讀清單與數量。不新增全域導覽或 AppHeader 項目，不出現在 Field 首頁，沿用 [ADM-R50](../admin-dashboard/spec.md#需求) 與 [FUI-R12](../field-ui/spec.md#需求) 的路由／導覽規則。 | 必須／不得 | [不另通知與待審數量裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231392325)、[提議人歷程可見](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)；settings 區塊與專案入口依第 2 輪負責人裁定，數量範圍與刷新時點為規格設計 |
+| TPL-R34 | 不另做通知、信件、推播或未讀通知功能。具審核權者在範本管理頁看到「待審建議（N）」與待審清單，N 是全部仍待審件數，不受目前頁次或搜尋篩選影響，不計退回、已核准與已撤回。個人設定頁（已登入者皆能進入的 `/settings`）另提供「我的範本建議」入口，只有曾提出建議者可見；由此開啟本人清單，返回時回設定頁，失去來源專案權限或沒有 template.use 時仍能進入。專案查核項目頁對具 `project_inspection_item.edit` 者顯示「我的範本建議（本案共 N 件）」連結，**必須**直接開啟本人清單並預設篩選本案，返回時回專案頁；N 為 0 時**必須**仍可進入清單並顯示本案尚未提出建議的空白說明。該 N 是本人在該專案的建議件數，含所有狀態，不是管理頁的待審總數。本人清單顯示最新狀態、核准目的地、退回原因及各版；動作後重讀清單與數量。不新增全域導覽或 AppHeader 項目，不出現在 Field 首頁，沿用 [ADM-R50](../admin-dashboard/spec.md#需求) 與 [FUI-R12](../field-ui/spec.md#需求) 的路由／導覽規則。 | 必須／不得 | [不另通知與待審數量裁定](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231392325)、[提議人歷程可見](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)；settings 區塊與專案入口依第 2 輪負責人裁定，數量範圍與刷新時點為規格設計 |
 | TPL-R35 | 成功首次提出（建立即送審）、修改、重送、退回、核准、撤回必須在同一交易寫入下方登記的 `template_suggestion.*` 事件。核准另寫既有 `template_item.created`，不可冒用直接讀來源項目的 `template_item.created_from_project`；關聯只放在 `template_suggestion.approved` 的建議／修訂與新範本 ID，`template_item.created` 不新增 project_id、suggestion_id 或 revision_id，其形狀維持既有目錄。被拒絕、回滾或無變更保存不留成功事件；任一稽核寫入失敗即回滾業務變更。 | 必須／不得 | [留存提議與核准紀錄](https://github.com/speko-tw/inspect-flow/issues/314)、[保留審核人及各版](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)、ALG-R06、TPL-R25；事件代碼與欄位為規格設計 |
 | TPL-R36 | 後端必須每次驗證本人／審核權限與目前狀態。本人即使失去來源專案編輯權，仍可讀自己已保存建議及歷程、撤回未核准件；修改與重送則重新檢查來源專案編輯權，不因歷史提議而取得任何專案權限。本人清單只列自己的建議；管理者可讀所有已提出件及後續退回、核准與撤回的完整歷程（Admin 全權仍依 KD-69）。所有新增畫面須依 PR-18／PR-19 呈現對象、影響與事前確認，欄位錯誤就近顯示並保留草稿；重大畫面實作前須先過原型關卡。 | 必須／不得 | [提議人與管理者可見範圍](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)、PR-01、PR-18、PR-19；失權後只讀／撤回與可見範圍為規格設計 |
 
@@ -247,13 +247,13 @@ stateDiagram-v2
 | POST | `/api/v1/template-suggestions/{id}:return` | 本文 `reason`、expected 欄位；template.manage，PENDING；原因空白／超長回 422 並指向 `/reason`；成功回 200。 |
 | POST | `/api/v1/template-suggestions/{id}:approve` | 本文 `category_id`、`system_id`、expected 欄位；template.manage，PENDING；目的地與唯一性驗證成功後同交易建立範本，回 200 建議、受審修訂及 template_id。名稱或結構要改時先保存審核修訂，不在核准本文藏未保存的內容。 |
 | GET | `/api/v1/me/template-suggestions` | 只列本人建議，含最新狀態、版本號、退回原因或核准目的地；cursor 分頁，可按狀態或 `source_project_id` 篩選；另回篩選後的本人件數 `total_count`，不受頁次影響。settings 以未篩選總數是否大於 0 判斷區塊可見，專案連結 N 以該專案且不篩狀態的總數呈現。 |
-| GET | `/api/v1/template-suggestions` | template.manage；列曾送審件，預設 PENDING，可切換退回、核准、撤回與完整歷程。 |
+| GET | `/api/v1/template-suggestions` | template.manage；列曾送審件，預設 PENDING；status 可選四種狀態或 ALL（完整歷程，不是第五種主件狀態），q 搜尋最新名稱或來源名稱；依最近送審時間分頁。 |
 | GET | `/api/v1/template-suggestions:pending-count` | template.manage；回 `{pending_count: N}`，是所有 PENDING 主件數，不按修訂、頁次或搜尋累加。 |
 | GET | `/api/v1/template-suggestions/{id}` | 本人，或對曾送審件具 template.manage 者；Admin 依既有全權規則。回來源名稱快照、最新內容、狀態與審核摘要。 |
 | GET | `/api/v1/template-suggestions/{id}/revisions` | 同詳情授權，cursor 分頁讀不可變各版內容及關聯狀態／原因／審核人；回 `{items, next_cursor}`，每筆修訂含其關聯狀態與審核歷程，不能只回最後一版。 |
 | GET | `/api/v1/template-suggestions/{id}/revisions:compare` | 本文無；query 指定 `from_revision_id`／`to_revision_id`，兩者必須屬於本件；限 template.manage，兩版須是本件前後相鄰修訂（to 的 revision_no = from + 1），非相鄰回 422；回前後兩版及穩定邏輯識別對照的新增／刪除／修改／重排。 |
 
-清單 `limit` 預設 50、上限 100；本人／管理清單依 `created_at`、`id` 降冪，版本依 `revision_no`、`id` 升冪，回 `{items, next_cursor}`（本人建議清單另含 total_count）。不得從請求接受 proposer_id、reviewer_id 或任意 status，操作者均由登入身分取得；來源 read、版本詳情與比較不得成為跨件或跨專案任意查詢入口。未登入 401；沒有動作權限 403；非本人且無審核可見權或資源不存在時回 404（Admin 全權依既有規則）；非法轉換回 409 `template_suggestion.invalid_state`；同名沿用 409 `template.name_conflict`；不存在的目標回 404；系統不屬於所選類別、非法內容或原因回 422，沿用 `error.fields`。核准遇衝突時保持 PENDING、歷史及既有範本不變，UI 保留目標與草稿以便修正；並行核准只有一件成功，重送失敗請先重讀結果。
+清單 `limit` 預設 50、上限 100；本人清單依 `created_at`、`id` 降冪；管理清單依最近一次送審（狀態歷程轉入 PENDING）的 `last_submitted_at`、`id` 降冪，送審時間相同以 ID 穩定續頁，不依管理者保存修訂的時間排序，版本依 `revision_no`、`id` 升冪，回 `{items, next_cursor}`（本人建議清單另含 total_count）。不得從請求接受 proposer_id、reviewer_id 或任意 status，操作者均由登入身分取得；來源 read、版本詳情與比較不得成為跨件或跨專案任意查詢入口。未登入 401；沒有動作權限 403；非本人且無審核可見權或資源不存在時回 404（Admin 全權依既有規則）；非法轉換回 409 `template_suggestion.invalid_state`；同名沿用 409 `template.name_conflict`；不存在的目標回 404；系統不屬於所選類別、非法內容或原因回 422，沿用 `error.fields`。核准遇衝突時保持 PENDING、歷史及既有範本不變，UI 保留目標與草稿以便修正；並行核准只有一件成功，重送失敗請先重讀結果。
 
 ### 稽核與介面驗收
 
@@ -267,7 +267,7 @@ stateDiagram-v2
 | `template_suggestion.approved` | 核准並建立新範本 | `template_suggestion` | true | status=PENDING | status=APPROVED、review_id、reviewed_revision_id、reviewer_id、template_id、category_id、system_id |
 | `template_suggestion.withdrawn` | 本人撤回未核准件 | `template_suggestion` | true | status=PENDING／RETURNED | status=WITHDRAWN |
 
-下列 AC 的 API、DB 與 UI 實跑由 0.6.x 實作任務提供；本次文件驗收不宣稱已實作通過。
+下列 AC 已由 0.6.x 任務 T15～T20 以真後端驗收；逐條證據見 [plan 的 T20 證據](plan.md#t20範本建議整合驗收證據807)。
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
@@ -295,6 +295,7 @@ stateDiagram-v2
 - 範圍變更（負責人試用回饋，#666，2026-10-15）：全數已套用時改為只顯示一句說明並停用套用；409 訊息使用「」— [#666](https://github.com/speko-tw/inspect-flow/issues/666)
 - 規格澄清（#728）：`GET /projects` 授權條件統一引用 domain-model 專案管理 API — [#728](https://github.com/speko-tw/inspect-flow/issues/728)
 - TPL-R22／TPL-AC20：依第 3 輪審查明確手風琴展開狀態轉移與輸入期間的穩定性 — [PR #453 第 3 輪審查](https://github.com/speko-tw/inspect-flow/pull/453#pullrequestreview-5411083162)。
+- 規格澄清（#807）：TPL-AC33～AC43 的驗收證據指向計畫的 T20 證據表；需求、範圍與行為不變 — [#807](https://github.com/speko-tw/inspect-flow/issues/807)
 - 對齊 #375 路線圖，將 Report Delivery 更新為 P8，並將範本建議、審核與核准流程更新為 0.6.x — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 - 單位規則的意圖已由 [#332](https://github.com/speko-tw/inspect-flow/issues/332)／[PR #333](https://github.com/speko-tw/inspect-flow/pull/333) 記錄（KD-54 已合併；原始來源為負責人[#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965931420)）。本規格依此將數值標準綁定一個數字欄位，並在 TPL-Q8 定案具體欄位關聯；單位換算仍由現場處理且不在本規格範圍。
@@ -348,3 +349,7 @@ stateDiagram-v2
 - 意圖變更跟進（負責人裁定，#314）：KD-49 僅記錄已裁定的 0.6.x 範本建議權限、回饋與歷程原則，具體狀態／API／資料設計留在本規格；依據：[版本](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-5977799701)、[用語](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6084599859)、[提議與不另通知](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231392325)、[版本留存與重送](https://github.com/speko-tw/inspect-flow/issues/314#issuecomment-6231403803)。維持已凍結規格狀態；新增 glossary 詞條須另取得負責人同意，本次不新增。
 
 - 規格澄清（#314，整合 v0.5.2 main）：保留 #717 已使用的 TPL-R28／TPL-AC32，將本節建議規則順延為 TPL-R29～R36、TPL-AC33～AC43；同步計畫、稽核、狀態責任與索引引用。行為與驗收內容不變；KD-49 沿用 #765 的唯讀範本 API 與專案內入口說明，保留既有停用、名稱衝突及稽核契約。
+
+- 規格澄清（負責人核可原型，#805）：TPL-R34 對齊專案捷徑直接開本人本案清單、依進入來源返回專案或設定、N 為 0 仍可進入空白狀態；設定頁保留另一入口，不改權限、計數範圍或全域導覽。依據：[負責人核可與調整指示](https://github.com/speko-tw/inspect-flow/issues/805#issuecomment-6541910039)。
+
+- 規格澄清（#806）：依已核可 T18 步驟 21 對齊管理清單的最近送審時間排序與 cursor，明列 ALL／q 查詢；本人清單維持建立時間排序。主件摘要補最新名稱、最後編輯者及最近送審時間，修訂／審核／歷程只在原有可見範圍投影目前人員顯示名稱；不授予查詢全域帳號或來源專案的能力，不改不可變內容與操作者 ID。HTTP 回應沿用 content、reviews、transitions，畫面事件由前端對照 review_id 衍生。

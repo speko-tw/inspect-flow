@@ -22,6 +22,8 @@ type Props = {
   updatePoint: (index: number, changes: Partial<InspectionPoint>) => void
   /** 依 IP-R13，鎖定時不得增刪欄位或改型別、單位與綁定，只能改名稱。 */
   structureLocked?: boolean
+  /** T19：可選重排入口；欄位識別與數值綁定不隨位置改變。 */
+  moveField?: (point: number, from: number, to: number) => void
 }
 
 /**
@@ -41,6 +43,7 @@ export function MeasurementFieldEditor({
   updateField,
   updatePoint,
   structureLocked = false,
+  moveField,
 }: Props) {
   // 操作錯誤以欄位的穩定識別當 key，不用陣列位置，增刪重排時錯誤才
   // 不會轉移到另一個欄位（TPL-R17）。
@@ -122,6 +125,36 @@ export function MeasurementFieldEditor({
         }
         return (
           <div className="tpl-field-card" key={field.clientKey}>
+            {moveField && (
+              <div className="suggestion-actions" aria-label="欄位排序">
+                {([-1, 1] as const).map((direction) => (
+                  <button
+                    key={direction}
+                    type="button"
+                    disabled={
+                      structureLocked ||
+                      fieldIndex + direction < 0 ||
+                      fieldIndex + direction >= point.measurement_fields.length
+                    }
+                    onClick={() => {
+                      moveField(pointIndex, fieldIndex, fieldIndex + direction)
+                      setConfirmField('')
+                      window.setTimeout(
+                        () =>
+                          document
+                            .getElementById(
+                              `field-${pointIndex}-${fieldIndex + direction}-name`,
+                            )
+                            ?.focus(),
+                        0,
+                      )
+                    }}
+                  >
+                    {direction < 0 ? '上移欄位' : '下移欄位'}
+                  </button>
+                ))}
+              </div>
+            )}
             <label htmlFor={`field-${pointIndex}-${fieldIndex}-name`}>
               欄位名稱 <RequiredMark />
             </label>

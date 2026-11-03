@@ -10,6 +10,7 @@ _NAMES = (
     "INSPECTFLOW_EVIDENCE_STORAGE_ROOT",
     "INSPECTFLOW_EVIDENCE_MAX_FILE_BYTES",
     "INSPECTFLOW_EVIDENCE_MAX_DECODE_PIXELS",
+    "INSPECTFLOW_EVIDENCE_MAX_CONCURRENT_UPLOADS",
 )
 
 
@@ -26,6 +27,7 @@ def test_defaults_and_empty_values_are_cwd_independent(monkeypatch, tmp_path):
     )
     assert settings.max_file_bytes == 30 * 1024 * 1024
     assert settings.max_decode_pixels == 50_000_000
+    assert settings.max_concurrent_uploads == 2
     monkeypatch.chdir(tmp_path)
     for name in _NAMES:
         monkeypatch.setenv(name, "")
@@ -34,13 +36,14 @@ def test_defaults_and_empty_values_are_cwd_independent(monkeypatch, tmp_path):
 
 def test_custom_settings(monkeypatch, tmp_path):
     for name, value in zip(
-        _NAMES, (str(tmp_path / "photos"), "123", "456"), strict=True
+        _NAMES, (str(tmp_path / "photos"), "123", "456", "3"), strict=True
     ):
         monkeypatch.setenv(name, value)
     settings = get_storage_settings()
     assert settings.root == tmp_path / "photos"
     assert settings.max_file_bytes == 123
     assert settings.max_decode_pixels == 456
+    assert settings.max_concurrent_uploads == 3
     assert not settings.root.exists()
 
 

@@ -214,6 +214,7 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
             apply_template,
             save_template,
             list_inspection_items,
+            ("POST", "/api/v1/projects/{project_id}/template-suggestions"),
         }
         | planning_routes
     )
@@ -304,23 +305,47 @@ def test_issue_361_plan_and_task_routes_declare_login_access() -> None:
         assert declaration.level is AccessLevel.LOGIN_REQUIRED
 
 
-def test_issue_361_does_not_expose_result_photo_or_manual_reopen_routes() -> (
-    None
-):
+def test_issue_361_does_not_expose_results_or_manual_reopen_routes() -> None:
     app = create_app()
-    paths = {
-        info.path
+    routes = {
+        (info.method, info.path)
         for info in iter_route_access(app)
         if "inspection-task" in info.path
     }
-    assert paths
+    assert routes
+    # T2 一次宣告規格介面表的照片路由，T3～T5 不再修改此檔。
+    prefix = "/api/v1/inspection-tasks/{task_id}/photos"
+    allowed_photos = {
+        ("POST", prefix),
+        ("GET", prefix),
+        ("GET", prefix + "/{photo_id}"),
+        ("GET", prefix + "/{photo_id}/image"),
+        ("PATCH", prefix + "/{photo_id}"),
+        ("DELETE", prefix + "/{photo_id}"),
+        ("PUT", prefix + "/{photo_id}/office-version"),
+        ("GET", "/api/v1/field/inspection-tasks/{task_id}/photos"),
+    }
+    assert ("POST", prefix) in routes
     assert not any(
         "/results" in path
-        or "/photos" in path
         or ":reopen" in path
         or "reopen" in path
-        for path in paths
+        or ("/photos" in path and (method, path) not in allowed_photos)
+        for method, path in routes
     )
+
+
+def test_field_evidence_upload_declares_login_access() -> None:
+    """FEV-AC13: register the T2 upload route access contract once."""
+    app = create_app()
+    route = next(
+        info
+        for info in iter_route_access(app)
+        if info.method == "POST"
+        and info.path == "/api/v1/inspection-tasks/{task_id}/photos"
+    )
+    assert route.declaration is not None
+    assert route.declaration.level is AccessLevel.LOGIN_REQUIRED
 
 
 def test_system_role_assignment_routes_are_removed() -> None:
@@ -398,7 +423,10 @@ def test_issue_290_my_projects_route_requires_login() -> None:
         if info.path.startswith("/api/v1/me")
     }
 
-    assert set(declarations) == {("GET", "/api/v1/me/projects")}
+    assert set(declarations) == {
+        ("GET", "/api/v1/me/projects"),
+        ("GET", "/api/v1/me/template-suggestions"),
+    }
     declaration = declarations[("GET", "/api/v1/me/projects")]
     assert declaration is not None
     assert declaration.level is AccessLevel.LOGIN_REQUIRED
@@ -432,3 +460,48 @@ def test_issue_416_field_routes_declare_their_access_contract() -> None:
     assert listing.permission_code == "inspection_task.inspect"
     assert detail is not None
     assert detail.level is AccessLevel.LOGIN_REQUIRED
+
+
+def test_t16_suggestion_routes_have_exact_access_declarations() -> None:
+    """TPL-R29、R36：初次提出宣告兩層權限，歷史／撤回不綁來源權限。"""
+    routes = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(create_app())
+        if "template-suggestions" in info.path
+    }
+    creation = ("POST", "/api/v1/projects/{project_id}/template-suggestions")
+    logged_in = {
+        ("GET", "/api/v1/me/template-suggestions"),
+        ("GET", "/api/v1/template-suggestions/{suggestion_id}"),
+        ("GET", "/api/v1/template-suggestions/{suggestion_id}/revisions"),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}/revisions"),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}:submit"),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}:withdraw"),
+    }
+    reviewing = {
+        ("GET", "/api/v1/template-suggestions"),
+        ("GET", "/api/v1/template-suggestions:pending-count"),
+        (
+            "GET",
+            "/api/v1/template-suggestions/{suggestion_id}/revisions:compare",
+        ),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}:return"),
+        ("POST", "/api/v1/template-suggestions/{suggestion_id}:approve"),
+    }
+    assert set(routes) == {creation, *logged_in, *reviewing}
+    for key in reviewing:
+        declaration = routes[key]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.MODULE_PERMISSION_REQUIRED
+        assert declaration.module_permission_code == "template.manage"
+    declaration = routes[creation]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.MODULE_AND_PROJECT_PERMISSION
+    assert declaration.module_permission_code == "inspection.use"
+    assert (
+        declaration.project_permission_code == "project_inspection_item.edit"
+    )
+    for key in logged_in:
+        declaration = routes[key]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.LOGIN_REQUIRED

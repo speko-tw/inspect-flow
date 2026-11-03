@@ -6,6 +6,10 @@ import { useCurrentUser } from '../../auth/useCurrentUser'
 import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { httpErrorMessage, isForbidden } from '../../http'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import {
+  ProjectSuggestionLink,
+  ProposeSuggestion,
+} from '../templates/suggestions'
 import { revealElement } from '../../ui/reveal'
 import { ManagementApiError } from '../api'
 import {
@@ -47,6 +51,8 @@ export default function ProjectItemLinks({
   const [activationError, setActivationError] = useState('')
   const activationAlert = useRef<HTMLParagraphElement | null>(null)
   const [notice, setNotice] = useState('')
+  // 提出建議成功後遞增，讓「我的範本建議（本案共 N 件）」重讀件數。
+  const [suggestionRefresh, setSuggestionRefresh] = useState(0)
 
   const savedNotice = useRef<HTMLParagraphElement | null>(null)
   const deleteTrigger = useRef<HTMLButtonElement | null>(null)
@@ -266,6 +272,12 @@ export default function ProjectItemLinks({
           從範本新增查核項目
         </Link>
       )}
+      {canEdit && (
+        <ProjectSuggestionLink
+          projectId={projectId}
+          refreshKey={suggestionRefresh}
+        />
+      )}
       {canEdit && !canManageTemplates && (
         <p className="project-item-template-hint">
           要把項目存回範本庫，需要「管理範本庫」功能，請找系統管理者開通。
@@ -337,6 +349,14 @@ export default function ProjectItemLinks({
                 >
                   {canEdit ? '修改' : '檢視'}
                 </Link>
+                {canEdit && (
+                  <ProposeSuggestion
+                    itemId={item.id}
+                    itemTitle={item.title}
+                    onProposed={() => setSuggestionRefresh((n) => n + 1)}
+                    projectId={projectId}
+                  />
+                )}
                 {canManageTemplates && (
                   <Link
                     aria-label={`將「${item.title}」存為範本`}

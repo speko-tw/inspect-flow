@@ -27,6 +27,8 @@ export const PAGE_TITLES = {
   myProjects: '我的專案',
   overview: '總覽',
   templates: '查核範本',
+  templateSuggestions: '範本建議審核',
+  mySuggestions: '我的範本建議',
   account: '帳號',
   company: '公司',
   projectRoles: '專案角色',

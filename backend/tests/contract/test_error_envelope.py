@@ -67,6 +67,9 @@ ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
         "docs/specs/domain-model/spec.md",
         "docs/specs/template-system/spec.md",
         "docs/specs/template-system/plan.md",
+        # FEV-R06／R07 的上傳錯誤碼列在凍結契約中。
+        "docs/specs/field-evidence/spec.md",
+        "docs/specs/field-evidence/plan.md",
         # IP-R18／IP-AC18 的需求表列出 422 回應；這是驗收契約，
         # 並非與 build_error_code_descriptions 競爭的錯誤碼對照表。
         "docs/specs/inspection-planning/spec.md",

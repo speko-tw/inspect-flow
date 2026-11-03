@@ -53,6 +53,8 @@ def page_cursor_key(cursor: str | None) -> tuple[datetime, uuid.UUID] | None:
         UnicodeDecodeError,
         binascii.Error,
         json.JSONDecodeError,
+        OverflowError,
+        RecursionError,
     ) as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
 
@@ -196,6 +198,7 @@ def _text_page_cursor_key(
         UnicodeDecodeError,
         binascii.Error,
         json.JSONDecodeError,
+        RecursionError,
     ) as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
 
