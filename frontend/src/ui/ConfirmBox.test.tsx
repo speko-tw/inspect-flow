@@ -6,6 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { StrictMode, useRef, useState } from 'react'
 
 import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 import { ConfirmBox } from './ConfirmBox'
@@ -393,5 +394,91 @@ describe('ConfirmBox', () => {
       expect.objectContaining({ message: 'sync failure' }),
     )
     error.mockRestore()
+  })
+})
+
+/** #822：以真實的觸發焦點驗證關閉，不把程式呼叫 click 當成聚焦。 */
+function FocusExample({ mode = 'normal' }: { mode?: string }) {
+  const [open, setOpen] = useState(false)
+  const [done, setDone] = useState(false)
+  const other = useRef<HTMLButtonElement>(null)
+  return (
+    <>
+      {(!done || mode === 'disabled') && (
+        <button disabled={done} onClick={() => setOpen(true)}>
+          開啟確認
+        </button>
+      )}
+      <button ref={other}>下一個操作</button>
+      {open && (
+        <ConfirmBox
+          confirmLabel="確認"
+          label="焦點測試"
+          onCancel={() => {
+            setOpen(false)
+            if (mode === 'removed' || mode === 'disabled') setDone(true)
+            if (mode === 'caller') other.current?.focus()
+          }}
+          onConfirm={() => setOpen(false)}
+        />
+      )}
+    </>
+  )
+}
+
+describe('ConfirmBox 取消焦點（#822）', () => {
+  it.each(['取消', 'Escape'])(
+    '%s 後回到觸發鈕，包含 StrictMode',
+    async (key) => {
+      render(
+        <StrictMode>
+          <FocusExample />
+        </StrictMode>,
+      )
+      const trigger = screen.getByRole('button', { name: '開啟確認' })
+      trigger.focus()
+      fireEvent.click(trigger)
+      const cancel = screen.getByRole('button', { name: '取消' })
+      expect(cancel).toHaveFocus()
+      if (key === 'Escape') fireEvent.keyDown(cancel, { key })
+      else fireEvent.click(cancel)
+      await waitFor(() => expect(trigger).toHaveFocus())
+    },
+  )
+
+  it('不覆蓋呼叫端取消時明確指定的焦點', async () => {
+    render(<FocusExample mode="caller" />)
+    const trigger = screen.getByRole('button', { name: '開啟確認' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '下一個操作' })).toHaveFocus(),
+    )
+  })
+
+  it.each(['removed', 'disabled'])(
+    '不聚焦已失效的觸發鈕：%s',
+    async (mode) => {
+      render(<FocusExample mode={mode} />)
+      const trigger = screen.getByRole('button', { name: '開啟確認' })
+      trigger.focus()
+      fireEvent.click(trigger)
+      fireEvent.click(screen.getByRole('button', { name: '取消' }))
+      await act(async () => {})
+      if (mode === 'removed') expect(trigger.isConnected).toBe(false)
+      else expect(trigger).toBeDisabled()
+      expect(document.body).toHaveFocus()
+    },
+  )
+
+  it('確認成功不把焦點拉回觸發鈕', async () => {
+    render(<FocusExample />)
+    const trigger = screen.getByRole('button', { name: '開啟確認' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    await act(async () => {})
+    expect(document.body).toHaveFocus()
   })
 })
