@@ -480,3 +480,194 @@ def upload_evidence(
             for key in saved_keys:
                 storage.delete(key)
         raise
+
+
+def authorize_photo_mutation(
+    session: Session, task_id: UUID, photo_id: UUID, user: User
+) -> tuple[Evidence, bool]:
+    """FEV-R12：先覆核兩層及拍照者，再依 D18 檢查照片寫入狀態。"""
+    from app.auth.access import permission_gaps
+    from app.services.evidence_office import lock_photo
+    from app.services.permissions import calculate_effective_access
+
+    task = session.get(InspectionTask, task_id)
+    if task is None:
+        raise _api_error(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    access = calculate_effective_access(
+        session, user_id=user.id, project_id=task.project_id
+    )
+    missing_module, _ = permission_gaps(
+        access, module_codes=("inspection.use",), project_codes=()
+    )
+    if missing_module:
+        raise _api_error(ErrorCode.PERMISSION_DENIED, 403)
+    _, no_manage = permission_gaps(
+        access, module_codes=(), project_codes=("evidence.manage",)
+    )
+    _, no_inspect = permission_gaps(
+        access, module_codes=(), project_codes=("inspection_task.inspect",)
+    )
+    if no_manage and no_inspect:
+        raise _api_error(
+            ErrorCode.RESOURCE_NOT_FOUND
+            if task.status == "DRAFT"
+            else ErrorCode.PERMISSION_DENIED,
+            404 if task.status == "DRAFT" else 403,
+        )
+    if no_manage and task.status == "DRAFT":
+        raise _api_error(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    photo = session.scalar(
+        select(Evidence).where(
+            Evidence.id == photo_id, Evidence.task_id == task_id
+        )
+    )
+    if photo is None:
+        raise _api_error(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    if no_manage and photo.created_by != user.id:
+        raise _api_error(ErrorCode.PERMISSION_DENIED, 403)
+    # 共用 T4 的 Plan→Task→照片鎖與引用註冊點，避免兩套優先順序漂移。
+    photo, _, _ = lock_photo(
+        session,
+        task_id,
+        photo_id,
+        task_statuses=frozenset({"IN_PROGRESS"}),
+    )
+    _, no_read = permission_gaps(
+        access, module_codes=(), project_codes=("evidence.read",)
+    )
+    return photo, not no_read
+
+
+def mutate_photo(
+    session: Session,
+    task_id: UUID,
+    photo_id: UUID,
+    user: User,
+    *,
+    raw: object = None,
+    delete_photo: bool = False,
+) -> dict | None:
+    """FEV-R10／R14：修改及軟刪除與稽核同交易，失敗不影響檔案。"""
+    from sqlalchemy import delete
+
+    from app.services.audit import record_audit_event
+    from app.services.evidence_office import photo_response
+
+    try:
+        # SQLite 無列鎖；PATCH 等本文已釋放交易，先取寫鎖再重驗狀態。
+        # DELETE 的登入 touch 已取得寫鎖，不重複啟動交易（FEV-D18）。
+        if (
+            session.get_bind().dialect.name == "sqlite"
+            and not session.in_transaction()
+        ):
+            session.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        photo, can_read = authorize_photo_mutation(
+            session, task_id, photo_id, user
+        )
+        points = sorted(
+            str(value)
+            for value in session.scalars(
+                select(EvidencePointLink.source_point_id).where(
+                    EvidencePointLink.evidence_id == photo.id
+                )
+            )
+        )
+        before, after = {}, {}
+        if delete_photo:
+            photo.deleted_at = utc_now()
+            photo.deleted_by = user.id
+            record_audit_event(
+                session,
+                "evidence.photo_deleted",
+                entity_id=photo.id,
+                project_id=photo.project_id,
+                before={
+                    "task_id": str(task_id),
+                    "item_id": str(photo.task_inspection_item_id),
+                    "caption": photo.caption,
+                    "point_ids": points,
+                },
+                after=None,
+            )
+        else:
+            if not isinstance(raw, dict) or set(raw) - {
+                "caption",
+                "point_ids",
+            }:
+                raise _api_error(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+            if "caption" in raw:
+                caption = raw["caption"]
+                if caption is not None and (
+                    not isinstance(caption, str) or len(caption) > 500
+                ):
+                    raise _api_error(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+                if caption != photo.caption:
+                    before["caption"], after["caption"] = (
+                        photo.caption,
+                        caption,
+                    )
+                    photo.caption = caption
+            if "point_ids" in raw:
+                values = raw["point_ids"]
+                try:
+                    if not isinstance(values, list):
+                        raise ValueError("point_ids must be an array")
+                    target = [UUID(value) for value in values]
+                except (ValueError, TypeError, AttributeError) as exc:
+                    raise _api_error(
+                        ErrorCode.REQUEST_VALIDATION_FAILED, 422
+                    ) from exc
+                if len(set(target)) != len(target) or (
+                    bool(target) == photo.is_overview
+                ):
+                    raise _api_error(ErrorCode.EVIDENCE_INVALID_TARGET, 422)
+                current_points = set(
+                    session.scalars(
+                        select(TaskSnapshotPoint.source_point_id)
+                        .join(TaskRequirementSnapshot)
+                        .where(
+                            TaskRequirementSnapshot.task_inspection_item_id
+                            == photo.task_inspection_item_id,
+                            TaskRequirementSnapshot.is_current.is_(True),
+                        )
+                    )
+                )
+                if not set(target) <= current_points:
+                    raise _api_error(ErrorCode.EVIDENCE_INVALID_TARGET, 422)
+                updated = sorted(str(value) for value in target)
+                if points != updated:
+                    before["point_ids"], after["point_ids"] = points, updated
+                    session.execute(
+                        delete(EvidencePointLink).where(
+                            EvidencePointLink.evidence_id == photo.id
+                        )
+                    )
+                    session.add_all(
+                        EvidencePointLink(
+                            evidence_id=photo.id,
+                            source_point_id=value,
+                            created_by=user.id,
+                            updated_by=user.id,
+                        )
+                        for value in target
+                    )
+            if after:
+                record_audit_event(
+                    session,
+                    "evidence.photo_updated",
+                    entity_id=photo.id,
+                    project_id=photo.project_id,
+                    before=before,
+                    after=after,
+                )
+        if after or delete_photo:
+            photo.updated_by = user.id
+        session.commit()
+    except BaseException:
+        session.rollback()
+        raise
+    if delete_photo:
+        return None
+    body = photo_response(session, photo, can_read=can_read)
+    body["uploaded_by"]["is_me"] = photo.created_by == user.id
+    return body

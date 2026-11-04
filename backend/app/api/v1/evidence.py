@@ -432,3 +432,61 @@ async def upload_photo(
         )
     finally:
         await form.close()
+
+
+def _prepare_mutation(
+    session: Session, task_id: UUID, photo_id: UUID, user: User
+) -> None:
+    from app.services.evidence import authorize_photo_mutation
+
+    authorize_photo_mutation(session, task_id, photo_id, user)
+    # D18：驗權／狀態先於本文；等候本文時釋放登入 touch 與照片鎖。
+    session.commit()
+
+
+@router.patch("/inspection-tasks/{task_id}/photos/{photo_id}")
+async def patch_photo(
+    task_id: UUID,
+    photo_id: UUID,
+    request: Request,
+    session: Session = _db_dependency,
+    user: User = _login_dependency,
+) -> dict:
+    """FEV-AC29：只改註記與對應，省略不變；拒絕狀態優先於本文。"""
+    from app.services.evidence import mutate_photo
+
+    await run_in_threadpool(
+        _prepare_mutation, session, task_id, photo_id, user
+    )
+    chunks = bytearray()
+    async for chunk in request.stream():
+        chunks.extend(chunk)
+        if len(chunks) > 64 * 1024:
+            raise _invalid_request()
+    try:
+        raw = json.loads(chunks)
+    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
+        raise _invalid_request() from exc
+    result = await run_in_threadpool(
+        mutate_photo, session, task_id, photo_id, user, raw=raw
+    )
+    assert result is not None
+    return result
+
+
+@router.delete(
+    "/inspection-tasks/{task_id}/photos/{photo_id}", status_code=204
+)
+def delete_photo(
+    task_id: UUID,
+    photo_id: UUID,
+    session: Session = _db_dependency,
+    user: User = _login_dependency,
+):
+    """FEV-R10：只軟刪除有效照片；完成、作廢與報告引用時拒絕。"""
+    from fastapi import Response
+
+    from app.services.evidence import mutate_photo
+
+    mutate_photo(session, task_id, photo_id, user, delete_photo=True)
+    return Response(status_code=204)
