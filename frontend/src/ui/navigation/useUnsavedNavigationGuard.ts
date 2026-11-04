@@ -58,6 +58,10 @@ export function useUnsavedNavigationGuard(
   useLayoutEffect(() => {
     // 同步新草稿狀態，避免舊值攔住頁面更新後的第一個動作。
     activeChanges.current = hasUnsavedChanges
+    return () => {
+      // blocker 到 passive 清理才移除；已卸載的草稿不能攔新頁導覽。
+      activeChanges.current = false
+    }
   }, [hasUnsavedChanges])
 
   useEffect(() => {

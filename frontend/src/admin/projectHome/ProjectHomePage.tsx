@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Link,
   Navigate,
@@ -106,7 +106,8 @@ export default function ProjectHomePage() {
     notFound?: boolean
   } | null>(null)
 
-  useEffect(() => {
+  // ADM-R54：先消費一次性 state，避免延後的 replace 蓋掉返回導覽。
+  useLayoutEffect(() => {
     const state = location.state as {
       duplicateProjectCode?: unknown
       projectNotice?: unknown
