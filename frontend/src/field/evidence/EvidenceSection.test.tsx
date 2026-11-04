@@ -246,6 +246,28 @@ describe('照片區顯示', () => {
     expect(screen.queryByRole('button', { name: /刪除照片/ })).toBeNull()
   })
 
+  it('封存時即使修改能力已開通，仍保留讀取並停用寫入', async () => {
+    const { requests } = stubApi(defaultServer({ photos: [photo()] }))
+    renderSection({ planArchived: true, mutationsAvailable: true })
+    expect(await screen.findByText('接頭近照')).toBeVisible()
+    expect(
+      screen.getByRole('group', { name: '1. 鋼筋間距' }),
+    ).toHaveTextContent('已有 0／需要 1 張')
+    expect(
+      screen.queryByRole('button', { name: /^拍照|^從相簿選|^拍總覽/ }),
+    ).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: /修改說明|刪除照片/ }),
+    ).toBeNull()
+    expect(cameraInput()).toBeDisabled()
+    expect(libraryInput()).toBeDisabled()
+    fireEvent.change(cameraInput(), {
+      target: { files: [new File(['raw'], 'photo.jpg')] },
+    })
+    expect(screen.queryByRole('heading', { name: '編修現場照片' })).toBeNull()
+    expect(requests.every((request) => request.method === 'GET')).toBe(true)
+  })
+
   it('載入失敗顯示說明與重試，不丟出例外', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
     vi.stubGlobal(

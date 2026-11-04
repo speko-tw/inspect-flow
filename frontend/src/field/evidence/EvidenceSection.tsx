@@ -111,7 +111,7 @@ function locationText(location: {
  * 待上傳照片只在記憶體，不寫任何持久儲存，也沒有離線佇列（FEV-R08），
  * 所以有未完成的照片時離開頁面會先提示。
  *
- * 任務未開始時不顯示拍照，完成或取消後唯讀（FEV-R09）；後端仍會覆核。
+ * 任務未開始時不顯示拍照，計畫封存、完成或取消後唯讀（FEV-R09）；後端仍會覆核。
  */
 export default function EvidenceSection({
   taskId,
@@ -119,9 +119,12 @@ export default function EvidenceSection({
   projectName,
   location,
   mutationsAvailable = false,
+  planArchived = false,
 }: {
   taskId: string
   status: TaskStatus
+  /** FEV-R09：計畫封存優先於任務的進行中狀態，照片只供查看。 */
+  planArchived?: boolean
   /** 依計畫 T7 依賴 T5；#794 尚未提供 PATCH／DELETE 時不顯示入口。 */
   mutationsAvailable?: boolean
   projectName: string
@@ -149,7 +152,7 @@ export default function EvidenceSection({
   }, [view])
   useEffect(() => () => discard(latestView.current), [])
 
-  const canCapture = status === 'IN_PROGRESS'
+  const canCapture = status === 'IN_PROGRESS' && !planArchived
   const visible = status !== 'PENDING'
 
   const refresh = useCallback(async () => {
@@ -223,6 +226,7 @@ export default function EvidenceSection({
   }
 
   function startCapture(target: CaptureTarget, source: CaptureSource) {
+    if (!canCapture) return
     setMessage(null)
     pendingTarget.current = target
     const input = source === 'camera' ? cameraInput : libraryInput
@@ -237,7 +241,7 @@ export default function EvidenceSection({
     // 清掉選取，同一張照片之後才能再選一次。
     event.target.value = ''
     const target = pendingTarget.current
-    if (!file || !target) return
+    if (!canCapture || !file || !target) return
     setView({ kind: 'opening' })
     try {
       const [capturedAt, source] = await Promise.all([
@@ -268,6 +272,7 @@ export default function EvidenceSection({
   }
 
   async function confirmEdit(draft: Draft) {
+    if (!canCapture) return
     setView({ kind: 'editor', draft, busy: true, error: '' })
     try {
       // 旋轉與亮度在這裡直接烘進現場版再壓縮，不含圖層（FEV-R02）。
@@ -296,7 +301,7 @@ export default function EvidenceSection({
   }
 
   function submitTarget(values: TargetValues) {
-    if (view.kind !== 'target') return
+    if (!canCapture || view.kind !== 'target') return
     const { draft, processed } = view
     const item = itemOf(draft.itemId)
     if (!item) return
@@ -338,6 +343,7 @@ export default function EvidenceSection({
   }
 
   async function saveModify(photo: FieldPhoto, values: TargetValues) {
+    if (!canCapture || !mutationsAvailable) return
     setView({ kind: 'modify', photo, busy: true, error: '' })
     try {
       await updatePhoto(taskId, photo.id, {
@@ -357,6 +363,7 @@ export default function EvidenceSection({
   }
 
   async function confirmDelete(photo: FieldPhoto) {
+    if (!canCapture || !mutationsAvailable) return
     setDeleting({ photoId: photo.id, busy: true, error: '' })
     try {
       await deletePhoto(taskId, photo.id)
@@ -380,7 +387,7 @@ export default function EvidenceSection({
         </Card>
       )
     }
-    if (view.kind === 'opening') {
+    if (canCapture && view.kind === 'opening') {
       return (
         <ResourceState
           message="正在開啟照片。"
@@ -389,7 +396,7 @@ export default function EvidenceSection({
         />
       )
     }
-    if (view.kind !== 'home' && !itemOf(itemIdOf(view))) {
+    if (canCapture && view.kind !== 'home' && !itemOf(itemIdOf(view))) {
       // 查核項目在流程中被更新（例如標準變更）時，舊項次已不存在。
       return (
         <div className="field-notice field-notice-error" role="alert">
@@ -400,7 +407,7 @@ export default function EvidenceSection({
         </div>
       )
     }
-    if (view.kind === 'editor') {
+    if (canCapture && view.kind === 'editor') {
       const { draft } = view
       const item = itemOf(draft.itemId)
       return (
@@ -429,7 +436,7 @@ export default function EvidenceSection({
         </>
       )
     }
-    if (view.kind === 'target') {
+    if (canCapture && view.kind === 'target') {
       const item = itemOf(view.draft.itemId)
       return (
         <>
@@ -459,7 +466,7 @@ export default function EvidenceSection({
         </>
       )
     }
-    if (view.kind === 'modify') {
+    if (canCapture && view.kind === 'modify') {
       const { photo } = view
       const item = itemOf(photo.item_id)
       return (
@@ -524,6 +531,7 @@ export default function EvidenceSection({
               onCapture={startCapture}
             />
             <UploadList
+              canResend={canCapture}
               onAbandon={(localId) => {
                 queue.abandon(localId)
                 setFocusHome((value) => value + 1)
@@ -539,7 +547,7 @@ export default function EvidenceSection({
             <PhotoList
               canChange={canCapture && mutationsAvailable}
               coverage={coverage}
-              deleting={deleting}
+              deleting={canCapture ? deleting : null}
               onAskDelete={(photo) =>
                 setDeleting({ photoId: photo.id, busy: false, error: '' })
               }
@@ -573,6 +581,7 @@ export default function EvidenceSection({
         accept="image/*"
         aria-label="使用相機拍照"
         capture="environment"
+        disabled={!canCapture}
         hidden
         onChange={(event) => void onFile(event, 'camera')}
         ref={cameraInput}
@@ -581,11 +590,17 @@ export default function EvidenceSection({
       <input
         accept="image/*"
         aria-label="從相簿選照片"
+        disabled={!canCapture}
         hidden
         onChange={(event) => void onFile(event, 'library')}
         ref={libraryInput}
         type="file"
       />
+      {planArchived && (
+        <Notice variant="info">
+          所屬計畫已封存，照片只能查看，無法新增、修改或刪除。
+        </Notice>
+      )}
       {body()}
     </section>
   )

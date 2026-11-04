@@ -21,10 +21,13 @@ function statusText(entry: QueuedUpload): string {
  */
 export function UploadList({
   uploads,
+  canResend = true,
   onResend,
   onAbandon,
 }: {
   uploads: QueuedUpload[]
+  /** 任務鎖定或計畫封存後不再提供寫入入口（FEV-R09）。 */
+  canResend?: boolean
   onResend: (localId: string) => void
   onAbandon: (localId: string) => void
 }) {
@@ -67,6 +70,7 @@ export function UploadList({
             <div className="evidence-actions">
               {entry.status === 'failed' && (
                 <Button
+                  disabled={!canResend}
                   onClick={() => onResend(entry.localId)}
                   type="button"
                   variant="primary"

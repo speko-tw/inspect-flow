@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import TaskDetail from './TaskDetail'
+import { COVERAGE, photo } from './evidence/testFixtures'
 import { currentUserFixture } from '../testing/contractFixtures'
 import { CurrentUserProvider } from '../auth/useCurrentUser'
 
@@ -185,6 +186,36 @@ describe('現場任務詳情', () => {
     expect(
       within(section).getByRole('button', { name: '從相簿選，1. 鋼筋間距' }),
     ).toBeEnabled()
+  })
+
+  it('封存計畫的進行中任務保留照片讀取，停用所有寫入入口', async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/evidence')) return Response.json(COVERAGE)
+      if (url.includes('/photos')) {
+        return Response.json({ items: [photo()], next_cursor: null })
+      }
+      return Response.json({
+        ...detail,
+        status: 'IN_PROGRESS',
+        plan_archived: true,
+      })
+    })
+    vi.stubGlobal('fetch', fetcher)
+    renderDetail()
+    const section = await screen.findByRole('region', { name: '照片佐證' })
+    expect(await within(section).findByText('接頭近照')).toBeVisible()
+    expect(
+      within(section).getByRole('group', { name: '1. 鋼筋間距' }),
+    ).toHaveTextContent('已有 0／需要 1 張')
+    expect(
+      within(section).queryByRole('button', {
+        name: /^拍照|^從相簿選|^拍總覽/,
+      }),
+    ).toBeNull()
+    expect(within(section).getByText(/計畫已.*封存.*只能查看/)).toBeVisible()
+    expect(within(section).getByLabelText('使用相機拍照')).toBeDisabled()
+    expect(within(section).getByLabelText('從相簿選照片')).toBeDisabled()
   })
 
   it('未開始的任務不讀照片 API，只說明開始後才能拍照', async () => {

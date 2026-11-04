@@ -216,6 +216,7 @@ export default function TaskDetail({
           </section>
           <EvidenceSection
             location={task.location}
+            planArchived={Boolean(task.plan_archived)}
             projectName={task.project_name}
             status={task.status}
             taskId={task.id}
