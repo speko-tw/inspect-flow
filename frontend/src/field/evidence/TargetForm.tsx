@@ -67,6 +67,9 @@ export function TargetForm({
   const [focusRequest, setFocusRequest] = useState(0)
   const [pending, setPending] = useState<TargetValues | null>(null)
   const modify = mode === 'modify'
+  const existingPhotoLabel = existingPhoto
+    ? existingPhoto.photo.caption || photoIdentity(existingPhoto.photo)
+    : ''
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true })
@@ -118,7 +121,7 @@ export function TargetForm({
       {existingPhoto && (
         <PhotoThumb
           src={existingPhoto.thumbnailUrl}
-          alt={`修改中的照片：${existingPhoto.photo.caption || photoIdentity(existingPhoto.photo)}`}
+          alt={`修改中的照片：${existingPhotoLabel}`}
           width={existingPhoto.photo.width}
           height={existingPhoto.photo.height}
           layer={existingPhoto.photo.layer}
