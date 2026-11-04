@@ -214,3 +214,12 @@
 | TPL-AC43 | `scenario_ac34_ac43` 與畫面 `desktop-11-approved-after-source-delete`：核准後先改再刪來源，範本、核准件與各版全部不變；另引用 T17 `test_ac43_*` |
 
 驗證中的觀察：撤回、重送、核准與退回的確認框按取消後，焦點不回到原按鈕（只有提議確認框會回）。ADM-R38 只要求開啟時焦點在「取消」與 Esc 等同取消，因此不算違規；若要改善，另開 task。
+
+
+### 確認框焦點改善（#822）
+
+依 T20 的鍵盤觀察補上取消後的操作連續性：撤回、重送、核准、退回確認框在取消或 Esc 後歸還焦點；成功後由結果訊息承接已消失的操作焦點，沿用 UDS-R18 的成功觸發者消失例外。
+
+實作範圍為 `frontend/src/ui/ConfirmBox.tsx` 與其測試，以及 `frontend/src/admin/templates/suggestions/SuggestionDetailPage.tsx` 與其測試。共用元件維持現有 props 相容，統一取消行為並尊重呼叫頁已指定的焦點；成功與一般卸載的焦點由呼叫頁管理。不修改 `frontend/src/field/`，供照片功能繼續沿用既有 API。
+
+驗證：四個確認框各覆蓋取消、Esc、成功結果焦點；共用元件覆蓋 StrictMode、呼叫頁指定焦點、已移除或停用的觸發者及確認成功。完整 `make check-frontend` 覆蓋其他既有呼叫頁，另以獨立真後端及 Chrome 純鍵盤走四個流程，截圖與原始結果置於工作單指定的 repo 外目錄。

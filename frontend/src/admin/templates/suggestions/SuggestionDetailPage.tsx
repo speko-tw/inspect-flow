@@ -73,6 +73,7 @@ export default function SuggestionDetailPage({
   const [sourceLost, setSourceLost] = useState(false)
   const [missing, setMissing] = useState<Record<string, string> | null>(null)
   const [pendingCount, setPendingCount] = useState<number | null>(null)
+  const focusNotice = useRef(false)
   const noticeRef = useRef<HTMLParagraphElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const autoConfirm = useRef(Boolean(navState.confirmResubmit))
@@ -131,6 +132,11 @@ export default function SuggestionDetailPage({
   useEffect(() => {
     if (notice) {
       revealElement(noticeRef.current)
+      // UDS-R18：動作成功後觸發者可能消失，讓結果承接鍵盤位置。
+      if (focusNotice.current) {
+        focusNotice.current = false
+        noticeRef.current?.focus({ preventScroll: true })
+      }
     }
   }, [notice])
 
@@ -186,6 +192,7 @@ export default function SuggestionDetailPage({
       }
       const { detail } = await reload()
       setPending(null)
+      focusNotice.current = true
       setNotice(
         action === 'resubmit'
           ? `第 ${detail.current_revision.revision_no} 版已重新送審。`
@@ -439,6 +446,7 @@ export default function SuggestionDetailPage({
           onTargetChange={setTarget}
           onChanged={async (message) => {
             await reload()
+            focusNotice.current = true
             setNotice(message)
             refreshPendingCount()
           }}

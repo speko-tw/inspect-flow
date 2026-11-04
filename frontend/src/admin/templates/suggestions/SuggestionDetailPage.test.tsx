@@ -784,3 +784,78 @@ describe('讀取失敗與權限', () => {
     ).toBeVisible()
   })
 })
+
+/** #822：四個確認框共用同一組取消、Esc 與成功焦點驗收。 */
+describe('建議確認框焦點（#822）', () => {
+  const actions = [
+    ['withdraw', '撤回建議', '確認撤回建議', '確認撤回'],
+    ['resubmit', '重新送審', '確認重新送審', '確認重新送審'],
+    ['approve', '核准入庫', '確認核准入庫', '確認核准入庫'],
+    ['return', '退回建議', '確認退回建議', '確認退回'],
+  ] as const
+
+  async function openAction(action: (typeof actions)[number]) {
+    const [kind, triggerName, boxName] = action
+    const reviewing = kind === 'approve' || kind === 'return'
+    const source = kind === 'resubmit' ? returned(2) : null
+    const detail = source?.detail ?? makeDetail()
+    load(detail, source?.revisions ?? [detail.current_revision])
+    renderDetail(reviewing ? 'review' : 'mine', reviewing ? WU.id : LIN.id)
+    if (kind === 'approve') {
+      await screen.findByRole('option', { name: '建築工程' })
+      fireEvent.change(screen.getByLabelText(/目標工程類別/), {
+        target: { value: 'cat-building' },
+      })
+      await screen.findByRole('option', { name: '結構工程' })
+      fireEvent.change(screen.getByLabelText(/目標系統/), {
+        target: { value: 'sys-structure' },
+      })
+    }
+    if (kind === 'return') {
+      fireEvent.click(
+        await screen.findByRole('button', { name: '附原因退回' }),
+      )
+      fireEvent.change(screen.getByLabelText(/退回原因/), {
+        target: { value: '請補充照片要求' },
+      })
+    }
+    const trigger = await screen.findByRole('button', { name: triggerName })
+    trigger.focus()
+    fireEvent.click(trigger)
+    const box = await screen.findByRole('group', { name: boxName })
+    expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
+    return { trigger, box, detail }
+  }
+
+  for (const action of actions) {
+    it.each(['取消', 'Escape'])(`${action[1]}：%s 回觸發鈕`, async (key) => {
+      const { trigger, box } = await openAction(action)
+      const cancel = within(box).getByRole('button', { name: '取消' })
+      if (key === 'Escape') fireEvent.keyDown(cancel, { key })
+      else fireEvent.click(cancel)
+      await waitFor(() => expect(trigger).toHaveFocus())
+      expect(withdrawSuggestion).not.toHaveBeenCalled()
+      expect(submitSuggestion).not.toHaveBeenCalled()
+      expect(approveSuggestion).not.toHaveBeenCalled()
+      expect(returnSuggestion).not.toHaveBeenCalled()
+    })
+
+    it(`${action[1]}：成功後聚焦結果訊息`, async () => {
+      const { box, detail } = await openAction(action)
+      const status = {
+        withdraw: 'WITHDRAWN',
+        resubmit: 'PENDING',
+        approve: 'APPROVED',
+        return: 'RETURNED',
+      } as const
+      const updated = { ...detail, status: status[action[0]] }
+      vi.mocked(getSuggestion).mockResolvedValue(updated)
+      vi.mocked(withdrawSuggestion).mockResolvedValue(updated)
+      vi.mocked(submitSuggestion).mockResolvedValue(updated)
+      vi.mocked(approveSuggestion).mockResolvedValue(updated)
+      vi.mocked(returnSuggestion).mockResolvedValue(updated)
+      fireEvent.click(within(box).getByRole('button', { name: action[3] }))
+      await waitFor(() => expect(screen.getByRole('status')).toHaveFocus())
+    })
+  }
+})
