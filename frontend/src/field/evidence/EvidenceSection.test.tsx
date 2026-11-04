@@ -362,7 +362,10 @@ describe('拍照、編修與上傳（FEV-AC03）', () => {
     renderSection()
     await choose('拍照，1. 鋼筋間距')
     const compare = screen.getByRole('button', { name: '按住比較編修前' })
-    fireEvent.pointerDown(compare)
+    const capturePointer = vi.fn()
+    compare.setPointerCapture = capturePointer
+    fireEvent.pointerDown(compare, { pointerId: 7 })
+    expect(capturePointer).toHaveBeenCalledOnce()
     expect(screen.getByText('編修前')).toBeInTheDocument()
     fireEvent.pointerUp(compare)
     expect(screen.queryByText('編修前')).toBeNull()

@@ -215,7 +215,11 @@ export function PhotoEditor({
             }}
             onKeyUp={() => setComparing(false)}
             onPointerCancel={() => setComparing(false)}
-            onPointerDown={() => setComparing(true)}
+            onPointerDown={(event) => {
+              // 旋轉前後的預覽比例會移動按鈕，捕捉指標以維持比較。
+              event.currentTarget.setPointerCapture(event.pointerId)
+              setComparing(true)
+            }}
             onPointerLeave={() => setComparing(false)}
             onPointerUp={() => setComparing(false)}
             type="button"
