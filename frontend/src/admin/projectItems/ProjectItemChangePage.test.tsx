@@ -320,13 +320,26 @@ describe('ProjectItemChangePage', () => {
     await confirm('yes')
     expect(
       await screen.findByText(
-        '已填的舊結果與照片會保留供查詢，但不再算數，任務需要重新查核。',
+        '舊結果與照片會保留可查，標示「標準變更作廢」，任務需要重新查核。',
       ),
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/二樓東側.*舊結果與照片保留供查詢，但不再算數/),
+      screen.getByText(/二樓東側.*舊結果與照片保留可查，標示「標準變更作廢」/),
     ).toBeInTheDocument()
     expect(screen.queryByText(/已標記作廢/)).toBeNull()
+  })
+
+  it('FEV-AC26: explains reinspection with only photos', async () => {
+    const photoOnly = structuredClone(preview)
+    photoOnly.affectedTasks[1].hasResult = true
+    const api = apiWith({ loadPreview: vi.fn(async () => photoOnly) })
+    renderPage(api)
+    await confirm('yes')
+    expect(
+      await screen.findByText(
+        '舊結果與照片會保留可查，標示「標準變更作廢」，任務需要重新查核。',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('names both kinds when Tasks with and without results mix (#491)', async () => {
@@ -347,8 +360,8 @@ describe('ProjectItemChangePage', () => {
     expect(
       await screen.findByText(
         [
-          '已有結果的任務：已填的舊結果與照片會保留供查詢，',
-          '但不再算數，任務需要重新查核；',
+          '已有照片或結果的任務：舊結果與照片會保留可查，',
+          '標示「標準變更作廢」，任務需要重新查核；',
           '尚未填寫結果的任務：直接改用新標準。',
         ].join(''),
       ),
@@ -376,9 +389,9 @@ describe('ProjectItemChangePage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
     const yes = await screen.findByRole('radio', { name: reinspectChoice })
     expect(yes).toHaveAccessibleDescription(
-      /舊結果與照片會保留供查詢，但不再算數/,
+      /舊結果與照片會保留可查，標示「標準變更作廢」/,
     )
-    expect(yes).not.toHaveAccessibleDescription(/作廢/)
+    expect(yes).toHaveAccessibleDescription(/標準變更作廢/)
     expect(screen.queryByText(/要，作廢/)).toBeNull()
   })
 

@@ -222,6 +222,8 @@ def lock_photo(
     session: Session,
     task_id: UUID,
     photo_id: UUID,
+    *,
+    task_statuses: frozenset[str] = frozenset({"IN_PROGRESS", "COMPLETED"}),
 ) -> tuple[Evidence, EvidenceVariant, EvidenceVariant]:
     """FEV-D18：可見性先於封存／任務／照片鎖；與計畫轉換同序上鎖。"""
     reference = session.get(InspectionTask, task_id)
@@ -256,7 +258,7 @@ def lock_photo(
         raise _error(ErrorCode.RESOURCE_NOT_FOUND, 404)
     if plan.is_archived:
         raise _error(ErrorCode.INSPECTION_PLAN_ARCHIVED, 409)
-    if task.status not in {"IN_PROGRESS", "COMPLETED"}:
+    if task.status not in task_statuses:
         raise _error(ErrorCode.EVIDENCE_TASK_LOCKED, 409)
     reason = (
         "voided"
@@ -366,7 +368,36 @@ def record_office_edit(
     reason: str,
     rule: dict,
 ) -> None:
-    """T5 接入點：在同一交易登記事件並寫入；T4 不先行實作稽核。"""
+    """FEV-R14／R24：每次套用必寫，圖層只在實際變動時寫完整快照。"""
+    from app.services.audit import record_audit_event
+
+    # ALG-R16：同參數重送也代表一次套用；維運依 D21 記系統 admin。
+    record_audit_event(
+        session,
+        "evidence.office_version_edited",
+        entity_id=photo.id,
+        project_id=photo.project_id,
+        before={
+            "edit_params": before["edit_params"],
+            "rule": before["rule"],
+            "reason": None,
+        },
+        after={
+            "edit_params": after["edit_params"],
+            "rule": rule,
+            "reason": reason,
+        },
+        system_event=reason == "label_rule_change",
+    )
+    if before["layer"] != after["layer"]:
+        record_audit_event(
+            session,
+            "evidence.layer_updated",
+            entity_id=photo.id,
+            project_id=photo.project_id,
+            before={key: before[key] for key in ("layer", "labels")},
+            after={key: after[key] for key in ("layer", "labels")},
+        )
 
 
 def _snapshot(photo: Evidence, office: EvidenceVariant) -> dict:
@@ -377,6 +408,7 @@ def _snapshot(photo: Evidence, office: EvidenceVariant) -> dict:
                 photo,
             ),
             "edit_params": office.edit_params,
+            "rule": office.label_rule,
         }
     )
 
