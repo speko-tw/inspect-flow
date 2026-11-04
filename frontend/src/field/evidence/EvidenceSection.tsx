@@ -21,6 +21,7 @@ import {
   deletePhoto,
   fetchCoverage,
   fetchFieldPhotos,
+  PhotoMutationResponseError,
   updatePhoto,
 } from './evidenceApi'
 import {
@@ -32,7 +33,7 @@ import {
   sha256Hex,
 } from './imageEdit'
 import { LeaveGuard } from './LeaveGuard'
-import { mutationFailureMessage } from './messages'
+import { mutationFailureMessage, shouldRefreshPhoto } from './messages'
 import {
   type EditorState,
   INITIAL_EDITOR_STATE,
@@ -129,6 +130,10 @@ export default function EvidenceSection({
 }) {
   const { user } = useCurrentUser()
   const sectionRef = useRef<HTMLElement | null>(null)
+  const photosHeading = useRef<HTMLHeadingElement | null>(null)
+  // ref 同步鎖住操作，涵蓋送出與重讀，避免 state 尚未重繪時換卡片重送。
+  const mutationInFlight = useRef(false)
+  const [focusPhotos, setFocusPhotos] = useState(0)
   const cameraInput = useRef<HTMLInputElement | null>(null)
   const libraryInput = useRef<HTMLInputElement | null>(null)
   const pendingTarget = useRef<CaptureTarget | null>(null)
@@ -164,12 +169,14 @@ export default function EvidenceSection({
       setCoverage(nextCoverage)
       setPhotos(nextPhotos)
       setLoadState('ready')
+      return true
     } catch (error) {
       console.error('Evidence refresh failed:', error)
       setMessage({
         variant: 'error',
         text: '照片資料暫時無法更新，畫面上的內容可能不是最新的。',
       })
+      return false
     }
   }, [taskId])
 
@@ -205,6 +212,10 @@ export default function EvidenceSection({
     if (focusHome > 0) sectionRef.current?.focus({ preventScroll: true })
   }, [focusHome])
 
+  useEffect(() => {
+    if (focusPhotos > 0) photosHeading.current?.focus({ preventScroll: true })
+  }, [focusPhotos])
+
   const items = useMemo(() => coverage?.items ?? [], [coverage])
   const itemOf = (itemId: string) =>
     items.find((item) => item.item_id === itemId)
@@ -217,12 +228,12 @@ export default function EvidenceSection({
     uploaded_at: null,
   })
 
-  function goHome(next?: Message | null) {
+  function goHome(next?: Message | null, restoreFocus = true) {
     discard(latestView.current)
     setView({ kind: 'home' })
     setAbandoning(false)
     if (next !== undefined) setMessage(next)
-    setFocusHome((value) => value + 1)
+    if (restoreFocus) setFocusHome((value) => value + 1)
   }
 
   function startCapture(target: CaptureTarget, source: CaptureSource) {
@@ -342,49 +353,98 @@ export default function EvidenceSection({
     })
   }
 
+  async function showStalePhoto(photo: FieldPhoto, error: unknown) {
+    const updated = await refresh()
+    setPhotoFeedback({
+      itemId: photo.item_id,
+      photoId: null,
+      variant: 'error',
+      text:
+        mutationFailureMessage(error) +
+        (updated ? '' : '畫面可能不是最新，請重新整理。'),
+    })
+    // 原照片可能已消失；錯誤留在原項目，不再編修過時的照片。
+    goHome(null, false)
+  }
+
   async function saveModify(photo: FieldPhoto, values: TargetValues) {
-    if (!canCapture || !photo.uploaded_by.is_me) return
+    if (!canCapture || !photo.uploaded_by.is_me || mutationInFlight.current)
+      return
+    mutationInFlight.current = true
+    setMessage(null)
     setView({ kind: 'modify', photo, busy: true, error: '' })
     try {
-      await updatePhoto(taskId, photo.id, {
-        caption: values.caption || null,
-        ...(photo.is_overview ? {} : { point_ids: values.pointIds }),
-      })
-      await refresh()
+      let uncertainResponse = false
+      try {
+        await updatePhoto(taskId, photo.id, {
+          caption: values.caption || null,
+          ...(photo.is_overview ? {} : { point_ids: values.pointIds }),
+        })
+      } catch (error) {
+        if (!(error instanceof PhotoMutationResponseError)) throw error
+        uncertainResponse = true
+        setMessage({ variant: 'info', text: '已送出，正在重新整理。' })
+      }
+      const updated = await refresh()
       setPhotoFeedback({
         itemId: photo.item_id,
         photoId: photo.id,
-        text: '已儲存照片說明與項次。',
+        variant: updated ? (uncertainResponse ? 'info' : 'success') : 'error',
+        text: updated
+          ? uncertainResponse
+            ? '已重新整理照片，請確認更新結果。'
+            : '已儲存照片說明與項次。'
+          : uncertainResponse
+            ? '已送出，但畫面可能不是最新，請重新整理。'
+            : '已儲存，但畫面可能不是最新，請重新整理。',
       })
-      goHome(null)
+      goHome(null, updated)
     } catch (error) {
-      setView({
-        kind: 'modify',
-        photo,
-        busy: false,
-        error: mutationFailureMessage(error),
-      })
+      if (shouldRefreshPhoto(error)) await showStalePhoto(photo, error)
+      else
+        setView({
+          kind: 'modify',
+          photo,
+          busy: false,
+          error: mutationFailureMessage(error),
+        })
+    } finally {
+      mutationInFlight.current = false
     }
   }
 
   async function confirmDelete(photo: FieldPhoto) {
-    if (!canCapture || !photo.uploaded_by.is_me) return
+    if (!canCapture || !photo.uploaded_by.is_me || mutationInFlight.current)
+      return
+    mutationInFlight.current = true
     setDeleting({ photoId: photo.id, busy: true, error: '' })
     try {
       await deletePhoto(taskId, photo.id)
-      setDeleting(null)
-      await refresh()
+      const updated = await refresh()
       setPhotoFeedback({
         itemId: photo.item_id,
         photoId: null,
-        text: '已刪除照片。',
+        variant: updated ? 'success' : 'error',
+        text: updated
+          ? '已刪除照片。'
+          : '已刪除，但畫面可能不是最新，請重新整理。',
       })
+      // 保持卡片鎖定直到重讀完成，避免已刪照片被再次送出。
+      setDeleting(null)
+      if (updated) setFocusPhotos((value) => value + 1)
+      setMessage(null)
     } catch (error) {
-      setDeleting({
-        photoId: photo.id,
-        busy: false,
-        error: mutationFailureMessage(error),
-      })
+      if (shouldRefreshPhoto(error)) {
+        await showStalePhoto(photo, error)
+        setDeleting(null)
+      } else
+        setDeleting({
+          photoId: photo.id,
+          busy: false,
+          error: mutationFailureMessage(error),
+        })
+    } finally {
+      mutationInFlight.current = false
     }
   }
 
@@ -495,8 +555,14 @@ export default function EvidenceSection({
             }}
             item={item}
             mode="modify"
+            notice={
+              view.busy && message?.variant === 'info'
+                ? message.text
+                : undefined
+            }
+            onClearError={() => setView({ ...view, error: '' })}
             onBack={() => goHome(null)}
-            onSubmit={(values) => void saveModify(photo, values)}
+            onSubmit={(values) => saveModify(photo, values)}
           />
         )
       )
@@ -554,20 +620,32 @@ export default function EvidenceSection({
               uploads={queue.uploads}
             />
             <PhotoList
+              headingRef={photosHeading}
               canChange={canCapture}
               feedback={photoFeedback}
               coverage={coverage}
               deleting={canCapture ? deleting : null}
               onAskDelete={(photo) => {
-                if (!canCapture || !photo.uploaded_by.is_me) return
+                if (
+                  !canCapture ||
+                  !photo.uploaded_by.is_me ||
+                  mutationInFlight.current
+                )
+                  return
                 setPhotoFeedback(null)
                 setDeleting({ photoId: photo.id, busy: false, error: '' })
               }}
               onCancelDelete={() => setDeleting(null)}
-              onConfirmDelete={(photo) => void confirmDelete(photo)}
+              onConfirmDelete={confirmDelete}
               onModify={(photo) => {
-                if (!canCapture || !photo.uploaded_by.is_me) return
+                if (
+                  !canCapture ||
+                  !photo.uploaded_by.is_me ||
+                  mutationInFlight.current
+                )
+                  return
                 setPhotoFeedback(null)
+                setMessage(null)
                 setView({ kind: 'modify', photo, busy: false, error: '' })
               }}
               photos={photos}
@@ -611,12 +689,12 @@ export default function EvidenceSection({
         type="file"
       />
       {planArchived && (
-        <Notice variant="info">
+        <Notice variant="info" autoReveal={false}>
           所屬計畫已封存，照片只能查看，無法新增、修改或刪除。
         </Notice>
       )}
       {!planArchived && (status === 'COMPLETED' || status === 'CANCELLED') && (
-        <Notice variant="info">
+        <Notice variant="info" autoReveal={false}>
           {status === 'COMPLETED' ? '任務已完成' : '任務已取消'}
           ，照片只能查看，無法新增、修改或刪除。
         </Notice>

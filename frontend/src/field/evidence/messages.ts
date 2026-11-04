@@ -56,6 +56,12 @@ export function mutationFailureMessage(error: unknown): string {
   if (!(error instanceof HttpError)) {
     return '目前連不上網路，請稍後再試。'
   }
+  if (Array.isArray(error.details) && error.details[0] === 'deleted') {
+    return '這張照片已被刪除。'
+  }
+  if (error.code === 'evidence.invalid_target') {
+    return '選的項次與這個查核項目不符。請按「返回修改」重新選擇項次。'
+  }
   if (error.code && CODE_MESSAGES[error.code]) {
     return CODE_MESSAGES[error.code]
   }
@@ -76,5 +82,14 @@ export function canResend(error: unknown, retryable: boolean): boolean {
   if (retryable) return true
   return (
     error instanceof HttpError && error.code === 'evidence.sha256_mismatch'
+  )
+}
+
+/** FEV-R10：照片已消失或鎖定時，同步清單與覆蓋以免沿用舊狀態。 */
+export function shouldRefreshPhoto(error: unknown): boolean {
+  return (
+    error instanceof HttpError &&
+    (error.status === 404 ||
+      (error.status === 409 && error.code === 'evidence.photo_locked'))
   )
 }

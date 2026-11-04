@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { currentUserFixture } from '../../testing/contractFixtures'
+import { Notice } from '../../ui/Notice'
 import EvidenceSection from './EvidenceSection'
 import { LEAVE_MESSAGE } from './LeaveGuard'
 import {
@@ -468,7 +469,7 @@ describe('拍照、編修與上傳（FEV-AC03）', () => {
     stubApi(defaultServer())
     renderSection()
     await choose('拍照，1. 鋼筋間距')
-    expect(calls.texts).toContain('示範工程甲')
+    await waitFor(() => expect(calls.texts).toContain('示範工程甲'))
     expect(calls.texts).toContain('上傳後以伺服器時間填入')
     calls.texts.length = 0
     fireEvent.click(screen.getByRole('checkbox', { name: '顯示工程圖層' }))
@@ -793,7 +794,7 @@ describe('修改與刪除（T5 真端點對齊）', () => {
     })
   })
 
-  it('修改失敗時錯誤顯示在表單的送出鈕旁，內容保留', async () => {
+  it('修改失敗時錯誤留在儲存確認框，註記保留', async () => {
     stubCanvas()
     stubApi(defaultServer({ photos: [photo()] }))
     renderSection()
@@ -841,10 +842,11 @@ describe('修改與刪除（T5 真端點對齊）', () => {
 
 describe('T5 操作附近的拒絕說明', () => {
   it.each([403, 409])(
-    'DELETE %s 錯誤留在原照片確認框且不顯示錯誤碼',
+    'DELETE %s 錯誤留在操作照片區且完整顯示白話文案',
     async (status) => {
       stubCanvas()
-      stubApi(defaultServer({ photos: [photo()] }))
+      const { fetcher } = stubApi(defaultServer({ photos: [photo()] }))
+      const original = fetcher.getMockImplementation()!
       renderSection()
       fireEvent.click(await screen.findByRole('button', { name: /^刪除照片/ }))
       const box = screen.getByRole('group', { name: '刪除這張照片？' })
@@ -852,12 +854,24 @@ describe('T5 操作附近的拒絕說明', () => {
         status === 403 ? 'permission.denied' : 'evidence.photo_locked'
       vi.stubGlobal(
         'fetch',
-        vi.fn(async () => Response.json({ error: { code } }, { status })),
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+          init?.method === 'DELETE'
+            ? Response.json({ error: { code } }, { status })
+            : original(input, init),
+        ),
       )
       fireEvent.click(within(box).getByRole('button', { name: '刪除照片' }))
-      const alert = await within(box).findByRole('alert')
-      expect(alert).toHaveTextContent(
-        status === 403 ? /沒有權限/ : /不能修改或刪除/,
+      const container =
+        status === 403
+          ? box
+          : screen.getByRole('region', {
+              name: '鋼筋工程的照片',
+            })
+      const alert = await within(container).findByRole('alert')
+      expect(alert.textContent).toBe(
+        status === 403
+          ? '你目前沒有權限在這個任務新增、修改或刪除照片。請返回任務清單確認。'
+          : '這張照片已被鎖定，不能修改或刪除。',
       )
       expect(alert).not.toHaveTextContent(code)
       expect(screen.getByText('接頭近照')).toBeVisible()
@@ -961,5 +975,372 @@ describe('T5 修改入口與狀態說明', () => {
         screen.queryByRole('button', { name: /修改說明與項次|刪除照片/ }),
       ).toBeNull()
     },
+  )
+})
+
+/** 以不同 GET 快照驗證寫入後同步；延遲承諾能確定在途狀態。 */
+function mutationApi() {
+  const state = {
+    photos: [photo()],
+    coverage: structuredClone(COVERAGE),
+    reads: { coverage: 0, photos: 0 },
+    failReads: false,
+    readBarrier: Promise.resolve(),
+    patch: async (): Promise<Response> => Response.json(photo()),
+    remove: async (): Promise<Response> => new Response(null, { status: 204 }),
+  }
+  const fetcher = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PATCH') return state.patch()
+      if (init?.method === 'DELETE') return state.remove()
+      const kind = String(input).includes('/evidence') ? 'coverage' : 'photos'
+      state.reads[kind]++
+      await state.readBarrier
+      if (state.failReads) throw new TypeError('read failed')
+      return Response.json(
+        kind === 'coverage'
+          ? state.coverage
+          : {
+              items: state.photos,
+              next_cursor: null,
+            },
+      )
+    },
+  )
+  vi.stubGlobal('fetch', fetcher)
+  return { state, fetcher }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+async function openModifyConfirmation() {
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: /^修改說明與項次/,
+    }),
+  )
+  fireEvent.click(screen.getByRole('button', { name: '儲存修改' }))
+  return screen.findByRole('group', { name: '儲存照片說明與項次？' })
+}
+
+async function openDeleteConfirmation() {
+  fireEvent.click(await screen.findByRole('button', { name: /^刪除照片/ }))
+  return screen.findByRole('group', { name: '刪除這張照片？' })
+}
+
+describe('r4 修改刪除的同步與操作安全', () => {
+  beforeEach(() => {
+    stubCanvas()
+  })
+
+  it('PATCH 成功後 GET 失敗，在照片區保留已儲存但未更新的警告', async () => {
+    const { state } = mutationApi()
+    renderSection()
+    const box = await openModifyConfirmation()
+    state.failReads = true
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    fireEvent.click(within(box).getByRole('button', { name: '確認儲存' }))
+    const group = await screen.findByRole('region', { name: '鋼筋工程的照片' })
+    expect(await within(group).findByRole('alert')).toHaveTextContent(
+      '已儲存，但畫面可能不是最新，請重新整理。',
+    )
+    expect(screen.queryByText('已儲存照片說明與項次。')).toBeNull()
+    expect(state.reads).toEqual({ coverage: 2, photos: 2 })
+  })
+
+  it('PATCH 成功後重讀兩種 GET，畫面使用第二次的註記與覆蓋數', async () => {
+    const { state } = mutationApi()
+    state.patch = async () => {
+      state.photos = [photo({ caption: '伺服器最新註記' })]
+      Object.assign(state.coverage.items[0].points[0], {
+        photo_count: 3,
+        missing_count: 0,
+        satisfied: true,
+      })
+      return Response.json(photo())
+    }
+    renderSection()
+    const box = await openModifyConfirmation()
+    fireEvent.click(within(box).getByRole('button', { name: '確認儲存' }))
+    expect(
+      await screen.findByRole('heading', {
+        name: '伺服器最新註記',
+      }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('group', { name: '1. 鋼筋間距' }),
+    ).toHaveTextContent('已有 3／需要 1 張')
+    expect(state.reads).toEqual({ coverage: 2, photos: 2 })
+  })
+
+  it('DELETE 在途與重讀期間鎖住同張和別張照片，不重複送出', async () => {
+    const { state, fetcher } = mutationApi()
+    state.photos.push(photo({ id: 'photo-2', caption: '第二張' }))
+    const deleting = deferred<Response>()
+    const reading = deferred<void>()
+    state.remove = () => deleting.promise
+    renderSection()
+    const triggers = await screen.findAllByRole('button', {
+      name: /^刪除照片/,
+    })
+    fireEvent.click(triggers[0])
+    const box = await screen.findByRole('group', { name: '刪除這張照片？' })
+    const confirm = within(box).getByRole('button', { name: '刪除照片' })
+    fireEvent.click(confirm)
+    for (const trigger of triggers) {
+      expect(trigger).toBeDisabled()
+      fireEvent.click(trigger)
+    }
+    fireEvent.click(confirm)
+    expect(
+      fetcher.mock.calls.filter(([, init]) => init?.method === 'DELETE'),
+    ).toHaveLength(1)
+    state.readBarrier = reading.promise
+    await act(async () => {
+      deleting.resolve(new Response(null, { status: 204 }))
+    })
+    for (const trigger of triggers) expect(trigger).toBeDisabled()
+    expect(
+      within(box).getByRole('button', { name: '保留照片' }),
+    ).toBeDisabled()
+    state.photos = []
+    await act(async () => {
+      reading.resolve()
+    })
+    await screen.findByText('已刪除照片。')
+  })
+
+  it.each(['PATCH', 'DELETE'] as const)(
+    '%s 遇到已刪除的鎖定時重讀清單與覆蓋',
+    async (method) => {
+      const { state } = mutationApi()
+      const rejected = async () => {
+        state.photos = []
+        return Response.json(
+          {
+            error: {
+              code: 'evidence.photo_locked',
+              details: ['deleted'],
+            },
+          },
+          { status: 409 },
+        )
+      }
+      if (method === 'PATCH') state.patch = rejected
+      else state.remove = rejected
+      renderSection()
+      const box = await (method === 'PATCH'
+        ? openModifyConfirmation()
+        : openDeleteConfirmation())
+      fireEvent.click(
+        within(box).getByRole('button', {
+          name: method === 'PATCH' ? '確認儲存' : '刪除照片',
+        }),
+      )
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        '這張照片已被刪除。',
+      )
+      expect(state.reads).toEqual({ coverage: 2, photos: 2 })
+      expect(screen.queryByRole('heading', { name: '接頭近照' })).toBeNull()
+    },
+  )
+
+  it.each(['PATCH', 'DELETE'] as const)('%s 404 也重讀', async (method) => {
+    const { state } = mutationApi()
+    const rejected = async () => {
+      state.photos = []
+      return Response.json({ error: { code: 'not_found' } }, { status: 404 })
+    }
+    if (method === 'PATCH') state.patch = rejected
+    else state.remove = rejected
+    renderSection()
+    const box = await (method === 'PATCH'
+      ? openModifyConfirmation()
+      : openDeleteConfirmation())
+    fireEvent.click(
+      within(box).getByRole('button', {
+        name: method === 'PATCH' ? '確認儲存' : '刪除照片',
+      }),
+    )
+    await waitFor(() =>
+      expect(state.reads).toEqual({ coverage: 2, photos: 2 }),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '找不到這張照片，可能已被刪除。',
+    )
+  })
+
+  it('取消修改確認後回到儲存修改，重新開啟不保留舊錯誤', async () => {
+    const { state } = mutationApi()
+    state.patch = async () =>
+      Response.json(
+        {
+          error: {
+            code: 'evidence.invalid_target',
+          },
+        },
+        { status: 422 },
+      )
+    renderSection()
+    const box = await openModifyConfirmation()
+    fireEvent.click(within(box).getByRole('button', { name: '確認儲存' }))
+    const alert = await within(box).findByRole('alert')
+    expect(alert).toHaveTextContent(
+      '選的項次與這個查核項目不符。請按「返回修改」重新選擇項次。',
+    )
+    await waitFor(() => expect(alert).toHaveFocus())
+    expect(alert).toHaveAttribute('tabindex', '-1')
+    fireEvent.click(within(box).getByRole('button', { name: '返回修改' }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {
+          name: '儲存修改',
+        }),
+      ).toHaveFocus(),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '儲存修改' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('刪除拒絕聚焦錯誤；取消回原刪除鈕，重新確認清掉錯誤', async () => {
+    const { state } = mutationApi()
+    state.remove = async () =>
+      Response.json(
+        {
+          error: {
+            code: 'permission.denied',
+          },
+        },
+        { status: 403 },
+      )
+    renderSection()
+    const trigger = await screen.findByRole('button', { name: /^刪除照片/ })
+    fireEvent.click(trigger)
+    const box = await screen.findByRole('group', { name: '刪除這張照片？' })
+    fireEvent.click(within(box).getByRole('button', { name: '刪除照片' }))
+    const alert = await within(box).findByRole('alert')
+    await waitFor(() => expect(alert).toHaveFocus())
+    expect(alert).toHaveAttribute('tabindex', '-1')
+    fireEvent.click(within(box).getByRole('button', { name: '保留照片' }))
+    expect(trigger).toHaveFocus()
+    fireEvent.click(trigger)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('刪除成功後聚焦已上傳照片標題', async () => {
+    const { state } = mutationApi()
+    state.remove = async () => {
+      state.photos = []
+      return new Response(null, { status: 204 })
+    }
+    renderSection()
+    const box = await openDeleteConfirmation()
+    fireEvent.click(within(box).getByRole('button', { name: '刪除照片' }))
+    await screen.findByText('已刪除照片。')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', {
+          name: '已上傳照片（0 張）',
+        }),
+      ).toHaveFocus(),
+    )
+  })
+
+  it.each([
+    { status: 'COMPLETED' as const },
+    { status: 'CANCELLED' as const },
+    { planArchived: true },
+  ])('靜態唯讀橫幅不在開頁捲動畫面 %j', async (props) => {
+    mutationApi()
+    const scroll = vi.fn()
+    const prior = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollIntoView',
+    )
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scroll,
+    })
+    try {
+      const positive = render(<Notice>主動操作回饋</Notice>)
+      expect(scroll).toHaveBeenCalled()
+      positive.unmount()
+      scroll.mockClear()
+      renderSection(props)
+      await screen.findByText('接頭近照')
+      expect(scroll).not.toHaveBeenCalled()
+    } finally {
+      if (prior)
+        Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', prior)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+    }
+  })
+
+  it('PATCH 200 形狀不符仍驗證並重讀，不誤報離線', async () => {
+    const { state } = mutationApi()
+    const reading = deferred<void>()
+    state.patch = async () => {
+      state.readBarrier = reading.promise
+      return Response.json({ unexpected: true })
+    }
+    renderSection()
+    const box = await openModifyConfirmation()
+    fireEvent.click(within(box).getByRole('button', { name: '確認儲存' }))
+    expect(
+      await within(box).findByText('已送出，正在重新整理。'),
+    ).toBeVisible()
+    expect(screen.queryByText(/連不上網路/)).toBeNull()
+    await act(async () => {
+      reading.resolve()
+    })
+    await waitFor(() =>
+      expect(state.reads).toEqual({ coverage: 2, photos: 2 }),
+    )
+    expect(
+      await screen.findByText('已重新整理照片，請確認更新結果。'),
+    ).toBeVisible()
+  })
+})
+
+describe('r4 刪除重讀失敗', () => {
+  it('DELETE 已成功但 GET 失敗，不把舊清單當成最新且聚焦警告', async () => {
+    stubCanvas()
+    const { state } = mutationApi()
+    renderSection()
+    const box = await openDeleteConfirmation()
+    state.remove = async () => {
+      state.failReads = true
+      return new Response(null, { status: 204 })
+    }
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    fireEvent.click(within(box).getByRole('button', { name: '刪除照片' }))
+    const group = screen.getByRole('region', { name: '鋼筋工程的照片' })
+    const alert = await within(group).findByRole('alert')
+    expect(alert.textContent).toBe('已刪除，但畫面可能不是最新，請重新整理。')
+    await waitFor(() => expect(alert).toHaveFocus())
+    expect(screen.queryByText('已刪除照片。')).toBeNull()
+    expect(state.reads).toEqual({ coverage: 2, photos: 2 })
+  })
+})
+
+it('PATCH 重讀時原照已消失，結果仍留在原項目的照片區', async () => {
+  stubCanvas()
+  const { state } = mutationApi()
+  state.patch = async () => {
+    state.photos = []
+    return Response.json(photo())
+  }
+  renderSection()
+  const box = await openModifyConfirmation()
+  fireEvent.click(within(box).getByRole('button', { name: '確認儲存' }))
+  const group = await screen.findByRole('region', { name: '鋼筋工程的照片' })
+  expect(await within(group).findByRole('status')).toHaveTextContent(
+    '已儲存照片說明與項次。',
   )
 })

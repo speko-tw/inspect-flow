@@ -1,3 +1,4 @@
+import { useRef, type Ref } from 'react'
 import { Button } from '../../components/Button'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { Notice } from '../../ui/Notice'
@@ -19,6 +20,7 @@ export interface PhotoFeedback {
   itemId: string
   photoId: string | null
   text: string
+  variant?: 'success' | 'error' | 'info'
 }
 
 /** 時間顯示成裝置當地的「年/月/日 時:分」。 */
@@ -49,6 +51,7 @@ export function targetOf(photo: FieldPhoto, item: CoverageItem): string {
  */
 export function PhotoList({
   taskId,
+  headingRef,
   coverage,
   photos,
   canChange,
@@ -60,6 +63,7 @@ export function PhotoList({
   onConfirmDelete,
 }: {
   taskId: string
+  headingRef?: Ref<HTMLHeadingElement>
   coverage: Coverage
   photos: FieldPhoto[]
   canChange: boolean
@@ -68,11 +72,12 @@ export function PhotoList({
   onModify: (photo: FieldPhoto) => void
   onAskDelete: (photo: FieldPhoto) => void
   onCancelDelete: () => void
-  onConfirmDelete: (photo: FieldPhoto) => void
+  onConfirmDelete: (photo: FieldPhoto) => Promise<void>
 }) {
+  const deleteTrigger = useRef<HTMLButtonElement | null>(null)
   return (
     <>
-      <h3 className="evidence-photos-title">
+      <h3 className="evidence-photos-title" ref={headingRef} tabIndex={-1}>
         已上傳照片（{photos.length} 張）
       </h3>
       {photos.length === 0 && <p>還沒有上傳照片。</p>}
@@ -116,6 +121,7 @@ export function PhotoList({
                       <div className="evidence-actions">
                         <Button
                           aria-label={`修改說明與項次，${photo.caption || target}`}
+                          disabled={Boolean(deleting?.busy)}
                           onClick={() => onModify(photo)}
                           type="button"
                         >
@@ -124,7 +130,11 @@ export function PhotoList({
                         <Button
                           aria-label={`刪除照片，${photo.caption || target}`}
                           className="btn-danger-outline"
-                          onClick={() => onAskDelete(photo)}
+                          disabled={Boolean(deleting?.busy)}
+                          onClick={(event) => {
+                            deleteTrigger.current = event.currentTarget
+                            onAskDelete(photo)
+                          }}
                           type="button"
                         >
                           刪除照片
@@ -132,7 +142,9 @@ export function PhotoList({
                       </div>
                     )}
                     {feedback?.photoId === photo.id && (
-                      <Notice>{feedback.text}</Notice>
+                      <Notice variant={feedback.variant}>
+                        {feedback.text}
+                      </Notice>
                     )}
                     {confirming && deleting && (
                       <ConfirmBox
@@ -140,7 +152,10 @@ export function PhotoList({
                         cancelLabel="保留照片"
                         confirmLabel="刪除照片"
                         headingLevel={3}
-                        onCancel={onCancelDelete}
+                        onCancel={() => {
+                          onCancelDelete()
+                          deleteTrigger.current?.focus({ preventScroll: true })
+                        }}
                         onConfirm={() => onConfirmDelete(photo)}
                         title="刪除這張照片？"
                         variant="danger"
@@ -151,7 +166,9 @@ export function PhotoList({
                           現場清單也看不到；需要時請重新拍攝。
                         </p>
                         {deleting.error && (
-                          <FormError>{deleting.error}</FormError>
+                          <FormError focusRequest={1} tabIndex={-1}>
+                            {deleting.error}
+                          </FormError>
                         )}
                       </ConfirmBox>
                     )}
@@ -160,7 +177,9 @@ export function PhotoList({
               })}
             </ul>
             {feedback?.itemId === item.item_id &&
-              feedback.photoId === null && <Notice>{feedback.text}</Notice>}
+              !own.some((photo) => photo.id === feedback.photoId) && (
+                <Notice variant={feedback.variant}>{feedback.text}</Notice>
+              )}
           </section>
         )
       })}

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button } from '../../components/Button'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { FieldError, FormError } from '../../ui/Form'
+import { Notice } from '../../ui/Notice'
 import type { CoverageItem } from './types'
 
 /** 註記字數上限（FEV-R05）。 */
@@ -30,6 +31,8 @@ export function TargetForm({
   preview,
   busy,
   error,
+  notice,
+  onClearError,
   onSubmit,
   onBack,
 }: {
@@ -41,9 +44,13 @@ export function TargetForm({
   busy: boolean
   /** 後端回的錯誤，顯示在送出按鈕旁（RG-M25）。 */
   error: string
-  onSubmit: (values: TargetValues) => void
+  notice?: string
+  onClearError?: () => void
+  onSubmit: (values: TargetValues) => void | Promise<void>
   onBack: () => void
 }) {
+  const form = useRef<HTMLFormElement | null>(null)
+  const [restoreFocus, setRestoreFocus] = useState(0)
   const heading = useRef<HTMLHeadingElement | null>(null)
   const firstPoint = useRef<HTMLInputElement | null>(null)
   const [overview, setOverview] = useState(initial.overview)
@@ -57,6 +64,13 @@ export function TargetForm({
   useEffect(() => {
     heading.current?.focus({ preventScroll: true })
   }, [])
+
+  useEffect(() => {
+    if (restoreFocus > 0)
+      form.current
+        ?.querySelector<HTMLButtonElement>('button[type="submit"]')
+        ?.focus({ preventScroll: true })
+  }, [restoreFocus])
 
   function toggle(pointId: string) {
     setPointError('')
@@ -80,8 +94,10 @@ export function TargetForm({
       pointIds: overview ? [] : pointIds,
       caption: caption.trim(),
     }
-    if (modify) setPending(values)
-    else onSubmit(values)
+    if (modify) {
+      onClearError?.()
+      setPending(values)
+    } else onSubmit(values)
   }
 
   return (
@@ -100,7 +116,7 @@ export function TargetForm({
           src={preview}
         />
       )}
-      <form noValidate onSubmit={submit}>
+      <form noValidate onSubmit={submit} ref={form}>
         <label className="evidence-check">
           <input
             checked={overview}
@@ -179,10 +195,12 @@ export function TargetForm({
             busy={busy}
             cancelLabel="返回修改"
             confirmLabel="確認儲存"
-            onCancel={() => setPending(null)}
-            onConfirm={() => {
-              if (pending) onSubmit(pending)
+            onCancel={() => {
+              setPending(null)
+              onClearError?.()
+              setRestoreFocus((value) => value + 1)
             }}
+            onConfirm={() => (pending ? onSubmit(pending) : undefined)}
             title="儲存照片說明與項次？"
           >
             <p>照片註記：{pending.caption || '未填註記'}</p>
@@ -196,7 +214,12 @@ export function TargetForm({
                     .join('、')}
             </p>
             <p>儲存後會更新照片說明及項次張數，照片影像保持原樣。</p>
-            {error && <FormError>{error}</FormError>}
+            {notice && <Notice variant="info">{notice}</Notice>}
+            {error && (
+              <FormError focusRequest={1} tabIndex={-1}>
+                {error}
+              </FormError>
+            )}
           </ConfirmBox>
         )}
       </form>

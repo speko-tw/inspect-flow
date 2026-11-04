@@ -26,6 +26,14 @@ export class EvidenceApiError extends HttpError {
   }
 }
 
+/** 寫入已獲成功回應但投影無法驗證；須重讀，不當作離線重送。 */
+export class PhotoMutationResponseError extends Error {
+  constructor() {
+    super('Photo mutation response has an unexpected shape')
+    this.name = 'PhotoMutationResponseError'
+  }
+}
+
 /** 單次上傳請求超過時限；視為網路問題，可自動重試（FEV-R08）。 */
 export class UploadTimeoutError extends Error {
   constructor() {
@@ -320,7 +328,7 @@ export async function updatePhoto(
     EvidenceApiError,
   )
   if (!isFieldPhoto(body) && !isUploadResponse(body)) {
-    throw new Error('Photo mutation response has an unexpected shape')
+    throw new PhotoMutationResponseError()
   }
 }
 
