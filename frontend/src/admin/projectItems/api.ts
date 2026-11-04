@@ -53,6 +53,7 @@ export interface AffectedTask {
   locationText: string | null
   status: TaskStatus
   planArchived: boolean
+  /** FEV-R20：本項目有有效照片或結果，不含同任務其他項目。 */
   hasResult: boolean
   preservedItemTitles: string[]
 }

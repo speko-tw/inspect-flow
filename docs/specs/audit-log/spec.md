@@ -246,12 +246,16 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 <a id="field-evidence-事件"></a>
 ## `field-evidence` 照片圖層事件
 
-由 [FEV-R24／AC36](../field-evidence/spec.md#需求) 的 T5 實作驗收；目錄登記不宣稱產品事件已實作。其餘三個照片事件 `evidence.photo_deleted`、`evidence.photo_updated`、`evidence.office_version_edited` 由 T5 在本事件區登記，寫入時機沿用 FEV-R14。
+由 [FEV-R14／R24、AC21／AC36](../field-evidence/spec.md#需求) 的 T5 登記與實作；四個事件均與照片變更同交易寫入，必填照片所屬 `project_id`。
 
 | 事件代碼 | 什麼時候寫 | `entity_type`／`entity_id` | 標記 | `before` | `after` |
 |---|---|---|---|---|---|
+| `evidence.photo_deleted` | 每次成功軟刪除；每次都寫（ALG-R16） | `evidence`／照片 UUID | `always_write`、`project_scoped` | `task_id`、`item_id`、`caption`（可空）、`point_ids` | 空值 |
+| `evidence.photo_updated` | 註記或對應實際變動；無變動不寫 | `evidence`／照片 UUID | `project_scoped` | 只有變動的 `caption`（可空）、`point_ids` | 同名欄位新值 |
+| `evidence.office_version_edited` | 每次套用或維運重產，同參數重送也寫 | `evidence`／照片 UUID | `always_write`、`project_scoped`，允許系統維運 | `edit_params`、`rule`（舊資料可空）、`reason=null`（非前次原因快照） | 本次 `edit_params`、`rule`、`reason`（`edit`／`label_rule_change`） |
 | `evidence.layer_updated` | 實際圖層顯示設定或三欄覆寫變動時；無變動不寫 | `evidence`／照片 UUID | `project_scoped`；`project_id` 取照片所屬專案 | `layer: {enabled, corner, offset_x, offset_y, size, style, overrides: {project_name, item_name, inspection_location}}`；`labels: {project_name, item_title, location, uploader_name, uploaded_at}`，保存修改前完整值 | 同名 `layer` 與 `labels`，保存修改後完整值 |
 
+- 操作者、UTC 伺服器時間與身分快照由共用入口保存；維運依 FEV-D21 記內建 admin。所有拒絕或回滾不留照片事件；已刪除照片重送依 FEV-AC15 拒絕，不是另一次成功刪除。
 - 依 ALG-R09 的事件欄位例外，實際圖層異動事件的 `before`／`after` **一律記錄**完整 `layer`（含三欄覆寫）與解析後五欄 `labels`，即使其中個別欄位未改也保留，不只記影像顯示文字或取整後數值。未覆寫的鍵依 FEV 契約省略，明確空字串保留；不改來源快照，姓名／時間不可覆寫。
 - `labels.uploaded_at` **必須**是原始 UTC ISO 8601 時間（舊資料無來源為 `null`），遵守 API-R09，**不得**存照片上的時區／分鐘顯示字串。事件時間沿用 `AuditLog.created_at`，照片詳情的 `occurred_at` 亦回 UTC；操作者及寫入當下身分快照沿用共用入口與 ALG-R29。
 - 與圖層資料及 OFFICE 重產同一交易；失敗回滾。既有 `evidence.office_version_edited` 每次套用仍寫入，不因 layer 無變動而省略。依 ALG-R24 必填 `project_id`。

@@ -1375,8 +1375,7 @@ def update_project_item_usage(
                 task.status = "IN_PROGRESS"
                 task.completed_by = None
                 task.completed_at = None
-        elif not reinspection_required:
-            task_item.needs_reinspection = False
+        # FEV-AC17／IP-R04：文字更正不清除先前仍待補查的狀態。
         task_item.updated_by = operator_id
         task.updated_by = operator_id
         plans_to_refresh[plan.id] = plan

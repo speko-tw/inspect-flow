@@ -698,3 +698,48 @@ def test_project_item_task_counts_are_only_computed_for_editors(
             and "group by" in statement.lower()
             for statement in statements
         )
+
+
+def test_fev_impact_select_count_does_not_grow_with_photos(
+    world, db_session, monkeypatch, tmp_path
+):
+    """FEV-R20：有效照片判斷採批次查詢，不隨照片數增長。"""
+    from app.models import (
+        TaskInspectionItem,
+        TaskRequirementSnapshot,
+        TaskSnapshotPoint,
+    )
+    from tests.api.test_evidence_read import _clone_photos
+    from tests.api.test_evidence_upload import _jpeg, _upload
+
+    w = world
+    monkeypatch.setenv("INSPECTFLOW_EVIDENCE_STORAGE_ROOT", str(tmp_path))
+    task = db_session.scalar(
+        select(InspectionTask).where(
+            InspectionTask.plan_id == UUID(w["plan_id"])
+        )
+    )
+    task.status = "IN_PROGRESS"
+    db_session.commit()
+    item = db_session.scalar(
+        select(TaskInspectionItem).where(
+            TaskInspectionItem.task_id == task.id,
+            TaskInspectionItem.project_inspection_item_id == w["item"].id,
+        )
+    )
+    point = db_session.scalar(
+        select(TaskSnapshotPoint.source_point_id)
+        .join(TaskRequirementSnapshot)
+        .where(TaskRequirementSnapshot.task_inspection_item_id == item.id)
+        .limit(1)
+    )
+    response = _upload(
+        w, task.id, item.id, point, _jpeg(), uuid4(), client=w["admin"]
+    )
+    assert response.status_code == 201, response.text
+    url = f"{w['base']}/inspection-items/{w['item'].id}/tasks"
+    small, count = select_count(w["admin"], url, limit=100)
+    assert count > 0 and small > 0
+    _clone_photos({"db": db_session, "point_id": point}, 99)
+    large, _ = select_count(w["admin"], url, limit=100)
+    assert large == small

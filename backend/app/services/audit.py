@@ -1299,3 +1299,41 @@ for _suggestion_event, _suggestion_fields in (
         before_optional=_suggestion_event == "submitted",
         project_scoped=True,
     )
+
+
+# FEV-R14／R24：照片事件沿用同交易入口，專案脈絡不可遺漏。
+register_audit_event(
+    "evidence.photo_deleted",
+    entity_type="evidence",
+    kind=AuditEventKind.DELETED,
+    fields=("task_id", "item_id", "caption", "point_ids"),
+    nullable_fields=("caption",),
+    always_write=True,
+    project_scoped=True,
+)
+register_audit_event(
+    "evidence.photo_updated",
+    entity_type="evidence",
+    kind=AuditEventKind.UPDATED,
+    fields=("caption", "point_ids"),
+    nullable_fields=("caption",),
+    project_scoped=True,
+)
+register_audit_event(
+    "evidence.office_version_edited",
+    entity_type="evidence",
+    kind=AuditEventKind.UPDATED,
+    fields=("edit_params", "rule", "reason"),
+    nullable_fields=("edit_params", "rule", "reason"),
+    always_write=True,
+    allow_system_event=True,
+    project_scoped=True,
+)
+register_audit_event(
+    "evidence.layer_updated",
+    entity_type="evidence",
+    kind=AuditEventKind.UPDATED,
+    fields=("layer", "labels"),
+    always_recorded=("layer", "labels"),
+    project_scoped=True,
+)

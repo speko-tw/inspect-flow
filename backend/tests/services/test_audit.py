@@ -307,6 +307,10 @@ def test_alg_ac19_to_ac24_two_layer_event_catalog():
 def test_project_scoped_catalog_covers_all_project_event_families():
     """守住 ALG-R24：新增專案事件時不能漏標 project_scoped。"""
     expected = {
+        "evidence.photo_deleted",
+        "evidence.photo_updated",
+        "evidence.office_version_edited",
+        "evidence.layer_updated",
         "project.created",
         "project.updated",
         "project.template_applied",
@@ -334,6 +338,7 @@ def test_project_scoped_catalog_covers_all_project_event_families():
         "template_suggestion.withdrawn",
     }
     project_entities = {
+        "evidence",
         "project",
         "project_member",
         "project_zone",
@@ -1699,3 +1704,18 @@ class TestAlgR09CreatedDeletedRequireAllDeclaredFields:
             )
 
         assert session.query(AuditLog).count() == before_count
+
+
+def test_field_evidence_event_catalog_matches_documented_shapes():
+    """FEV-R14／R24：照片目錄守住每次寫、差異寫與完整圖層快照。"""
+    deleted = _EVENT_CATALOG["evidence.photo_deleted"]
+    assert deleted.kind is AuditEventKind.DELETED
+    assert deleted.always_write and deleted.project_scoped
+    office = _EVENT_CATALOG["evidence.office_version_edited"]
+    assert office.always_write and office.allow_system_event
+    updated = _EVENT_CATALOG["evidence.photo_updated"]
+    assert updated.fields == {"caption", "point_ids"}
+    assert not updated.always_write
+    layer = _EVENT_CATALOG["evidence.layer_updated"]
+    assert layer.always_recorded == {"layer", "labels"}
+    assert not layer.always_write

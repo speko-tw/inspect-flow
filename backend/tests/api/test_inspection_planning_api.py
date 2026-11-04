@@ -4726,3 +4726,100 @@ def test_field_assignee_summary_exposes_archive_context(
     response = world["field"].get(f"/api/v1/field/inspection-tasks/{task_id}")
     assert response.status_code == 200
     assert response.json()["plan_archived"] is True
+
+
+def test_fev_item_scoped_photo_impact_and_invalidation(
+    db_session, make_client, monkeypatch, tmp_path
+):
+    """FEV-AC16／26：同 Task 只有 X 作廢，Y 照片不能誤算為 X 已有結果。"""
+    from app.models import Evidence, TaskSnapshotPoint
+    from tests.api.test_evidence_upload import _jpeg, _upload
+
+    monkeypatch.setenv("INSPECTFLOW_EVIDENCE_STORAGE_ROOT", str(tmp_path))
+    w = _planning_world(db_session, make_client)
+    admin, project = w["admin"], w["project"].id
+    plan = admin.post(
+        f"/api/v1/projects/{project}/inspection-plans",
+        json={"name": "照片範圍"},
+    ).json()
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan['id']}/tasks",
+        json={
+            "name": "兩項目照片",
+            "item_ids": [str(w[k].id) for k in ("item", "item_two")],
+            "suggested_assignee_id": str(w["field_user"].id),
+        },
+    ).json()
+    task_id = task["id"]
+    assert (
+        admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch").status_code
+        == 200
+    )
+    assert (
+        w["field"]
+        .post(f"/api/v1/inspection-tasks/{task_id}:start")
+        .status_code
+        == 200
+    )
+    items = {
+        item.project_inspection_item_id: item
+        for item in db_session.scalars(
+            select(TaskInspectionItem).where(
+                TaskInspectionItem.task_id == UUID(task_id)
+            )
+        )
+    }
+
+    def upload(key, overview=False):
+        item = items[w[key].id]
+        point = db_session.scalar(
+            select(TaskSnapshotPoint.source_point_id)
+            .join(TaskRequirementSnapshot)
+            .where(TaskRequirementSnapshot.task_inspection_item_id == item.id)
+        )
+        response = _upload(
+            w,
+            task_id,
+            item.id,
+            [] if overview else point,
+            _jpeg(),
+            uuid4(),
+            is_overview="true" if overview else "false",
+        )
+        assert response.status_code == 201, response.text
+        return UUID(response.json()["id"])
+
+    def impact(key):
+        response = admin.get(
+            f"/api/v1/projects/{project}/inspection-items/{w[key].id}/tasks"
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["items"][0]["has_result"]
+
+    other = upload("item_two")
+    assert impact("item") is False
+    assert impact("item_two") is True
+    regular, overview = upload("item"), upload("item", True)
+    assert impact("item") is True
+    changed = admin.patch(
+        f"/api/v1/projects/{project}/inspection-items/{w['item'].id}",
+        json={"title": "新標準", "reinspect": True},
+    )
+    assert changed.status_code == 200, changed.text
+    db_session.expire_all()
+    for photo_id in (regular, overview):
+        assert (
+            db_session.get(Evidence, photo_id).void_reason
+            == "STANDARD_CHANGED"
+        )
+    assert db_session.get(Evidence, other).voided_at is None
+    assert impact("item") is False
+    assert impact("item_two") is True
+    # 選不要只能更正文案，不能把尚待補查的旗標清掉。
+    corrected = admin.patch(
+        f"/api/v1/projects/{project}/inspection-items/{w['item'].id}",
+        json={"title": "新標準文字更正", "reinspect": False},
+    )
+    assert corrected.status_code == 200, corrected.text
+    db_session.refresh(items[w["item"].id])
+    assert items[w["item"].id].needs_reinspection
