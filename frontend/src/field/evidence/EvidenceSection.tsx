@@ -118,9 +118,12 @@ export default function EvidenceSection({
   status,
   projectName,
   location,
+  mutationsAvailable = false,
 }: {
   taskId: string
   status: TaskStatus
+  /** 依計畫 T7 依賴 T5；#794 尚未提供 PATCH／DELETE 時不顯示入口。 */
+  mutationsAvailable?: boolean
   projectName: string
   location: { zone_name: string | null; location_text: string | null }
 }) {
@@ -300,7 +303,7 @@ export default function EvidenceSection({
     const targetText = values.overview
       ? '總覽照片（選拍）'
       : `佐證項次：${item.points
-          .filter((point) => values.pointIds.includes(point.point_id))
+          .filter((point) => values.pointIds.includes(point.id))
           .map(pointLabel)
           .join('、')}`
     // 同一個請求物件（同鍵、同檔）會被送出所有嘗試與手動重送。
@@ -528,8 +531,13 @@ export default function EvidenceSection({
               onResend={queue.resend}
               uploads={queue.uploads}
             />
+            {canCapture && !mutationsAvailable && photos.length > 0 && (
+              <p className="evidence-hint">
+                照片上傳後的修改與刪除功能尚未開放。
+              </p>
+            )}
             <PhotoList
-              canChange={canCapture}
+              canChange={canCapture && mutationsAvailable}
               coverage={coverage}
               deleting={deleting}
               onAskDelete={(photo) =>

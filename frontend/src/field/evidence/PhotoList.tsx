@@ -28,7 +28,7 @@ function displayTime(value: string): string {
 export function targetOf(photo: FieldPhoto, item: CoverageItem): string {
   if (photo.is_overview) return '總覽照片（選拍）'
   const labels = item.points
-    .filter((point) => photo.point_ids.includes(point.point_id))
+    .filter((point) => photo.point_ids.includes(point.id))
     .map(pointLabel)
   return labels.length ? `佐證項次：${labels.join('、')}` : '佐證項次'
 }

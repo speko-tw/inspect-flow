@@ -118,11 +118,11 @@ export function TargetForm({
             <span aria-hidden="true" className="required-mark" />
           </legend>
           {item.points.map((point, index) => (
-            <label className="evidence-check" key={point.point_id}>
+            <label className="evidence-check" key={point.id}>
               <input
                 aria-invalid={pointError ? true : undefined}
-                checked={pointIds.includes(point.point_id)}
-                onChange={() => toggle(point.point_id)}
+                checked={pointIds.includes(point.id)}
+                onChange={() => toggle(point.id)}
                 ref={index === 0 ? firstPoint : undefined}
                 type="checkbox"
               />

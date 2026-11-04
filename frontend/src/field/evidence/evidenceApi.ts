@@ -1,8 +1,6 @@
 // 現場照片 API client（FEV 規格「介面」一節）。
 //
-// 這支 client 依規格契約撰寫；後端上傳 API（T2、#791）與讀取 API
-// （T3、#792）合併前，元件測試以 mock 驗證，真 API 契約測試待後續接上
-// （RG-M22、FEV-AC24）。
+// T2 上傳 receipt 與 T3 現場查詢各自驗證實際回應，避免將上傳成功誤判失敗。
 
 import { withBasePath } from '../../basePath'
 import {
@@ -12,7 +10,13 @@ import {
   listAllPages,
   request,
 } from '../../http'
-import type { Coverage, FieldPhoto, StoredLayer, UploadRequest } from './types'
+import type {
+  Coverage,
+  FieldPhoto,
+  StoredLayer,
+  UploadRequest,
+  UploadResponse,
+} from './types'
 
 /** 照片 API 回傳非預期狀態碼時拋出；`code` 取自錯誤 envelope。 */
 export class EvidenceApiError extends HttpError {
@@ -60,11 +64,12 @@ function isCoverage(value: unknown): value is Coverage {
         item.points.every(
           (point: unknown) =>
             isRecord(point) &&
-            isText(point.point_id) &&
+            isText(point.id) &&
             Number.isInteger(point.sequence) &&
             isText(point.title) &&
             Number.isInteger(point.min_count) &&
-            Number.isInteger(point.covered_count) &&
+            isCount(point.photo_count) &&
+            isCount(point.missing_count) &&
             typeof point.satisfied === 'boolean',
         ),
     )
@@ -86,11 +91,13 @@ function isStoredLayer(value: unknown): value is StoredLayer {
   )
 }
 
-/** 檢查現場視圖的一張照片；不符契約就拒收，不讓畫面吃到半套資料。 */
-export function isFieldPhoto(value: unknown): value is FieldPhoto {
-  if (!isRecord(value)) return false
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function hasPhotoMetadata(value: Record<string, unknown>): boolean {
   const labels = value.labels
-  const by = value.uploaded_by
+  const render = value.layer_render
   return (
     isText(value.id) &&
     isText(value.item_id) &&
@@ -100,23 +107,70 @@ export function isFieldPhoto(value: unknown): value is FieldPhoto {
     isOptionalText(value.caption) &&
     isOptionalText(value.captured_at) &&
     isText(value.uploaded_at) &&
-    isRecord(by) &&
-    isOptionalText(by.name_zh) &&
-    typeof by.is_me === 'boolean' &&
+    (value.capture_source === null ||
+      value.capture_source === 'camera' ||
+      value.capture_source === 'library') &&
     isStoredLayer(value.layer) &&
     isRecord(labels) &&
-    isText(labels.project_name) &&
-    isText(labels.item_title) &&
-    isText(labels.location) &&
-    isText(labels.uploader_name) &&
-    isOptionalText(labels.uploaded_at)
+    [
+      'project_name',
+      'item_title',
+      'location',
+      'uploader_name',
+      'uploaded_at',
+    ].every((key) => isOptionalText(labels[key])) &&
+    isRecord(render) &&
+    (render.render_state === null ||
+      ['applied', 'fallback_small', 'omitted_too_small', 'disabled'].includes(
+        String(render.render_state),
+      )) &&
+    (render.effective_size === null ||
+      ['small', 'medium', 'large'].includes(String(render.effective_size)))
   )
 }
 
+/** T3 現場清單必須有實際寬高、大小及上傳者，不能以 T2 receipt 代替。 */
+export function isFieldPhoto(value: unknown): value is FieldPhoto {
+  if (!isRecord(value) || !hasPhotoMetadata(value)) return false
+  const by = value.uploaded_by
+  return (
+    isRecord(by) &&
+    isOptionalText(by.name_zh) &&
+    typeof by.is_me === 'boolean' &&
+    isCount(value.width) &&
+    value.width > 0 &&
+    isCount(value.height) &&
+    value.height > 0 &&
+    isCount(value.byte_size)
+  )
+}
+
+function isUploadResponse(value: unknown): value is UploadResponse {
+  if (
+    !isRecord(value) ||
+    !hasPhotoMetadata(value) ||
+    !isText(value.task_id) ||
+    !isRecord(value.variants)
+  )
+    return false
+  const variants = value.variants
+  return ['field', 'office'].every((key) => {
+    const variant = variants[key]
+    return (
+      isRecord(variant) &&
+      isCount(variant.width) &&
+      variant.width > 0 &&
+      isCount(variant.height) &&
+      variant.height > 0 &&
+      isCount(variant.byte_size) &&
+      isText(variant.sha256)
+    )
+  })
+}
+
 function photoOrThrow(body: unknown): FieldPhoto {
-  if (!isFieldPhoto(body)) {
+  if (!isFieldPhoto(body))
     throw new Error('Field photo response has an unexpected shape')
-  }
   return body
 }
 
@@ -212,7 +266,7 @@ export async function uploadPhoto(
   taskId: string,
   upload: UploadRequest,
   signal?: AbortSignal,
-): Promise<FieldPhoto> {
+): Promise<UploadResponse> {
   const controller = new AbortController()
   let timedOut = false
   const timer = setTimeout(() => {
@@ -239,7 +293,9 @@ export async function uploadPhoto(
     } catch {
       throw new EvidenceApiError(response.status)
     }
-    return photoOrThrow(body)
+    if (!isUploadResponse(body))
+      throw new Error('Photo upload response has an unexpected shape')
+    return body
   } catch (error) {
     if (timedOut) throw new UploadTimeoutError()
     throw error
@@ -250,7 +306,7 @@ export async function uploadPhoto(
 }
 
 /**
- * 修改註記與對應項次（`PATCH`，FEV-R05）。總覽照不帶 `point_ids`，
+ * 待 #794 提供的註記與項次修改（`PATCH`，FEV-R05）；目前入口預設隱藏。總覽照不帶 `point_ids`，
  * 否則後端回 422 `evidence.invalid_target`；省略的欄位維持不變。
  */
 export async function updatePhoto(
@@ -266,7 +322,7 @@ export async function updatePhoto(
   return photoOrThrow(body)
 }
 
-/** 軟刪除一張照片（`DELETE`，FEV-R10）；檔案與紀錄由後端保留。 */
+/** 待 #794 的軟刪除（FEV-R10）；目前入口預設隱藏，尚未驗收真 API。 */
 export async function deletePhoto(
   taskId: string,
   photoId: string,

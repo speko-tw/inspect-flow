@@ -14,7 +14,13 @@ import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { currentUserFixture } from '../../testing/contractFixtures'
 import EvidenceSection from './EvidenceSection'
 import { LEAVE_MESSAGE } from './LeaveGuard'
-import { COVERAGE, OVERVIEW, jpegWithExif, photo } from './testFixtures'
+import {
+  COVERAGE,
+  OVERVIEW,
+  jpegWithExif,
+  photo,
+  uploadedPhoto,
+} from './testFixtures'
 import type { Coverage, FieldPhoto } from './types'
 
 vi.mock('./imageEdit', async (importOriginal) => ({
@@ -113,7 +119,7 @@ function stubApi(server: Server) {
 }
 
 const created = () =>
-  Response.json(photo({ id: 'photo-new' }), { status: 201 })
+  Response.json(uploadedPhoto({ id: 'photo-new' }), { status: 201 })
 const offline = () => {
   throw new TypeError('Failed to fetch')
 }
@@ -661,11 +667,11 @@ describe('不留下本機資料（FEV-AC11）', () => {
   })
 })
 
-describe('修改與刪除', () => {
+describe('修改與刪除（待 T5；能力開通後的元件回歸）', () => {
   it('只有拍照者本人看得到修改與刪除入口，且與新增入口分開', async () => {
     stubCanvas()
     stubApi(defaultServer({ photos: [photo(), OVERVIEW] }))
-    renderSection()
+    renderSection({ mutationsAvailable: true })
     expect(await screen.findByText('接頭近照')).toBeInTheDocument()
     expect(
       screen.getAllByRole('button', { name: /^修改說明與項次/ }),
@@ -680,7 +686,7 @@ describe('修改與刪除', () => {
   it('修改註記與項次：送出 caption 與 point_ids', async () => {
     stubCanvas()
     const { requests } = stubApi(defaultServer({ photos: [photo()] }))
-    renderSection()
+    renderSection({ mutationsAvailable: true })
     fireEvent.click(
       await screen.findByRole('button', { name: /^修改說明與項次/ }),
     )
@@ -706,7 +712,7 @@ describe('修改與刪除', () => {
   it('修改失敗時錯誤顯示在表單的送出鈕旁，內容保留', async () => {
     stubCanvas()
     stubApi(defaultServer({ photos: [photo()] }))
-    renderSection()
+    renderSection({ mutationsAvailable: true })
     fireEvent.click(
       await screen.findByRole('button', { name: /^修改說明與項次/ }),
     )
@@ -733,7 +739,7 @@ describe('修改與刪除', () => {
   it('刪除先說明對象與後果，確認鈕是危險樣式，確認後送出 DELETE', async () => {
     stubCanvas()
     const { requests } = stubApi(defaultServer({ photos: [photo()] }))
-    renderSection()
+    renderSection({ mutationsAvailable: true })
     fireEvent.click(await screen.findByRole('button', { name: /^刪除照片/ }))
     const box = await screen.findByRole('group', { name: '刪除這張照片？' })
     expect(box).toHaveTextContent('接頭近照')
@@ -783,5 +789,28 @@ describe('縮圖的圖層預覽（FEV-R23）', () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
     })
     expect(calls.texts).toEqual([])
+  })
+})
+
+describe('T5 尚未提供的寫入入口', () => {
+  it('預設隱藏修改／刪除，已上傳照片仍可查看且不呼叫不存在的端點', async () => {
+    stubCanvas()
+    const { requests } = stubApi(defaultServer({ photos: [photo()] }))
+    renderSection()
+    expect(await screen.findByText('接頭近照')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /^修改說明與項次/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /^刪除照片/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText('照片上傳後的修改與刪除功能尚未開放。'),
+    ).toBeInTheDocument()
+    expect(
+      requests.every(
+        (request) => request.method !== 'PATCH' && request.method !== 'DELETE',
+      ),
+    ).toBe(true)
   })
 })

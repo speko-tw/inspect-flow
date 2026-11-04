@@ -155,11 +155,12 @@ describe('現場任務詳情', () => {
               overview_count: 0,
               points: [
                 {
-                  point_id: 'point-1',
+                  id: 'point-1',
                   sequence: 1,
                   title: '鋼筋間距',
                   min_count: 2,
-                  covered_count: 1,
+                  photo_count: 1,
+                  missing_count: 0,
                   satisfied: false,
                 },
               ],

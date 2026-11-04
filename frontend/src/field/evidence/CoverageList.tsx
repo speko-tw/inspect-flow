@@ -16,7 +16,7 @@ export function pointLabel(point: CoveragePoint): string {
 
 /** 還缺幾張；達標回 0。 */
 function missing(point: CoveragePoint): number {
-  return Math.max(0, point.min_count - point.covered_count)
+  return point.missing_count
 }
 
 function PointRow({
@@ -32,7 +32,7 @@ function PointRow({
 }) {
   const target: CaptureTarget = {
     itemId: item.item_id,
-    pointIds: [point.point_id],
+    pointIds: [point.id],
     overview: false,
   }
   const label = pointLabel(point)
@@ -47,7 +47,7 @@ function PointRow({
         <h4>{label}</h4>
         <p>
           {point.satisfied ? '✓ 已齊全' : `尚需補拍 ${missing(point)} 張`}
-          ・已有 {point.covered_count}／需要 {point.min_count} 張
+          ・已有 {point.photo_count}／需要 {point.min_count} 張
         </p>
       </div>
       {canCapture && (
@@ -107,7 +107,7 @@ export function CoverageList({
               <PointRow
                 canCapture={canCapture}
                 item={item}
-                key={point.point_id}
+                key={point.id}
                 onCapture={onCapture}
                 point={point}
               />

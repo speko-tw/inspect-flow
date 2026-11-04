@@ -13,7 +13,7 @@ import {
   updatePhoto,
   uploadPhoto,
 } from './evidenceApi'
-import { COVERAGE, photo, uploadRequest } from './testFixtures'
+import { COVERAGE, photo, uploadRequest, uploadedPhoto } from './testFixtures'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -63,7 +63,9 @@ describe('multipart 上傳欄位（FEV-R06、R07、R22）', () => {
 
 describe('uploadPhoto', () => {
   it('帶冪等鍵標頭，Content-Type 交給瀏覽器產生 boundary', async () => {
-    const fetcher = vi.fn(async () => Response.json(photo(), { status: 201 }))
+    const fetcher = vi.fn(async () =>
+      Response.json(uploadedPhoto(), { status: 201 }),
+    )
     vi.stubGlobal('fetch', fetcher)
     const result = await uploadPhoto('task-1', uploadRequest())
     expect(result.id).toBe('photo-1')
@@ -83,7 +85,7 @@ describe('uploadPhoto', () => {
   it('接受冪等重放的 200', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => Response.json(photo(), { status: 200 })),
+      vi.fn(async () => Response.json(uploadedPhoto(), { status: 200 })),
     )
     await expect(
       uploadPhoto('task-1', uploadRequest()),
@@ -220,4 +222,91 @@ describe('讀取、修改與刪除', () => {
     expect(isFieldPhoto({ ...photo(), point_ids: 'x' })).toBe(false)
     expect(isFieldPhoto(null)).toBe(false)
   })
+})
+
+describe('已合併後端的真實回應形狀', () => {
+  it('接受真後端覆蓋的 id、photo_count 與 missing_count', async () => {
+    const body = {
+      all_points_satisfied: false,
+      items: [
+        {
+          item_id: 'item-a',
+          title: '鋼筋工程',
+          overview_count: 0,
+          points: [
+            {
+              id: 'point-1',
+              sequence: 1,
+              title: '鋼筋間距',
+              min_count: 2,
+              photo_count: 1,
+              missing_count: 1,
+              satisfied: false,
+            },
+          ],
+        },
+      ],
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json(body)),
+    )
+    await expect(fetchCoverage('task-1')).resolves.toEqual(body)
+  })
+
+  it('接受真後端上傳 receipt，不要求清單才有的 uploaded_by', async () => {
+    const item = photo()
+    const body = {
+      id: item.id,
+      task_id: 'task-1',
+      item_id: item.item_id,
+      is_overview: item.is_overview,
+      point_ids: item.point_ids,
+      caption: item.caption,
+      captured_at: item.captured_at,
+      uploaded_at: item.uploaded_at,
+      capture_source: 'camera',
+      layer: item.layer,
+      labels: item.labels,
+      layer_render: { render_state: 'applied', effective_size: 'medium' },
+      variants: {
+        field: {
+          width: 1200,
+          height: 800,
+          byte_size: 1234,
+          sha256: 'b'.repeat(64),
+        },
+        office: {
+          width: 1200,
+          height: 800,
+          byte_size: 2345,
+          sha256: 'c'.repeat(64),
+        },
+      },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json(body, { status: 201 })),
+    )
+    await expect(uploadPhoto('task-1', uploadRequest())).resolves.toEqual(body)
+  })
+})
+
+it('接受真清單的 nullable 來源、capture_source 與舊圖層摘要', () => {
+  expect(
+    isFieldPhoto(
+      photo({
+        labels: {
+          project_name: null,
+          item_title: null,
+          location: null,
+          uploader_name: null,
+          uploaded_at: null,
+        },
+        capture_source: null,
+        layer_render: { render_state: null, effective_size: null },
+      }),
+    ),
+  ).toBe(true)
+  expect(isFieldPhoto({ ...photo(), byte_size: undefined })).toBe(false)
 })

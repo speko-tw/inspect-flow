@@ -28,10 +28,10 @@ export interface StoredLayer extends FieldLayerChoice {
  * 上傳前尚無此值。
  */
 export interface LayerLabels {
-  project_name: string
-  item_title: string
-  location: string
-  uploader_name: string
+  project_name: string | null
+  item_title: string | null
+  location: string | null
+  uploader_name: string | null
   uploaded_at: string | null
 }
 
@@ -44,6 +44,13 @@ export interface FieldEditSummary {
 /** 照片來源；由用戶端回報，供稽核（現場決定：相機或相簿）。 */
 export type CaptureSource = 'camera' | 'library'
 
+/** T3 以 OFFICE 規則回傳唯讀的實際合成狀態；舊資料可能尚無摘要。 */
+export interface LayerRender {
+  render_state:
+    'applied' | 'fallback_small' | 'omitted_too_small' | 'disabled' | null
+  effective_size: StoredLayer['size'] | null
+}
+
 /** 現場視圖的一張照片（只含有效照片）。 */
 export interface FieldPhoto {
   id: string
@@ -54,19 +61,23 @@ export interface FieldPhoto {
   captured_at: string | null
   uploaded_at: string
   uploaded_by: { name_zh: string | null; is_me: boolean }
+  capture_source: CaptureSource | null
   width: number
   height: number
+  byte_size: number
+  layer_render: LayerRender
   layer: StoredLayer
   labels: LayerLabels
 }
 
 /** 覆蓋狀態裡的一個項次（FEV-R04）。 */
 export interface CoveragePoint {
-  point_id: string
+  id: string
   sequence: number
   title: string
   min_count: number
-  covered_count: number
+  photo_count: number
+  missing_count: number
   satisfied: boolean
 }
 
@@ -98,4 +109,21 @@ export interface UploadRequest {
   fieldEdit: FieldEditSummary
   layer: FieldLayerChoice
   captureSource: CaptureSource
+}
+
+/** T2 上傳 receipt 與 T3 現場清單不同；雜湊只供傳輸確認，不放入畫面。 */
+export interface UploadResponse extends Omit<
+  FieldPhoto,
+  'uploaded_by' | 'width' | 'height' | 'byte_size'
+> {
+  task_id: string
+  variants: Record<
+    'field' | 'office',
+    {
+      width: number
+      height: number
+      byte_size: number
+      sha256: string
+    }
+  >
 }

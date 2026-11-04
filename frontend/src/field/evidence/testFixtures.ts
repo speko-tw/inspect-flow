@@ -1,6 +1,11 @@
 // 照片區測試共用的假資料；欄位形狀依 FEV 規格的現場視圖。
 
-import type { Coverage, FieldPhoto, UploadRequest } from './types'
+import type {
+  Coverage,
+  FieldPhoto,
+  UploadRequest,
+  UploadResponse,
+} from './types'
 
 export const COVERAGE: Coverage = {
   all_points_satisfied: false,
@@ -11,19 +16,21 @@ export const COVERAGE: Coverage = {
       overview_count: 1,
       points: [
         {
-          point_id: 'point-1',
+          id: 'point-1',
           sequence: 1,
           title: '鋼筋間距',
           min_count: 1,
-          covered_count: 0,
+          photo_count: 0,
+          missing_count: 1,
           satisfied: false,
         },
         {
-          point_id: 'point-2',
+          id: 'point-2',
           sequence: 2,
           title: '續接器鎖固',
           min_count: 2,
-          covered_count: 1,
+          photo_count: 1,
+          missing_count: 1,
           satisfied: false,
         },
       ],
@@ -43,6 +50,9 @@ export function photo(overrides: Partial<FieldPhoto> = {}): FieldPhoto {
     uploaded_by: { name_zh: '張先生', is_me: true },
     width: 1200,
     height: 800,
+    byte_size: 1234,
+    capture_source: 'camera',
+    layer_render: { render_state: 'applied', effective_size: 'medium' },
     layer: {
       enabled: true,
       corner: 'bottom_left',
@@ -58,6 +68,42 @@ export function photo(overrides: Partial<FieldPhoto> = {}): FieldPhoto {
       location: '一樓／東側',
       uploader_name: '張先生',
       uploaded_at: '2026-10-31T02:24:00Z',
+    },
+    ...overrides,
+  }
+}
+
+/** 依 T2 實際 POST 回應產生 receipt，不能用清單照片冒充。 */
+export function uploadedPhoto(
+  overrides: Partial<UploadResponse> = {},
+): UploadResponse {
+  const p = photo()
+  return {
+    id: p.id,
+    task_id: 'task-1',
+    item_id: p.item_id,
+    is_overview: p.is_overview,
+    point_ids: p.point_ids,
+    caption: p.caption,
+    captured_at: p.captured_at,
+    uploaded_at: p.uploaded_at,
+    capture_source: p.capture_source,
+    layer: p.layer,
+    labels: p.labels,
+    layer_render: p.layer_render,
+    variants: {
+      field: {
+        width: p.width,
+        height: p.height,
+        byte_size: p.byte_size,
+        sha256: 'b'.repeat(64),
+      },
+      office: {
+        width: p.width,
+        height: p.height,
+        byte_size: 2345,
+        sha256: 'c'.repeat(64),
+      },
     },
     ...overrides,
   }

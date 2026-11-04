@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { uploadPhoto } from './evidenceApi'
 import { canResend, uploadFailureMessage } from './messages'
-import type { FieldPhoto, UploadRequest } from './types'
+import type { UploadRequest } from './types'
 import { MAX_AUTO_RETRIES, sendWithRetry } from './uploadRetry'
 
 /** 畫面上一張待上傳照片的狀態。 */
@@ -41,10 +41,7 @@ export interface UploadDraft {
  * 管理待上傳清單。上傳成功就從清單移除並呼叫 `onUploaded`；
  * 放棄會中止進行中的請求並釋放預覽。
  */
-export function useUploadQueue(
-  taskId: string,
-  onUploaded: (photo: FieldPhoto) => void,
-) {
+export function useUploadQueue(taskId: string, onUploaded: () => void) {
   const [uploads, setUploads] = useState<QueuedUpload[]>([])
   // 請求內容與中止器不進 state：它們不影響畫面，且必須維持同一份。
   const requests = useRef(new Map<string, UploadRequest>())
@@ -92,7 +89,7 @@ export function useUploadQueue(
         )
         if (result.ok) {
           drop(localId)
-          callback.current(result.value)
+          callback.current()
           return
         }
         const resendable = canResend(result.error, result.retryable)
