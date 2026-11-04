@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -14,7 +15,7 @@ import {
   useNavigate,
 } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 
 import { UnsavedLeaveBox } from '../../ui/navigation'
 import { useUnsavedNavigationGuard } from '../../ui/navigation'
@@ -364,6 +365,34 @@ describe('unsaved navigation guard lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: '清除草稿' }))
     await waitFor(() => expect(screen.queryByRole('group')).toBeNull())
     expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
+  })
+
+  it('新頁 layout 階段返回時，不得被已卸載表單的守衛攔下', async () => {
+    const entered = vi.fn()
+    function ReturnImmediately() {
+      const navigate = useNavigate()
+      useLayoutEffect(() => {
+        entered()
+        void navigate(-1)
+      }, [navigate])
+      return <p>已確認的新頁</p>
+    }
+    const router = createMemoryRouter(
+      [
+        { path: '/one', element: <Editor initialDirty /> },
+        { path: '/approved', element: <ReturnImmediately /> },
+      ],
+      { initialEntries: ['/one'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByText('編輯中 /one')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '已確認導覽' }))
+    })
+
+    expect(entered).toHaveBeenCalledTimes(1)
+    expect(router.state.location.pathname).toBe('/one')
+    expect(screen.getByText('編輯中 /one')).toBeVisible()
   })
 
   it('removes every listener when the page unmounts', async () => {

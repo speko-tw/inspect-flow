@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react'
 import {
   act,
   fireEvent,
@@ -162,6 +163,7 @@ function renderAt(
   history?: {
     entries: Array<string | { pathname: string; state?: unknown }>
     index: number
+    backOnCreated?: boolean
   },
 ) {
   return render(
@@ -175,6 +177,7 @@ function renderAt(
             <CurrentUserProvider value={{ user, clear: vi.fn() }}>
               <AdminPage />
               <MemberTestNavigation />
+              {history?.backOnCreated && <ImmediateBackAfterCreate />}
             </CurrentUserProvider>
           }
           path="/*"
@@ -213,6 +216,20 @@ function renderMemberReturnContract(returnTo: unknown) {
       </CurrentUserProvider>
     </DataMemoryRouter>,
   )
+}
+
+/** 固定新頁已顯示、舊頁 passive 清理尚未完成的返回窗口（#824）。 */
+function ImmediateBackAfterCreate() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const returned = useRef(false)
+  useLayoutEffect(() => {
+    const state = location.state as { projectNotice?: string } | null
+    if (returned.current || !state?.projectNotice) return
+    returned.current = true
+    void navigate(-1)
+  }, [location.state, navigate])
+  return null
 }
 
 function MemberTestNavigation() {
@@ -3753,6 +3770,25 @@ describe('project members forms guard (#507)', () => {
         /^\/projects$/,
       ),
     )
+    expect(screen.queryByRole('heading', { name: '新增專案' })).toBeNull()
+  })
+
+  it('新頁首次顯示即返回，不受舊表單或成功訊息清理攔截', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/projects/new', adminUser, {
+      entries: ['/projects', '/projects/new'],
+      index: 1,
+      backOnCreated: true,
+    })
+    await screen.findByRole('heading', { name: '新增專案' })
+    fillProjectForm()
+    await waitForNewProjectSubmit()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    })
+
+    expect(calls(fetchMock, 'POST', /\/projects$/)).toHaveLength(1)
+    expect(screen.getByTestId('member-path')).toHaveTextContent(/^\/projects$/)
     expect(screen.queryByRole('heading', { name: '新增專案' })).toBeNull()
   })
 
