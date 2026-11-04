@@ -7,13 +7,16 @@ import { useUnsavedNavigationGuard } from '../../ui/navigation'
 /** 離開頁面時的原生提示文字（FEV-R15）。 */
 export const LEAVE_MESSAGE = '照片尚未上傳，請勿關閉頁面'
 
+/** Safari POP 使用取消／好，問句才能明確表達「好」代表放棄離開。 */
+export const LEAVE_POP_MESSAGE = '照片尚未上傳，離開後照片會消失。要離開嗎？'
+
 /**
  * 站內導覽被攔下時的頁內確認框。`useBlocker` 只能用在 Data Router，
  * 所以只在 Data Router 底下才掛這個元件（正式環境是；單元測試的
  * MemoryRouter 不是）。
  */
 function RouterLeaveBox({ active }: { active: boolean }) {
-  const guard = useUnsavedNavigationGuard(active, LEAVE_MESSAGE)
+  const guard = useUnsavedNavigationGuard(active, LEAVE_POP_MESSAGE)
   if (!guard.pending) return null
   return (
     <ConfirmBox

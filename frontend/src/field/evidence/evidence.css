@@ -227,11 +227,76 @@
   overflow-wrap: anywhere;
 }
 
+/* 深色 color-scheme 會套原生實心底色；照片區明確畫空心邊界，保留真 input。 */
 .evidence-check input[type='checkbox'] {
   flex: none;
   width: 24px;
   height: 24px;
   margin: 0;
+  display: grid;
+  place-content: center;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 2px solid var(--color-border-control);
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.evidence-check input.evidence-checkbox::after {
+  content: '';
+  width: 10px;
+  height: 6px;
+  border-bottom: 2px solid var(--color-text-on-primary);
+  border-left: 2px solid var(--color-text-on-primary);
+  transform: translateY(-1px) rotate(-45deg);
+  opacity: 0;
+}
+
+.evidence-check input.evidence-checkbox:checked {
+  border-color: var(--color-action-primary);
+  background: var(--color-action-primary);
+}
+
+.evidence-check input.evidence-checkbox:checked::after {
+  opacity: 1;
+}
+
+.evidence-check input.evidence-checkbox:disabled {
+  opacity: 0.6;
+}
+
+.evidence-brightness-label {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+/* 數值不是可輸入欄位，避免全域 output 的虛線框與等寬字誤導。 */
+.evidence-value {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (forced-colors: active) {
+  .evidence-check input.evidence-checkbox,
+  .evidence-check input.evidence-checkbox:checked {
+    -webkit-appearance: auto;
+    appearance: auto;
+    border: revert;
+    background: revert;
+  }
+
+  .evidence-check input.evidence-checkbox::after {
+    content: none;
+  }
 }
 
 .evidence-layer-details summary {

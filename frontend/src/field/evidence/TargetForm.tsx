@@ -4,7 +4,9 @@ import { Button } from '../../components/Button'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { FieldError, FormError } from '../../ui/Form'
 import { Notice } from '../../ui/Notice'
-import type { CoverageItem } from './types'
+import { photoIdentity } from './PhotoList'
+import { PhotoThumb } from './PhotoThumb'
+import type { CoverageItem, FieldPhoto } from './types'
 
 /** 註記字數上限（FEV-R05）。 */
 export const CAPTION_LIMIT = 500
@@ -29,6 +31,7 @@ export function TargetForm({
   item,
   initial,
   preview,
+  existingPhoto,
   busy,
   error,
   notice,
@@ -41,6 +44,8 @@ export function TargetForm({
   initial: TargetValues
   /** 剛處理好、待上傳的現場版預覽（修改模式不顯示）。 */
   preview?: string
+  /** 修改對象與清單同源的縮圖；新上傳流程不提供。 */
+  existingPhoto?: { photo: FieldPhoto; thumbnailUrl: string }
   busy: boolean
   /** 後端錯誤；修改時顯示在儲存確認框內，新增時在送出鈕旁（RG-M25）。 */
   error: string
@@ -110,6 +115,16 @@ export function TargetForm({
       <h2 id="evidence-target-title" ref={heading} tabIndex={-1}>
         {modify ? '修改說明與項次' : '選擇佐證項次與註記'}
       </h2>
+      {existingPhoto && (
+        <PhotoThumb
+          src={existingPhoto.thumbnailUrl}
+          alt={`修改中的照片：${existingPhoto.photo.caption || photoIdentity(existingPhoto.photo)}`}
+          width={existingPhoto.photo.width}
+          height={existingPhoto.photo.height}
+          layer={existingPhoto.photo.layer}
+          labels={existingPhoto.photo.labels}
+        />
+      )}
       <p>查核項目：{item.title}</p>
       {preview && (
         <img
@@ -127,6 +142,7 @@ export function TargetForm({
               setOverview(event.target.checked)
               setPointError('')
             }}
+            className="evidence-checkbox"
             type="checkbox"
           />
           總覽照片（選拍，不計入項次需求）
@@ -147,6 +163,7 @@ export function TargetForm({
                 checked={pointIds.includes(point.id)}
                 onChange={() => toggle(point.id)}
                 ref={index === 0 ? firstPoint : undefined}
+                className="evidence-checkbox"
                 type="checkbox"
               />
               {point.sequence}. {point.title}
@@ -189,7 +206,7 @@ export function TargetForm({
             onClick={onBack}
             type="button"
           >
-            {modify ? '取消修改' : '返回任務'}
+            {modify ? '取消修改' : '放棄照片'}
           </Button>
         </div>
         {pending && (
@@ -205,7 +222,10 @@ export function TargetForm({
             onConfirm={() => (pending ? onSubmit(pending) : undefined)}
             title="儲存照片說明與項次？"
           >
-            <p>照片註記：{pending.caption || '未填註記'}</p>
+            {existingPhoto && (
+              <p>要修改{photoIdentity(existingPhoto.photo)}的說明與項次。</p>
+            )}
+            <p>照片註記：{pending.caption || '未填寫'}</p>
             <p>
               佐證範圍：
               {pending.overview

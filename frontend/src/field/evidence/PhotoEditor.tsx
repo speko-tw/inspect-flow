@@ -93,6 +93,7 @@ export function PhotoEditor({
   const [comparing, setComparing] = useState(false)
   const [previewError, setPreviewError] = useState(false)
   const { rotation, brightness, layer } = state
+  const brightnessText = brightness > 0 ? `+${brightness}` : String(brightness)
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true })
@@ -240,12 +241,19 @@ export function PhotoEditor({
           </Button>
         </div>
         <div className="evidence-control">
-          <label htmlFor="evidence-brightness">
-            亮度 <output htmlFor="evidence-brightness">{brightness}</output>
+          <label
+            className="evidence-brightness-label"
+            htmlFor="evidence-brightness"
+          >
+            亮度{' '}
+            <span className="evidence-value" aria-hidden="true">
+              {brightnessText}
+            </span>
           </label>
           <input
             disabled={busy}
             id="evidence-brightness"
+            aria-valuetext={brightnessText}
             max={100}
             min={-100}
             onChange={(event) =>
@@ -268,6 +276,7 @@ export function PhotoEditor({
                   layer: { ...layer, enabled: event.target.checked },
                 })
               }
+              className="evidence-checkbox"
               type="checkbox"
             />
             顯示工程圖層

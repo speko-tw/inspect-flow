@@ -35,6 +35,14 @@ function displayTime(value: string): string {
       }).format(date)
 }
 
+/** 優先用拍攝時間辨識照片；缺值時明說上傳時間，不把註記當名稱。 */
+export function photoIdentity(photo: FieldPhoto): string {
+  const name = photo.uploaded_by.name_zh?.trim() || '未記錄人員'
+  const time = displayTime(photo.captured_at ?? photo.uploaded_at)
+  const action = photo.captured_at ? '拍攝' : '上傳'
+  return `${name}於${time}${action}的照片`
+}
+
 /** 這張照片對應到哪裡，供清單與刪除說明使用。 */
 export function targetOf(photo: FieldPhoto, item: CoverageItem): string {
   if (photo.is_overview) return '總覽照片（選拍）'
@@ -162,8 +170,11 @@ export function PhotoList({
                         variant="danger"
                       >
                         <p>
-                          要刪除「{photo.caption || '未填註記'}」（{target}
-                          ）。刪除後這張照片不再計入「已有幾張」，
+                          要刪除{photoIdentity(photo)}（{target}）？
+                        </p>
+                        {photo.caption?.trim() && <p>註記：{photo.caption}</p>}
+                        <p>
+                          刪除後這張照片不再計入「已有幾張」，
                           現場清單也看不到；需要時請重新拍攝。
                         </p>
                         {deleting.error && (

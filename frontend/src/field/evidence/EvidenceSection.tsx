@@ -21,6 +21,7 @@ import {
   deletePhoto,
   fetchCoverage,
   fetchFieldPhotos,
+  photoImageUrl,
   PhotoMutationResponseError,
   updatePhoto,
 } from './evidenceApi'
@@ -555,6 +556,10 @@ export default function EvidenceSection({
             }}
             item={item}
             mode="modify"
+            existingPhoto={{
+              photo,
+              thumbnailUrl: photoImageUrl(taskId, photo.id, 640),
+            }}
             notice={
               view.busy && message?.variant === 'info'
                 ? message.text

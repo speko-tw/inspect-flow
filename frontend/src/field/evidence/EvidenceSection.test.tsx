@@ -14,7 +14,7 @@ import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { currentUserFixture } from '../../testing/contractFixtures'
 import { Notice } from '../../ui/Notice'
 import EvidenceSection from './EvidenceSection'
-import { LEAVE_MESSAGE } from './LeaveGuard'
+import { LEAVE_MESSAGE, LeaveGuard } from './LeaveGuard'
 import {
   COVERAGE,
   OVERVIEW,
@@ -1386,3 +1386,153 @@ it.each([200, 202])(
     ).toHaveLength(1)
   },
 )
+
+describe('r6 iPhone 實機試用回饋', () => {
+  it.each([
+    { caption: null, captured_at: null },
+    { caption: '閥件標示', captured_at: '2026-10-30T06:50:00Z' },
+  ])('刪除確認以人員與時間指認，不以缺少註記命名 %j', async (values) => {
+    stubCanvas()
+    const p = photo(values)
+    stubApi(defaultServer({ photos: [p] }))
+    renderSection()
+    const box = await openDeleteConfirmation()
+    const time = new Intl.DateTimeFormat('zh-TW', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(new Date(values.captured_at ?? p.uploaded_at))
+    const action = values.captured_at ? '拍攝' : '上傳'
+    expect(box.querySelector('p')?.textContent).toBe(
+      `要刪除張先生於${time}${action}的照片（佐證項次：2. 續接器鎖固）？`,
+    )
+    if (values.caption) {
+      expect(within(box).getByText('註記：閥件標示').textContent).toBe(
+        '註記：閥件標示',
+      )
+    } else {
+      expect(box).not.toHaveTextContent('未填註記')
+      expect(within(box).queryByText(/^註記：/)).toBeNull()
+    }
+  })
+
+  it('新增次要按鈕叫放棄照片，仍先確認而且可保留', async () => {
+    stubCanvas()
+    stubApi(defaultServer())
+    renderSection()
+    await choose('拍照，1. 鋼筋間距')
+    await confirmEdit()
+    const form = screen.getByRole('region', { name: '選擇佐證項次與註記' })
+    const abandon = within(form).getByRole('button', {
+      name: '放棄照片',
+    })
+    expect(within(form).queryByRole('button', { name: '返回任務' })).toBeNull()
+    fireEvent.click(abandon)
+    const box = await screen.findByRole('group', { name: /^放棄.*照片/ })
+    fireEvent.click(within(box).getByRole('button', { name: '繼續處理' }))
+    expect(
+      screen.getByRole('region', { name: '選擇佐證項次與註記' }),
+    ).toBeInTheDocument()
+  })
+
+  it('未勾總覽核取方塊使用照片區專用外觀class', async () => {
+    stubCanvas()
+    stubApi(defaultServer())
+    renderSection()
+    await choose('拍照，1. 鋼筋間距')
+    await confirmEdit()
+    const overview = screen.getByRole('checkbox', { name: /總覽照片/ })
+    expect(overview).not.toBeChecked()
+    expect(overview).toHaveClass('evidence-checkbox')
+  })
+
+  it('修改標題下有同源縮圖及alt，確認框也指認原照片', async () => {
+    stubCanvas()
+    const sources: string[] = []
+    vi.stubGlobal(
+      'Image',
+      class {
+        onload = null
+        onerror = null
+        set src(value: string) {
+          sources.push(value)
+        }
+      },
+    )
+    stubApi(defaultServer({ photos: [photo()] }))
+    renderSection()
+    fireEvent.click(
+      await screen.findByRole('button', { name: /^修改說明與項次/ }),
+    )
+    const form = screen.getByRole('region', { name: '修改說明與項次' })
+    expect(
+      within(form).getByRole('img', { name: '修改中的照片：接頭近照' }),
+    ).toBeInTheDocument()
+    expect(sources.length).toBeGreaterThanOrEqual(2)
+    expect(sources.at(-1)).toBe(sources[0])
+    expect(sources[0]).toContain('variant=field')
+    fireEvent.click(within(form).getByRole('button', { name: '儲存修改' }))
+    const box = await screen.findByRole('group', {
+      name: '儲存照片說明與項次？',
+    })
+    expect(box).toHaveTextContent('張先生')
+    expect(box).toHaveTextContent('上傳的照片')
+  })
+
+  it('亮度是帶正負號的純文字，滑桿有可讀值', async () => {
+    stubCanvas()
+    stubApi(defaultServer())
+    renderSection()
+    await choose('拍照，1. 鋼筋間距')
+    const slider = screen.getByRole('slider') as HTMLInputElement
+    for (const [value, text] of [
+      [0, '0'],
+      [15, '+15'],
+      [-20, '-20'],
+    ] as const) {
+      fireEvent.change(slider, { target: { value: String(value) } })
+      expect(slider).toHaveAccessibleName('亮度')
+      expect(slider).toHaveAttribute('aria-valuetext', text)
+      const label = slider.labels?.[0]
+      expect(label?.querySelector('.evidence-value')?.tagName).toBe('SPAN')
+      expect(label?.querySelector('.evidence-value')?.textContent).toBe(text)
+      expect(label?.querySelector('output')).toBeNull()
+    }
+  })
+
+  it('POP使用離開問句，PUSH卡片與beforeunload仍沿用原文', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/',
+          element: (
+            <>
+              <Link to="/other">離開此頁</Link>
+              <LeaveGuard active />
+            </>
+          ),
+        },
+        { path: '/other', element: <p>其他頁</p> },
+      ],
+      { initialEntries: ['/other', '/'], initialIndex: 1 },
+    )
+    render(<RouterProvider router={router} />)
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(
+      '照片尚未上傳，離開後照片會消失。要離開嗎？',
+    )
+    expect(router.state.location.pathname).toBe('/')
+    fireEvent.click(screen.getByRole('link', { name: '離開此頁' }))
+    const box = await screen.findByRole('group', { name: '照片尚未上傳' })
+    expect(box.querySelector('p')?.textContent).toBe(
+      '照片尚未上傳，請勿關閉頁面。離開後，還沒上傳的照片會消失，無法找回。',
+    )
+    expect(confirm).toHaveBeenCalledTimes(1)
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+    expect(LEAVE_MESSAGE).toBe('照片尚未上傳，請勿關閉頁面')
+  })
+})
