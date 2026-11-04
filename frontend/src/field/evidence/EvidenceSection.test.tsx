@@ -406,6 +406,63 @@ describe('拍照、編修與上傳（FEV-AC03）', () => {
     expect(screen.getByRole('slider')).toHaveValue('0')
   })
 
+  it('畫布捕捉指標，滿 450ms 才比較，外部放開回傳後還原', async () => {
+    stubCanvas()
+    stubApi(defaultServer())
+    renderSection()
+    await choose('拍照，1. 鋼筋間距')
+    const canvas = screen.getByRole('img', { name: '現場照片與圖層預覽' })
+    const capturePointer = vi.fn()
+    canvas.setPointerCapture = capturePointer
+    const down = new Event('pointerdown', { bubbles: true })
+    Object.defineProperty(down, 'pointerId', { value: 17 })
+    vi.useFakeTimers()
+    fireEvent(canvas, down)
+    expect(capturePointer).toHaveBeenCalledWith(17)
+    act(() => vi.advanceTimersByTime(449))
+    expect(screen.queryByText('編修前')).toBeNull()
+    act(() => vi.advanceTimersByTime(1))
+    expect(screen.getByText('編修前')).toBeVisible()
+    // 捕捉指標後，瀏覽器會把畫布外放開的 pointerup 送回畫布。
+    fireEvent.pointerUp(canvas)
+    expect(screen.queryByText('編修前')).toBeNull()
+    act(() => vi.advanceTimersByTime(1000))
+    expect(screen.queryByText('編修前')).toBeNull()
+  })
+
+  describe.each(['leave', 'cancel', 'lost'] as const)(
+    '畫布指標 %s 的生命週期',
+    (ending) => {
+      it.each([449, 450])('%dms 結束會清計時器並還原預覽', async (delay) => {
+        stubCanvas()
+        stubApi(defaultServer())
+        renderSection()
+        await choose('拍照，1. 鋼筋間距')
+        const canvas = screen.getByRole('img', { name: '現場照片與圖層預覽' })
+        canvas.setPointerCapture = vi.fn()
+        vi.useFakeTimers()
+        fireEvent.pointerDown(canvas)
+        act(() => vi.advanceTimersByTime(delay))
+        if (delay === 450) expect(screen.getByText('編修前')).toBeVisible()
+        const end = {
+          leave: () => fireEvent.pointerLeave(canvas),
+          cancel: () => fireEvent.pointerCancel(canvas),
+          lost: () =>
+            fireEvent(
+              canvas,
+              new Event('lostpointercapture', {
+                bubbles: true,
+              }),
+            ),
+        }
+        end[ending]()
+        fireEvent.pointerUp(document.body)
+        act(() => vi.advanceTimersByTime(1000))
+        expect(screen.queryByText('編修前')).toBeNull()
+      })
+    },
+  )
+
   it('圖層開關與四角改動即時反映在預覽，五欄唯讀且時間待伺服器填入', async () => {
     const calls = stubCanvas()
     stubApi(defaultServer())

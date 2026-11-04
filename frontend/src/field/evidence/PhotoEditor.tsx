@@ -137,6 +137,13 @@ export function PhotoEditor({
   const values = labelValues(labels, true)
   const nothingToReset = rotation === 0 && brightness === 0
 
+  // FEV-R02：移出或失去捕捉也要清掉長按計時器，避免比較卡住。
+  function stopCanvasComparison() {
+    clearTimeout(pressTimer.current)
+    pressTimer.current = undefined
+    setComparing(false)
+  }
+
   return (
     <section
       className="evidence-editor"
@@ -164,20 +171,18 @@ export function PhotoEditor({
           <canvas
             aria-label="現場照片與圖層預覽"
             className="evidence-editor-canvas"
-            onPointerCancel={() => {
+            onLostPointerCapture={stopCanvasComparison}
+            onPointerCancel={stopCanvasComparison}
+            onPointerDown={(event) => {
               clearTimeout(pressTimer.current)
-              setComparing(false)
-            }}
-            onPointerDown={() => {
+              event.currentTarget.setPointerCapture(event.pointerId)
               pressTimer.current = setTimeout(
                 () => setComparing(true),
                 LONG_PRESS_MS,
               )
             }}
-            onPointerUp={() => {
-              clearTimeout(pressTimer.current)
-              setComparing(false)
-            }}
+            onPointerLeave={stopCanvasComparison}
+            onPointerUp={stopCanvasComparison}
             ref={canvas}
             role="img"
           />

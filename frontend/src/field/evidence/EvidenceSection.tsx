@@ -396,7 +396,12 @@ export default function EvidenceSection({
         />
       )
     }
-    if (canCapture && view.kind !== 'home' && !itemOf(itemIdOf(view))) {
+    if (
+      canCapture &&
+      view.kind !== 'home' &&
+      view.kind !== 'opening' &&
+      !itemOf(itemIdOf(view))
+    ) {
       // 查核項目在流程中被更新（例如標準變更）時，舊項次已不存在。
       return (
         <div className="field-notice field-notice-error" role="alert">
