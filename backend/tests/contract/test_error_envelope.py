@@ -119,24 +119,17 @@ _TABLE_LIKE_EXTENSIONS: frozenset[str] = frozenset(
 
 
 def _is_table_like_line(line: str, code: str) -> bool:
-    """Return whether ``line`` looks like a table/lookup row naming
-    ``code``, in either of two shapes:
+    """辨識 Markdown 表格、對應鍵及帶值 CSV 列。
 
-    (a) a Markdown table row: the line (after stripping leading
-        whitespace) starts with ``|`` and contains ``code``
-        anywhere.
-    (b) a key/value or CSV-shaped row: ``code`` immediately
-        preceded by the start of the line, whitespace or a quote,
-        and immediately followed by an optional quote, optional
-        whitespace, then one of ``:``, ``=``, ``,`` or a tab.
-
-    Plain prose that merely mentions a code in running text (e.g.
-    "returns `resource.not_found`") matches neither shape.
+    API-AC10c：呼叫參數或集合尾逗號不構成錯誤碼對照；CSV 需有值。
+    一般內文提及錯誤碼不屬於另行維護的查找表。
     """
     if line.lstrip().startswith("|") and code in line:
         return True
 
-    pattern = r'(?:^|[\s"\'])' + re.escape(code) + r'[\'"]?\s*[:=,\t]'
+    pattern = (
+        r'(?:^|[\s"\'])' + re.escape(code) + r'[\'"]?\s*(?:[:=\t]|,\s*\S)'
+    )
     return re.search(pattern, line) is not None
 
 
@@ -172,6 +165,14 @@ def _find_hand_written_tables(
         if Path(path).suffix.lower() not in _TABLE_LIKE_EXTENSIONS:
             continue
         for line in text.splitlines():
+            # FEV-R14：此同名列是稽核事件，不是 API 錯誤碼對照。
+            # 僅辨識具名照片事件列，不豁免整檔；真錯誤表仍需攔下。
+            if path == "docs/specs/audit-log/spec.md" and re.match(
+                r"^\|\s*`evidence\.photo_deleted`\s*\|[^|]*\|"
+                r"\s*`evidence`／照片 UUID\s*\|",
+                line,
+            ):
+                continue
             if any(_is_table_like_line(line, code) for code in code_list):
                 offending.append(path)
                 break
@@ -668,3 +669,41 @@ def test_find_hand_written_tables_detects_single_code_data_formats() -> None:
         )
         == []
     )
+
+
+def test_audit_event_mentions_are_not_error_code_tables() -> None:
+    """FEV-R14：同名事件的呼叫、集合與事件目錄不是錯誤碼表。"""
+    files = {
+        "backend/app/services/audit.py": '    "evidence.photo_deleted",',
+        "backend/app/services/evidence.py": '    "evidence.photo_deleted",',
+        "backend/tests/api/test_evidence_mutations.py": (
+            '    "delete": "evidence.photo_deleted",'
+        ),
+        "backend/tests/services/test_audit.py": (
+            '    "evidence.photo_deleted",'
+        ),
+        "docs/specs/audit-log/spec.md": (
+            "| `evidence.photo_deleted` | 成功刪除 | "
+            "`evidence`／照片 UUID | always_write | 舊值 | 空值 |"
+        ),
+    }
+    assert _find_hand_written_tables(files, ErrorCode) == []
+
+
+def test_audit_paths_still_reject_real_error_code_tables() -> None:
+    """API-AC10c：事件例外不可掩蓋同檔真正的錯誤碼對照表。"""
+    paths = (
+        "backend/app/services/audit.py",
+        "backend/app/services/evidence.py",
+        "backend/tests/api/test_evidence_mutations.py",
+        "backend/tests/services/test_audit.py",
+        "docs/specs/audit-log/spec.md",
+    )
+    for path in paths:
+        for row in (
+            '{"evidence.photo_deleted": "deleted error"}',
+            "| `evidence.photo_deleted` | deleted error |",
+            "evidence.photo_deleted,deleted error",
+            "| resource.not_found | missing |",
+        ):
+            assert _find_hand_written_tables({path: row}, ErrorCode) == [path]
