@@ -18,6 +18,7 @@ import {
   type Ref,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react'
@@ -112,6 +113,7 @@ export function ConfirmBox({
   const localRoot = useRef<HTMLElement | null>(null)
   const localCancel = useRef<HTMLButtonElement | null>(null)
   const localHeading = useRef<HTMLHeadingElement | null>(null)
+  const returnTarget = useRef<HTMLElement | null>(null)
   const guard = useSubmitGuard()
   const [confirmError, setConfirmError] = useState('')
 
@@ -125,6 +127,42 @@ export function ConfirmBox({
     // 掛載或影響資料就緒才重設位置與焦點，其餘互動交回使用者。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealRequest])
+
+  useLayoutEffect(() => {
+    const active = document.activeElement
+    // #822：在取消鈕接手焦點前記住外部觸發者，StrictMode 重播也保留它。
+    if (
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      !localRoot.current?.contains(active)
+    ) {
+      returnTarget.current = active
+    }
+  }, [])
+
+  function cancel() {
+    if (busy) return
+    const root = localRoot.current
+    onCancel()
+    // 只在取消後歸還，不在卸載時拉回成功或換頁後的焦點。
+    queueMicrotask(() => {
+      const target = returnTarget.current
+      const active = document.activeElement
+      const callerMovedFocus =
+        active instanceof HTMLElement &&
+        active !== document.body &&
+        active.isConnected &&
+        !root?.contains(active)
+      if (
+        !callerMovedFocus &&
+        target?.isConnected &&
+        !target.matches(':disabled') &&
+        !target.closest('[inert], [hidden]')
+      ) {
+        target.focus({ preventScroll: true })
+      }
+    })
+  }
 
   async function confirm() {
     if (hideConfirm) return
@@ -144,7 +182,7 @@ export function ConfirmBox({
       event.preventDefault()
       event.stopPropagation()
       // 送出中取消鈕是停用的，Esc 要一致；否則錯誤訊息會跟著確認框消失。
-      if (!busy) onCancel()
+      if (!busy) cancel()
     }
   }
 
@@ -179,7 +217,7 @@ export function ConfirmBox({
       <div className="confirm-box-actions">
         <button
           disabled={busy}
-          onClick={onCancel}
+          onClick={cancel}
           ref={(node) => {
             localCancel.current = node
             assignRef(cancelRef, node)
