@@ -20,6 +20,7 @@ export interface PhotoFeedback {
   itemId: string
   photoId: string | null
   text: string
+  /** 拒絕或重讀失敗用 error 警告；成功及重新整理資訊維持 status。 */
   variant?: 'success' | 'error' | 'info'
 }
 

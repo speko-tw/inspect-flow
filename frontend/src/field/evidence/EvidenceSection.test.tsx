@@ -1047,9 +1047,8 @@ describe('r4 修改刪除的同步與操作安全', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     fireEvent.click(within(box).getByRole('button', { name: '確認儲存' }))
     const group = await screen.findByRole('region', { name: '鋼筋工程的照片' })
-    expect(await within(group).findByRole('alert')).toHaveTextContent(
-      '已儲存，但畫面可能不是最新，請重新整理。',
-    )
+    const alert = await within(group).findByRole('alert')
+    expect(alert.textContent).toBe('已儲存，但畫面可能不是最新，請重新整理。')
     expect(screen.queryByText('已儲存照片說明與項次。')).toBeNull()
     expect(state.reads).toEqual({ coverage: 2, photos: 2 })
   })
@@ -1113,7 +1112,8 @@ describe('r4 修改刪除的同步與操作安全', () => {
     await act(async () => {
       reading.resolve()
     })
-    await screen.findByText('已刪除照片。')
+    const group = screen.getByRole('region', { name: '鋼筋工程的照片' })
+    await within(group).findByText('已刪除照片。')
   })
 
   it.each(['PATCH', 'DELETE'] as const)(
@@ -1143,9 +1143,11 @@ describe('r4 修改刪除的同步與操作安全', () => {
           name: method === 'PATCH' ? '確認儲存' : '刪除照片',
         }),
       )
-      expect(await screen.findByRole('alert')).toHaveTextContent(
-        '這張照片已被刪除。',
-      )
+      const group = await screen.findByRole('region', {
+        name: '鋼筋工程的照片',
+      })
+      const alert = await within(group).findByRole('alert')
+      expect(alert.textContent).toBe('這張照片已被刪除。')
       expect(state.reads).toEqual({ coverage: 2, photos: 2 })
       expect(screen.queryByRole('heading', { name: '接頭近照' })).toBeNull()
     },
@@ -1171,9 +1173,9 @@ describe('r4 修改刪除的同步與操作安全', () => {
     await waitFor(() =>
       expect(state.reads).toEqual({ coverage: 2, photos: 2 }),
     )
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '找不到這張照片，可能已被刪除。',
-    )
+    const group = await screen.findByRole('region', { name: '鋼筋工程的照片' })
+    const alert = await within(group).findByRole('alert')
+    expect(alert.textContent).toBe('找不到這張照片，可能已被刪除。')
   })
 
   it('取消修改確認後回到儲存修改，重新開啟不保留舊錯誤', async () => {
@@ -1191,7 +1193,7 @@ describe('r4 修改刪除的同步與操作安全', () => {
     const box = await openModifyConfirmation()
     fireEvent.click(within(box).getByRole('button', { name: '確認儲存' }))
     const alert = await within(box).findByRole('alert')
-    expect(alert).toHaveTextContent(
+    expect(alert.textContent).toBe(
       '選的項次與這個查核項目不符。請按「返回修改」重新選擇項次。',
     )
     await waitFor(() => expect(alert).toHaveFocus())
@@ -1242,7 +1244,8 @@ describe('r4 修改刪除的同步與操作安全', () => {
     renderSection()
     const box = await openDeleteConfirmation()
     fireEvent.click(within(box).getByRole('button', { name: '刪除照片' }))
-    await screen.findByText('已刪除照片。')
+    const group = screen.getByRole('region', { name: '鋼筋工程的照片' })
+    await within(group).findByText('已刪除照片。')
     await waitFor(() =>
       expect(
         screen.getByRole('heading', {
@@ -1302,8 +1305,9 @@ describe('r4 修改刪除的同步與操作安全', () => {
     await waitFor(() =>
       expect(state.reads).toEqual({ coverage: 2, photos: 2 }),
     )
+    const group = await screen.findByRole('region', { name: '鋼筋工程的照片' })
     expect(
-      await screen.findByText('已重新整理照片，請確認更新結果。'),
+      await within(group).findByText('已重新整理照片，請確認更新結果。'),
     ).toBeVisible()
   })
 })
@@ -1340,7 +1344,45 @@ it('PATCH 重讀時原照已消失，結果仍留在原項目的照片區', asyn
   const box = await openModifyConfirmation()
   fireEvent.click(within(box).getByRole('button', { name: '確認儲存' }))
   const group = await screen.findByRole('region', { name: '鋼筋工程的照片' })
-  expect(await within(group).findByRole('status')).toHaveTextContent(
-    '已儲存照片說明與項次。',
-  )
+  const status = await within(group).findByRole('status')
+  expect(status.textContent).toBe('已儲存照片說明與項次。')
 })
+
+it.each([200, 202])(
+  'PATCH %s 非JSON成功本文會重讀，不重送或顯示失敗',
+  async (status) => {
+    stubCanvas()
+    const { state, fetcher } = mutationApi()
+    const reading = deferred<void>()
+    state.patch = async () => {
+      state.readBarrier = reading.promise
+      state.photos = [photo({ caption: '非JSON後讀回的註記' })]
+      return new Response('<html>unexpected</html>', {
+        status,
+        headers: { 'Content-Type': 'text/html' },
+      })
+    }
+    renderSection()
+    const box = await openModifyConfirmation()
+    fireEvent.click(within(box).getByRole('button', { name: '確認儲存' }))
+    expect(
+      await within(box).findByText('已送出，正在重新整理。'),
+    ).toBeVisible()
+    expect(within(box).queryByRole('alert')).toBeNull()
+    await act(async () => {
+      reading.resolve()
+    })
+    const group = await screen.findByRole('region', { name: '鋼筋工程的照片' })
+    const result = await within(group).findByRole('status')
+    expect(result.textContent).toBe('已重新整理照片，請確認更新結果。')
+    expect(
+      within(group).getByRole('heading', {
+        name: '非JSON後讀回的註記',
+      }),
+    ).toBeVisible()
+    expect(state.reads).toEqual({ coverage: 2, photos: 2 })
+    expect(
+      fetcher.mock.calls.filter(([, init]) => init?.method === 'PATCH'),
+    ).toHaveLength(1)
+  },
+)

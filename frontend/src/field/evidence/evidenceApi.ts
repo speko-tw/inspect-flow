@@ -322,11 +322,24 @@ export async function updatePhoto(
   photoId: string,
   change: { caption: string | null; point_ids?: string[] },
 ): Promise<void> {
-  const body = await request<unknown>(
-    `${photosBase(taskId)}/${encodeURIComponent(photoId)}`,
-    { method: 'PATCH', body: JSON.stringify(change) },
-    EvidenceApiError,
-  )
+  let body: unknown
+  try {
+    body = await request<unknown>(
+      `${photosBase(taskId)}/${encodeURIComponent(photoId)}`,
+      { method: 'PATCH', body: JSON.stringify(change) },
+      EvidenceApiError,
+    )
+  } catch (error) {
+    // 2xx 本文解析失敗仍可能已寫入；交由呼叫端重讀，不當作失敗重送。
+    if (
+      error instanceof EvidenceApiError &&
+      error.status >= 200 &&
+      error.status < 300
+    ) {
+      throw new PhotoMutationResponseError()
+    }
+    throw error
+  }
   if (!isFieldPhoto(body) && !isUploadResponse(body)) {
     throw new PhotoMutationResponseError()
   }

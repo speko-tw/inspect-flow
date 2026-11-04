@@ -42,9 +42,11 @@ export function TargetForm({
   /** 剛處理好、待上傳的現場版預覽（修改模式不顯示）。 */
   preview?: string
   busy: boolean
-  /** 後端回的錯誤，顯示在送出按鈕旁（RG-M25）。 */
+  /** 後端錯誤；修改時顯示在儲存確認框內，新增時在送出鈕旁（RG-M25）。 */
   error: string
+  /** 成功回應待重讀時的資訊，留在儲存確認框內，不先宣稱已完成。 */
   notice?: string
+  /** 返回修改或重新確認前清掉上一次錯誤，保留使用者填寫的欄位。 */
   onClearError?: () => void
   onSubmit: (values: TargetValues) => void | Promise<void>
   onBack: () => void
