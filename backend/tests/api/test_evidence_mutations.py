@@ -3,6 +3,7 @@
 from copy import deepcopy
 from uuid import UUID
 
+import pytest
 from sqlalchemy import select
 
 from app.models import AuditLog, Evidence, TaskInspectionItem
@@ -635,3 +636,102 @@ def test_actual_layer_history_pagination_preserves_full_text_and_scope(
     )
     assert rejected.status_code == 422
     assert w["outsider"].get(url).status_code == 403
+
+
+@pytest.mark.parametrize("scope", ["module", "project"])
+def test_streaming_patch_rechecks_revoked_permissions(read_world, scope):
+    """FEV-R12：本文尚未送完時撤權，第二階段必須拒絕且不寫資料。"""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from sqlalchemy.orm import Session
+
+    from app.models import (
+        ProjectMember,
+        ProjectMemberRole,
+        UserModulePermission,
+    )
+
+    w = read_world
+    photo = _add_photo(w, caption="撤權前")
+    _, _, url = _paths(w, photo)
+    user_id, project_id = w["field_user"].id, w["project"].id
+    member_id = w["db"].scalar(
+        select(ProjectMember.id).where(
+            ProjectMember.user_id == user_id,
+            ProjectMember.project_id == project_id,
+        )
+    )
+    assert member_id is not None
+    before = _state(w)
+    w["db"].commit()
+    ready, release = Event(), Event()
+
+    def body():
+        yield b'{"caption":'
+        ready.set()
+        assert release.wait(15), "PATCH body was not released"
+        yield b'"revoked"}'
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            request = executor.submit(
+                w["field"].patch,
+                url,
+                content=body(),
+                headers={"Content-Type": "application/json"},
+            )
+            assert ready.wait(10)
+            with Session(w["engine"]) as other:
+                if scope == "module":
+                    rows = list(
+                        other.scalars(
+                            select(UserModulePermission).where(
+                                UserModulePermission.user_id == user_id,
+                                UserModulePermission.permission_code
+                                == "inspection.use",
+                            )
+                        )
+                    )
+                else:
+                    rows = list(
+                        other.scalars(
+                            select(ProjectMemberRole).where(
+                                ProjectMemberRole.project_member_id
+                                == member_id
+                            )
+                        )
+                    )
+                assert rows, "revocation must remove an existing grant"
+                for row in rows:
+                    other.delete(row)
+                other.commit()
+            release.set()
+            response = request.result(20)
+    finally:
+        release.set()
+    assert response.status_code == 403, (scope, response.text)
+    assert response.json()["error"]["code"] == "permission.denied"
+    assert _state(w) == before
+
+
+def test_kd55_keeps_soft_deleted_photo_deleted_only(read_world):
+    """依抽查意見與 IP-R04，已刪除照片不再改標標準變更作廢。"""
+    w = read_world
+    photo = _add_photo(w)
+    _, _, url = _paths(w, photo)
+    assert w["field"].delete(url).status_code == 204
+    result = _change(w)
+    assert result.status_code == 200, result.text
+    row = w["db"].get(Evidence, UUID(photo["id"]))
+    w["db"].refresh(row)
+    assert row.deleted_at is not None
+    assert row.voided_at is None
+    assert row.void_reason is None
+    for response in (
+        w["field"].delete(url),
+        w["admin"].put(url + "/office-version", json={}),
+    ):
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "evidence.photo_locked"
+        assert response.json()["error"]["details"] == ["deleted"]

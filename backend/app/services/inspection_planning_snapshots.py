@@ -346,6 +346,8 @@ def refresh_task_item(
             update(Evidence)
             .where(
                 Evidence.task_inspection_item_id == task_item.id,
+                # IP-R04：只作廢有效照片，已軟刪除者保留 deleted 狀態。
+                Evidence.deleted_at.is_(None),
                 Evidence.voided_at.is_(None),
             )
             .values(

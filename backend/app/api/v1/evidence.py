@@ -21,7 +21,10 @@ from starlette.formparsers import MultiPartException, MultiPartParser
 from app.api import limits
 from app.api.errors import APIError, ErrorCode
 from app.auth.access import permission_gaps, require_login_access
-from app.auth.dependencies import get_db
+from app.auth.dependencies import (
+    get_db,
+    get_request_effective_access_cache,
+)
 from app.models import InspectionTask, User
 from app.services.evidence import (
     _request_fingerprint,
@@ -442,6 +445,11 @@ def _prepare_mutation(
     authorize_photo_mutation(session, task_id, photo_id, user)
     # D18：驗權／狀態先於本文；等候本文時釋放登入 touch 與照片鎖。
     session.commit()
+    # FEV-R12：commit 不清請求快取；跨本文等待後同一 Session 須重查。
+    # 僅在照片 PATCH 的交易邊界清除，避免沿用等待期間撤回的權限。
+    cache = get_request_effective_access_cache()
+    if cache is not None:
+        cache.clear()
 
 
 @router.patch("/inspection-tasks/{task_id}/photos/{photo_id}")

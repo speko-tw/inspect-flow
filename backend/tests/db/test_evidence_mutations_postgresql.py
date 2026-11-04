@@ -118,3 +118,103 @@ def test_upload_wins_then_kd55_voids_the_committed_photo(
         db_session.scalars(select(TaskSnapshotPoint.source_point_id))
     )
     assert point in point_ids
+
+
+def test_parallel_deletes_wait_and_write_one_deletion_event(
+    db_session, engine, make_client, tmp_path, monkeypatch
+):
+    """AC14／21：兩個真 DELETE 互擋，僅第一筆成功並寫一筆事件。"""
+    from sqlalchemy import func
+
+    from app.models import AuditLog
+
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL row locks")
+    root = tmp_path / "photos"
+    monkeypatch.setenv("INSPECTFLOW_EVIDENCE_STORAGE_ROOT", str(root))
+    world, task, item, point = _ready(db_session, make_client)
+    uploaded = _upload(world, task, item, point, _jpeg(), uuid4())
+    assert uploaded.status_code == 201, uploaded.text
+    photo_id = UUID(uploaded.json()["id"])
+    url = f"/api/v1/inspection-tasks/{task}/photos/{photo_id}"
+    files = {p.name: p.read_bytes() for p in root.iterdir()}
+    db_session.commit()
+    ready, release = Event(), Event()
+    deleting_pid = None
+
+    def mark(session, *_):
+        if any(
+            isinstance(row, AuditLog)
+            and row.event_type == "evidence.photo_deleted"
+            for row in session.new
+        ):
+            session.info["w794_r1_delete"] = True
+
+    def pause(session):
+        nonlocal deleting_pid
+        if not session.info.pop("w794_r1_delete", False) or ready.is_set():
+            return
+        deleting_pid = session.scalar(text("SELECT pg_backend_pid()"))
+        ready.set()
+        if not release.wait(20):
+            raise TimeoutError("first DELETE was not released")
+
+    event.listen(Session, "before_flush", mark)
+    event.listen(Session, "before_commit", pause)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(world["field"].delete, url)
+            assert ready.wait(15)
+            # 不同身分／session，避免以同一登入 touch 鎖冒充照片交易鎖。
+            second = executor.submit(world["admin"].delete, url)
+            try:
+                deadline = monotonic() + 15
+                while monotonic() < deadline:
+                    with engine.connect() as connection:
+                        schema = connection.scalar(
+                            text("SELECT current_schema()")
+                        )
+                        assert schema.startswith("w793_")
+                        blockers = (
+                            connection.execute(
+                                text(
+                                    "SELECT pg_blocking_pids(pid) "
+                                    "FROM pg_stat_activity "
+                                    "WHERE datname = current_database() "
+                                    "AND pid <> pg_backend_pid() "
+                                    "AND state = 'active'"
+                                )
+                            )
+                            .scalars()
+                            .all()
+                        )
+                    if any(deleting_pid in value for value in blockers):
+                        assert not second.done()
+                        break
+                    sleep(0.05)
+                else:
+                    raise AssertionError("second DELETE did not wait")
+            finally:
+                release.set()
+            accepted, denied = first.result(25), second.result(25)
+    finally:
+        release.set()
+        event.remove(Session, "before_flush", mark)
+        event.remove(Session, "before_commit", pause)
+    assert accepted.status_code == 204, accepted.text
+    assert denied.status_code == 409, denied.text
+    error = denied.json()["error"]
+    assert error["code"] == "evidence.photo_locked"
+    assert error["details"] == ["deleted"]
+    db_session.expire_all()
+    assert db_session.get(Evidence, photo_id).deleted_at is not None
+    assert (
+        db_session.scalar(
+            select(func.count(AuditLog.id)).where(
+                AuditLog.entity_id == photo_id,
+                AuditLog.event_type == "evidence.photo_deleted",
+            )
+        )
+        == 1
+    )
+    assert {p.name: p.read_bytes() for p in root.iterdir()} == files
