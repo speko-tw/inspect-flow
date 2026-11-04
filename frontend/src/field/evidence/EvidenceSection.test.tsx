@@ -248,7 +248,7 @@ describe('照片區顯示', () => {
 
   it('封存時即使修改能力已開通，仍保留讀取並停用寫入', async () => {
     const { requests } = stubApi(defaultServer({ photos: [photo()] }))
-    renderSection({ planArchived: true, mutationsAvailable: true })
+    renderSection({ planArchived: true })
     expect(await screen.findByText('接頭近照')).toBeVisible()
     expect(
       screen.getByRole('group', { name: '1. 鋼筋間距' }),
@@ -749,11 +749,11 @@ describe('不留下本機資料（FEV-AC11）', () => {
   })
 })
 
-describe('修改與刪除（待 T5；能力開通後的元件回歸）', () => {
+describe('修改與刪除（T5 真端點對齊）', () => {
   it('只有拍照者本人看得到修改與刪除入口，且與新增入口分開', async () => {
     stubCanvas()
     stubApi(defaultServer({ photos: [photo(), OVERVIEW] }))
-    renderSection({ mutationsAvailable: true })
+    renderSection()
     expect(await screen.findByText('接頭近照')).toBeInTheDocument()
     expect(
       screen.getAllByRole('button', { name: /^修改說明與項次/ }),
@@ -762,13 +762,14 @@ describe('修改與刪除（待 T5；能力開通後的元件回歸）', () => {
       1,
     )
     expect(screen.getByText('總覽照片（選拍）')).toBeInTheDocument()
+    expect(screen.getByText('這是其他人上傳的照片，只能查看。')).toBeVisible()
     expect(screen.getByText('佐證項次：2. 續接器鎖固')).toBeInTheDocument()
   })
 
   it('修改註記與項次：送出 caption 與 point_ids', async () => {
     stubCanvas()
     const { requests } = stubApi(defaultServer({ photos: [photo()] }))
-    renderSection({ mutationsAvailable: true })
+    renderSection()
     fireEvent.click(
       await screen.findByRole('button', { name: /^修改說明與項次/ }),
     )
@@ -781,6 +782,7 @@ describe('修改與刪除（待 T5；能力開通後的元件回歸）', () => {
       target: { value: '  已補充  ' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存修改' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認儲存' }))
     expect(
       await screen.findByText('已儲存照片說明與項次。'),
     ).toBeInTheDocument()
@@ -794,7 +796,7 @@ describe('修改與刪除（待 T5；能力開通後的元件回歸）', () => {
   it('修改失敗時錯誤顯示在表單的送出鈕旁，內容保留', async () => {
     stubCanvas()
     stubApi(defaultServer({ photos: [photo()] }))
-    renderSection({ mutationsAvailable: true })
+    renderSection()
     fireEvent.click(
       await screen.findByRole('button', { name: /^修改說明與項次/ }),
     )
@@ -812,8 +814,9 @@ describe('修改與刪除（待 T5；能力開通後的元件回歸）', () => {
       target: { value: '保留我' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存修改' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認儲存' }))
     expect(
-      await screen.findByText(/這個任務目前不能新增或修改照片/),
+      await screen.findByText(/這個任務目前只能查看照片/),
     ).toBeInTheDocument()
     expect(screen.getByLabelText(/照片註記/)).toHaveValue('保留我')
   })
@@ -821,7 +824,7 @@ describe('修改與刪除（待 T5；能力開通後的元件回歸）', () => {
   it('刪除先說明對象與後果，確認鈕是危險樣式，確認後送出 DELETE', async () => {
     stubCanvas()
     const { requests } = stubApi(defaultServer({ photos: [photo()] }))
-    renderSection({ mutationsAvailable: true })
+    renderSection()
     fireEvent.click(await screen.findByRole('button', { name: /^刪除照片/ }))
     const box = await screen.findByRole('group', { name: '刪除這張照片？' })
     expect(box).toHaveTextContent('接頭近照')
@@ -830,8 +833,55 @@ describe('修改與刪除（待 T5；能力開通後的元件回歸）', () => {
     const confirm = within(box).getByRole('button', { name: '刪除照片' })
     expect(confirm).toHaveClass('btn-danger')
     fireEvent.click(confirm)
-    expect(await screen.findByText('已刪除照片。')).toBeInTheDocument()
+    const group = screen.getByRole('region', { name: '鋼筋工程的照片' })
+    expect(await within(group).findByText('已刪除照片。')).toBeVisible()
     expect(requests.some((request) => request.method === 'DELETE')).toBe(true)
+  })
+})
+
+describe('T5 操作附近的拒絕說明', () => {
+  it.each([403, 409])(
+    'DELETE %s 錯誤留在原照片確認框且不顯示錯誤碼',
+    async (status) => {
+      stubCanvas()
+      stubApi(defaultServer({ photos: [photo()] }))
+      renderSection()
+      fireEvent.click(await screen.findByRole('button', { name: /^刪除照片/ }))
+      const box = screen.getByRole('group', { name: '刪除這張照片？' })
+      const code =
+        status === 403 ? 'permission.denied' : 'evidence.photo_locked'
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ error: { code } }, { status })),
+      )
+      fireEvent.click(within(box).getByRole('button', { name: '刪除照片' }))
+      const alert = await within(box).findByRole('alert')
+      expect(alert).toHaveTextContent(
+        status === 403 ? /沒有權限/ : /不能修改或刪除/,
+      )
+      expect(alert).not.toHaveTextContent(code)
+      expect(screen.getByText('接頭近照')).toBeVisible()
+    },
+  )
+
+  it('總覽修改不送項次且清空註記送 null', async () => {
+    stubCanvas()
+    const { requests } = stubApi(
+      defaultServer({ photos: [photo({ is_overview: true, point_ids: [] })] }),
+    )
+    renderSection()
+    fireEvent.click(
+      await screen.findByRole('button', { name: /^修改說明與項次/ }),
+    )
+    fireEvent.change(screen.getByLabelText(/照片註記/), {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存修改' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認儲存' }))
+    await screen.findByText('已儲存照片說明與項次。')
+    expect(
+      JSON.parse(String(requests.find((r) => r.method === 'PATCH')?.body)),
+    ).toEqual({ caption: null })
   })
 })
 
@@ -874,25 +924,42 @@ describe('縮圖的圖層預覽（FEV-R23）', () => {
   })
 })
 
-describe('T5 尚未提供的寫入入口', () => {
-  it('預設隱藏修改／刪除，已上傳照片仍可查看且不呼叫不存在的端點', async () => {
+describe('T5 修改入口與狀態說明', () => {
+  it('預設開放本人修改，送出先確認且成功訊息留在照片區', async () => {
     stubCanvas()
-    const { requests } = stubApi(defaultServer({ photos: [photo()] }))
+    const server = defaultServer({ photos: [photo()] })
+    const { requests } = stubApi(server)
     renderSection()
-    expect(await screen.findByText('接頭近照')).toBeInTheDocument()
+    fireEvent.click(
+      await screen.findByRole('button', { name: /^修改說明與項次/ }),
+    )
+    fireEvent.change(screen.getByLabelText(/照片註記/), {
+      target: { value: '新註記' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存修改' }))
+    const box = await screen.findByRole('group', {
+      name: '儲存照片說明與項次？',
+    })
+    expect(requests.some((r) => r.method === 'PATCH')).toBe(false)
+    expect(within(box).getByRole('button', { name: '返回修改' })).toHaveFocus()
+    fireEvent.click(within(box).getByRole('button', { name: '確認儲存' }))
+    const group = await screen.findByRole('region', { name: '鋼筋工程的照片' })
     expect(
-      screen.queryByRole('button', { name: /^修改說明與項次/ }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: /^刪除照片/ }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByText('照片上傳後的修改與刪除功能尚未開放。'),
-    ).toBeInTheDocument()
-    expect(
-      requests.every(
-        (request) => request.method !== 'PATCH' && request.method !== 'DELETE',
-      ),
-    ).toBe(true)
+      await within(group).findByText('已儲存照片說明與項次。'),
+    ).toBeVisible()
   })
+
+  it.each(['COMPLETED', 'CANCELLED'] as const)(
+    '任務 %s 有唯讀原因',
+    async (status) => {
+      stubCanvas()
+      stubApi(defaultServer({ photos: [photo()] }))
+      renderSection({ status })
+      await screen.findByText('接頭近照')
+      expect(screen.getByText(/任務已.*照片只能查看/)).toBeVisible()
+      expect(
+        screen.queryByRole('button', { name: /修改說明與項次|刪除照片/ }),
+      ).toBeNull()
+    },
+  )
 })

@@ -12,13 +12,16 @@ const CODE_MESSAGES: Record<string, string> = {
     '選的項次與這個查核項目不符。請放棄後重新選擇項次。',
   'evidence.requirement_changed':
     '這個查核項目的標準剛更新，舊項次已失效。請重新整理頁面後再拍。',
-  'evidence.task_locked': '這個任務目前不能新增或修改照片，可能已完成或取消。',
-  'inspection_plan.archived': '所屬計畫已封存，照片無法新增或修改。',
+  'evidence.task_locked':
+    '這個任務目前只能查看照片，可能已完成或取消。請返回任務清單確認狀態。',
+  'inspection_plan.archived':
+    '所屬計畫已封存，照片只能查看，無法新增、修改或刪除。',
   'evidence.idempotency_conflict':
     '這張照片的上傳內容有衝突。請放棄後重新拍攝。',
   'evidence.photo_deleted': '這張照片已被刪除。',
   'evidence.photo_locked': '這張照片已被鎖定，不能修改或刪除。',
-  'permission.denied': '你沒有權限在這個任務上傳或修改照片。',
+  'permission.denied':
+    '你目前沒有權限在這個任務新增、修改或刪除照片。請返回任務清單確認。',
 }
 
 /** 離線或連不上伺服器；照片仍留在畫面（FEV-AC11）。 */
@@ -58,6 +61,8 @@ export function mutationFailureMessage(error: unknown): string {
   }
   if (error.status === 403) return CODE_MESSAGES['permission.denied']
   if (error.status === 404) return '找不到這張照片，可能已被刪除。'
+  if (error.status === 409)
+    return '照片或任務狀態已改變，目前無法修改或刪除。請重新整理後確認。'
   if (error.status === 422) return '送出的內容有誤，請檢查後再試。'
   if (error.status >= 500) return '伺服器暫時無法處理，請稍後再試。'
   return '操作失敗，請稍後再試。'

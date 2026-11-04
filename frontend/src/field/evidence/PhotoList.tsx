@@ -1,5 +1,6 @@
 import { Button } from '../../components/Button'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { Notice } from '../../ui/Notice'
 import { FormError } from '../../ui/Form'
 import { pointLabel } from './CoverageList'
 import { photoImageUrl } from './evidenceApi'
@@ -11,6 +12,13 @@ export interface DeleteState {
   photoId: string
   busy: boolean
   error: string
+}
+
+/** 修改結果留在該照片卡片；刪除後留在原項目的照片區（RG-M25）。 */
+export interface PhotoFeedback {
+  itemId: string
+  photoId: string | null
+  text: string
 }
 
 /** 時間顯示成裝置當地的「年/月/日 時:分」。 */
@@ -44,6 +52,7 @@ export function PhotoList({
   coverage,
   photos,
   canChange,
+  feedback,
   deleting,
   onModify,
   onAskDelete,
@@ -54,6 +63,7 @@ export function PhotoList({
   coverage: Coverage
   photos: FieldPhoto[]
   canChange: boolean
+  feedback: PhotoFeedback | null
   deleting: DeleteState | null
   onModify: (photo: FieldPhoto) => void
   onAskDelete: (photo: FieldPhoto) => void
@@ -68,7 +78,7 @@ export function PhotoList({
       {photos.length === 0 && <p>還沒有上傳照片。</p>}
       {coverage.items.map((item) => {
         const own = photos.filter((photo) => photo.item_id === item.item_id)
-        if (own.length === 0) return null
+        if (own.length === 0 && feedback?.itemId !== item.item_id) return null
         return (
           <section
             aria-label={`${item.title}的照片`}
@@ -84,6 +94,8 @@ export function PhotoList({
                 return (
                   <li className="evidence-photo" key={photo.id}>
                     <PhotoThumb
+                      width={photo.width}
+                      height={photo.height}
                       alt={photo.caption || '現場照片'}
                       labels={photo.labels}
                       layer={photo.layer}
@@ -95,6 +107,11 @@ export function PhotoList({
                       {photo.uploaded_by.name_zh ?? '未記錄'}・
                       {displayTime(photo.uploaded_at)}
                     </small>
+                    {!photo.uploaded_by.is_me && (
+                      <p className="evidence-hint">
+                        這是其他人上傳的照片，只能查看。
+                      </p>
+                    )}
                     {mine && (
                       <div className="evidence-actions">
                         <Button
@@ -113,6 +130,9 @@ export function PhotoList({
                           刪除照片
                         </Button>
                       </div>
+                    )}
+                    {feedback?.photoId === photo.id && (
+                      <Notice>{feedback.text}</Notice>
                     )}
                     {confirming && deleting && (
                       <ConfirmBox
@@ -139,6 +159,8 @@ export function PhotoList({
                 )
               })}
             </ul>
+            {feedback?.itemId === item.item_id &&
+              feedback.photoId === null && <Notice>{feedback.text}</Notice>}
           </section>
         )
       })}

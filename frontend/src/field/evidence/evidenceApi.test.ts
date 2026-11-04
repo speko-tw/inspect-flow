@@ -310,3 +310,19 @@ it('接受真清單的 nullable 來源、capture_source 與舊圖層摘要', () 
   ).toBe(true)
   expect(isFieldPhoto({ ...photo(), byte_size: undefined })).toBe(false)
 })
+
+describe('T5 依權限回應', () => {
+  it('PATCH 接受具讀取權限者的內業視圖，再由呼叫端重讀現場清單', async () => {
+    const body = {
+      ...uploadedPhoto(),
+      uploaded_by: { name_zh: '張先生', is_me: true },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json(body)),
+    )
+    await expect(
+      updatePhoto('task-1', 'photo-1', { caption: null }),
+    ).resolves.toBeUndefined()
+  })
+})

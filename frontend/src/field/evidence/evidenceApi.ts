@@ -306,23 +306,25 @@ export async function uploadPhoto(
 }
 
 /**
- * 待 #794 提供的註記與項次修改（`PATCH`，FEV-R05）；目前入口預設隱藏。總覽照不帶 `point_ids`，
- * 否則後端回 422 `evidence.invalid_target`；省略的欄位維持不變。
+ * T5 修改註記／項次；總覽照省略 point_ids，未送欄位維持不變。
+ * 回應依權限為現場或內業視圖；呼叫端儲存後重讀現場清單，避免混用視圖。
  */
 export async function updatePhoto(
   taskId: string,
   photoId: string,
   change: { caption: string | null; point_ids?: string[] },
-): Promise<FieldPhoto> {
+): Promise<void> {
   const body = await request<unknown>(
     `${photosBase(taskId)}/${encodeURIComponent(photoId)}`,
     { method: 'PATCH', body: JSON.stringify(change) },
     EvidenceApiError,
   )
-  return photoOrThrow(body)
+  if (!isFieldPhoto(body) && !isUploadResponse(body)) {
+    throw new Error('Photo mutation response has an unexpected shape')
+  }
 }
 
-/** 待 #794 的軟刪除（FEV-R10）；目前入口預設隱藏，尚未驗收真 API。 */
+/** T5 軟刪除（FEV-R10）；成功回 204，之後重讀現場清單與覆蓋。 */
 export async function deletePhoto(
   taskId: string,
   photoId: string,

@@ -38,7 +38,7 @@ import {
   INITIAL_EDITOR_STATE,
   PhotoEditor,
 } from './PhotoEditor'
-import { type DeleteState, PhotoList } from './PhotoList'
+import { type DeleteState, type PhotoFeedback, PhotoList } from './PhotoList'
 import { TargetForm, type TargetValues } from './TargetForm'
 import type {
   CaptureSource,
@@ -118,15 +118,12 @@ export default function EvidenceSection({
   status,
   projectName,
   location,
-  mutationsAvailable = false,
   planArchived = false,
 }: {
   taskId: string
   status: TaskStatus
   /** FEV-R09：計畫封存優先於任務的進行中狀態，照片只供查看。 */
   planArchived?: boolean
-  /** 依計畫 T7 依賴 T5；#794 尚未提供 PATCH／DELETE 時不顯示入口。 */
-  mutationsAvailable?: boolean
   projectName: string
   location: { zone_name: string | null; location_text: string | null }
 }) {
@@ -145,6 +142,9 @@ export default function EvidenceSection({
   const [message, setMessage] = useState<Message | null>(null)
   const [abandoning, setAbandoning] = useState(false)
   const [deleting, setDeleting] = useState<DeleteState | null>(null)
+  const [photoFeedback, setPhotoFeedback] = useState<PhotoFeedback | null>(
+    null,
+  )
   const [focusHome, setFocusHome] = useState(0)
   const latestView = useRef(view)
   useEffect(() => {
@@ -343,7 +343,7 @@ export default function EvidenceSection({
   }
 
   async function saveModify(photo: FieldPhoto, values: TargetValues) {
-    if (!canCapture || !mutationsAvailable) return
+    if (!canCapture || !photo.uploaded_by.is_me) return
     setView({ kind: 'modify', photo, busy: true, error: '' })
     try {
       await updatePhoto(taskId, photo.id, {
@@ -351,7 +351,12 @@ export default function EvidenceSection({
         ...(photo.is_overview ? {} : { point_ids: values.pointIds }),
       })
       await refresh()
-      goHome({ variant: 'success', text: '已儲存照片說明與項次。' })
+      setPhotoFeedback({
+        itemId: photo.item_id,
+        photoId: photo.id,
+        text: '已儲存照片說明與項次。',
+      })
+      goHome(null)
     } catch (error) {
       setView({
         kind: 'modify',
@@ -363,13 +368,17 @@ export default function EvidenceSection({
   }
 
   async function confirmDelete(photo: FieldPhoto) {
-    if (!canCapture || !mutationsAvailable) return
+    if (!canCapture || !photo.uploaded_by.is_me) return
     setDeleting({ photoId: photo.id, busy: true, error: '' })
     try {
       await deletePhoto(taskId, photo.id)
       setDeleting(null)
       await refresh()
-      setMessage({ variant: 'success', text: '已刪除照片。' })
+      setPhotoFeedback({
+        itemId: photo.item_id,
+        photoId: null,
+        text: '已刪除照片。',
+      })
     } catch (error) {
       setDeleting({
         photoId: photo.id,
@@ -544,23 +553,23 @@ export default function EvidenceSection({
               onResend={queue.resend}
               uploads={queue.uploads}
             />
-            {canCapture && !mutationsAvailable && photos.length > 0 && (
-              <p className="evidence-hint">
-                照片上傳後的修改與刪除功能尚未開放。
-              </p>
-            )}
             <PhotoList
-              canChange={canCapture && mutationsAvailable}
+              canChange={canCapture}
+              feedback={photoFeedback}
               coverage={coverage}
               deleting={canCapture ? deleting : null}
-              onAskDelete={(photo) =>
+              onAskDelete={(photo) => {
+                if (!canCapture || !photo.uploaded_by.is_me) return
+                setPhotoFeedback(null)
                 setDeleting({ photoId: photo.id, busy: false, error: '' })
-              }
+              }}
               onCancelDelete={() => setDeleting(null)}
               onConfirmDelete={(photo) => void confirmDelete(photo)}
-              onModify={(photo) =>
+              onModify={(photo) => {
+                if (!canCapture || !photo.uploaded_by.is_me) return
+                setPhotoFeedback(null)
                 setView({ kind: 'modify', photo, busy: false, error: '' })
-              }
+              }}
               photos={photos}
               taskId={taskId}
             />
@@ -604,6 +613,12 @@ export default function EvidenceSection({
       {planArchived && (
         <Notice variant="info">
           所屬計畫已封存，照片只能查看，無法新增、修改或刪除。
+        </Notice>
+      )}
+      {!planArchived && (status === 'COMPLETED' || status === 'CANCELLED') && (
+        <Notice variant="info">
+          {status === 'COMPLETED' ? '任務已完成' : '任務已取消'}
+          ，照片只能查看，無法新增、修改或刪除。
         </Notice>
       )}
       {body()}

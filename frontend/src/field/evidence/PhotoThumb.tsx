@@ -14,12 +14,18 @@ export function PhotoThumb({
   alt,
   layer,
   labels,
+  width,
+  height,
 }: {
   src: string
   alt: string
   layer: StoredLayer
   labels: LayerLabels
+  width: number
+  height: number
 }) {
+  // RG-M25：先保留來源比例，避免縮圖載入後把操作結果推離視窗。
+  const geometry = { aspectRatio: `${width} / ${height}` }
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const [mode, setMode] = useState<'canvas' | 'plain' | 'error'>('canvas')
 
@@ -52,13 +58,16 @@ export function PhotoThumb({
   }, [labels, layer, src])
 
   if (mode === 'plain') {
-    return <img alt={alt} className="evidence-thumb" src={src} />
+    return (
+      <img alt={alt} className="evidence-thumb" src={src} style={geometry} />
+    )
   }
   if (mode === 'error') {
     return (
       <p
         className="evidence-thumb evidence-thumb-missing"
         role="img"
+        style={geometry}
         aria-label={alt}
       >
         照片預覽無法載入
@@ -70,6 +79,7 @@ export function PhotoThumb({
       aria-label={alt}
       className="evidence-thumb"
       ref={canvas}
+      style={geometry}
       role="img"
     />
   )

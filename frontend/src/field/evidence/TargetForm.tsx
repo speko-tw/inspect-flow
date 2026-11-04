@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { Button } from '../../components/Button'
+import { ConfirmBox } from '../../ui/ConfirmBox'
 import { FieldError, FormError } from '../../ui/Form'
 import type { CoverageItem } from './types'
 
@@ -50,6 +51,7 @@ export function TargetForm({
   const [caption, setCaption] = useState(initial.caption)
   const [pointError, setPointError] = useState('')
   const [focusRequest, setFocusRequest] = useState(0)
+  const [pending, setPending] = useState<TargetValues | null>(null)
   const modify = mode === 'modify'
 
   useEffect(() => {
@@ -67,16 +69,19 @@ export function TargetForm({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (busy || pending) return
     if (!overview && pointIds.length === 0) {
       setPointError('請至少選擇一個佐證項次。')
       setFocusRequest((value) => value + 1)
       return
     }
-    onSubmit({
+    const values = {
       overview,
       pointIds: overview ? [] : pointIds,
       caption: caption.trim(),
-    })
+    }
+    if (modify) setPending(values)
+    else onSubmit(values)
   }
 
   return (
@@ -111,7 +116,7 @@ export function TargetForm({
         <fieldset
           aria-describedby={pointError ? 'evidence-point-error' : undefined}
           className="evidence-points"
-          disabled={overview}
+          disabled={overview || busy || Boolean(pending)}
         >
           <legend>
             佐證項次（非總覽必選，可複選）
@@ -142,6 +147,7 @@ export function TargetForm({
             照片註記（選填，最多 {CAPTION_LIMIT} 字）
           </label>
           <textarea
+            disabled={busy || Boolean(pending)}
             id="evidence-caption"
             maxLength={CAPTION_LIMIT}
             onChange={(event) => setCaption(event.target.value)}
@@ -149,9 +155,10 @@ export function TargetForm({
             value={caption}
           />
         </div>
-        {error && <FormError>{error}</FormError>}
+        {error && !pending && <FormError>{error}</FormError>}
         <div className="evidence-actions">
           <Button
+            disabled={Boolean(pending)}
             loading={busy}
             loadingText={modify ? '儲存中…' : '準備上傳…'}
             type="submit"
@@ -159,10 +166,39 @@ export function TargetForm({
           >
             {modify ? '儲存修改' : '上傳現場照片'}
           </Button>
-          <Button disabled={busy} onClick={onBack} type="button">
+          <Button
+            disabled={busy || Boolean(pending)}
+            onClick={onBack}
+            type="button"
+          >
             {modify ? '取消修改' : '返回任務'}
           </Button>
         </div>
+        {pending && (
+          <ConfirmBox
+            busy={busy}
+            cancelLabel="返回修改"
+            confirmLabel="確認儲存"
+            onCancel={() => setPending(null)}
+            onConfirm={() => {
+              if (pending) onSubmit(pending)
+            }}
+            title="儲存照片說明與項次？"
+          >
+            <p>照片註記：{pending.caption || '未填註記'}</p>
+            <p>
+              佐證範圍：
+              {pending.overview
+                ? '總覽照片（選拍）'
+                : item.points
+                    .filter((point) => pending.pointIds.includes(point.id))
+                    .map((point) => `${point.sequence}. ${point.title}`)
+                    .join('、')}
+            </p>
+            <p>儲存後會更新照片說明及項次張數，照片影像保持原樣。</p>
+            {error && <FormError>{error}</FormError>}
+          </ConfirmBox>
+        )}
       </form>
     </section>
   )
