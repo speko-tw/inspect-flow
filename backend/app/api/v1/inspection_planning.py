@@ -1075,11 +1075,42 @@ def item_tasks(
             InspectionTask.project_id == project_id,
             InspectionTask.id.in_(task_ids),
         ),
-        serialize_batch=lambda rows: _impact_summaries(db, rows),
+        serialize_batch=lambda rows: _impact_summaries(
+            db, rows, project_inspection_item_id
+        ),
     )
 
 
-def _impact_summaries(db: Session, tasks: Sequence[InspectionTask]):
+def _impact_summaries(
+    db: Session, tasks: Sequence[InspectionTask], source_item_id: UUID
+):
+    from app.models import Evidence
+
+    # FEV-R20：以受影響項目批次查有效照片，不誤算同 Task 的其他項目。
+    # 0.7.x 的結果實體尚未落地，屆時沿用此項目級判斷加上有效結果。
+    with_photos = (
+        set(
+            db.scalars(
+                select(TaskInspectionItem.task_id)
+                .join(
+                    Evidence,
+                    Evidence.task_inspection_item_id == TaskInspectionItem.id,
+                )
+                .where(
+                    TaskInspectionItem.task_id.in_(
+                        [task.id for task in tasks]
+                    ),
+                    TaskInspectionItem.project_inspection_item_id
+                    == source_item_id,
+                    Evidence.deleted_at.is_(None),
+                    Evidence.voided_at.is_(None),
+                )
+                .distinct()
+            )
+        )
+        if tasks
+        else set()
+    )
     plans = load_by_id(db, InspectionPlan, [task.plan_id for task in tasks])
     summaries = _task_summaries(db, tasks)
     for task, summary in zip(tasks, summaries, strict=True):
@@ -1088,10 +1119,7 @@ def _impact_summaries(db: Session, tasks: Sequence[InspectionTask]):
             {
                 "plan_name": plan.name if plan else None,
                 "plan_archived": bool(plan and plan.is_archived),
-                # 依 IP-R04 與規格「API 表示」，has_result 含結果與有效照片；
-                # field-evidence（0.6.x）、completion-validation（0.7.x）
-                # 上線前恆為 false。
-                "has_result": False,
+                "has_result": task.id in with_photos,
             }
         )
     return summaries

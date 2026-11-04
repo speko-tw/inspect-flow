@@ -4,11 +4,12 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.db.clock import utc_now
 from app.models import (
+    Evidence,
     InspectionTask,
     ProjectEvidenceRequirement,
     ProjectInspectionItem,
@@ -50,6 +51,7 @@ class TaskItemRefreshContext:
 
     snapshots_by_item_id: dict[uuid.UUID, TaskRequirementSnapshot]
     source_points: list[_SourcePoint]
+    items_with_photos: set[uuid.UUID]
 
 
 def _load_source_points(
@@ -143,6 +145,19 @@ def load_task_item_refresh_context(
             for snapshot in snapshots
         },
         source_points=_load_source_points(session, source_item.id),
+        items_with_photos=set(
+            session.scalars(
+                select(Evidence.task_inspection_item_id)
+                .where(
+                    Evidence.task_inspection_item_id.in_(item_ids),
+                    Evidence.deleted_at.is_(None),
+                    Evidence.voided_at.is_(None),
+                )
+                .distinct()
+            )
+        )
+        if item_ids
+        else set(),
     )
 
 
@@ -308,6 +323,39 @@ def refresh_task_item(
         if context is not None
         else _current_snapshot(session, task_item.id)
     )
+    # FEV-R11／R21：呼叫者已持有 Task 明細鎖；照片與快照一起作廢。
+    # 只有照片也要待重查，不能用 Task 層的 has_result 決定作廢範圍。
+    if retain_history and superseded_reason == "STANDARD_CHANGED":
+        has_photos = (
+            task_item.id in context.items_with_photos
+            if context is not None
+            else session.scalar(
+                select(Evidence.id)
+                .where(
+                    Evidence.task_inspection_item_id == task_item.id,
+                    Evidence.deleted_at.is_(None),
+                    Evidence.voided_at.is_(None),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+        if has_photos:
+            task_item.needs_reinspection = True
+        session.execute(
+            update(Evidence)
+            .where(
+                Evidence.task_inspection_item_id == task_item.id,
+                # IP-R04：只作廢有效照片，已軟刪除者保留 deleted 狀態。
+                Evidence.deleted_at.is_(None),
+                Evidence.voided_at.is_(None),
+            )
+            .values(
+                voided_at=utc_now(),
+                void_reason="STANDARD_CHANGED",
+                updated_by=operator_id,
+            )
+        )
     revision = 1
     if current is not None:
         if retain_history:

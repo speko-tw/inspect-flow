@@ -40,6 +40,9 @@ def _office_world(db_session, make_client, monkeypatch, tmp_path, size=None):
     root = tmp_path / "photos"
     monkeypatch.setenv("INSPECTFLOW_EVIDENCE_STORAGE_ROOT", str(root))
     world = _planning_world(db_session, make_client)
+    # T5 真稽核要求正式環境必備的系統操作者，直接服務測試也要初始化。
+    make_system_admin(world["admin_user"])
+    db_session.commit()
     plan_id, task_id = _dispatched_field_task(
         world,
         "內業照片",

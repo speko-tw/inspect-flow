@@ -42,7 +42,7 @@ const ARCHIVED_PLAN_ERROR = [
 const NO_RESULT_TEXT = '任務尚未填寫結果，直接改用新標準'
 
 const HAS_RESULT_TEXT = [
-  '已填的舊結果與照片會保留供查詢，但不再算數，',
+  '舊結果與照片會保留可查，標示「標準變更作廢」，',
   '任務需要重新查核',
 ].join('')
 
@@ -56,7 +56,7 @@ function reinspectionResultText(tasks: AffectedTask[]): string {
   const withoutResult = relevant.some((task) => !task.hasResult)
   if (withResult && withoutResult) {
     return [
-      `已有結果的任務：${HAS_RESULT_TEXT}；`,
+      `已有照片或結果的任務：${HAS_RESULT_TEXT}；`,
       '尚未填寫結果的任務：直接改用新標準。',
     ].join('')
   }
@@ -68,10 +68,10 @@ function reinspectionResultText(tasks: AffectedTask[]): string {
 const DRAFT_ONLY_RESULT_TEXT = '草稿任務已直接更新為新內容，沒有重新查核。'
 
 // 依 IP-R04：PENDING／IN_PROGRESS 維持原狀、COMPLETED 退回進行中；
-// 只有已有結果的項目才作廢舊結果並待重查，待重查項目補查前不能完成。
+// 只有已有照片或結果的項目才作廢舊結果並待重查，待重查項目補查前不能完成。
 const REINSPECT_YES_HINT = [
-  '已派出的任務會改用新標準；若已填過結果，',
-  '舊結果與照片會保留供查詢，但不再算數，該項目要重新查核。',
+  '已派出的任務會改用新標準；若已有照片或結果，',
+  '舊結果與照片會保留可查，標示「標準變更作廢」，該項目要重新查核。',
   '已完成的任務會退回進行中，有待重查項目的任務補查完成前不能再完成。',
 ].join('')
 
@@ -137,9 +137,10 @@ function updatePoint(
 function taskConsequence(status: TaskStatus): string {
   if (status === 'DRAFT') return '草稿任務會直接更新為新內容'
   if (status === 'PENDING') return '維持待開始'
-  if (status === 'IN_PROGRESS') return '維持進行中，已有結果的項目改列待重查'
+  if (status === 'IN_PROGRESS')
+    return '維持進行中，已有照片或結果的項目改列待重查'
   if (status === 'COMPLETED') return '退回進行中，受影響項目改列待重查'
-  return '維持已取消；恢復時才套用新內容，原有結果若受影響才待重查'
+  return '維持已取消；恢復時才套用新內容，原有照片或結果若受影響才待重查'
 }
 
 // 選「不要」只更正文字，已派出任務的狀態都不變；草稿任務不受選擇影響。
@@ -1131,7 +1132,7 @@ export default function ProjectItemChangePage({
                           task.prior_status !== 'CANCELLED' && (
                             <>
                               {before?.hasResult
-                                ? '；舊結果與照片保留供查詢，但不再算數'
+                                ? '；舊結果與照片保留可查，標示「標準變更作廢」'
                                 : '；尚未填寫結果，直接改用新標準'}
                             </>
                           )}
