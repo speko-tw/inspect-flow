@@ -58,6 +58,59 @@ describe('layoutLayer（FEV-R22 比例）', () => {
     expect(at('top_right')?.y).toBe(left?.y)
   })
 
+  it.each(['top_left', 'top_right', 'bottom_left', 'bottom_right'] as const)(
+    '%s 依照片寬高套用正規化偏移，超界時限制整塊於照片內',
+    (corner) => {
+      const base = layoutLayer(
+        2000,
+        1500,
+        { ...DEFAULT_LAYER, corner },
+        values,
+        measure,
+      )!
+      const shifted = layoutLayer(
+        2000,
+        1500,
+        { ...DEFAULT_LAYER, corner, offset_x: 0.1, offset_y: -0.1 },
+        values,
+        measure,
+      )!
+      expect(shifted.x).toBe(Math.min(base.x + 200, 2000 - base.width))
+      expect(shifted.y).toBe(Math.max(0, base.y - 150))
+      const far = layoutLayer(
+        2000,
+        1500,
+        { ...DEFAULT_LAYER, corner, offset_x: 1, offset_y: -1 },
+        values,
+        measure,
+      )!
+      expect(far.x).toBe(2000 - far.width)
+      expect(far.y).toBe(0)
+      const opposite = layoutLayer(
+        2000,
+        1500,
+        { ...DEFAULT_LAYER, corner, offset_x: -1, offset_y: 1 },
+        values,
+        measure,
+      )!
+      expect(opposite.x).toBe(0)
+      expect(opposite.y).toBe(1500 - opposite.height)
+    },
+  )
+
+  it('偏移像素與後端 int 一致向零截斷，不四捨五入負數', () => {
+    const base = layoutLayer(2000, 1500, DEFAULT_LAYER, values, measure)!
+    const moved = layoutLayer(
+      2000,
+      1500,
+      { ...DEFAULT_LAYER, offset_x: 0.0009, offset_y: -0.0011 },
+      values,
+      measure,
+    )!
+    expect(moved.x).toBe(base.x + 1)
+    expect(moved.y).toBe(base.y - 1)
+  })
+
   it('大尺寸放不下改試中、小；都放不下就回 null，不擋上傳', () => {
     const large = { ...DEFAULT_LAYER, size: 'large' as const }
     const fallback = layoutLayer(2000, 1500, large, values, measure)

@@ -141,10 +141,17 @@ function layoutAtSize(
   }
   const left = layer.corner.endsWith('left')
   const top = layer.corner.startsWith('top')
+  // FEV-R22：與後端 renderer 的 int 相同，偏移乘照片寬高後向零截斷。
+  const x =
+    (left ? margin : width - margin - layerWidth) +
+    Math.trunc(layer.offset_x * width)
+  const y =
+    (top ? margin : height - margin - layerHeight) +
+    Math.trunc(layer.offset_y * height)
   return {
     size,
-    x: left ? margin : width - margin - layerWidth,
-    y: top ? margin : height - margin - layerHeight,
+    x: Math.min(Math.max(0, x), width - layerWidth),
+    y: Math.min(Math.max(0, y), height - layerHeight),
     width: layerWidth,
     height: layerHeight,
     fontSize,
