@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { OfficePhoto } from './api'
@@ -152,6 +153,100 @@ describe('OfficePhotoEditor', () => {
     expect(document.querySelector('.office-crop-frame')).toHaveStyle({
       left: '8.5%',
     })
+  })
+
+  it('uses Tab and arrow keys for crop and preview movement', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    const moveCrop = screen.getByRole('button', { name: '移動裁切框' })
+
+    for (let index = 0; index < 20; index += 1) {
+      if (document.activeElement === moveCrop) break
+      await user.tab()
+    }
+    expect(moveCrop).toHaveFocus()
+    await user.keyboard('{ArrowRight}')
+    expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+      left: '8.5%',
+    })
+
+    await user.click(screen.getByRole('button', { name: '放大' }))
+    const stage = screen.getByRole('group', {
+      name: '照片畫面，可用方向鍵平移',
+    })
+    for (let index = 0; index < 30; index += 1) {
+      if (document.activeElement === stage) break
+      await user.tab()
+    }
+    expect(stage).toHaveFocus()
+    await user.keyboard('{ArrowRight}')
+    expect(stage).toHaveStyle({
+      transform: 'translate(24px, 0px) scale(1.25)',
+    })
+  })
+
+  it('uses Space and arrow keys for layer keyboard alternatives', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    const layerTab = screen.getByRole('tab', { name: '圖層' })
+    await user.click(layerTab)
+
+    const enabled = screen.getByRole('checkbox', { name: '顯示工程標示' })
+    await user.tab()
+    expect(enabled).toHaveFocus()
+    await user.keyboard(' ')
+    expect(enabled).not.toBeChecked()
+    await user.keyboard(' ')
+    expect(enabled).toBeChecked()
+
+    const overlay = screen.getByRole('group', {
+      name: '圖層位置，方向鍵微調',
+    })
+    for (let index = 0; index < 30; index += 1) {
+      if (document.activeElement === overlay) break
+      await user.tab({ shift: true })
+    }
+    expect(overlay).toHaveFocus()
+    const offset = screen.getByLabelText('水平位移')
+    const previousOffset = Number((offset as HTMLInputElement).value)
+    await user.keyboard('{ArrowRight}')
+    expect(Number((offset as HTMLInputElement).value)).toBe(previousOffset + 1)
+
+    const moveRight = screen.getByRole('button', { name: '圖層右移' })
+    for (let index = 0; index < 30; index += 1) {
+      if (document.activeElement === moveRight) break
+      await user.tab()
+    }
+    expect(moveRight).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(Number((offset as HTMLInputElement).value)).toBe(previousOffset + 2)
+  })
+
+  it('submits the apply confirmation with Enter', async () => {
+    const user = userEvent.setup()
+    const save = renderEditor()
+    await user.click(screen.getByRole('button', { name: '確認' }))
+    const apply = await screen.findByRole('button', { name: '確認套用' })
+    for (let index = 0; index < 10; index += 1) {
+      if (document.activeElement === apply) break
+      await user.tab()
+    }
+    expect(apply).toHaveFocus()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+  })
+
+  it('uses selectOptions as the native-select interaction model', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    await user.selectOptions(screen.getByLabelText('比例'), '1:1')
+    expect(screen.getByLabelText('比例')).toHaveValue('1:1')
+
+    await user.click(screen.getByRole('tab', { name: '圖層' }))
+    await user.selectOptions(screen.getByLabelText('位置'), 'top_right')
+    await user.selectOptions(screen.getByLabelText('樣式'), 'paper')
+    expect(screen.getByLabelText('位置')).toHaveValue('top_right')
+    expect(screen.getByLabelText('樣式')).toHaveValue('paper')
   })
 
   it('locks the source ratio and undo restores crop', () => {
