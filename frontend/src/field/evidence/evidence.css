@@ -1,0 +1,333 @@
+/* 現場照片區（T7）。只放本畫面樣式，共用的 styles.css 由其他工作使用。
+   觸控目標至少 44×44 CSS px、不得水平捲動（FEV-R15、FEV-AC22）。 */
+
+.evidence-section {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  margin-block-start: var(--space-6);
+}
+
+.evidence-section:focus {
+  outline: none;
+}
+
+.evidence-section h3,
+.evidence-section h4,
+.evidence-section h5 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.evidence-section p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.evidence-section button,
+.evidence-section .btn-danger-outline {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.evidence-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.evidence-item {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.evidence-point {
+  display: grid;
+  gap: var(--space-2);
+  padding-block: var(--space-3);
+  border-block-start: 1px solid var(--color-border);
+}
+
+.evidence-point[data-satisfied='true'] h4::after {
+  margin-inline-start: var(--space-2);
+  color: var(--color-status-success);
+  content: '✓' / '';
+}
+
+.evidence-all-done {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-status-success-border);
+  border-radius: var(--radius-md);
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success);
+  font-weight: 600;
+}
+
+.evidence-photos-title {
+  margin-block-start: var(--space-4);
+}
+
+.evidence-photo-group {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.evidence-photo-grid,
+.evidence-upload-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evidence-photo-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+}
+
+.evidence-photo,
+.evidence-upload {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+}
+
+.evidence-thumb {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  max-height: 14rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-muted);
+  object-fit: contain;
+}
+
+.evidence-thumb-missing {
+  display: grid;
+  min-height: 6rem;
+  place-items: center;
+  color: var(--color-text-secondary);
+}
+
+.evidence-upload-title {
+  font-weight: 600;
+}
+
+.evidence-upload-failed {
+  color: var(--color-status-danger);
+  font-weight: 600;
+}
+
+/* 編修與選項次的步驟畫面。 */
+.evidence-editor,
+.evidence-target {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.evidence-editor-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.evidence-editor-bar h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+.evidence-editor-body {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.evidence-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-muted);
+}
+
+.evidence-editor-canvas {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  max-height: 60vh;
+  object-fit: contain;
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.evidence-compare-tag {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-start: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: rgb(0 0 0 / 70%);
+  color: #ffffff;
+  font-size: var(--font-size-small);
+}
+
+.evidence-control {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.evidence-control input[type='range'] {
+  width: 100%;
+  min-height: 44px;
+}
+
+.evidence-control textarea,
+.evidence-control select,
+.evidence-layer-controls select {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-height: 44px;
+}
+
+.evidence-layer-controls,
+.evidence-points {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.evidence-check {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+
+/* 深色 color-scheme 會套原生實心底色；照片區明確畫空心邊界，保留真 input。 */
+.evidence-check input[type='checkbox'] {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  display: grid;
+  place-content: center;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 2px solid var(--color-border-control);
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.evidence-check input.evidence-checkbox::after {
+  content: '';
+  width: 10px;
+  height: 6px;
+  border-bottom: 2px solid var(--color-text-on-primary);
+  border-left: 2px solid var(--color-text-on-primary);
+  transform: translateY(-1px) rotate(-45deg);
+  opacity: 0;
+}
+
+.evidence-check input.evidence-checkbox:checked {
+  border-color: var(--color-action-primary);
+  background: var(--color-action-primary);
+}
+
+.evidence-check input.evidence-checkbox:checked::after {
+  opacity: 1;
+}
+
+.evidence-check input.evidence-checkbox:disabled {
+  opacity: 0.6;
+}
+
+.evidence-brightness-label {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+/* 數值不是可輸入欄位，避免全域 output 的虛線框與等寬字誤導。 */
+.evidence-value {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (forced-colors: active) {
+  .evidence-check input.evidence-checkbox,
+  .evidence-check input.evidence-checkbox:checked {
+    -webkit-appearance: auto;
+    appearance: auto;
+    border: revert;
+    background: revert;
+  }
+
+  .evidence-check input.evidence-checkbox::after {
+    content: none;
+  }
+}
+
+.evidence-layer-details summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.evidence-layer-details {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.evidence-target-preview {
+  display: block;
+  width: 100%;
+  max-width: 24rem;
+  height: auto;
+  max-height: 16rem;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
+@media (min-width: 48rem) {
+  .evidence-section {
+    gap: var(--space-5);
+  }
+
+  .evidence-point {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+}
