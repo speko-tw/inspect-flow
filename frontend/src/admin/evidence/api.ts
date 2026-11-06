@@ -56,7 +56,8 @@ export type OfficePhoto = {
   layer_history?: {
     items: Array<{
       id: string
-      actor: { id: string | null; snapshot: Record<string, unknown> }
+      /** ALG-R29：姓名、身分與單位已合成，不拆解或回查快照。 */
+      actor: { id: string | null; snapshot: string }
       occurred_at: string
       before: { layer: OfficeLayer; labels: OfficeLabels }
       after: { layer: OfficeLayer; labels: OfficeLabels }

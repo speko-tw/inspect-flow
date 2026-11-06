@@ -591,18 +591,11 @@ function OfficePhotoHistory({
       ) : (
         <ol className="office-history-list">
           {history.map((entry) => {
-            const actor = entry.actor.snapshot
-            const name =
-              typeof actor.name_zh === 'string' ? actor.name_zh : '未記錄'
+            const name = entry.actor.snapshot || '未記錄'
             return (
               <li key={entry.id}>
                 <p>
-                  {name}・
-                  {new Intl.DateTimeFormat('zh-TW', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                    timeZone: 'Asia/Taipei',
-                  }).format(new Date(entry.occurred_at))}
+                  {name}・{formatRecordedTime(entry.occurred_at)}
                 </p>
                 <details>
                   <summary>查看修改前後</summary>

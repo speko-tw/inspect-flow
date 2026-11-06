@@ -126,7 +126,7 @@ describe('OfficeEvidencePage', () => {
         items: [
           {
             id: 'event-1',
-            actor: { id: null, snapshot: { name_zh: '林檢查員' } },
+            actor: { id: null, snapshot: '林檢查員．示範公司' },
             occurred_at: '2026-10-02T03:00:00Z',
             before: { layer: photo.layer, labels: photo.labels },
             after: {
@@ -287,9 +287,52 @@ describe('OfficeEvidencePage', () => {
     ).toBeInTheDocument()
     expect(getOfficePhoto).toHaveBeenCalledWith('task-1', 'photo-1')
     expect(
-      screen.getByText('林檢查員・2026年10月2日 上午11:00'),
+      screen.getByText('林檢查員．示範公司・2026/10/02 11:00'),
     ).toBeInTheDocument()
   })
+
+  it.each([
+    [
+      'verbatim',
+      '林檢查員．外部協作人員．示範公司',
+      '林檢查員．外部協作人員．示範公司',
+    ],
+    ['empty', '', '未記錄'],
+    ['missing', '', '未記錄'],
+  ])(
+    'renders %s actor snapshot with Taipei next-day time',
+    async (kind, snapshot, expected) => {
+      const actor = { id: null, snapshot }
+      // 舊回應漏欄位的容錯，不放寬正式 API 的字串型別。
+      if (kind === 'missing') Reflect.deleteProperty(actor, 'snapshot')
+      vi.mocked(getOfficePhoto).mockResolvedValue({
+        ...photo,
+        layer_history: {
+          items: [
+            {
+              id: 'snapshot-time',
+              actor,
+              occurred_at: '2026-11-06T16:04:00Z',
+              before: { layer: photo.layer, labels: photo.labels },
+              after: { layer: photo.layer, labels: photo.labels },
+            },
+          ],
+          next_cursor: null,
+        },
+      })
+      renderPage(false)
+      const card = (await screen.findAllByRole('article'))[0]
+      fireEvent.click(
+        within(card).getByRole('button', { name: /^查看歷程，/ }),
+      )
+      const history = await screen.findByRole('region', {
+        name: '圖層修改歷程',
+      })
+      expect(
+        within(history).getByText(`${expected}・2026/11/07 00:04`),
+      ).toBeVisible()
+    },
+  )
 
   it('uses rendered labels and Taipei upload time in history', async () => {
     const labels = {
@@ -302,7 +345,7 @@ describe('OfficeEvidencePage', () => {
         items: [
           {
             id: 'label-time',
-            actor: { id: null, snapshot: { name_zh: '林檢查員' } },
+            actor: { id: null, snapshot: '林檢查員．示範公司' },
             occurred_at: '2026-11-07T04:00:00Z',
             before: { layer: photo.layer, labels },
             after: { layer: photo.layer, labels },
@@ -360,14 +403,14 @@ describe('OfficeEvidencePage', () => {
         items: [
           {
             id: 'added',
-            actor: { id: null, snapshot: { name_zh: '林檢查員' } },
+            actor: { id: null, snapshot: '林檢查員．示範公司' },
             occurred_at: '2026-10-02T03:00:00Z',
             before: { layer: inherited, labels: photo.labels },
             after: { layer: explicit, labels: photo.labels },
           },
           {
             id: 'removed',
-            actor: { id: null, snapshot: { name_zh: '林檢查員' } },
+            actor: { id: null, snapshot: '林檢查員．示範公司' },
             occurred_at: '2026-10-03T03:00:00Z',
             before: { layer: explicit, labels: photo.labels },
             after: { layer: afterRemoval, labels: photo.labels },
@@ -386,7 +429,9 @@ describe('OfficeEvidencePage', () => {
     expect(records).toHaveLength(2)
 
     const expectRecord = (record: HTMLElement, date: string) => {
-      expect(within(record).getByText(`林檢查員・${date}`)).toBeInTheDocument()
+      expect(
+        within(record).getByText(`林檢查員．示範公司・${date}`),
+      ).toBeInTheDocument()
       fireEvent.click(within(record).getByText('查看修改前後'))
     }
     const valuesIn = (record: HTMLElement, title: string) => {
@@ -396,7 +441,7 @@ describe('OfficeEvidencePage', () => {
       return within(values as HTMLElement)
     }
 
-    expectRecord(records[0], '2026年10月2日 上午11:00')
+    expectRecord(records[0], '2026/10/02 11:00')
     const addedBefore = valuesIn(records[0], '修改前')
     const addedAfter = valuesIn(records[0], '修改後')
     expect(addedBefore.getByText('沿用來源：工程')).toBeVisible()
@@ -406,7 +451,7 @@ describe('OfficeEvidencePage', () => {
     expect(addedAfter.getByText('覆寫：自訂項目')).toBeVisible()
     expect(addedAfter.getByText('覆寫：北側')).toBeVisible()
 
-    expectRecord(records[1], '2026年10月3日 上午11:00')
+    expectRecord(records[1], '2026/10/03 11:00')
     const removedBefore = valuesIn(records[1], '修改前')
     const removedAfter = valuesIn(records[1], '修改後')
     expect(removedBefore.getByText('明示空字串')).toBeVisible()
