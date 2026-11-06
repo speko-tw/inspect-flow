@@ -1,0 +1,349 @@
+import { readFileSync } from 'node:fs'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
+import type { OfficePhoto } from './api'
+import { OfficePhotoEditor } from './OfficePhotoEditor'
+
+const photo: OfficePhoto = {
+  id: 'photo-1',
+  task_id: 'task-1',
+  item_id: 'item-1',
+  is_overview: false,
+  point_ids: [],
+  caption: null,
+  captured_at: '2026-10-01T02:00:00Z',
+  uploaded_at: '2026-10-01T02:00:00Z',
+  uploaded_by: { name_zh: '測試者', is_me: true },
+  capture_source: 'camera',
+  layer: {
+    enabled: true,
+    corner: 'bottom_left',
+    offset_x: 0,
+    offset_y: 0,
+    size: 'large',
+    style: 'dark',
+    overrides: {},
+  },
+  labels: {
+    project_name: '專案',
+    item_title: '項目',
+    location: '位置',
+    uploader_name: '測試者',
+    uploaded_at: '2026-10-01 10:00',
+  },
+  layer_render: { render_state: 'fallback_small', effective_size: 'small' },
+  voided_at: null,
+  void_reason: null,
+  deleted_at: null,
+  is_non_realtime_capture: false,
+  has_layer_overrides: false,
+  variants: {
+    field: { sha256: 'field', width: 1200, height: 800, byte_size: 1000 },
+    office: {
+      sha256: 'office',
+      width: 1200,
+      height: 800,
+      byte_size: 1000,
+      edit_params: {},
+      edited_by: null,
+      edited_at: null,
+    },
+  },
+}
+
+function renderEditor(
+  onSave = vi.fn(async () => true),
+  photoOverrides: Partial<OfficePhoto> = {},
+) {
+  render(
+    <OfficePhotoEditor
+      busy={false}
+      error=""
+      validation={null}
+      leaveGuard={{ pending: false, stay: vi.fn(), leave: vi.fn() }}
+      onCancel={vi.fn()}
+      onDirtyChange={vi.fn()}
+      onErrorClear={vi.fn()}
+      onSave={onSave}
+      photo={{ ...photo, ...photoOverrides }}
+      taskId="task-1"
+    />,
+  )
+  return onSave
+}
+
+describe('OfficePhotoEditor', () => {
+  it('keeps layer offset sliders at least 44px tall', () => {
+    const styles = readFileSync(
+      'src/admin/evidence/evidence-office.css',
+      'utf8',
+    )
+    expect(styles).toMatch(
+      /\.office-tool-controls input\[type='range'\]\s*\{[^}]*height: 44px;/s,
+    )
+  })
+
+  it('saves image edits without writing the fallback layer', async () => {
+    const save = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    expect(save).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: '確認套用' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith({
+        rotation: 0,
+        straighten: 0,
+        crop: null,
+        brightness: 0,
+      }),
+    )
+  })
+
+  it('preselects effective size and sends after a layer edit', async () => {
+    const save = renderEditor()
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    expect(screen.getByLabelText('尺寸')).toHaveValue('small')
+    fireEvent.change(screen.getByLabelText('樣式'), {
+      target: { value: 'paper' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認套用' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          layer: expect.objectContaining({ size: 'small', style: 'paper' }),
+        }),
+      ),
+    )
+  })
+
+  it('sends once after confirmation and never after cancel', async () => {
+    const save = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    fireEvent.click(await screen.findByRole('button', { name: '繼續編修' }))
+    expect(save).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    const confirm = await screen.findByRole('button', { name: '確認套用' })
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    expect(
+      screen.getByRole('heading', { name: /確認更新內業版/ }),
+    ).not.toHaveTextContent('上傳時間')
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+  })
+
+  it('labels upload time when no capture time is available', async () => {
+    renderEditor(undefined, { captured_at: null })
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    expect(
+      await screen.findByRole('heading', { name: /確認更新內業版/ }),
+    ).toHaveTextContent('上傳時間')
+  })
+
+  it('exposes eight handles and keyboard crop controls', () => {
+    renderEditor()
+    for (const handle of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'])
+      expect(
+        screen.getByRole('button', { name: `裁切框${handle}控制點` }),
+      ).toBeInTheDocument()
+    const move = screen.getByRole('button', { name: '移動裁切框' })
+    fireEvent.keyDown(move, { key: 'ArrowRight' })
+    expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+      left: '8.5%',
+    })
+  })
+
+  it('locks the source ratio and undo restores crop', () => {
+    renderEditor()
+    fireEvent.change(screen.getByLabelText('比例'), {
+      target: { value: '1:1' },
+    })
+    const frame = document.querySelector('.office-crop-frame')
+    expect(frame).toHaveStyle({ width: '55.99999999999999%', height: '84%' })
+    fireEvent.click(screen.getByRole('button', { name: '復原上一步' }))
+    expect(
+      (document.querySelector('.office-crop-frame') as HTMLElement).style
+        .width,
+    ).toBe('')
+  })
+
+  it('hides and restores the layer during comparison', () => {
+    renderEditor()
+    const compare = screen.getByRole('button', { name: '按住比較' })
+    expect(document.querySelector('.office-layer-overlay')).toBeInTheDocument()
+
+    fireEvent.pointerDown(compare)
+    expect(
+      document.querySelector('.office-layer-overlay'),
+    ).not.toBeInTheDocument()
+    fireEvent.pointerUp(compare)
+    expect(document.querySelector('.office-layer-overlay')).toBeInTheDocument()
+
+    fireEvent.keyDown(compare, { key: ' ' })
+    expect(
+      document.querySelector('.office-layer-overlay'),
+    ).not.toBeInTheDocument()
+    fireEvent.keyUp(compare, { key: ' ' })
+    expect(document.querySelector('.office-layer-overlay')).toBeInTheDocument()
+  })
+
+  it('moves the image, crop, and layer as one preview scene', async () => {
+    const save = renderEditor()
+    const stage = screen.getByRole('group', {
+      name: '照片畫面，可用方向鍵平移',
+    })
+    const crop = stage.querySelector('.office-crop-frame')
+    const layer = stage.querySelector('.office-layer-overlay')
+    expect(crop).toBeInTheDocument()
+    expect(layer).toBeInTheDocument()
+
+    fireEvent.pointerDown(stage, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 100,
+      clientY: 100,
+    })
+    fireEvent.pointerDown(stage, {
+      pointerId: 2,
+      pointerType: 'touch',
+      clientX: 200,
+      clientY: 100,
+    })
+    fireEvent.pointerMove(stage, {
+      pointerId: 2,
+      pointerType: 'touch',
+      clientX: 220,
+      clientY: 100,
+    })
+    fireEvent.pointerMove(stage, {
+      pointerId: 2,
+      pointerType: 'touch',
+      clientX: 240,
+      clientY: 100,
+    })
+    fireEvent.pointerUp(stage, { pointerId: 2, pointerType: 'touch' })
+    fireEvent.pointerMove(stage, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 124,
+      clientY: 100,
+    })
+    fireEvent.pointerUp(stage, { pointerId: 1, pointerType: 'touch' })
+    expect(stage.style.transform).toMatch(/translate\(24px, 0px\) scale\(/)
+    const zoomedTransform = stage.style.transform
+    const compare = screen.getByRole('button', { name: '按住比較' })
+    const image = screen.getByAltText('內業版照片預覽')
+    fireEvent.pointerDown(compare, { pointerId: 3 })
+    expect(stage.style.transform).toBe('none')
+    expect(image.style.objectFit).toBe('contain')
+    fireEvent.pointerUp(compare, { pointerId: 3 })
+    expect(stage.style.transform).toBe(zoomedTransform)
+
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認套用' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith({
+        rotation: 0,
+        straighten: 0,
+        crop: null,
+        brightness: 0,
+      }),
+    )
+  })
+
+  it('fits the unedited photo while comparing at 90 degrees', () => {
+    renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: '向右旋轉 90°' }))
+    const stage = screen.getByRole('group', {
+      name: '照片畫面，可用方向鍵平移',
+    })
+    const image = screen.getByAltText('內業版照片預覽')
+    expect(stage).toHaveStyle({ aspectRatio: '800 / 1200' })
+
+    const compare = screen.getByRole('button', { name: '按住比較' })
+    fireEvent.pointerDown(compare, { pointerId: 1 })
+    expect(stage).toHaveStyle({
+      aspectRatio: '1200 / 800',
+      transform: 'none',
+    })
+    expect(image).toHaveStyle({
+      width: '100%',
+      height: '100%',
+      objectFit: 'contain',
+      filter: 'brightness(1)',
+    })
+    expect(image.style.transform).toContain('rotate(0deg)')
+
+    fireEvent.pointerUp(compare, { pointerId: 1 })
+    expect(stage).toHaveStyle({ aspectRatio: '800 / 1200' })
+    expect(image).toHaveStyle({ objectFit: 'fill' })
+  })
+
+  it('nudges offsets with arrow keys and direction buttons', async () => {
+    const save = renderEditor()
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    const overlay = screen.getByRole('group', {
+      name: '圖層位置，方向鍵微調',
+    })
+    fireEvent.keyDown(overlay, { key: 'ArrowRight' })
+    fireEvent.click(screen.getByRole('button', { name: '圖層下移' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認套用' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          layer: expect.objectContaining({
+            offset_x: expect.closeTo(0.01, 2),
+            offset_y: expect.closeTo(0.01, 2),
+          }),
+        }),
+      ),
+    )
+  })
+
+  it('drags the overlay in image-relative pixels', async () => {
+    const save = renderEditor()
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    const overlay = screen.getByRole('group', {
+      name: '圖層位置，方向鍵微調',
+    })
+    const stage = document.querySelector('.office-image-stage')!
+    vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 100,
+      width: 200,
+      height: 100,
+      toJSON: () => ({}),
+    })
+    Object.defineProperty(overlay, 'setPointerCapture', { value: vi.fn() })
+    fireEvent.pointerDown(overlay, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      clientX: 50,
+      clientY: 50,
+    })
+    fireEvent.pointerMove(overlay, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      clientX: 66.8,
+      clientY: 50,
+    })
+    fireEvent.pointerUp(overlay, { pointerId: 1 })
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認套用' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          layer: expect.objectContaining({
+            offset_x: expect.closeTo(0.083333, 2),
+          }),
+        }),
+      ),
+    )
+  })
+})
