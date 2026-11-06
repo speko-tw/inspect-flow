@@ -816,9 +816,11 @@ describe('修改與刪除（T5 真端點對齊）', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存修改' }))
     fireEvent.click(await screen.findByRole('button', { name: '確認儲存' }))
-    expect(
-      await screen.findByText(/這個任務目前只能查看照片/),
-    ).toBeInTheDocument()
+    const box = screen.getByRole('group', { name: '儲存照片說明與項次？' })
+    const alert = await within(box).findByRole('alert')
+    expect(alert.textContent).toBe(
+      '這個任務目前只能查看照片，可能已完成或取消。請返回任務清單確認狀態。',
+    )
     expect(screen.getByLabelText(/照片註記/)).toHaveValue('保留我')
   })
 
@@ -1034,7 +1036,7 @@ async function openDeleteConfirmation() {
   return screen.findByRole('group', { name: '刪除這張照片？' })
 }
 
-describe('r4 修改刪除的同步與操作安全', () => {
+describe('修改刪除的同步與操作安全', () => {
   beforeEach(() => {
     stubCanvas()
   })
@@ -1091,12 +1093,14 @@ describe('r4 修改刪除的同步與操作安全', () => {
     fireEvent.click(triggers[0])
     const box = await screen.findByRole('group', { name: '刪除這張照片？' })
     const confirm = within(box).getByRole('button', { name: '刪除照片' })
-    fireEvent.click(confirm)
+    act(() => {
+      confirm.click()
+      confirm.click()
+    })
     for (const trigger of triggers) {
       expect(trigger).toBeDisabled()
       fireEvent.click(trigger)
     }
-    fireEvent.click(confirm)
     expect(
       fetcher.mock.calls.filter(([, init]) => init?.method === 'DELETE'),
     ).toHaveLength(1)
@@ -1235,6 +1239,17 @@ describe('r4 修改刪除的同步與操作安全', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('開啟刪除確認後改點修改，返回清單不再顯示舊確認框', async () => {
+    stubApi(defaultServer({ photos: [photo()] }))
+    renderSection()
+    await openDeleteConfirmation()
+    fireEvent.click(screen.getByRole('button', { name: /^修改說明與項次/ }))
+    await screen.findByRole('heading', { name: '修改說明與項次' })
+    fireEvent.click(screen.getByRole('button', { name: '取消修改' }))
+    await screen.findByRole('heading', { name: '已上傳照片（1 張）' })
+    expect(screen.queryByRole('group', { name: '刪除這張照片？' })).toBeNull()
+  })
+
   it('刪除成功後聚焦已上傳照片標題', async () => {
     const { state } = mutationApi()
     state.remove = async () => {
@@ -1312,7 +1327,7 @@ describe('r4 修改刪除的同步與操作安全', () => {
   })
 })
 
-describe('r4 刪除重讀失敗', () => {
+describe('刪除重讀失敗', () => {
   it('DELETE 已成功但 GET 失敗，不把舊清單當成最新且聚焦警告', async () => {
     stubCanvas()
     const { state } = mutationApi()
@@ -1387,7 +1402,7 @@ it.each([200, 202])(
   },
 )
 
-describe('r6 iPhone 實機試用回饋', () => {
+describe('照片身分與拍攝資訊', () => {
   it.each([
     { caption: null, captured_at: null },
     { caption: '閥件標示', captured_at: '2026-10-30T06:50:00Z' },
@@ -1395,15 +1410,25 @@ describe('r6 iPhone 實機試用回饋', () => {
     stubCanvas()
     const p = photo(values)
     stubApi(defaultServer({ photos: [p] }))
-    renderSection()
+    const { container } = renderSection()
     const box = await openDeleteConfirmation()
     const time = new Intl.DateTimeFormat('zh-TW', {
       dateStyle: 'short',
       timeStyle: 'short',
     }).format(new Date(values.captured_at ?? p.uploaded_at))
     const action = values.captured_at ? '拍攝' : '上傳'
+    const identity = `張先生於${time}${action}的照片`
+    expect(
+      screen.getByRole('button', {
+        name: `修改說明與項次，${identity}`,
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: `刪除照片，${identity}` }),
+    ).toBeInTheDocument()
+    expect(container.querySelector('small')?.textContent).toBe(identity)
     expect(box.querySelector('p')?.textContent).toBe(
-      `要刪除張先生於${time}${action}的照片（佐證項次：2. 續接器鎖固）？`,
+      `要刪除${identity}（佐證項次：2. 續接器鎖固）？`,
     )
     if (values.caption) {
       expect(within(box).getByText('註記：閥件標示').textContent).toBe(
@@ -1508,7 +1533,7 @@ describe('r6 iPhone 實機試用回饋', () => {
           element: (
             <>
               <Link to="/other">離開此頁</Link>
-              <LeaveGuard active />
+              <LeaveGuard active kind="upload" />
             </>
           ),
         },
@@ -1534,5 +1559,103 @@ describe('r6 iPhone 實機試用回饋', () => {
     window.dispatchEvent(unload)
     expect(unload.defaultPrevented).toBe(true)
     expect(LEAVE_MESSAGE).toBe('照片尚未上傳，請勿關閉頁面')
+  })
+
+  it('修改畫面的站內導覽與 POP 提示都說明未儲存修改', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    stubApi(defaultServer({ photos: [photo()] }))
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/task',
+          element: (
+            <CurrentUserProvider
+              value={{
+                user: currentUserFixture({
+                  has_field_access: true,
+                  name_zh: '張先生',
+                }),
+                clear: vi.fn(),
+              }}
+            >
+              <>
+                <Link to="/other">離開此頁</Link>
+                <EvidenceSection
+                  location={{ zone_name: '一樓', location_text: '東側' }}
+                  projectName="示範工程甲"
+                  status="IN_PROGRESS"
+                  taskId="task-1"
+                />
+              </>
+            </CurrentUserProvider>
+          ),
+        },
+        { path: '/other', element: <p>其他頁</p> },
+      ],
+      { initialEntries: ['/other', '/task'], initialIndex: 1 },
+    )
+    render(<RouterProvider router={router} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: /^修改說明與項次/ }),
+    )
+    await screen.findByRole('heading', { name: '修改說明與項次' })
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(
+      '修改尚未儲存，離開後這次的修改會消失。要離開嗎？',
+    )
+    expect(router.state.location.pathname).toBe('/task')
+    fireEvent.click(screen.getByRole('link', { name: '離開此頁' }))
+    const box = await screen.findByRole('group', { name: '修改尚未儲存' })
+    expect(
+      within(box).getByText('離開後，這次的修改會消失；照片本身不受影響。'),
+    ).toBeInTheDocument()
+    expect(
+      within(box).getByRole('button', { name: '離開並放棄修改' }),
+    ).toBeInTheDocument()
+    expect(
+      within(box).getByRole('button', { name: '留在這一頁' }),
+    ).toBeInTheDocument()
+    expect(confirm).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('過時照片操作的回饋', () => {
+  it('刪除期間進入拍照編修，DELETE 404 後保留編修畫面', async () => {
+    stubCanvas()
+    const { state } = mutationApi()
+    const deleting = deferred<Response>()
+    state.remove = () => deleting.promise
+    renderSection()
+    const box = await openDeleteConfirmation()
+    fireEvent.click(within(box).getByRole('button', { name: '刪除照片' }))
+    await choose('拍照，1. 鋼筋間距')
+    await act(async () => {
+      deleting.resolve(
+        Response.json({ error: { code: 'not_found' } }, { status: 404 }),
+      )
+    })
+    expect(
+      await screen.findByRole('heading', { name: '編修現場照片' }),
+    ).toBeVisible()
+  })
+
+  it('重讀後找不到原項目時把錯誤放在照片標題下並聚焦', async () => {
+    const { state } = mutationApi()
+    state.remove = async () => {
+      state.coverage = { ...state.coverage, items: [] }
+      state.photos = []
+      return Response.json({ error: { code: 'not_found' } }, { status: 404 })
+    }
+    renderSection()
+    const box = await openDeleteConfirmation()
+    fireEvent.click(within(box).getByRole('button', { name: '刪除照片' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('找不到這張照片，可能已被刪除。')
+    await waitFor(() => expect(alert).toHaveFocus())
+    expect(alert.previousElementSibling).toHaveTextContent(
+      '已上傳照片（0 張）',
+    )
   })
 })

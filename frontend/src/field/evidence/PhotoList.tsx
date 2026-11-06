@@ -84,11 +84,17 @@ export function PhotoList({
   onConfirmDelete: (photo: FieldPhoto) => Promise<void>
 }) {
   const deleteTrigger = useRef<HTMLButtonElement | null>(null)
+  const hasFeedbackItem = coverage.items.some(
+    (item) => item.item_id === feedback?.itemId,
+  )
   return (
     <>
       <h3 className="evidence-photos-title" ref={headingRef} tabIndex={-1}>
         已上傳照片（{photos.length} 張）
       </h3>
+      {feedback && !hasFeedbackItem && (
+        <Notice variant={feedback.variant}>{feedback.text}</Notice>
+      )}
       {photos.length === 0 && <p>還沒有上傳照片。</p>}
       {coverage.items.map((item) => {
         const own = photos.filter((photo) => photo.item_id === item.item_id)
@@ -117,10 +123,7 @@ export function PhotoList({
                     />
                     <h5>{photo.caption || '未填註記'}</h5>
                     <p>{target}</p>
-                    <small>
-                      {photo.uploaded_by.name_zh ?? '未記錄'}・
-                      {displayTime(photo.uploaded_at)}
-                    </small>
+                    <small>{photoIdentity(photo)}</small>
                     {!photo.uploaded_by.is_me && (
                       <p className="evidence-hint">
                         這是其他人上傳的照片，只能查看。
@@ -129,7 +132,7 @@ export function PhotoList({
                     {mine && (
                       <div className="evidence-actions">
                         <Button
-                          aria-label={`修改說明與項次，${photo.caption || target}`}
+                          aria-label={`修改說明與項次，${photoIdentity(photo)}`}
                           disabled={Boolean(deleting?.busy)}
                           onClick={() => onModify(photo)}
                           type="button"
@@ -137,7 +140,7 @@ export function PhotoList({
                           修改說明與項次
                         </Button>
                         <Button
-                          aria-label={`刪除照片，${photo.caption || target}`}
+                          aria-label={`刪除照片，${photoIdentity(photo)}`}
                           className="btn-danger-outline"
                           disabled={Boolean(deleting?.busy)}
                           onClick={(event) => {

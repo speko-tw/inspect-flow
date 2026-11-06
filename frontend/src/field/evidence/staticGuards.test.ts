@@ -56,6 +56,13 @@ describe('版面（FEV-R15、FEV-AC22）', () => {
     expect(css).toMatch(/minmax\(min\(100%, 15rem\), 1fr\)/)
   })
 
+  it('強制色彩模式使用系統核取方塊外觀', () => {
+    const block = css.match(
+      /@media\s*\(forced-colors:\s*active\)\s*\{([\s\S]*?)\n\}/,
+    )
+    expect(block?.[1]).toContain('appearance: auto;')
+  })
+
   it('沒有提供對比、標註、裁切等現場不允許的控制項文案', () => {
     const editor = readFileSync(path.join(dir, 'PhotoEditor.tsx'), 'utf8')
     const labels = [...editor.matchAll(/>\s*([^<>{}\n]+?)\s*</g)].map(

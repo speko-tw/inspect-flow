@@ -365,7 +365,7 @@ export default function EvidenceSection({
         (updated ? '' : '畫面可能不是最新，請重新整理。'),
     })
     // 原照片可能已消失；錯誤留在原項目，不再編修過時的照片。
-    goHome(null, false)
+    if (latestView.current.kind === 'modify') goHome(null, false)
   }
 
   async function saveModify(photo: FieldPhoto, values: TargetValues) {
@@ -651,6 +651,7 @@ export default function EvidenceSection({
                   return
                 setPhotoFeedback(null)
                 setMessage(null)
+                setDeleting(null)
                 setView({ kind: 'modify', photo, busy: false, error: '' })
               }}
               photos={photos}
@@ -673,7 +674,14 @@ export default function EvidenceSection({
       tabIndex={-1}
     >
       {/* 守衛與檔案選擇器放在最外層，各步驟切換時不會被重建。 */}
-      <LeaveGuard active={view.kind !== 'home' || queue.uploads.length > 0} />
+      <LeaveGuard
+        active={view.kind !== 'home' || queue.uploads.length > 0}
+        kind={
+          queue.uploads.length > 0 || view.kind !== 'modify'
+            ? 'upload'
+            : 'edit'
+        }
+      />
       <input
         accept="image/*"
         aria-label="使用相機拍照"
