@@ -333,14 +333,39 @@ describe('OfficeEvidencePage', () => {
     const history = await screen.findByRole('region', {
       name: '圖層修改歷程',
     })
-    const summaries = within(history).getAllByText('查看修改前後')
-    for (const summary of summaries) fireEvent.click(summary)
-    const text = history.textContent ?? ''
-    expect(text).toContain('沿用來源：工程')
-    expect(text).toContain('明示空字串')
-    expect(text).toContain('覆寫：自訂項目')
-    expect(text).toContain('覆寫：北側')
-    expect(text).toContain('沿用來源：一樓')
+    const records = within(history).getAllByRole('listitem')
+    expect(records).toHaveLength(2)
+
+    const expectRecord = (record: HTMLElement, date: string) => {
+      expect(within(record).getByText(`林檢查員・${date}`)).toBeInTheDocument()
+      fireEvent.click(within(record).getByText('查看修改前後'))
+    }
+    const valuesIn = (record: HTMLElement, title: string) => {
+      const heading = within(record).getByRole('heading', { name: title })
+      const values = heading.closest('.office-history-values')
+      expect(values).not.toBeNull()
+      return within(values as HTMLElement)
+    }
+
+    expectRecord(records[0], '2026年10月2日 上午11:00')
+    const addedBefore = valuesIn(records[0], '修改前')
+    const addedAfter = valuesIn(records[0], '修改後')
+    expect(addedBefore.getByText('沿用來源：工程')).toBeVisible()
+    expect(addedBefore.getByText('沿用來源：表面')).toBeVisible()
+    expect(addedBefore.getByText('沿用來源：一樓')).toBeVisible()
+    expect(addedAfter.getByText('明示空字串')).toBeVisible()
+    expect(addedAfter.getByText('覆寫：自訂項目')).toBeVisible()
+    expect(addedAfter.getByText('覆寫：北側')).toBeVisible()
+
+    expectRecord(records[1], '2026年10月3日 上午11:00')
+    const removedBefore = valuesIn(records[1], '修改前')
+    const removedAfter = valuesIn(records[1], '修改後')
+    expect(removedBefore.getByText('明示空字串')).toBeVisible()
+    expect(removedBefore.getByText('覆寫：自訂項目')).toBeVisible()
+    expect(removedBefore.getByText('覆寫：北側')).toBeVisible()
+    expect(removedAfter.getByText('沿用來源：工程')).toBeVisible()
+    expect(removedAfter.getByText('覆寫：自訂項目')).toBeVisible()
+    expect(removedAfter.getByText('明示空字串')).toBeVisible()
   })
 
   it('reloads with explicit voided filters', async () => {
