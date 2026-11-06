@@ -291,6 +291,55 @@ describe('OfficeEvidencePage', () => {
     ).toBeInTheDocument()
   })
 
+  it('uses rendered labels and Taipei upload time in history', async () => {
+    const labels = {
+      ...photo.labels,
+      uploaded_at: '2026-11-06T18:43:37.141490Z',
+    }
+    vi.mocked(getOfficePhoto).mockResolvedValue({
+      ...photo,
+      layer_history: {
+        items: [
+          {
+            id: 'label-time',
+            actor: { id: null, snapshot: { name_zh: '林檢查員' } },
+            occurred_at: '2026-11-07T04:00:00Z',
+            before: { layer: photo.layer, labels },
+            after: { layer: photo.layer, labels },
+          },
+        ],
+        next_cursor: null,
+      },
+    })
+    renderPage(false)
+    const card = (await screen.findAllByRole('article'))[0]
+    fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
+    const history = await screen.findByRole('region', {
+      name: '圖層修改歷程',
+    })
+    fireEvent.click(within(history).getByText('查看修改前後'))
+    const values = history.querySelectorAll('.office-history-values')
+    expect(values).toHaveLength(2)
+    for (const value of values) {
+      for (const label of [
+        '工程名稱',
+        '檢驗項目',
+        '檢驗位置',
+        '檢驗人員',
+        '檢驗時間',
+      ]) {
+        expect(
+          within(value as HTMLElement).getByText(label, {
+            selector: 'dt',
+          }),
+        ).toBeVisible()
+      }
+      expect(
+        within(value as HTMLElement).getByText('2026/11/07 02:43'),
+      ).toBeVisible()
+    }
+  })
+
   it('shows label override states across history', async () => {
     const inherited = { ...photo.layer, overrides: {} }
     const explicit = {

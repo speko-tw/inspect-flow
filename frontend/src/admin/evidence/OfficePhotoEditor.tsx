@@ -17,6 +17,7 @@ import {
   getLayerPreviewRect,
   moveLayerOffset,
 } from './layerGeometry'
+import { formatRecordedTime } from './labelTime'
 import {
   officeImageUrl,
   type OfficeEdit,
@@ -108,17 +109,6 @@ function straightenScale(
     cosine + (height / width) * sine,
     cosine + (width / height) * sine,
   )
-}
-
-function formatRecordedTime(value: string | null | undefined): string {
-  if (!value) return '未記錄'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('zh-TW', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-    timeZone: 'Asia/Taipei',
-  }).format(date)
 }
 
 /** 內業影像編修器：保存參數交由正式 OFFICE API 產製。 */
@@ -959,11 +949,7 @@ export function OfficePhotoEditor({
                   <span>
                     {photo.labels.uploader_name ?? photo.uploaded_by.name_zh}
                   </span>
-                  <span>
-                    {formatRecordedTime(
-                      photo.labels.uploaded_at ?? photo.uploaded_at,
-                    )}
-                  </span>
+                  <span>{formatRecordedTime(photo.labels.uploaded_at)}</span>
                 </div>
               )}
             </div>
@@ -1392,13 +1378,13 @@ export function OfficePhotoEditor({
                     這張照片太小，已自動用小尺寸。套用原設定或未修改圖層時會沿用有效尺寸。
                   </p>
                 )}
-              <p>姓名與拍攝時間由系統記錄，不能在此修改。</p>
+              <p>檢驗人員與檢驗時間由系統記錄，不能在此修改。</p>
               {(
                 ['project_name', 'item_name', 'inspection_location'] as const
               ).map((name, index) => (
                 <Fragment key={name}>
                   <label>
-                    {['專案名稱', '查核項目', '查核地點'][index]}
+                    {['工程名稱', '檢驗項目', '檢驗位置'][index]}
                     <input
                       ref={(node) => {
                         if (node) overrideControls.current[name] = node
@@ -1428,12 +1414,12 @@ export function OfficePhotoEditor({
                   </label>
                   {renderFieldError(
                     name,
-                    ['專案名稱', '查核項目', '查核地點'][index],
+                    ['工程名稱', '檢驗項目', '檢驗位置'][index],
                   )}
                 </Fragment>
               ))}
               <label>
-                拍攝者
+                檢驗人員
                 <input
                   disabled
                   value={
@@ -1444,12 +1430,10 @@ export function OfficePhotoEditor({
                 />
               </label>
               <label>
-                拍攝時間
+                檢驗時間
                 <input
                   disabled
-                  value={
-                    photo.labels.uploaded_at ?? photo.uploaded_at ?? '未記錄'
-                  }
+                  value={formatRecordedTime(photo.labels.uploaded_at)}
                 />
               </label>
             </div>

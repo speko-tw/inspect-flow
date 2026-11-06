@@ -22,6 +22,7 @@ import {
 } from './api'
 import { OfficePhotoEditor } from './OfficePhotoEditor'
 import { OfficePhotoViewer } from './OfficePhotoViewer'
+import { formatRecordedTime } from './labelTime'
 import './evidence-office.css'
 
 type TaskItem = {
@@ -640,9 +641,9 @@ function HistoryValues({
   ]
   const size = { small: '小', medium: '中', large: '大' }[value.layer.size]
   const overrides = [
-    ['專案名稱', 'project_name', value.labels.project_name],
-    ['查核項目', 'item_name', value.labels.item_title],
-    ['查核地點', 'inspection_location', value.labels.location],
+    ['工程名稱', 'project_name', value.labels.project_name],
+    ['檢驗項目', 'item_name', value.labels.item_title],
+    ['檢驗位置', 'inspection_location', value.labels.location],
   ] as const
   return (
     <div className="office-history-values">
@@ -676,10 +677,10 @@ function HistoryValues({
             </Fragment>
           )
         })}
-        <dt>拍攝者</dt>
+        <dt>檢驗人員</dt>
         <dd>{value.labels.uploader_name ?? '未記錄'}</dd>
         <dt>檢驗時間</dt>
-        <dd>{value.labels.uploaded_at ?? '未記錄'}</dd>
+        <dd>{formatRecordedTime(value.labels.uploaded_at)}</dd>
       </dl>
     </div>
   )

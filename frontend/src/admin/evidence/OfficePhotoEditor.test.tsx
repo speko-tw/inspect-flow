@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { HttpFieldError } from '../../http'
 import type { OfficePhoto } from './api'
 import { OfficePhotoEditor } from './OfficePhotoEditor'
 
@@ -31,7 +32,7 @@ const photo: OfficePhoto = {
     item_title: '項目',
     location: '位置',
     uploader_name: '測試者',
-    uploaded_at: '2026-10-01 10:00',
+    uploaded_at: '2026-10-01T02:00:00Z',
   },
   layer_render: { render_state: 'fallback_small', effective_size: 'small' },
   voided_at: null,
@@ -56,12 +57,13 @@ const photo: OfficePhoto = {
 function renderEditor(
   onSave = vi.fn(async () => true),
   photoOverrides: Partial<OfficePhoto> = {},
+  validation: { code?: string; fields?: HttpFieldError[] } | null = null,
 ) {
   render(
     <OfficePhotoEditor
       busy={false}
       error=""
-      validation={null}
+      validation={validation}
       leaveGuard={{ pending: false, stay: vi.fn(), leave: vi.fn() }}
       onCancel={vi.fn()}
       onDirtyChange={vi.fn()}
@@ -75,6 +77,60 @@ function renderEditor(
 }
 
 describe('OfficePhotoEditor', () => {
+  it('uses rendered label names and the locked inspection notice', () => {
+    renderEditor()
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    for (const name of ['工程名稱', '檢驗項目', '檢驗位置']) {
+      expect(screen.getByLabelText(name)).toBeEnabled()
+    }
+    expect(screen.getByLabelText('檢驗人員')).toBeDisabled()
+    expect(screen.getByLabelText('檢驗時間')).toBeDisabled()
+    expect(
+      screen.getByText('檢驗人員與檢驗時間由系統記錄，不能在此修改。'),
+    ).toBeVisible()
+  })
+
+  it.each([
+    ['2026-11-06T15:43:37.141490Z', '2026/11/06 23:43'],
+    ['2026-11-06T18:43:37.141490Z', '2026/11/07 02:43'],
+  ])('formats the recorded upload time %s in Taipei', (value, expected) => {
+    renderEditor(undefined, {
+      captured_at: '2000-01-01T00:00:00Z',
+      uploaded_at: '2026-01-01T00:00:00Z',
+      labels: { ...photo.labels, uploaded_at: value },
+    })
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    expect(screen.getByLabelText('檢驗時間')).toHaveValue(expected)
+  })
+
+  it('does not invent a missing recorded inspection time', () => {
+    renderEditor(undefined, {
+      labels: { ...photo.labels, uploaded_at: undefined },
+    })
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    expect(screen.getByLabelText('檢驗時間')).toHaveValue('未記錄')
+  })
+
+  it('uses rendered names in override validation errors', () => {
+    renderEditor(
+      undefined,
+      {},
+      {
+        code: 'request.validation_failed',
+        fields: ['project_name', 'item_name', 'inspection_location'].map(
+          (key) => ({
+            path: `/layer/overrides/${key}`,
+            code: 'field.too_long',
+          }),
+        ),
+      },
+    )
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    for (const name of ['工程名稱', '檢驗項目', '檢驗位置']) {
+      expect(screen.getByText(`${name}：輸入內容太長。`)).toBeVisible()
+    }
+  })
+
   it('keeps layer offset sliders at least 44px tall', () => {
     const styles = readFileSync(
       'src/admin/evidence/evidence-office.css',
