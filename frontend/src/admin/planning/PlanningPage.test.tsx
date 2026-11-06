@@ -37,8 +37,8 @@ describe('office photo task-state capabilities (FEV-R09)', () => {
   it.each([
     ['IN_PROGRESS', false, true, true, true],
     ['COMPLETED', false, true, true, false],
-    ['CANCELLED', false, false, false, false],
-    ['IN_PROGRESS', true, false, false, false],
+    ['CANCELLED', false, true, false, false],
+    ['IN_PROGRESS', true, true, false, false],
     ['IN_PROGRESS', false, false, false, false],
   ] as const)(
     'maps %s archived=%s manage=%s to edit=%s and delete=%s',
