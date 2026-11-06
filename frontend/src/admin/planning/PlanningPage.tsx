@@ -60,6 +60,19 @@ const defaultPlanningPageClient: PlanningPageClient = {
 
 type NoticeArea = 'plans' | 'plan-detail' | 'tasks'
 
+/** FEV-R09：照片編修與刪除依任務狀態及計畫封存分開授權。 */
+export function officePhotoCapabilities(
+  status: InspectionTask['status'],
+  planArchived: boolean,
+  canManage: boolean,
+): { canEdit: boolean; canDelete: boolean } {
+  const allowed = canManage && !planArchived
+  return {
+    canEdit: allowed && ['IN_PROGRESS', 'COMPLETED'].includes(status),
+    canDelete: allowed && status === 'IN_PROGRESS',
+  }
+}
+
 // 必填錯誤等送出才顯示，避免輸入前就出現錯誤；錯誤列在欄位旁
 // 並聚焦（PR-19、ADM-R28），讓使用者能找到修正位置。
 type FieldKey =
@@ -1760,12 +1773,16 @@ function PlanningContent({
   }
 
   if (view === 'task-photos' && routeTask && selectedPlanDetail) {
+    const photoCapabilities = officePhotoCapabilities(
+      routeTask.status,
+      selectedPlanDetail.archived || routeTask.plan.archived,
+      viewerPermissions === undefined ||
+        viewerPermissions.includes('evidence.manage'),
+    )
     return (
       <OfficeEvidencePage
-        canManage={
-          viewerPermissions === undefined ||
-          viewerPermissions.includes('evidence.manage')
-        }
+        canEdit={photoCapabilities.canEdit}
+        canDelete={photoCapabilities.canDelete}
         items={routeTask.items}
         planId={planId}
         projectId={initialProjectId}

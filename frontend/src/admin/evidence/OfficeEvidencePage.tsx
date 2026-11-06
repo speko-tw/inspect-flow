@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Link } from 'react-router'
 
 import { ConfirmBox } from '../../ui/ConfirmBox'
@@ -30,7 +37,8 @@ type Props = {
   taskId: string
   taskName: string
   items: TaskItem[]
-  canManage: boolean
+  canEdit: boolean
+  canDelete: boolean
 }
 
 type Filter = 'all' | 'active' | 'voided' | 'deleted'
@@ -95,7 +103,8 @@ export function OfficeEvidencePage({
   taskId,
   taskName,
   items,
-  canManage,
+  canEdit,
+  canDelete,
 }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
   const [photos, setPhotos] = useState<OfficePhoto[]>([])
@@ -387,8 +396,11 @@ export function OfficeEvidencePage({
               <ul className="office-photo-list">
                 {group.map((photo) => (
                   <li key={photo.id}>
-                    <article className="office-photo-card">
-                      <h4>{photo.is_overview ? '總覽照片' : title}</h4>
+                    <article
+                      aria-label={photoIdentity(photo)}
+                      className="office-photo-card"
+                    >
+                      {photo.is_overview && <h4>總覽照片</h4>}
                       <div className="office-comparison">
                         <figure>
                           <img
@@ -473,18 +485,16 @@ export function OfficeEvidencePage({
                         >
                           查看歷程
                         </button>
-                        {canManage &&
-                          !photo.deleted_at &&
-                          !photo.voided_at && (
-                            <button
-                              aria-label={`編修內業版，${photoIdentity(photo)}`}
-                              onClick={() => void openEditor(photo)}
-                              type="button"
-                            >
-                              編修內業版
-                            </button>
-                          )}
-                        {canManage &&
+                        {canEdit && !photo.deleted_at && !photo.voided_at && (
+                          <button
+                            aria-label={`編修內業版，${photoIdentity(photo)}`}
+                            onClick={() => void openEditor(photo)}
+                            type="button"
+                          >
+                            編修內業版
+                          </button>
+                        )}
+                        {canDelete &&
                           !photo.deleted_at &&
                           !photo.voided_at && (
                             <button
@@ -629,6 +639,11 @@ function HistoryValues({
     value.layer.style
   ]
   const size = { small: '小', medium: '中', large: '大' }[value.layer.size]
+  const overrides = [
+    ['專案名稱', 'project_name', value.labels.project_name],
+    ['查核項目', 'item_name', value.labels.item_title],
+    ['查核地點', 'inspection_location', value.labels.location],
+  ] as const
   return (
     <div className="office-history-values">
       <h4>{title}</h4>
@@ -643,12 +658,24 @@ function HistoryValues({
         <dd>
           {size}・{style}
         </dd>
-        <dt>專案名稱</dt>
-        <dd>{value.labels.project_name ?? '未記錄'}</dd>
-        <dt>查核項目</dt>
-        <dd>{value.labels.item_title ?? '未記錄'}</dd>
-        <dt>查核地點</dt>
-        <dd>{value.labels.location ?? '未記錄'}</dd>
+        {overrides.map(([label, key, source]) => {
+          const hasOverride = Object.prototype.hasOwnProperty.call(
+            value.layer.overrides,
+            key,
+          )
+          const override = value.layer.overrides[key]
+          const description = hasOverride
+            ? override === ''
+              ? '明示空字串'
+              : `覆寫：${override}`
+            : `沿用來源：${source ?? '未記錄'}`
+          return (
+            <Fragment key={key}>
+              <dt>{label}</dt>
+              <dd>{description}</dd>
+            </Fragment>
+          )
+        })}
         <dt>拍攝者</dt>
         <dd>{value.labels.uploader_name ?? '未記錄'}</dd>
         <dt>檢驗時間</dt>

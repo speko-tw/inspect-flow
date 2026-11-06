@@ -93,7 +93,7 @@ const deletedPhoto = {
   capture_source: null,
 }
 
-function renderPage(canManage: boolean) {
+function renderPage(canEdit: boolean, canDelete = canEdit) {
   render(
     <DataMemoryRouter
       initialEntries={[
@@ -101,7 +101,8 @@ function renderPage(canManage: boolean) {
       ]}
     >
       <OfficeEvidencePage
-        canManage={canManage}
+        canDelete={canDelete}
+        canEdit={canEdit}
         items={items}
         planId="plan-1"
         projectId="project-1"
@@ -164,6 +165,40 @@ describe('OfficeEvidencePage', () => {
       screen.queryByRole('button', { name: '編修內業版' }),
     ).not.toBeInTheDocument()
   })
+
+  it.each([
+    ['cancelled or archived', false, false],
+    ['completed', true, false],
+  ])(
+    '%s task exposes only permitted photo actions',
+    async (_, canEdit, canDelete) => {
+      vi.mocked(listOfficePhotos).mockResolvedValue({
+        items: [photo],
+        next_cursor: null,
+      })
+      renderPage(canEdit, canDelete)
+      const card = await screen.findByRole('article')
+
+      if (canEdit) {
+        expect(
+          within(card).getByRole('button', { name: /^編修內業版，/ }),
+        ).toBeVisible()
+      } else {
+        expect(
+          within(card).queryByRole('button', { name: /^編修內業版，/ }),
+        ).toBeNull()
+      }
+      if (canDelete) {
+        expect(
+          within(card).getByRole('button', { name: /^刪除照片，/ }),
+        ).toBeVisible()
+      } else {
+        expect(
+          within(card).queryByRole('button', { name: /^刪除照片，/ }),
+        ).toBeNull()
+      }
+    },
+  )
 
   it('opens saved variants for deleted photos without mutations', async () => {
     vi.mocked(listOfficePhotos).mockResolvedValue({
@@ -236,12 +271,11 @@ describe('OfficeEvidencePage', () => {
     expect(
       await screen.findByRole('region', { name: '表面檢查' }),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { level: 4, name: '表面檢查' }),
-    ).toBeInTheDocument()
     const cards = await screen.findAllByRole('article')
+    expect(cards[0]).toHaveAccessibleName(/林檢查員/)
     expect(cards[0].querySelector('h4')).toHaveTextContent('總覽照片')
-    expect(cards[1].querySelector('h4')).toHaveTextContent('表面檢查')
+    expect(cards[1]).toHaveAccessibleName(/林檢查員/)
+    expect(cards[1].querySelector('h4')).toBeNull()
   })
 
   it('loads per-photo history using the normal detail API', async () => {
@@ -255,6 +289,58 @@ describe('OfficeEvidencePage', () => {
     expect(
       screen.getByText('林檢查員・2026年10月2日 上午11:00'),
     ).toBeInTheDocument()
+  })
+
+  it('shows label override states across history', async () => {
+    const inherited = { ...photo.layer, overrides: {} }
+    const explicit = {
+      ...photo.layer,
+      overrides: {
+        project_name: '',
+        item_name: '自訂項目',
+        inspection_location: '北側',
+      },
+    }
+    const afterRemoval = {
+      ...photo.layer,
+      overrides: { item_name: '自訂項目', inspection_location: '' },
+    }
+    vi.mocked(getOfficePhoto).mockResolvedValue({
+      ...photo,
+      layer_history: {
+        items: [
+          {
+            id: 'added',
+            actor: { id: null, snapshot: { name_zh: '林檢查員' } },
+            occurred_at: '2026-10-02T03:00:00Z',
+            before: { layer: inherited, labels: photo.labels },
+            after: { layer: explicit, labels: photo.labels },
+          },
+          {
+            id: 'removed',
+            actor: { id: null, snapshot: { name_zh: '林檢查員' } },
+            occurred_at: '2026-10-03T03:00:00Z',
+            before: { layer: explicit, labels: photo.labels },
+            after: { layer: afterRemoval, labels: photo.labels },
+          },
+        ],
+        next_cursor: null,
+      },
+    })
+    renderPage(false)
+    const card = (await screen.findAllByRole('article'))[0]
+    fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
+    const history = await screen.findByRole('region', {
+      name: '圖層修改歷程',
+    })
+    const summaries = within(history).getAllByText('查看修改前後')
+    for (const summary of summaries) fireEvent.click(summary)
+    const text = history.textContent ?? ''
+    expect(text).toContain('沿用來源：工程')
+    expect(text).toContain('明示空字串')
+    expect(text).toContain('覆寫：自訂項目')
+    expect(text).toContain('覆寫：北側')
+    expect(text).toContain('沿用來源：一樓')
   })
 
   it('reloads with explicit voided filters', async () => {

@@ -323,12 +323,23 @@
   min-width: 44px;
   min-height: 44px;
   padding: 0;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: var(--color-action-primary);
-  color: #fff;
-  font-weight: 600;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: transparent;
   touch-action: none;
+}
+.office-crop-handle::after,
+.office-crop-move::after {
+  position: absolute;
+  inset: 17px;
+  border: 1px solid #000;
+  background: #fff;
+  content: '';
+  pointer-events: none;
+}
+.office-crop-move::after {
+  inset: 17px;
 }
 .office-crop-nw {
   inset: -22px auto auto -22px;
@@ -361,6 +372,18 @@
   justify-content: center;
   flex-wrap: wrap;
   margin-top: 12px;
+}
+.office-canvas-tools {
+  margin-top: 8px;
+}
+.office-canvas-tools summary {
+  min-height: 44px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.office-canvas-tools summary:focus-visible {
+  outline: 2px solid var(--color-action-primary);
+  outline-offset: 2px;
 }
 .office-editor-tabs {
   display: flex;

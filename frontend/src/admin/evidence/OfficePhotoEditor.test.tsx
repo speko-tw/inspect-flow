@@ -155,6 +155,50 @@ describe('OfficePhotoEditor', () => {
     })
   })
 
+  it.each([-15, 15])(
+    'fills a cropped 1200×800 preview at %s degrees',
+    (degrees) => {
+      const crop = { x: 0.12, y: 0.15, width: 0.6, height: 0.7 }
+      renderEditor(undefined, {
+        variants: {
+          ...photo.variants,
+          office: {
+            ...photo.variants.office,
+            edit_params: {
+              rotation: 0,
+              straighten: 0,
+              crop,
+              brightness: 0,
+            },
+          },
+        },
+      })
+
+      fireEvent.change(screen.getByLabelText(/拉直/), {
+        target: { value: String(degrees) },
+      })
+
+      const image = screen.getByAltText('內業版照片預覽')
+      const scale = Number(
+        image.style.transform.match(/scale\(([^)]+)\)$/)?.[1],
+      )
+      const angle = (Math.abs(degrees) * Math.PI) / 180
+      const expected = Math.max(
+        Math.cos(angle) + (800 / 1200) * Math.sin(angle),
+        Math.cos(angle) + (1200 / 800) * Math.sin(angle),
+      )
+
+      expect(scale).toBeGreaterThan(1)
+      expect(scale).toBeCloseTo(expected, 5)
+      expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+        left: '12%',
+        top: '15%',
+        width: '60%',
+        height: '70%',
+      })
+    },
+  )
+
   it('uses Tab and arrow keys for crop and preview movement', async () => {
     const user = userEvent.setup()
     renderEditor()

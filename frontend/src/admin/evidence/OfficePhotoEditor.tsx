@@ -811,7 +811,7 @@ export function OfficePhotoEditor({
                         `rotate(${
                           compare ? 0 : edit.rotation + edit.straighten
                         }deg)`,
-                        `scale(${compare ? 1 : 1 / straightening})`,
+                        `scale(${compare ? 1 : straightening})`,
                       ].join(' '),
                       filter: `brightness(${
                         compare ? 1 : 1 + edit.brightness / 200
@@ -849,9 +849,7 @@ export function OfficePhotoEditor({
                       startDrag('move', event)
                     }}
                     type="button"
-                  >
-                    移動
-                  </button>
+                  />
                   {(['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const).map(
                     (handle) => (
                       <button
@@ -970,62 +968,65 @@ export function OfficePhotoEditor({
               )}
             </div>
           </div>
-          <div className="office-canvas-controls">
-            <button
-              aria-label="畫面向左平移"
-              onClick={() =>
-                setPan((value) => ({ ...value, x: value.x - 24 }))
-              }
-              type="button"
-            >
-              ←
-            </button>
-            <button
-              aria-label="畫面向上平移"
-              onClick={() =>
-                setPan((value) => ({ ...value, y: value.y - 24 }))
-              }
-              type="button"
-            >
-              ↑
-            </button>
-            <button
-              aria-label="畫面向下平移"
-              onClick={() =>
-                setPan((value) => ({ ...value, y: value.y + 24 }))
-              }
-              type="button"
-            >
-              ↓
-            </button>
-            <button
-              aria-label="畫面向右平移"
-              onClick={() =>
-                setPan((value) => ({ ...value, x: value.x + 24 }))
-              }
-              type="button"
-            >
-              →
-            </button>
-            <button
-              aria-label="縮小"
-              onClick={() => adjustZoom(0.8)}
-              type="button"
-            >
-              −
-            </button>
-            <span>{Math.round(zoom * 100)}%</span>
-            <button
-              aria-label="放大"
-              onClick={() => adjustZoom(1.25)}
-              type="button"
-            >
-              ＋
-            </button>
-            <button onClick={() => setPan({ x: 0, y: 0 })} type="button">
-              置中
-            </button>
-          </div>
+          <details className="office-canvas-tools">
+            <summary>精細調整</summary>
+            <div className="office-canvas-controls">
+              <button
+                aria-label="畫面向左平移"
+                onClick={() =>
+                  setPan((value) => ({ ...value, x: value.x - 24 }))
+                }
+                type="button"
+              >
+                ←
+              </button>
+              <button
+                aria-label="畫面向上平移"
+                onClick={() =>
+                  setPan((value) => ({ ...value, y: value.y - 24 }))
+                }
+                type="button"
+              >
+                ↑
+              </button>
+              <button
+                aria-label="畫面向下平移"
+                onClick={() =>
+                  setPan((value) => ({ ...value, y: value.y + 24 }))
+                }
+                type="button"
+              >
+                ↓
+              </button>
+              <button
+                aria-label="畫面向右平移"
+                onClick={() =>
+                  setPan((value) => ({ ...value, x: value.x + 24 }))
+                }
+                type="button"
+              >
+                →
+              </button>
+              <button
+                aria-label="縮小"
+                onClick={() => adjustZoom(0.8)}
+                type="button"
+              >
+                −
+              </button>
+              <span>{Math.round(zoom * 100)}%</span>
+              <button
+                aria-label="放大"
+                onClick={() => adjustZoom(1.25)}
+                type="button"
+              >
+                ＋
+              </button>
+              <button onClick={() => setPan({ x: 0, y: 0 })} type="button">
+                置中
+              </button>
+            </div>
+          </details>
         </section>
         <section className="office-editor-panel">
           <div
