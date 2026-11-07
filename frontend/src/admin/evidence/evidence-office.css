@@ -476,8 +476,10 @@
   );
 }
 .office-layer-table--outline > span {
+  /* FEV-R23：CSS 描邊置中且 fill 蓋住內半，需補足外擴寬度。 */
+  /* Pillow 外擴 3px 對應 CSS 全寬 6px。 */
   -webkit-text-stroke: calc(
-      min(100cqi, 100cqb) * var(--office-outline-width-ratio)
+      min(100cqi, 100cqb) * var(--office-outline-width-ratio) * 2
     )
     #000;
   paint-order: stroke fill;
