@@ -1,0 +1,594 @@
+.office-evidence {
+  display: grid;
+  gap: 20px;
+  color: var(--color-text-primary);
+}
+
+.office-evidence-heading,
+.office-evidence-toolbar,
+.office-photo-card,
+.office-editor,
+.office-history {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.office-evidence-heading h2,
+.office-photo-card h3,
+.office-editor h2,
+.office-history h3 {
+  margin-block: 0 8px;
+}
+
+.office-evidence-toolbar,
+.office-photo-actions,
+.office-editor-actions,
+.office-editor-tabs,
+.office-editor-controls,
+.office-comparison {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.office-evidence-toolbar label,
+.office-editor-controls label {
+  display: grid;
+  gap: 4px;
+}
+
+.office-evidence-toolbar select,
+.office-editor-controls input,
+.office-editor-controls select,
+.office-editor-controls textarea {
+  min-height: 44px;
+}
+
+.office-photo-groups {
+  display: grid;
+  gap: 20px;
+}
+
+.office-photo-group {
+  display: grid;
+  gap: 12px;
+}
+
+.office-photo-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.office-photo-card {
+  min-width: 0;
+}
+
+.office-photo-card img,
+.office-editor-preview img {
+  display: block;
+  width: 100%;
+  max-height: 430px;
+  object-fit: contain;
+  background: #111827;
+}
+
+.office-photo-meta,
+.office-photo-badges,
+.office-photo-actions {
+  margin-top: 12px;
+}
+
+.office-photo-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.office-photo-badge {
+  border: 1px solid var(--color-border-control);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+
+.office-comparison > figure {
+  flex: 1 1 280px;
+  min-width: 0;
+  margin: 0;
+}
+
+.office-editor {
+  display: grid;
+  gap: 16px;
+}
+
+.office-editor-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.office-editor-stage {
+  position: relative;
+  width: 100%;
+  min-height: 240px;
+  overflow: hidden;
+  background: #111827;
+  touch-action: none;
+}
+
+.office-editor-preview {
+  position: relative;
+  width: min(100%, 780px);
+  margin-inline: auto;
+}
+
+.office-editor-preview img {
+  max-height: 54vh;
+  transition: filter 120ms ease;
+}
+
+.office-crop-window {
+  position: absolute;
+  inset: 8%;
+  border: 2px solid white;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 42%);
+  touch-action: none;
+}
+
+.office-crop-window button {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 3px solid #ffffff;
+  background: var(--color-action-primary);
+  touch-action: none;
+}
+
+.office-crop-window [data-handle='nw'] {
+  inset: -22px auto auto -22px;
+}
+
+.office-crop-window [data-handle='n'] {
+  inset: -22px auto auto calc(50% - 22px);
+}
+
+.office-crop-window [data-handle='ne'] {
+  inset: -22px -22px auto auto;
+}
+
+.office-crop-window [data-handle='e'] {
+  inset: calc(50% - 22px) -22px auto auto;
+}
+
+.office-crop-window [data-handle='se'] {
+  inset: auto -22px -22px auto;
+}
+
+.office-crop-window [data-handle='s'] {
+  inset: auto auto -22px calc(50% - 22px);
+}
+
+.office-crop-window [data-handle='sw'] {
+  inset: auto auto -22px -22px;
+}
+
+.office-crop-window [data-handle='w'] {
+  inset: calc(50% - 22px) auto auto -22px;
+}
+
+.office-editor-controls {
+  align-items: end;
+}
+
+.office-editor-controls > * {
+  flex: 1 1 180px;
+}
+
+.office-editor-controls input[type='range'] {
+  width: 100%;
+  min-height: 44px;
+}
+
+.office-layer-preview {
+  position: relative;
+  width: min(100%, 780px);
+  margin-inline: auto;
+}
+
+.office-layer-preview img {
+  display: block;
+  width: 100%;
+  max-height: 52vh;
+  object-fit: contain;
+}
+
+.office-layer-position {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.office-history-list {
+  display: grid;
+  gap: 12px;
+  padding-inline-start: 20px;
+}
+.office-history-values dl {
+  display: grid;
+  grid-template-columns: minmax(110px, auto) 1fr;
+  gap: 4px 10px;
+}
+.office-history-values dt {
+  font-weight: 600;
+}
+.office-history-values dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.office-inline-error {
+  color: var(--color-status-danger);
+}
+
+.office-editor-header,
+.office-canvas-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.office-editor-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.office-editor-header h2 {
+  min-width: 0;
+  margin: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.office-editor-header button {
+  min-width: 44px;
+  white-space: nowrap;
+}
+
+.office-editor-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+  gap: 20px;
+}
+
+.office-canvas-area {
+  position: relative;
+  min-width: 0;
+}
+.office-canvas {
+  position: relative;
+  display: grid;
+  min-height: 320px;
+  height: min(65vh, 680px);
+  place-items: center;
+  overflow: hidden;
+  background: #141820;
+  touch-action: none;
+}
+.office-canvas > img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: filter 100ms ease;
+}
+.office-image-stage {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: visible;
+  container-type: size;
+}
+.office-image-stage > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+.office-image-stage .office-crop-frame {
+  inset: 8%;
+}
+.office-crop-frame {
+  position: absolute;
+  inset: 8%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 44%);
+  touch-action: none;
+}
+.office-crop-handle,
+.office-crop-move {
+  position: absolute;
+  z-index: 2;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: transparent;
+  touch-action: none;
+}
+.office-crop-handle::after,
+.office-crop-move::after {
+  position: absolute;
+  inset: 17px;
+  border: 1px solid #000;
+  background: #fff;
+  content: '';
+  pointer-events: none;
+}
+.office-crop-move::after {
+  inset: 17px;
+}
+.office-crop-nw {
+  inset: -22px auto auto -22px;
+}
+.office-crop-n {
+  inset: -22px auto auto calc(50% - 22px);
+}
+.office-crop-ne {
+  inset: -22px -22px auto auto;
+}
+.office-crop-e {
+  inset: calc(50% - 22px) -22px auto auto;
+}
+.office-crop-se {
+  inset: auto -22px -22px auto;
+}
+.office-crop-s {
+  inset: auto auto -22px calc(50% - 22px);
+}
+.office-crop-sw {
+  inset: auto auto -22px -22px;
+}
+.office-crop-w {
+  inset: calc(50% - 22px) auto auto -22px;
+}
+.office-crop-move {
+  inset: calc(50% - 22px) auto auto calc(50% - 22px);
+}
+.office-canvas-controls {
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.office-canvas-tools {
+  margin-top: 8px;
+}
+.office-canvas-tools summary {
+  min-height: 44px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.office-canvas-tools summary:focus-visible {
+  outline: 2px solid var(--color-action-primary);
+  outline-offset: 2px;
+}
+.office-editor-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+.office-editor-panel {
+  min-width: 0;
+}
+.office-tool-controls {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  padding-block: 16px;
+}
+.office-tool-controls label {
+  display: grid;
+  gap: 6px;
+}
+.office-tool-controls input[type='range'] {
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+}
+.office-layer-position {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+.office-layer-overlay {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: calc(min(100cqi, 100cqb) * var(--office-inner-ratio));
+  grid-template-columns:
+    calc(min(100cqi, 100cqb) * var(--office-title-width-ratio))
+    calc(min(100cqi, 100cqb) * var(--office-value-width-ratio));
+  grid-template-rows: repeat(
+    5,
+    calc(min(100cqi, 100cqb) * var(--office-row-height-ratio))
+  );
+  gap: 0;
+  font-size: calc(min(100cqi, 100cqb) * var(--office-font-ratio));
+  line-height: calc(min(100cqi, 100cqb) * var(--office-line-height-ratio));
+  border-radius: calc(min(100cqi, 100cqb) * var(--office-radius-ratio));
+  pointer-events: none;
+}
+.office-layer-table--dark {
+  color: #fff;
+  background: rgb(0 0 0 / 65.88%);
+}
+.office-layer-table--paper {
+  color: #000;
+  background: #fff;
+}
+.office-layer-table--outline {
+  color: #fff;
+  background: transparent;
+  box-shadow: inset 0 0 0
+    calc(min(100cqi, 100cqb) * var(--office-outline-width-ratio)) #fff;
+}
+.office-layer-table > span {
+  display: -webkit-box;
+  position: relative;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  min-height: 0;
+  box-shadow: inset 0
+    calc(-1 * min(100cqi, 100cqb) * var(--office-line-width-ratio)) 0
+    currentColor;
+}
+.office-layer-table__title {
+  padding-block-start: calc(min(100cqi, 100cqb) * var(--office-inner-ratio));
+  padding-inline-end: calc(min(100cqi, 100cqb) * var(--office-inner-ratio));
+  box-shadow: inset
+    calc(-1 * min(100cqi, 100cqb) * var(--office-line-width-ratio)) 0 0
+    currentColor;
+}
+.office-layer-table__value {
+  padding-block-start: calc(min(100cqi, 100cqb) * var(--office-inner-ratio));
+  padding-inline-start: calc(min(100cqi, 100cqb) * var(--office-inner-ratio));
+  padding-inline-end: calc(
+    2 * min(100cqi, 100cqb) * var(--office-inner-ratio)
+  );
+}
+.office-layer-table--outline > span {
+  /* FEV-R23：CSS 描邊置中且 fill 蓋住內半，需補足外擴寬度。 */
+  /* Pillow 外擴 3px 對應 CSS 全寬 6px。 */
+  -webkit-text-stroke: calc(
+      min(100cqi, 100cqb) * var(--office-outline-width-ratio) * 2
+    )
+    #000;
+  paint-order: stroke fill;
+}
+.office-selection-status {
+  min-height: 1.5em;
+  margin-block: 8px;
+}
+.office-selection-status kbd {
+  margin-inline: 2px;
+  border: 1px solid var(--color-border-control);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font: inherit;
+}
+.office-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+.office-crop-nudge,
+.office-layer-nudge {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.office-crop-nudge button,
+.office-layer-nudge button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.office-nudge-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.office-advanced-values {
+  display: grid;
+  gap: 12px;
+}
+.office-advanced-values summary {
+  min-height: 44px;
+  padding-block: 10px;
+  cursor: pointer;
+}
+.office-layer-draggable {
+  cursor: move;
+  outline: 2px dashed #ffc200;
+  pointer-events: auto;
+  touch-action: none;
+}
+.office-layer-draggable:focus-visible {
+  outline: 3px solid #ffc200;
+}
+.office-size-note {
+  padding: 10px;
+  border-inline-start: 4px solid var(--color-action-primary);
+}
+
+.office-evidence :is(button, a, select, input, textarea) {
+  min-height: 44px;
+}
+
+@media (max-width: 600px) {
+  .office-evidence-heading,
+  .office-evidence-toolbar,
+  .office-photo-card,
+  .office-editor,
+  .office-history {
+    padding: 12px;
+  }
+
+  .office-photo-list {
+    grid-template-columns: 1fr;
+  }
+
+  .office-editor-topbar {
+    align-items: stretch;
+  }
+
+  .office-editor-topbar > * {
+    flex: 1;
+  }
+
+  .office-editor-workspace {
+    grid-template-columns: 1fr;
+  }
+  .office-canvas {
+    min-height: 240px;
+    height: 44vh;
+  }
+  .office-image-stage {
+    max-height: 100%;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .office-keyboard-hint {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .office-editor-preview img {
+    transition: none;
+  }
+}
