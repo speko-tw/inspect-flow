@@ -6,7 +6,13 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
@@ -46,6 +52,15 @@ function LocationProbe() {
   return <div data-testid="location">{JSON.stringify(location)}</div>
 }
 
+function HistoryBackButton() {
+  const navigate = useNavigate()
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      瀏覽器上一頁
+    </button>
+  )
+}
+
 function fieldTaskCalls(fetcher: ReturnType<typeof vi.fn>) {
   return fetcher.mock.calls.filter(([input]) => {
     const url = new URL(String(input), 'https://testserver')
@@ -54,7 +69,11 @@ function fieldTaskCalls(fetcher: ReturnType<typeof vi.fn>) {
 }
 
 function renderPage(
-  options: { user?: Partial<CurrentUser>; state?: unknown } = {},
+  options: {
+    historyBack?: boolean
+    user?: Partial<CurrentUser>
+    state?: unknown
+  } = {},
 ) {
   nextUser += 1
   const user: CurrentUser = {
@@ -84,6 +103,7 @@ function renderPage(
     >
       <CurrentUserProvider value={{ user: currentUser, clear }}>
         <LocationProbe />
+        {options.historyBack && <HistoryBackButton />}
         <Routes>
           <Route path="/tasks/*" element={<FieldPage />} />
           <Route path="/settings" element={<p>密碼頁</p>} />
@@ -308,6 +328,51 @@ describe('今日任務首頁', () => {
     )
     await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 240))
     expect(fieldTaskCalls(fetcher)).toHaveLength(5)
+  })
+
+  it('展開近期已完成不重抓或覆寫已載入的未完成第二頁', async () => {
+    const secondPage = {
+      ...TASK,
+      id: 'active-page-2',
+      name: '未完成第二頁任務',
+    }
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'https://testserver')
+      if (url.searchParams.get('status') === 'COMPLETED') {
+        return Response.json({ items: [], next_cursor: null, total_count: 0 })
+      }
+      return Response.json(
+        url.searchParams.has('cursor')
+          ? { items: [secondPage], next_cursor: null }
+          : { items: [TASK], next_cursor: 'active-next' },
+      )
+    })
+    vi.stubGlobal('fetch', fetcher)
+    renderPage()
+
+    await screen.findByText(TASK.name)
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    expect(
+      await screen.findByRole('link', { name: /未完成第二頁任務/ }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: /近期已完成/ }))
+    await screen.findByText('最近 14 天沒有已完成的任務。')
+
+    expect(fieldTaskCalls(fetcher)).toHaveLength(2)
+    expect(
+      screen.getByRole('link', { name: /未完成第二頁任務/ }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: /近期已完成/ }))
+    expect(screen.getByRole('button', { name: /近期已完成/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(
+      screen.getByRole('link', { name: /未完成第二頁任務/ }),
+    ).toBeVisible()
+    expect(fieldTaskCalls(fetcher)).toHaveLength(2)
   })
 
   it('切回曾看過的篩選組合會重抓第一頁', async () => {
@@ -977,6 +1042,154 @@ it('近期已完成預設收合，展開顯示筆數與綠色標籤並可唯讀�
     await screen.findByRole('button', { name: /近期已完成 \(1\)/ }),
   ).toHaveAttribute('aria-expanded', 'true')
   await waitFor(() => expect(scroll).toHaveBeenCalledWith(0, 321))
+})
+
+it('近期已完成卡片顯示單項與多項摘要並隱藏空摘要', async () => {
+  const completed = [
+    {
+      ...TASK,
+      id: 'completed-summary-single',
+      name: '單項完成任務',
+      status: 'COMPLETED',
+      completed_at: '2026-10-10T08:00:00Z',
+      item_summary: { first_title: '單一查核項目', item_count: 1 },
+    },
+    {
+      ...TASK,
+      id: 'completed-summary-multiple',
+      name: '多項完成任務',
+      status: 'COMPLETED',
+      completed_at: '2026-10-09T08:00:00Z',
+      item_summary: { first_title: '首項查核項目', item_count: 3 },
+    },
+    {
+      ...TASK,
+      id: 'completed-summary-empty',
+      name: '空摘要完成任務',
+      status: 'COMPLETED',
+      completed_at: '2026-10-08T08:00:00Z',
+      item_summary: { first_title: null, item_count: 0 },
+    },
+  ]
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'https://testserver')
+      return url.searchParams.get('status') === 'COMPLETED'
+        ? Response.json({
+            items: completed,
+            next_cursor: null,
+            total_count: completed.length,
+          })
+        : Response.json({ items: [TASK], next_cursor: null })
+    }),
+  )
+  renderPage()
+  fireEvent.click(screen.getByRole('button', { name: /近期已完成/ }))
+
+  const single = await screen.findByRole('link', { name: /單項完成任務/ })
+  const multiple = screen.getByRole('link', { name: /多項完成任務/ })
+  const empty = screen.getByRole('link', { name: /空摘要完成任務/ })
+  expect(within(single).getByText('單一查核項目')).toBeVisible()
+  expect(within(multiple).getByText('首項查核項目等 3 項')).toBeVisible()
+  expect(empty.querySelector('.field-card-item-summary')).toBeNull()
+})
+
+it('瀏覽器上一頁還原近期已完成第二頁、cursor、展開與捲動位置', async () => {
+  const first = {
+    ...TASK,
+    id: 'history-completed-1',
+    name: '歷史第一頁完成任務',
+    status: 'COMPLETED',
+    completed_at: '2026-10-10T08:00:00Z',
+  }
+  const second = {
+    ...TASK,
+    id: 'history-completed-2',
+    name: '歷史第二頁完成任務',
+    status: 'COMPLETED',
+    completed_at: '2026-10-09T08:00:00Z',
+  }
+  const third = {
+    ...TASK,
+    id: 'history-completed-3',
+    name: '歷史第三頁完成任務',
+    status: 'COMPLETED',
+    completed_at: '2026-10-08T08:00:00Z',
+  }
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'https://testserver')
+    if (url.pathname.endsWith('/evidence')) {
+      return Response.json({ all_points_satisfied: true, items: [] })
+    }
+    if (url.pathname.endsWith('/photos')) {
+      return Response.json({ items: [], next_cursor: null })
+    }
+    if (url.pathname.endsWith('/history-completed-2')) {
+      return Response.json({
+        ...DETAIL,
+        ...second,
+        suggested_assignee: { name_zh: '示範查核員', is_me: true },
+        started_by: null,
+        cancellation_reason: null,
+        items: [],
+      })
+    }
+    if (url.searchParams.get('status') === 'COMPLETED') {
+      const cursor = url.searchParams.get('cursor')
+      if (cursor === 'completed-last') {
+        return Response.json({
+          items: [third],
+          next_cursor: null,
+          total_count: 3,
+        })
+      }
+      if (cursor === 'completed-next') {
+        return Response.json({
+          items: [second],
+          next_cursor: 'completed-last',
+          total_count: 3,
+        })
+      }
+      return Response.json({
+        items: [first],
+        next_cursor: 'completed-next',
+        total_count: 3,
+      })
+    }
+    return Response.json({ items: [TASK], next_cursor: null })
+  })
+  vi.stubGlobal('fetch', fetcher)
+  const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+  Object.defineProperty(window, 'scrollY', { value: 444, configurable: true })
+  renderPage({ historyBack: true })
+
+  fireEvent.click(screen.getByRole('button', { name: /近期已完成/ }))
+  await screen.findByRole('link', { name: /歷史第一頁完成任務/ })
+  fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+  const secondCard = await screen.findByRole('link', {
+    name: /歷史第二頁完成任務/,
+  })
+  fireEvent.click(secondCard)
+  await screen.findByRole('heading', { name: '歷史第二頁完成任務' })
+
+  fireEvent.click(screen.getByRole('button', { name: '瀏覽器上一頁' }))
+  expect(
+    await screen.findByRole('link', { name: /歷史第二頁完成任務/ }),
+  ).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: /近期已完成 \(3\)/ }),
+  ).toHaveAttribute('aria-expanded', 'true')
+  await waitFor(() => expect(scroll).toHaveBeenCalledWith(0, 444))
+  const completedRequests = () =>
+    fetcher.mock.calls.filter(([input]) =>
+      String(input).includes('status=COMPLETED'),
+    )
+  expect(completedRequests()).toHaveLength(2)
+
+  fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+  await screen.findByRole('link', { name: /歷史第三頁完成任務/ })
+  expect(String(completedRequests()[2][0])).toContain('cursor=completed-last')
 })
 
 it('近期已完成第二頁詳情返回時保留項目、展開與捲動位置', async () => {

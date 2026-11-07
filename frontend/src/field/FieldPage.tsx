@@ -5,6 +5,7 @@ import {
   matchPath,
   useLocation,
   useNavigate,
+  useNavigationType,
   useSearchParams,
 } from 'react-router'
 
@@ -164,8 +165,18 @@ function TaskList({
   completedReturnKeys: Set<string>
 }) {
   const [params, setParams] = useSearchParams()
+  // 查詢更新會更換 setter；避免展開／收合讓 active 清單重抓並覆寫分頁。
+  const setParamsRef = useRef(setParams)
   const navigate = useNavigate()
   const location = useLocation()
+  const navigationType = useNavigationType()
+  const locationStateRef = useRef(location.state)
+  useEffect(() => {
+    setParamsRef.current = setParams
+  }, [setParams])
+  useEffect(() => {
+    locationStateRef.current = location.state
+  }, [location.state])
   const locationRef = useRef(location.pathname + location.search)
   useEffect(() => {
     locationRef.current = location.pathname + location.search
@@ -193,11 +204,13 @@ function TaskList({
   const [error, setError] = useState<'forbidden' | 'other' | null>(null)
   const [retry, setRetry] = useState(0)
   const recentExpanded = params.get('recent') === '1'
+  // 瀏覽器上一頁是 POP，沒有詳情返回 state 時仍以 user/scope 記憶還原。
   const [restoreCompleted] = useState(
     () =>
       completedReturnKeys.has(completedKey) &&
-      (location.state as { restoreTaskList?: unknown } | null)
-        ?.restoreTaskList === true,
+      (navigationType === 'POP' ||
+        (location.state as { restoreTaskList?: unknown } | null)
+          ?.restoreTaskList === true),
   )
   const [completedState, setCompletedState] =
     useState<CompletedListState | null>(() =>
@@ -233,11 +246,17 @@ function TaskList({
         if (!active) return
         // T16：先以真實指派查詢決定預設，不從管理者身分猜有沒有任務。
         if (allowAutoScope && scope === 'mine' && page.items.length === 0) {
-          setParams(
+          setParamsRef.current(
             { scope: 'all' },
             {
               replace: true,
-              state: { ...location.state, defaultedToAll: true },
+              state: {
+                ...(locationStateRef.current as Record<
+                  string,
+                  unknown
+                > | null),
+                defaultedToAll: true,
+              },
             },
           )
           return
@@ -270,7 +289,6 @@ function TaskList({
   }, [
     key,
     location.pathname,
-    location.state,
     memory,
     navigate,
     retry,
@@ -279,7 +297,7 @@ function TaskList({
     scope,
     status,
     allowAutoScope,
-    setParams,
+    noAssignedTasks,
   ])
 
   useEffect(() => {
@@ -356,7 +374,7 @@ function TaskList({
     const next = new URLSearchParams(params)
     if (recentExpanded) next.delete('recent')
     else next.set('recent', '1')
-    setParams(next)
+    setParams(next, { state: location.state })
   }
 
   function retryRecent() {
@@ -697,6 +715,13 @@ function TaskList({
                         <strong>{task.name}</strong>
                         <StatusBadge status="COMPLETED" />
                       </span>
+                      {task.item_summary.first_title && (
+                        <span className="field-card-item-summary">
+                          {task.item_summary.first_title}
+                          {task.item_summary.item_count > 1 &&
+                            `等 ${task.item_summary.item_count} 項`}
+                        </span>
+                      )}
                       <span className="field-card-project">
                         {task.project_name}
                       </span>
