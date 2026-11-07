@@ -164,6 +164,7 @@ describe('OfficeEvidencePage', () => {
       expect.stringContaining('variant=office'),
     )
     expect(screen.getAllByText('相簿匯入')).toHaveLength(2)
+    expect(screen.getAllByRole('group', { name: '照片標示' })).toHaveLength(3)
     expect(screen.getByText('非即時拍攝')).toBeInTheDocument()
     expect(screen.getAllByText('標準變更作廢').length).toBeGreaterThan(1)
     expect(screen.getAllByText('已刪除').length).toBeGreaterThan(1)

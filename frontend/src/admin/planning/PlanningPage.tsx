@@ -1773,9 +1773,10 @@ function PlanningContent({
   }
 
   if (view === 'task-photos' && routeTask && selectedPlanDetail) {
+    const planArchived = selectedPlanDetail.archived || routeTask.plan.archived
     const photoCapabilities = officePhotoCapabilities(
       routeTask.status,
-      selectedPlanDetail.archived || routeTask.plan.archived,
+      planArchived,
       viewerPermissions === undefined ||
         viewerPermissions.includes('evidence.manage'),
     )
@@ -1784,7 +1785,7 @@ function PlanningContent({
         canEdit={photoCapabilities.canEdit}
         canDelete={photoCapabilities.canDelete}
         taskStatus={routeTask.status}
-        planArchived={selectedPlanDetail.archived || routeTask.plan.archived}
+        planArchived={planArchived}
         items={routeTask.items}
         planId={planId}
         projectId={initialProjectId}

@@ -647,6 +647,7 @@ export function OfficeEvidencePage({
                       <div
                         aria-label="照片標示"
                         className="office-photo-badges"
+                        role="group"
                       >
                         {photo.voided_at && (
                           <span className="office-photo-badge">

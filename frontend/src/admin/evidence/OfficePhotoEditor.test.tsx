@@ -139,6 +139,13 @@ describe('OfficePhotoEditor', () => {
     expect(styles).toMatch(
       /\.office-tool-controls input\[type='range'\]\s*\{[^}]*height: 44px;/s,
     )
+    const controls = Array.from(
+      styles.matchAll(/\.office-tool-controls\s*\{([^}]+)\}/g),
+      (match) => match[1],
+    )
+    expect(controls).toHaveLength(1)
+    expect(controls[0]).toMatch(/padding-block:\s*16px/)
+    expect(controls[0]).toMatch(/padding-inline:\s*0/)
   })
 
   it('renders a scaled hidden 5×2 preview table', () => {
@@ -212,6 +219,17 @@ describe('OfficePhotoEditor', () => {
     expect(screen.queryByText(/snapshot-only-name/)).not.toBeInTheDocument()
   })
 
+  it('shows the fallback for an empty location override', () => {
+    renderEditor(undefined, {
+      labels: { ...photo.labels, location: '來源位置' },
+      layer: {
+        ...photo.layer,
+        overrides: { inspection_location: '' },
+      },
+    })
+    expect(screen.getByText(/檢驗位置：未填寫/)).toBeInTheDocument()
+  })
+
   it.each(['medium', 'small'] as const)(
     'shows accurate fit guidance for 227px photos at %s size',
     (size) => {
@@ -238,11 +256,11 @@ describe('OfficePhotoEditor', () => {
     const handle = screen.getByRole('button', { name: '移動裁切框' })
     const selectionStatus = document.querySelector('.office-selection-status')
     await user.click(handle)
-    expect(selectionStatus).toHaveTextContent('已選取：裁切框中央')
+    expect(selectionStatus).toHaveTextContent('已選取：整個裁切框')
     expect(screen.getByText(/按.*微調/)).toBeVisible()
     await user.click(screen.getByRole('button', { name: '小（0.5%）' }))
     await user.click(screen.getByRole('button', { name: '→ 右' }))
-    expect(selectionStatus).toHaveTextContent('已選取：裁切框中央')
+    expect(selectionStatus).toHaveTextContent('已選取：整個裁切框')
     expect(document.querySelector('.office-crop-frame')).toHaveStyle({
       left: '8.5%',
     })
@@ -258,6 +276,8 @@ describe('OfficePhotoEditor', () => {
     expect(screen.getByRole('button', { name: '↑ 上' })).toBeDisabled()
     await user.keyboard('{Escape}')
     expect(selectionStatus).not.toHaveTextContent('已選取')
+    expect(right).not.toHaveFocus()
+    expect(selectionStatus).toHaveTextContent('微調對象：整個裁切框')
     await user.click(
       screen.getByRole('group', { name: '照片畫面，可用方向鍵平移' }),
     )
@@ -269,13 +289,45 @@ describe('OfficePhotoEditor', () => {
     renderEditor()
     const status = document.querySelector('.office-selection-status')
     await user.click(screen.getByRole('button', { name: '移動裁切框' }))
-    expect(status).toHaveTextContent('已選取：裁切框中央')
+    expect(status).toHaveTextContent('已選取：整個裁切框')
 
     await user.click(screen.getByRole('img', { name: '內業版照片預覽' }))
 
     expect(status).not.toHaveTextContent('已選取')
     expect(status).toHaveTextContent('微調對象：整個裁切框')
     expect(screen.getByRole('main', { name: '編修內業版' })).toBeVisible()
+  })
+
+  it('nudges the right crop edge without moving x', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    await user.click(
+      screen.getByRole('button', { name: '裁切框右側中點控制點' }),
+    )
+
+    await user.click(screen.getByRole('button', { name: '→ 右' }))
+
+    expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+      left: '8%',
+      width: '84.5%',
+    })
+  })
+
+  it('uses the layer target for crop focus on the layer tab', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    await user.click(screen.getByRole('tab', { name: '圖層' }))
+    const right = screen.getByRole('button', {
+      name: '裁切框右側中點控制點',
+    })
+    await user.click(right)
+    expect(screen.getByRole('status')).toHaveTextContent('微調對象：工程標示')
+
+    await user.click(
+      screen.getByRole('group', { name: '圖層位置，方向鍵微調' }),
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('已選取：工程標示')
+    expect(screen.getByRole('status')).toHaveTextContent('微調對象：工程標示')
   })
 
   it('keeps advanced crop limits, ratio and undo', () => {
@@ -302,6 +354,37 @@ describe('OfficePhotoEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: '復原上一步' }))
     expect(screen.getByLabelText('寬（%）')).toHaveValue(beforeWidth)
   })
+
+  it.each(['ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'])(
+    'snapshots a %s range gesture once and ignores no-op clicks',
+    async (key) => {
+      const user = userEvent.setup()
+      renderEditor()
+      await user.click(screen.getByText('進階裁切數值（X、Y、寬、高）'))
+      const width = screen.getByLabelText('寬（%）')
+      const initial = (width as HTMLInputElement).value
+      const undo = screen.getByRole('button', { name: '復原上一步' })
+      expect(undo).toBeDisabled()
+
+      fireEvent.pointerDown(width, { pointerId: 1 })
+      fireEvent.pointerUp(width, { pointerId: 1 })
+      fireEvent.click(width)
+      expect(undo).toBeDisabled()
+
+      width.focus()
+      fireEvent.keyDown(width, { key })
+      fireEvent.change(width, { target: { value: '84.5' } })
+      fireEvent.keyDown(width, { key, repeat: true })
+      fireEvent.change(width, { target: { value: '85' } })
+      fireEvent.keyUp(width, { key })
+      expect(width).toHaveValue('85')
+      expect(undo).toBeEnabled()
+
+      await user.click(undo)
+      expect(width).toHaveValue(initial)
+      expect(undo).toBeDisabled()
+    },
+  )
 
   it('locks editor controls while pinned to the previous image', async () => {
     const user = userEvent.setup()
