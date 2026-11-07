@@ -679,6 +679,42 @@ def test_saved_small_baseline_legacy_inference_and_source_never_refreshes(
     )
 
 
+def test_crop_after_tiny_upload_uses_saved_small_base_without_changing_field(
+    db_session, make_client, monkeypatch, tmp_path
+):
+    """FEV-AC33：只裁切可達 fallback_small，且 FIELD 維持原始位元組。"""
+    world = _office_world(
+        db_session, make_client, monkeypatch, tmp_path, size=(227, 227)
+    )
+    initial = world["initial"]
+    assert initial["layer_render"] == {
+        "render_state": "omitted_too_small",
+        "effective_size": None,
+    }
+    before = _state(db_session, world)
+    field_before = before["files"][before["variants"]["FIELD"][1]]
+    response = world["admin"].put(
+        world["url"],
+        json={
+            "crop": {
+                "x": 0,
+                "y": 0,
+                "width": 0.96,
+                "height": 0.96,
+            }
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["layer_render"] == {
+        "render_state": "fallback_small",
+        "effective_size": "small",
+    }
+    after = _state(db_session, world)
+    assert after["layer"]["size"] == "medium"
+    assert after["variants"]["OFFICE"][6]["base_size"] == "small"
+    assert after["files"][after["variants"]["FIELD"][1]] == field_before
+
+
 @pytest.mark.parametrize("operation", ["put", "put_missing_delete", "cli"])
 def test_missing_office_is_rebuilt_from_field(
     db_session,
