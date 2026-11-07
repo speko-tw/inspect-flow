@@ -699,7 +699,7 @@ def field_inspection_task_filters(
     project_id: uuid.UUID | None = None,
     status: str | None = None,
 ) -> tuple[ColumnElement[bool], ...]:
-    """建立現場任務篩選；無可查核專案時拒絕。"""
+    """建立未完成或近期已完成的現場任務篩選（FUI-R05）。"""
     access = calculate_effective_access(
         session, user_id=user_id, project_id=project_id
     )
@@ -735,9 +735,15 @@ def field_inspection_task_filters(
         project_filter = InspectionTask.project_id.in_(permissioned_projects)
     else:
         project_filter = None
-    filters: list[ColumnElement[bool]] = [
-        InspectionTask.status.in_(("PENDING", "IN_PROGRESS")),
-    ]
+    if status == "COMPLETED":
+        filters: list[ColumnElement[bool]] = [
+            InspectionTask.status == "COMPLETED",
+            InspectionTask.completed_at.is_not(None),
+        ]
+    else:
+        filters = [
+            InspectionTask.status.in_(("PENDING", "IN_PROGRESS")),
+        ]
     if project_filter is not None:
         filters.append(project_filter)
     if status is not None:

@@ -72,6 +72,14 @@
   color: var(--color-text-secondary);
 }
 
+.field-redesign .field-recent-completed {
+  margin-block-start: var(--space-6);
+}
+
+.field-redesign .field-recent-completed > h2 {
+  margin: 0 0 var(--space-3);
+}
+
 .field-redesign .field-task-list {
   gap: var(--space-3);
 }
