@@ -289,11 +289,13 @@ export function OfficePhotoEditor({
     ['工程名稱', layer.overrides.project_name ?? photo.labels.project_name],
     ['檢驗項目', layer.overrides.item_name ?? photo.labels.item_title],
     ['檢驗位置', layer.overrides.inspection_location ?? photo.labels.location],
-    ['檢驗人員', photo.labels.uploader_name ?? photo.uploaded_by.name_zh],
+    ['檢驗人員', photo.labels.uploader_name],
     ['檢驗時間', formatRecordedTime(photo.labels.uploaded_at)],
   ] as const
+  const layerValue = (title: string, value: string | null | undefined) =>
+    value || (title === '檢驗位置' ? '未填寫' : '未記錄')
   const layerSummary = layerFields
-    .map(([title, value]) => `${title}：${value ?? '未記錄'}`)
+    .map(([title, value]) => `${title}：${layerValue(title, value)}`)
     .join('；')
   const layerOverlayClassName = [
     'office-layer-overlay',
@@ -495,7 +497,7 @@ export function OfficePhotoEditor({
     }
     if (event.pointerType === 'touch' && zoomRef.current > 1) return
     event.preventDefault()
-    event.currentTarget.setPointerCapture(event.pointerId)
+    event.currentTarget.setPointerCapture?.(event.pointerId)
     layerDrag.current = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -539,6 +541,31 @@ export function OfficePhotoEditor({
       x: Math.max(0, Math.min(1 - next.width, next.x)),
       y: Math.max(0, Math.min(1 - next.height, next.y)),
     })
+  }
+  function setAdvancedCrop(key: keyof Crop, value: number): void {
+    const current = crop ?? INITIAL_CROP
+    const nextValue = value / 100
+    const size = orientedSize(
+      photo.variants.field.width,
+      photo.variants.field.height,
+      edit.rotation,
+    )
+    if (key === 'x' || key === 'y') {
+      setCropValue(
+        moveCrop(
+          current,
+          key === 'x' ? nextValue - current.x : 0,
+          key === 'y' ? nextValue - current.y : 0,
+        ),
+      )
+      return
+    }
+    const delta = nextValue - current[key]
+    setCropValue(
+      key === 'width'
+        ? resizeCrop(current, 'e', delta, 0, ratio, size.width, size.height)
+        : resizeCrop(current, 's', 0, delta, ratio, size.width, size.height),
+    )
   }
   function handleKey(
     kind: CropHandle,
@@ -594,6 +621,14 @@ export function OfficePhotoEditor({
     saveSnapshot()
     setCropValue(next)
   }
+  function canNudge(direction: 'left' | 'right' | 'up' | 'down'): boolean {
+    if (!selectedCropHandle) return true
+    const horizontalOnly = ['e', 'w'].includes(selectedCropHandle)
+    const verticalOnly = ['n', 's'].includes(selectedCropHandle)
+    if (horizontalOnly) return direction === 'left' || direction === 'right'
+    if (verticalOnly) return direction === 'up' || direction === 'down'
+    return true
+  }
   function startDrag(kind: CropHandle, event: React.PointerEvent) {
     if (event.pointerType === 'touch' && touches.current.size > 1) {
       drag.current = null
@@ -602,7 +637,7 @@ export function OfficePhotoEditor({
     }
     if (event.pointerType === 'touch' && zoomRef.current > 1) return
     event.preventDefault()
-    event.currentTarget.setPointerCapture(event.pointerId)
+    event.currentTarget.setPointerCapture?.(event.pointerId)
     saveSnapshot()
     drag.current = {
       kind,
@@ -660,6 +695,7 @@ export function OfficePhotoEditor({
     setZoom((current) => Math.max(1, Math.min(4, current * factor)))
   }
   function save() {
+    if (comparePinned) return
     setFieldError('')
     onErrorClear()
     const params = { ...edit, crop: crop ?? edit.crop }
@@ -683,7 +719,7 @@ export function OfficePhotoEditor({
   }
 
   async function confirmApply() {
-    if (!pendingApply || submitRef.current) return
+    if (comparePinned || !pendingApply || submitRef.current) return
     submitRef.current = true
     setSubmitting(true)
     try {
@@ -763,7 +799,17 @@ export function OfficePhotoEditor({
   }, [zoom])
 
   return (
-    <main className="office-editor" aria-labelledby="office-editor-title">
+    <main
+      className="office-editor"
+      aria-labelledby="office-editor-title"
+      onKeyDownCapture={(event) => {
+        if (event.key === 'Escape') {
+          setSelectedCropHandle(null)
+          setSelectedControl('')
+          setComparePinned(false)
+        }
+      }}
+    >
       <header className="office-editor-header">
         <button
           type="button"
@@ -778,23 +824,14 @@ export function OfficePhotoEditor({
         <button
           className="btn-primary"
           type="button"
-          disabled={busy || submitting}
+          disabled={busy || comparePinned || submitting}
           onClick={save}
         >
           {busy ? '儲存中…' : '確認'}
         </button>
       </header>
       <div className="office-editor-workspace">
-        <section
-          aria-label="照片編修畫布"
-          className="office-canvas-area"
-          onBlurCapture={(event) => {
-            if (
-              !event.currentTarget.contains(event.relatedTarget as Node | null)
-            )
-              setSelectedControl('')
-          }}
-        >
+        <section aria-label="照片編修畫布" className="office-canvas-area">
           <div
             className="office-canvas"
             ref={frame}
@@ -809,6 +846,12 @@ export function OfficePhotoEditor({
               tabIndex={0}
               role="group"
               aria-label="照片畫面，可用方向鍵平移"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) {
+                  setSelectedCropHandle(null)
+                  setSelectedControl('')
+                }
+              }}
               onKeyDown={(event) => {
                 if (event.target !== event.currentTarget || zoom <= 1) return
                 const delta = event.shiftKey ? 48 : 24
@@ -947,7 +990,7 @@ export function OfficePhotoEditor({
                         onFocus={() => {
                           setSelectedCropHandle(handle)
                           setSelectedControl(
-                            `裁切框${CROP_HANDLE_LABELS[handle]}控制點`,
+                            `裁切框${CROP_HANDLE_LABELS[handle]}`,
                           )
                         }}
                         onKeyDown={(event) => handleKey(handle, event)}
@@ -955,7 +998,7 @@ export function OfficePhotoEditor({
                           event.stopPropagation()
                           setSelectedCropHandle(handle)
                           setSelectedControl(
-                            `裁切框${CROP_HANDLE_LABELS[handle]}控制點`,
+                            `裁切框${CROP_HANDLE_LABELS[handle]}`,
                           )
                           startDrag(handle, event)
                         }}
@@ -973,8 +1016,8 @@ export function OfficePhotoEditor({
                   aria-hidden={activeTab !== 'layer'}
                   className={
                     activeTab === 'layer'
-                      ? 'office-layer-position office-layer-draggable'
-                      : 'office-layer-position'
+                      ? 'office-layer-anchor office-layer-draggable'
+                      : 'office-layer-anchor'
                   }
                   tabIndex={activeTab === 'layer' ? 0 : undefined}
                   onFocus={() => setSelectedControl('工程標示')}
@@ -1037,13 +1080,17 @@ export function OfficePhotoEditor({
                         className="office-layer-table__title"
                         key={`t-${index}`}
                       >
-                        {title}
+                        <span className="office-layer-table__text">
+                          {title}
+                        </span>
                       </span>,
                       <span
                         className="office-layer-table__value"
                         key={`v-${index}`}
                       >
-                        {value ?? '未記錄'}
+                        <span className="office-layer-table__text">
+                          {layerValue(title, value)}
+                        </span>
                       </span>,
                     ])}
                   </div>
@@ -1054,9 +1101,9 @@ export function OfficePhotoEditor({
           {layer.enabled && layerBox.fits && (
             <p className="office-sr-only">工程標示預覽。{layerSummary}</p>
           )}
-          {selectedControl && (
-            <p className="office-selection-status" role="status">
-              已選取：{selectedControl}。
+          <p className="office-selection-status" role="status">
+            {selectedControl ? `已選取：${selectedControl}。` : '\u00a0'}
+            {selectedControl && (
               <span className="office-keyboard-hint">
                 按 <kbd>←</kbd>
                 <kbd>→</kbd>
@@ -1064,8 +1111,18 @@ export function OfficePhotoEditor({
                 <kbd>↓</kbd> 微調；加按
                 <kbd>Shift</kbd> 一次移動較多。也可以用下方箭頭按鈕。
               </span>
-            </p>
-          )}
+            )}
+            <span>
+              微調對象：
+              {selectedCropHandle
+                ? CROP_HANDLE_LABELS[selectedCropHandle]
+                : activeTab === 'crop'
+                  ? '整個裁切框'
+                  : activeTab === 'layer'
+                    ? '工程標示'
+                    : '無'}
+            </span>
+          </p>
           <details className="office-canvas-tools">
             <summary>放大／移動畫面</summary>
             <div className="office-canvas-controls">
@@ -1136,7 +1193,12 @@ export function OfficePhotoEditor({
             {(['crop', 'adjust', 'layer'] as const).map((name) => (
               <button
                 aria-selected={activeTab === name}
-                onClick={() => setTab(name)}
+                onClick={() => {
+                  setTab(name)
+                  setComparePinned(false)
+                  setSelectedControl('')
+                  setSelectedCropHandle(null)
+                }}
                 role="tab"
                 type="button"
                 key={name}
@@ -1149,8 +1211,22 @@ export function OfficePhotoEditor({
               </button>
             ))}
           </div>
+          <div className="office-editor-actions">
+            <button
+              aria-pressed={comparePinned}
+              onClick={() => setComparePinned((value) => !value)}
+              type="button"
+            >
+              顯示修改前
+            </button>
+            {comparePinned && <span role="status">目前顯示修改前</span>}
+          </div>
           {activeTab === 'crop' && (
-            <div role="tabpanel" className="office-tool-controls">
+            <fieldset
+              disabled={comparePinned}
+              role="tabpanel"
+              className="office-tool-controls"
+            >
               <label>
                 比例
                 <select
@@ -1195,7 +1271,11 @@ export function OfficePhotoEditor({
               <p>
                 用滑鼠或手指拖曳白點調整範圍。想要更精準？點一下白點，再用下方箭頭微調。
               </p>
-              <div className="office-nudge-tools">
+              <div
+                aria-label="一次移動距離"
+                className="office-nudge-tools"
+                role="group"
+              >
                 <span>一次移動：</span>
                 <button
                   aria-pressed={cropStep === 0.005}
@@ -1212,17 +1292,49 @@ export function OfficePhotoEditor({
                   大（2%）
                 </button>
               </div>
-              <div aria-label="裁切框微調" className="office-crop-nudge">
-                <button onClick={() => nudgeCrop('left')} type="button">
+              <div
+                aria-label="裁切框微調"
+                className="office-crop-nudge"
+                role="group"
+              >
+                <span>
+                  微調對象：
+                  {selectedCropHandle
+                    ? CROP_HANDLE_LABELS[selectedCropHandle]
+                    : '整個裁切框'}
+                </span>
+                {selectedCropHandle &&
+                  (['e', 'w'].includes(selectedCropHandle) ? (
+                    <span>這個點只能左右微調。</span>
+                  ) : ['n', 's'].includes(selectedCropHandle) ? (
+                    <span>這個點只能上下微調。</span>
+                  ) : null)}
+                <button
+                  disabled={!canNudge('left')}
+                  onClick={() => nudgeCrop('left')}
+                  type="button"
+                >
                   ← 左
                 </button>
-                <button onClick={() => nudgeCrop('right')} type="button">
+                <button
+                  disabled={!canNudge('right')}
+                  onClick={() => nudgeCrop('right')}
+                  type="button"
+                >
                   → 右
                 </button>
-                <button onClick={() => nudgeCrop('up')} type="button">
+                <button
+                  disabled={!canNudge('up')}
+                  onClick={() => nudgeCrop('up')}
+                  type="button"
+                >
                   ↑ 上
                 </button>
-                <button onClick={() => nudgeCrop('down')} type="button">
+                <button
+                  disabled={!canNudge('down')}
+                  onClick={() => nudgeCrop('down')}
+                  type="button"
+                >
                   ↓ 下
                 </button>
               </div>
@@ -1236,22 +1348,26 @@ export function OfficePhotoEditor({
                     ['高', 'height'],
                   ] as const
                 ).map(([label, key]) => (
-                  <label key={key}>
-                    {label}（%）
-                    <input
-                      max="100"
-                      min="0"
-                      onChange={(event) =>
-                        setCropValue({
-                          ...(crop ?? INITIAL_CROP),
-                          [key]: Number(event.target.value) / 100,
-                        })
-                      }
-                      step="0.5"
-                      type="range"
-                      value={(crop ?? INITIAL_CROP)[key] * 100}
-                    />
-                  </label>
+                  <div key={key}>
+                    <label htmlFor={`office-crop-${key}`}>
+                      {label}（%）
+                      <input
+                        id={`office-crop-${key}`}
+                        max="100"
+                        min="0"
+                        onChange={(event) =>
+                          setAdvancedCrop(key, Number(event.target.value))
+                        }
+                        onPointerDown={saveSnapshot}
+                        step="0.5"
+                        type="range"
+                        value={(crop ?? INITIAL_CROP)[key] * 100}
+                      />
+                    </label>
+                    <output htmlFor={`office-crop-${key}`}>
+                      {((crop ?? INITIAL_CROP)[key] * 100).toFixed(1)}%
+                    </output>
+                  </div>
                 ))}
               </details>
               {renderFieldError('crop_x', '裁切水平位置')}
@@ -1332,13 +1448,6 @@ export function OfficePhotoEditor({
                   按住不放可看修改前
                 </button>
                 <button
-                  aria-pressed={comparePinned}
-                  onClick={() => setComparePinned((value) => !value)}
-                  type="button"
-                >
-                  {comparePinned ? '修改前' : '修改後'}
-                </button>
-                <button
                   disabled={!history.length}
                   onClick={() => {
                     const previous = history.at(-1)
@@ -1373,10 +1482,14 @@ export function OfficePhotoEditor({
                   全部重設
                 </button>
               </div>
-            </div>
+            </fieldset>
           )}
           {activeTab === 'adjust' && (
-            <div role="tabpanel" className="office-tool-controls">
+            <fieldset
+              disabled={comparePinned}
+              role="tabpanel"
+              className="office-tool-controls"
+            >
               <label>
                 亮度 {edit.brightness}
                 <input
@@ -1395,10 +1508,14 @@ export function OfficePhotoEditor({
                 />
               </label>
               {renderFieldError('brightness', '亮度')}
-            </div>
+            </fieldset>
           )}
           {activeTab === 'layer' && (
-            <div role="tabpanel" className="office-tool-controls">
+            <fieldset
+              disabled={comparePinned}
+              role="tabpanel"
+              className="office-tool-controls"
+            >
               {layer.enabled && !layerBox.fits && (
                 <p className="office-size-note" role="status">
                   {smallLayerBox.fits
@@ -1445,7 +1562,11 @@ export function OfficePhotoEditor({
                     圖層設定無法放入這張照片，請調整工程標示。
                   </p>
                 )}
-              <div aria-label="圖層位置微調" className="office-layer-nudge">
+              <div
+                aria-label="圖層位置微調"
+                className="office-layer-nudge"
+                role="group"
+              >
                 <button
                   aria-label="圖層左移"
                   disabled={!layer.enabled}
@@ -1479,8 +1600,12 @@ export function OfficePhotoEditor({
                   ↓ 下
                 </button>
               </div>
-              <p>一次移動：</p>
-              <div className="office-nudge-tools">
+              <div
+                aria-label="一次移動距離"
+                className="office-nudge-tools"
+                role="group"
+              >
+                <span>一次移動：</span>
                 <button
                   aria-pressed={layerStep === 0.005}
                   onClick={() => setLayerStep(0.005)}
@@ -1502,7 +1627,6 @@ export function OfficePhotoEditor({
                   X 位置（%）
                   <input
                     ref={layerOffsetXControl}
-                    aria-label="水平位移"
                     aria-describedby={fieldErrorId('layer_offset_x')}
                     max="100"
                     min="-100"
@@ -1521,7 +1645,6 @@ export function OfficePhotoEditor({
                   Y 位置（%）
                   <input
                     ref={layerOffsetYControl}
-                    aria-label="垂直位移"
                     aria-describedby={fieldErrorId('layer_offset_y')}
                     max="100"
                     min="-100"
@@ -1625,11 +1748,7 @@ export function OfficePhotoEditor({
                 檢驗人員
                 <input
                   disabled
-                  value={
-                    photo.labels.uploader_name ??
-                    photo.uploaded_by.name_zh ??
-                    '未記錄'
-                  }
+                  value={photo.labels.uploader_name ?? '未記錄'}
                 />
               </label>
               <label>
@@ -1639,7 +1758,7 @@ export function OfficePhotoEditor({
                   value={formatRecordedTime(photo.labels.uploaded_at)}
                 />
               </label>
-            </div>
+            </fieldset>
           )}
           {(fieldError || (error && !hasMappedFieldErrors)) && (
             <p

@@ -1783,6 +1783,8 @@ function PlanningContent({
       <OfficeEvidencePage
         canEdit={photoCapabilities.canEdit}
         canDelete={photoCapabilities.canDelete}
+        taskStatus={routeTask.status}
+        planArchived={selectedPlanDetail.archived || routeTask.plan.archived}
         items={routeTask.items}
         planId={planId}
         projectId={initialProjectId}

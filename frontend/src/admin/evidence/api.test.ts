@@ -15,9 +15,21 @@ describe('officeImageUrl', () => {
     },
   )
 
-  it('keeps the image URL stable when no digest is available', () => {
-    expect(officeImageUrl('task-1', 'photo-1', 'office')).toBe(
-      '/api/v1/inspection-tasks/task-1/photos/photo-1/image?variant=office',
+  it('uses the digest prefix as the cache version', () => {
+    const first = officeImageUrl(
+      'task-1',
+      'photo-1',
+      'office',
+      'deadbeef11111111',
     )
+    const samePrefix = officeImageUrl(
+      'task-1',
+      'photo-1',
+      'office',
+      'deadbeef22222222',
+    )
+
+    expect(first).toContain('&v=deadbeef')
+    expect(first).toBe(samePrefix)
   })
 })

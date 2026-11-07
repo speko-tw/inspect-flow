@@ -105,17 +105,20 @@ export function getOfficePhoto(
   return request(`/inspection-tasks/${taskId}/photos/${photoId}?${query}`)
 }
 
-/** 以正式串流 API 顯示保存版本，不在瀏覽器重新合成 OFFICE。 */
+/**
+ * 以正式串流 API 顯示保存版本，不在瀏覽器重新合成 OFFICE。
+ * digest 前綴讓保存內容變更時 src 改變，觸發瀏覽器重新抓取。
+ */
 export function officeImageUrl(
   taskId: string,
   photoId: string,
   variant: 'field' | 'office',
-  sha256?: string,
+  sha256: string,
 ): string {
   const url =
     `/api/v1/inspection-tasks/${taskId}/photos/${photoId}` +
     `/image?variant=${variant}`
-  return sha256 ? `${url}&v=${sha256.slice(0, 8)}` : url
+  return `${url}&v=${sha256.slice(0, 8)}`
 }
 
 /** 軟刪除照片；刪除結果以後續清單讀回為準。 */

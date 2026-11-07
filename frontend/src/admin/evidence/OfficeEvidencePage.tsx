@@ -12,7 +12,7 @@ import { ConfirmBox } from '../../ui/ConfirmBox'
 import { useUnsavedNavigationGuard } from '../../ui/navigation'
 import { ManagementApiError } from '../api'
 import type { HttpFieldError } from '../../http'
-import { planningClient } from '../planning/api'
+import type { TaskStatus } from '../projectItems/api'
 import {
   deletePhoto,
   editOfficePhoto,
@@ -41,6 +41,8 @@ type Props = {
   items: TaskItem[]
   canEdit: boolean
   canDelete: boolean
+  taskStatus: TaskStatus
+  planArchived: boolean
 }
 
 type Filter = 'all' | 'active' | 'voided' | 'deleted'
@@ -107,13 +109,10 @@ export function OfficeEvidencePage({
   items,
   canEdit,
   canDelete,
+  taskStatus,
+  planArchived,
 }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
-  const [taskStatus, setTaskStatus] = useState<{
-    taskId: string
-    status: string
-    archived: boolean
-  } | null>(null)
   const [photos, setPhotos] = useState<OfficePhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -149,6 +148,8 @@ export function OfficeEvidencePage({
   const historyTriggers = useRef<Record<string, HTMLButtonElement | null>>({})
   const historyHeadings = useRef<Record<string, HTMLHeadingElement | null>>({})
   const pendingHistoryFocus = useRef<string | null>(null)
+  // FEV-R16：同一照片的後續請求會淘汰較早的非同步回應。
+  const historyRequestSeq = useRef<Record<string, number>>({})
   const errorRef = useRef<HTMLParagraphElement | null>(null)
   const operationRef = useRef(false)
   const leaveGuard = useUnsavedNavigationGuard(
@@ -180,25 +181,15 @@ export function OfficeEvidencePage({
     return () => window.clearTimeout(timer)
   }, [reload])
 
-  useEffect(() => {
-    let active = true
-    void planningClient
-      .getTask(taskId)
-      .then((task) => {
-        if (active)
-          setTaskStatus({
-            taskId,
-            status: task.status,
-            archived: task.plan.archived,
-          })
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [taskId])
+  function beginHistoryRequest(photoId: string): number {
+    const next = (historyRequestSeq.current[photoId] ?? 0) + 1
+    historyRequestSeq.current[photoId] = next
+    return next
+  }
 
-  const currentTaskStatus = taskStatus?.taskId === taskId ? taskStatus : null
+  function isCurrentHistoryRequest(photoId: string, requestId: number) {
+    return historyRequestSeq.current[photoId] === requestId
+  }
 
   useEffect(() => {
     const photoId = pendingHistoryFocus.current
@@ -279,10 +270,13 @@ export function OfficeEvidencePage({
 
   async function openHistory(photo: OfficePhoto): Promise<void> {
     if (expandedHistoryIds.includes(photo.id)) {
+      beginHistoryRequest(photo.id)
       setExpandedHistoryIds((ids) => ids.filter((id) => id !== photo.id))
+      // FEV-R16：卸載歷程後把焦點還給原本的展開按鈕。
       window.setTimeout(() => historyTriggers.current[photo.id]?.focus(), 0)
       return
     }
+    const requestId = beginHistoryRequest(photo.id)
     pendingHistoryFocus.current = photo.id
     setExpandedHistoryIds((ids) => [...ids, photo.id])
     setHistoryByPhoto((current) => ({
@@ -297,6 +291,7 @@ export function OfficeEvidencePage({
     }))
     try {
       const detail = await getOfficePhoto(taskId, photo.id)
+      if (!isCurrentHistoryRequest(photo.id, requestId)) return
       setHistoryByPhoto((current) => ({
         ...current,
         [photo.id]: {
@@ -308,6 +303,7 @@ export function OfficeEvidencePage({
         },
       }))
     } catch {
+      if (!isCurrentHistoryRequest(photo.id, requestId)) return
       setHistoryByPhoto((current) => ({
         ...current,
         [photo.id]: {
@@ -321,6 +317,8 @@ export function OfficeEvidencePage({
   }
 
   async function retryHistory(photoId: string): Promise<void> {
+    const requestId = beginHistoryRequest(photoId)
+    historyHeadings.current[photoId]?.focus({ preventScroll: true })
     setHistoryByPhoto((current) => ({
       ...current,
       [photoId]: {
@@ -331,6 +329,7 @@ export function OfficeEvidencePage({
     }))
     try {
       const detail = await getOfficePhoto(taskId, photoId)
+      if (!isCurrentHistoryRequest(photoId, requestId)) return
       setHistoryByPhoto((current) => ({
         ...current,
         [photoId]: {
@@ -342,6 +341,7 @@ export function OfficeEvidencePage({
         },
       }))
     } catch {
+      if (!isCurrentHistoryRequest(photoId, requestId)) return
       setHistoryByPhoto((current) => ({
         ...current,
         [photoId]: { ...current[photoId], loading: false, error: true },
@@ -353,12 +353,14 @@ export function OfficeEvidencePage({
     const current = historyByPhoto[photoId]?.photo
     const cursor = current?.layer_history?.next_cursor
     if (!current || !cursor) return
+    const requestId = beginHistoryRequest(photoId)
     setHistoryByPhoto((state) => ({
       ...state,
       [photoId]: { ...state[photoId], moreLoading: true, moreError: false },
     }))
     try {
       const detail = await getOfficePhoto(taskId, current.id, cursor)
+      if (!isCurrentHistoryRequest(photoId, requestId)) return
       setHistoryByPhoto((state) => ({
         ...state,
         [photoId]: {
@@ -377,6 +379,7 @@ export function OfficeEvidencePage({
         },
       }))
     } catch {
+      if (!isCurrentHistoryRequest(photoId, requestId)) return
       setHistoryByPhoto((state) => ({
         ...state,
         [photoId]: { ...state[photoId], moreLoading: false, moreError: true },
@@ -435,6 +438,9 @@ export function OfficeEvidencePage({
             return response
           })
           if (ok) {
+            const refreshIds = expandedHistoryIds.map(
+              (photoId) => [photoId, beginHistoryRequest(photoId)] as const,
+            )
             try {
               const detail = await getOfficePhoto(taskId, editing.id)
               setPhotos((current) =>
@@ -443,20 +449,19 @@ export function OfficeEvidencePage({
                 ),
               )
               const refreshedHistory = await Promise.all(
-                expandedHistoryIds.map(async (photoId) => {
+                refreshIds.map(async ([photoId, requestId]) => {
                   try {
-                    return [
-                      photoId,
-                      await getOfficePhoto(taskId, photoId),
-                    ] as const
+                    const updated = await getOfficePhoto(taskId, photoId)
+                    return [photoId, requestId, updated] as const
                   } catch {
-                    return [photoId, null] as const
+                    return [photoId, requestId, null] as const
                   }
                 }),
               )
               setHistoryByPhoto((current) => {
                 const next = { ...current }
-                for (const [photoId, updated] of refreshedHistory) {
+                for (const [photoId, requestId, updated] of refreshedHistory) {
+                  if (!isCurrentHistoryRequest(photoId, requestId)) continue
                   if (updated) {
                     next[photoId] = {
                       photo: updated,
@@ -476,11 +481,23 @@ export function OfficeEvidencePage({
                 return next
               })
             } catch {
+              setHistoryByPhoto((current) => {
+                const next = { ...current }
+                for (const [photoId, requestId] of refreshIds) {
+                  if (!isCurrentHistoryRequest(photoId, requestId)) continue
+                  next[photoId] = {
+                    ...next[photoId],
+                    loading: false,
+                    error: true,
+                  }
+                }
+                return next
+              })
               setError('內業版已更新，但詳情讀回失敗，請重新載入。')
             }
             setNoticeByPhoto((current) => ({
               ...current,
-              [editing.id]: '內業版已更新，清單與歷程已重新讀取。',
+              [editing.id]: '內業版已更新。',
             }))
             setEditorDirty(false)
             setEditing(null)
@@ -501,12 +518,14 @@ export function OfficeEvidencePage({
           {taskName}｜照片
         </h2>
         <p>
-          {currentTaskStatus?.archived
+          {planArchived
             ? '計畫已封存，照片只能查看。'
-            : currentTaskStatus?.status === 'CANCELLED'
+            : taskStatus === 'CANCELLED'
               ? '任務已取消，照片只能查看。'
-              : currentTaskStatus?.status === 'COMPLETED'
-                ? '任務已完成：可以編修內業版，不能刪除照片。'
+              : taskStatus === 'COMPLETED'
+                ? canEdit
+                  ? '任務已完成：可以編修內業版，不能刪除照片。'
+                  : '照片只能查看。'
                 : canEdit && canDelete
                   ? '依查核項目查看現場版與內業版；編修後直接更新內業版。'
                   : '照片只能查看。'}
@@ -578,6 +597,8 @@ export function OfficeEvidencePage({
                           setExpandedHistoryIds((ids) =>
                             ids.filter((id) => id !== photo.id),
                           )
+                          beginHistoryRequest(photo.id)
+                          // FEV-R16：Esc 卸載歷程後還原觸發按鈕焦點。
                           window.setTimeout(
                             () => historyTriggers.current[photo.id]?.focus(),
                             0,
@@ -863,7 +884,7 @@ function OfficePhotoHistory({
           })}
         </ol>
       )}
-      {photo.layer_history?.next_cursor && (
+      {photo.layer_history?.next_cursor && !loading && !error && (
         <>
           {moreError && <p role="alert">更多歷程讀取失敗，請再試一次。</p>}
           <button disabled={moreLoading} onClick={onMore} type="button">

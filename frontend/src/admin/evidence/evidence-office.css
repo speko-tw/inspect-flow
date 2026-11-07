@@ -213,12 +213,6 @@
   object-fit: contain;
 }
 
-.office-layer-position {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .office-history-list {
   display: grid;
   gap: 12px;
@@ -298,6 +292,7 @@
   max-width: 100%;
   max-height: 100%;
   overflow: visible;
+  /* FEV-R23：比例變數以預覽短邊為基準，隨容器尺寸縮放。 */
   container-type: size;
 }
 .office-image-stage > img {
@@ -408,7 +403,7 @@
   height: 44px;
   min-height: 44px;
 }
-.office-layer-position {
+.office-layer-anchor {
   position: absolute;
   overflow: visible;
   pointer-events: none;
@@ -420,6 +415,7 @@
   height: 100%;
   box-sizing: border-box;
   overflow: hidden;
+  /* FEV-R23：--office-*-ratio 均相對照片短邊計算。 */
   padding: calc(min(100cqi, 100cqb) * var(--office-inner-ratio));
   grid-template-columns:
     calc(min(100cqi, 100cqb) * var(--office-title-width-ratio))
@@ -449,24 +445,22 @@
     calc(min(100cqi, 100cqb) * var(--office-outline-width-ratio)) #fff;
 }
 .office-layer-table > span {
-  display: -webkit-box;
   position: relative;
   overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow-wrap: anywhere;
   min-width: 0;
   min-height: 0;
   box-shadow: inset 0
     calc(-1 * min(100cqi, 100cqb) * var(--office-line-width-ratio)) 0
     currentColor;
 }
-.office-layer-table__title {
+.office-layer-table > .office-layer-table__title {
   padding-block-start: calc(min(100cqi, 100cqb) * var(--office-inner-ratio));
   padding-inline-end: calc(min(100cqi, 100cqb) * var(--office-inner-ratio));
-  box-shadow: inset
-    calc(-1 * min(100cqi, 100cqb) * var(--office-line-width-ratio)) 0 0
-    currentColor;
+  box-shadow:
+    inset calc(-1 * min(100cqi, 100cqb) * var(--office-line-width-ratio)) 0 0
+      currentColor,
+    inset 0 calc(-1 * min(100cqi, 100cqb) * var(--office-line-width-ratio)) 0
+      currentColor;
 }
 .office-layer-table__value {
   padding-block-start: calc(min(100cqi, 100cqb) * var(--office-inner-ratio));
@@ -483,6 +477,14 @@
     )
     #000;
   paint-order: stroke fill;
+}
+.office-layer-table__text {
+  display: -webkit-box;
+  max-height: calc(2 * min(100cqi, 100cqb) * var(--office-line-height-ratio));
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .office-selection-status {
   min-height: 1.5em;
@@ -510,6 +512,22 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
+.office-crop-nudge > span {
+  grid-column: 1 / -1;
+}
+.office-nudge-tools > span {
+  flex: 0 0 100%;
+}
+.office-nudge-tools > button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.office-tool-controls {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
 .office-crop-nudge button,
 .office-layer-nudge button {
   min-width: 44px;
@@ -524,6 +542,10 @@
 .office-advanced-values {
   display: grid;
   gap: 12px;
+}
+.office-advanced-values > div {
+  display: grid;
+  gap: 4px;
 }
 .office-advanced-values summary {
   min-height: 44px;

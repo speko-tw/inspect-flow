@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { ManagementApiError } from '../api'
+import type { TaskStatus } from '../projectItems/api'
 import {
   deletePhoto,
   editOfficePhoto,
@@ -17,7 +18,6 @@ import {
 } from './api'
 import type { OfficePhoto } from './api'
 import { OfficeEvidencePage } from './OfficeEvidencePage'
-import { planningClient } from '../planning/api'
 
 vi.mock('./api', () => ({
   deletePhoto: vi.fn(),
@@ -27,9 +27,6 @@ vi.mock('./api', () => ({
   officeImageUrl: (task: string, photo: string, version: string) =>
     `/api/v1/inspection-tasks/${task}/photos/${photo}` +
     `/image?variant=${version}`,
-}))
-vi.mock('../planning/api', () => ({
-  planningClient: { getTask: vi.fn() },
 }))
 
 const photo: OfficePhoto = {
@@ -97,7 +94,13 @@ const deletedPhoto = {
   capture_source: null,
 }
 
-function renderPage(canEdit: boolean, canDelete = canEdit, taskId = 'task-1') {
+function renderPage(
+  canEdit: boolean,
+  canDelete = canEdit,
+  taskId = 'task-1',
+  taskStatus: TaskStatus = 'IN_PROGRESS',
+  planArchived = false,
+) {
   return render(
     <DataMemoryRouter
       initialEntries={[
@@ -112,6 +115,8 @@ function renderPage(canEdit: boolean, canDelete = canEdit, taskId = 'task-1') {
         projectId="project-1"
         taskId={taskId}
         taskName="現場檢查"
+        taskStatus={taskStatus}
+        planArchived={planArchived}
       />
     </DataMemoryRouter>,
   )
@@ -143,10 +148,6 @@ describe('OfficeEvidencePage', () => {
       },
     })
     vi.mocked(deletePhoto).mockResolvedValue(undefined)
-    vi.mocked(planningClient.getTask).mockResolvedValue({
-      status: 'IN_PROGRESS',
-      plan: { archived: false },
-    } as never)
   })
 
   it('compares variants and shows badges to read-only staff', async () => {
@@ -213,27 +214,49 @@ describe('OfficeEvidencePage', () => {
       'in progress',
       'IN_PROGRESS',
       false,
+      true,
+      true,
       '依查核項目查看現場版與內業版；編修後直接更新內業版。',
     ],
     [
-      'completed',
+      'completed with edit access',
       'COMPLETED',
+      false,
+      true,
       false,
       '任務已完成：可以編修內業版，不能刪除照片。',
     ],
-    ['cancelled', 'CANCELLED', false, '任務已取消，照片只能查看。'],
-    ['archived', 'IN_PROGRESS', true, '計畫已封存，照片只能查看。'],
-  ])('shows %s task photo instructions', async (_, status, archived, text) => {
-    vi.mocked(planningClient.getTask).mockResolvedValue({
-      status,
-      plan: { archived },
-    } as never)
-    renderPage(
-      status === 'IN_PROGRESS' || status === 'COMPLETED',
-      status === 'IN_PROGRESS',
-    )
-    expect(await screen.findByText(text)).toBeVisible()
-  })
+    [
+      'completed without edit access',
+      'COMPLETED',
+      false,
+      false,
+      false,
+      '照片只能查看。',
+    ],
+    [
+      'cancelled',
+      'CANCELLED',
+      false,
+      false,
+      false,
+      '任務已取消，照片只能查看。',
+    ],
+    [
+      'archived',
+      'IN_PROGRESS',
+      true,
+      false,
+      false,
+      '計畫已封存，照片只能查看。',
+    ],
+  ])(
+    'shows correct instructions for %s tasks',
+    async (_, status, archived, canEdit, canDelete, text) => {
+      renderPage(canEdit, canDelete, 'task-1', status as TaskStatus, archived)
+      expect(await screen.findByText(text)).toBeVisible()
+    },
+  )
 
   it('opens saved variants for deleted photos without mutations', async () => {
     vi.mocked(listOfficePhotos).mockResolvedValue({
@@ -394,9 +417,15 @@ describe('OfficeEvidencePage', () => {
     fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
     expect(await screen.findByText('正在讀取歷程…')).toBeVisible()
     expect(
+      screen.queryByRole('button', { name: '載入更多歷程' }),
+    ).not.toBeInTheDocument()
+    expect(
       screen.getByRole('heading', { name: /圖層修改歷程｜/ }),
     ).toHaveFocus()
-    finish({ ...photo, layer_history: { items: [], next_cursor: null } })
+    finish({
+      ...photo,
+      layer_history: { items: [], next_cursor: 'next-cursor' },
+    })
     expect(
       await screen.findByText('這張照片還沒有修改過工程標示。'),
     ).toBeVisible()
@@ -411,6 +440,9 @@ describe('OfficeEvidencePage', () => {
     fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
     expect(await screen.findByText('歷程讀取失敗，請再試一次。')).toBeVisible()
     expect(
+      screen.queryByRole('button', { name: '載入更多歷程' }),
+    ).not.toBeInTheDocument()
+    expect(
       screen.getByRole('heading', { name: /圖層修改歷程｜/ }),
     ).toHaveFocus()
     vi.mocked(getOfficePhoto).mockResolvedValueOnce({
@@ -419,44 +451,165 @@ describe('OfficeEvidencePage', () => {
     })
     fireEvent.click(within(card).getByRole('button', { name: '重試' }))
     expect(
+      screen.getByRole('heading', { name: /圖層修改歷程｜/ }),
+    ).toHaveFocus()
+    expect(
       await screen.findByText('這張照片還沒有修改過工程標示。'),
     ).toBeVisible()
   })
 
-  it('uses a neutral fallback when the next task lookup fails', async () => {
-    vi.mocked(planningClient.getTask).mockResolvedValueOnce({
-      status: 'CANCELLED',
-      plan: { archived: false },
-    } as never)
-    const view = renderPage(false, false, 'task-1')
-    expect(await screen.findByText('任務已取消，照片只能查看。')).toBeVisible()
-
-    vi.mocked(planningClient.getTask).mockRejectedValueOnce(
-      new Error('offline'),
-    )
-    view.rerender(
-      <DataMemoryRouter
-        initialEntries={[
-          '/projects/project-1/planning/plan-1/tasks/task-1?tab=photos',
-        ]}
-      >
-        <OfficeEvidencePage
-          canDelete={false}
-          canEdit={false}
-          items={items}
-          planId="plan-1"
-          projectId="project-1"
-          taskId="task-2"
-          taskName="現場檢查"
-        />
-      </DataMemoryRouter>,
-    )
+  it('drops an old history response after reopening', async () => {
+    let resolveOld!: (value: OfficePhoto) => void
+    let resolveNew!: (value: OfficePhoto) => void
+    vi.mocked(listOfficePhotos).mockResolvedValue({
+      items: [photo],
+      next_cursor: null,
+    })
+    vi.mocked(getOfficePhoto)
+      .mockReturnValueOnce(new Promise((resolve) => (resolveOld = resolve)))
+      .mockReturnValueOnce(new Promise((resolve) => (resolveNew = resolve)))
+    renderPage(false)
+    const card = await screen.findByRole('article')
+    fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
+    const close = await within(card).findByRole('button', {
+      name: /^收起歷程，/,
+    })
+    fireEvent.click(close)
     await waitFor(() =>
       expect(
-        screen.queryByText('任務已取消，照片只能查看。'),
+        screen.queryByRole('region', { name: /圖層修改歷程｜/ }),
       ).not.toBeInTheDocument(),
     )
-    expect(screen.getByText('照片只能查看。')).toBeVisible()
+    fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
+    resolveNew({
+      ...photo,
+      layer_history: {
+        items: [],
+        next_cursor: null,
+      },
+    })
+    expect(
+      await screen.findByText('這張照片還沒有修改過工程標示。'),
+    ).toBeVisible()
+    resolveOld({
+      ...photo,
+      layer_history: {
+        items: [
+          {
+            id: 'stale-event',
+            actor: { id: null, snapshot: '過期資料' },
+            occurred_at: '2026-10-02T03:00:00Z',
+            before: { layer: photo.layer, labels: photo.labels },
+            after: { layer: photo.layer, labels: photo.labels },
+          },
+        ],
+        next_cursor: null,
+      },
+    })
+    await waitFor(() =>
+      expect(screen.queryByText(/過期資料/)).not.toBeInTheDocument(),
+    )
+  })
+
+  it('drops stale more results after reopening history', async () => {
+    let resolveMore!: (value: OfficePhoto) => void
+    const entry = (id: string, actor: string) => ({
+      id,
+      actor: { id: null, snapshot: actor },
+      occurred_at: '2026-10-02T03:00:00Z',
+      before: { layer: photo.layer, labels: photo.labels },
+      after: { layer: photo.layer, labels: photo.labels },
+    })
+    vi.mocked(listOfficePhotos).mockResolvedValue({
+      items: [photo],
+      next_cursor: null,
+    })
+    vi.mocked(getOfficePhoto)
+      .mockResolvedValueOnce({
+        ...photo,
+        layer_history: {
+          items: [entry('base-event', '目前資料')],
+          next_cursor: 'next-cursor',
+        },
+      })
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveMore = resolve
+        }),
+      )
+      .mockResolvedValueOnce({
+        ...photo,
+        layer_history: {
+          items: [entry('fresh-event', '新資料')],
+          next_cursor: null,
+        },
+      })
+    renderPage(false)
+    const card = await screen.findByRole('article')
+    fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
+    expect(await screen.findByText(/目前資料・/)).toBeVisible()
+    fireEvent.click(within(card).getByRole('button', { name: '載入更多歷程' }))
+    expect(await screen.findByText('正在讀取更多歷程…')).toBeVisible()
+    fireEvent.click(within(card).getByRole('button', { name: /^收起歷程，/ }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('region', { name: /圖層修改歷程｜/ }),
+      ).not.toBeInTheDocument(),
+    )
+    fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
+    expect(await screen.findByText(/新資料・/)).toBeVisible()
+    resolveMore({
+      ...photo,
+      layer_history: {
+        items: [entry('stale-more-event', '過期更多資料')],
+        next_cursor: null,
+      },
+    })
+    await waitFor(() =>
+      expect(screen.queryByText(/過期更多資料/)).not.toBeInTheDocument(),
+    )
+    expect(screen.getByText(/新資料・/)).toBeVisible()
+  })
+
+  it('keeps a failed more request retryable for its photo', async () => {
+    const entry = (id: string, actor: string) => ({
+      id,
+      actor: { id: null, snapshot: actor },
+      occurred_at: '2026-10-02T03:00:00Z',
+      before: { layer: photo.layer, labels: photo.labels },
+      after: { layer: photo.layer, labels: photo.labels },
+    })
+    const withHistory = (items: ReturnType<typeof entry>[]) => ({
+      ...photo,
+      layer_history: { items, next_cursor: 'next-cursor' },
+    })
+    vi.mocked(listOfficePhotos).mockResolvedValue({
+      items: [photo],
+      next_cursor: null,
+    })
+    vi.mocked(getOfficePhoto)
+      .mockResolvedValueOnce(withHistory([entry('base', '原有紀錄')]))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({
+        ...photo,
+        layer_history: {
+          items: [entry('more', '新增紀錄')],
+          next_cursor: null,
+        },
+      })
+    renderPage(false)
+    const card = await screen.findByRole('article')
+    fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
+    expect(await screen.findByText(/原有紀錄・/)).toBeVisible()
+    fireEvent.click(within(card).getByRole('button', { name: '載入更多歷程' }))
+    expect(
+      await screen.findByText('更多歷程讀取失敗，請再試一次。'),
+    ).toBeVisible()
+    fireEvent.click(within(card).getByRole('button', { name: '載入更多歷程' }))
+    expect(await screen.findByText(/新增紀錄・/)).toBeVisible()
+    expect(
+      screen.queryByText('更多歷程讀取失敗，請再試一次。'),
+    ).not.toBeInTheDocument()
   })
 
   it('keeps apply refresh errors scoped to each photo', async () => {
@@ -786,9 +939,9 @@ describe('OfficeEvidencePage', () => {
     const alert = await within(panel).findByRole('alert')
     expect(alert.textContent).toBe('工程標示水平位移：數值超出允許範圍。')
     await waitFor(() =>
-      expect(screen.getByLabelText('水平位移')).toHaveFocus(),
+      expect(screen.getByLabelText('X 位置（%）')).toHaveFocus(),
     )
-    expect(screen.getByLabelText('水平位移')).toHaveAccessibleDescription(
+    expect(screen.getByLabelText('X 位置（%）')).toHaveAccessibleDescription(
       '工程標示水平位移：數值超出允許範圍。',
     )
   })

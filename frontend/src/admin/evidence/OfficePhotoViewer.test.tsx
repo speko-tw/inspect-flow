@@ -8,8 +8,16 @@ import { OfficePhotoViewer } from './OfficePhotoViewer'
 const photo = {
   id: 'photo-1',
   variants: {
-    field: { width: 1200, height: 800 },
-    office: { width: 1200, height: 800 },
+    field: {
+      sha256: 'a'.repeat(64),
+      width: 1200,
+      height: 800,
+    },
+    office: {
+      sha256: 'b'.repeat(64),
+      width: 1200,
+      height: 800,
+    },
   },
 } as OfficePhoto
 
@@ -53,11 +61,13 @@ describe('OfficePhotoViewer', () => {
     expect(screen.getByRole('button', { name: '關閉大圖檢視' })).toHaveFocus()
     expect(screen.getByAltText(/現場版原尺寸/)).toHaveAttribute(
       'src',
-      '/api/v1/inspection-tasks/task-1/photos/photo-1/image?variant=field',
+      '/api/v1/inspection-tasks/task-1/photos/photo-1/image' +
+        '?variant=field&v=aaaaaaaa',
     )
     expect(screen.getByAltText(/內業版原尺寸/)).toHaveAttribute(
       'src',
-      '/api/v1/inspection-tasks/task-1/photos/photo-1/image?variant=office',
+      '/api/v1/inspection-tasks/task-1/photos/photo-1/image' +
+        '?variant=office&v=bbbbbbbb',
     )
 
     fireEvent(viewer, new Event('cancel', { cancelable: true }))
