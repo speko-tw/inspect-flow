@@ -283,6 +283,9 @@ describe('現場任務詳情', () => {
     renderDetail()
     expect(await screen.findByText(message)).toBeInTheDocument()
     expect(screen.getByText(label)).toBeInTheDocument()
+    if (status === 'COMPLETED') {
+      expect(screen.getByText(label)).toHaveClass('badge', 'badge-success')
+    }
     expect(screen.getByText('3～4 mm')).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /開始查核/ }),
