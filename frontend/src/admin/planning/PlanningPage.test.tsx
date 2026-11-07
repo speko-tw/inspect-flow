@@ -22,13 +22,34 @@ import taskAssigneeValidation from './fixtures/task-assignee-validation-422.json
 import taskCancelValidation from './fixtures/task-cancel-validation-422.json'
 import taskCreateValidation from './fixtures/task-create-validation-422.json'
 import taskLocationValidation from './fixtures/task-location-validation-422.json'
-import PlanningPage, { type PlanningPageClient } from './PlanningPage'
+import PlanningPage, {
+  officePhotoCapabilities,
+  type PlanningPageClient,
+} from './PlanningPage'
 
 const READ_ONLY_NOTICE =
   '你在這個專案只能查看計畫與任務，不能新增、修改或派出。' +
   '需要調整請找有管理權限的專案成員或管理者。'
 const ASSIGNEE_LIST_UNAVAILABLE_NOTICE =
   '看不到成員名單，這次只能選「不指定」，' + '之後請有權限的人補上。'
+
+describe('office photo task-state capabilities (FEV-R09)', () => {
+  it.each([
+    ['IN_PROGRESS', false, true, true, true],
+    ['COMPLETED', false, true, true, false],
+    ['CANCELLED', false, true, false, false],
+    ['IN_PROGRESS', true, true, false, false],
+    ['IN_PROGRESS', false, false, false, false],
+  ] as const)(
+    'maps %s archived=%s manage=%s to edit=%s and delete=%s',
+    (status, archived, manage, expectedEdit, expectedDelete) => {
+      expect(officePhotoCapabilities(status, archived, manage)).toEqual({
+        canEdit: expectedEdit,
+        canDelete: expectedDelete,
+      })
+    },
+  )
+})
 
 function validationError(fixture: {
   error: { code: string; fields: Array<{ path: string; code: string }> }

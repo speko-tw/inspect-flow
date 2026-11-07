@@ -38,6 +38,7 @@ import type {
 } from './api'
 
 import './PlanningPage.css'
+import { OfficeEvidencePage } from '../evidence/OfficeEvidencePage'
 
 const READ_ONLY_NOTICE =
   '你在這個專案只能查看計畫與任務，不能新增、修改或派出。' +
@@ -58,6 +59,19 @@ const defaultPlanningPageClient: PlanningPageClient = {
 }
 
 type NoticeArea = 'plans' | 'plan-detail' | 'tasks'
+
+/** FEV-R09：照片編修與刪除依任務狀態及計畫封存分開授權。 */
+export function officePhotoCapabilities(
+  status: InspectionTask['status'],
+  planArchived: boolean,
+  canManage: boolean,
+): { canEdit: boolean; canDelete: boolean } {
+  const allowed = canManage && !planArchived
+  return {
+    canEdit: allowed && ['IN_PROGRESS', 'COMPLETED'].includes(status),
+    canDelete: allowed && status === 'IN_PROGRESS',
+  }
+}
 
 // 必填錯誤等送出才顯示，避免輸入前就出現錯誤；錯誤列在欄位旁
 // 並聚焦（PR-19、ADM-R28），讓使用者能找到修正位置。
@@ -247,7 +261,13 @@ type PlanningPageProps = {
 }
 
 type PlanningView =
-  'list' | 'plan-new' | 'plan' | 'task-new' | 'task' | 'task-edit'
+  | 'list'
+  | 'plan-new'
+  | 'plan'
+  | 'task-new'
+  | 'task'
+  | 'task-edit'
+  | 'task-photos'
 type EditSection = 'location' | 'assignee' | 'items'
 
 /** IP-R27：每個清單、詳情與表單都有可重新整理的網址。 */
@@ -269,13 +289,19 @@ export default function PlanningPage(props: PlanningPageProps) {
         suffix[3] === 'edit'))
   const planId = suffix[0] === 'new' ? '' : (suffix[0] ?? '')
   const taskId = suffix[2] === 'new' ? '' : (suffix[2] ?? '')
+  const photosTab =
+    new URLSearchParams(location.search).get('tab') === 'photos' &&
+    suffix.length === 3 &&
+    suffix[1] === 'tasks'
   const view: PlanningView =
     suffix[0] === 'new'
       ? 'plan-new'
       : suffix[3] === 'edit'
         ? 'task-edit'
         : taskId
-          ? 'task'
+          ? photosTab
+            ? 'task-photos'
+            : 'task'
           : suffix[2] === 'new'
             ? 'task-new'
             : planId
@@ -583,6 +609,7 @@ function PlanningContent({
         itemIds: routeTask.items.map((item) => item.id),
       })
   }
+
   const [cancelTask, setCancelTask] = useState<InspectionTask | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [confirmation, setConfirmation] = useState<{
@@ -1745,6 +1772,29 @@ function PlanningContent({
     )
   }
 
+  if (view === 'task-photos' && routeTask && selectedPlanDetail) {
+    const planArchived = selectedPlanDetail.archived || routeTask.plan.archived
+    const photoCapabilities = officePhotoCapabilities(
+      routeTask.status,
+      planArchived,
+      viewerPermissions === undefined ||
+        viewerPermissions.includes('evidence.manage'),
+    )
+    return (
+      <OfficeEvidencePage
+        canEdit={photoCapabilities.canEdit}
+        canDelete={photoCapabilities.canDelete}
+        taskStatus={routeTask.status}
+        planArchived={planArchived}
+        items={routeTask.items}
+        planId={planId}
+        projectId={initialProjectId}
+        taskId={taskId}
+        taskName={taskTitle(routeTask)}
+      />
+    )
+  }
+
   return (
     <section
       aria-labelledby={
@@ -2481,6 +2531,14 @@ function PlanningContent({
                                 </div>
                               )}
                             </div>
+                          )}
+                          {view === 'task' && task.status !== 'DRAFT' && (
+                            <Link
+                              className="btn"
+                              to={`${taskPath}?tab=photos`}
+                            >
+                              照片與內業編修
+                            </Link>
                           )}
                           {canModify &&
                             canManageTask &&
