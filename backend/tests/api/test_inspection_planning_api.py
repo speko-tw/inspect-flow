@@ -883,8 +883,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
             expected[2:]
         )
         assert (
-            field.get(prefix, params={"status": "COMPLETED"}).status_code
-            == 422
+            field.get(prefix, params={"status": "INVALID"}).status_code == 422
         )
         assert field.get(prefix, params={"limit": 101}).status_code == 422
         assert (
@@ -905,22 +904,116 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         )
         assert field.get(f"{prefix}/{uuid4()}").status_code == 404
 
-        completed_id = uuid7()
-        db_session.add(
-            InspectionTask(
-                id=completed_id,
-                plan_id=UUID(plan_id),
-                project_id=project.id,
-                status="COMPLETED",
-                dispatched_at=timestamp,
-                created_by=world["admin_user"].id,
-                updated_by=world["admin_user"].id,
-                name="示範任務",
-            )
+        completed_cutoff = timestamp - timedelta(days=14)
+        completed_ids = [uuid7() for _ in range(4)]
+        completed_specs = [
+            (
+                completed_ids[0],
+                timestamp - timedelta(days=1),
+                world["field_user"].id,
+            ),
+            (
+                completed_ids[1],
+                timestamp - timedelta(days=1),
+                world["field_user"].id,
+            ),
+            (completed_ids[2], completed_cutoff, world["field_user_two"].id),
+            (
+                completed_ids[3],
+                completed_cutoff - timedelta(seconds=1),
+                world["field_user"].id,
+            ),
+        ]
+        db_session.add_all(
+            [
+                InspectionTask(
+                    id=task_id,
+                    plan_id=UUID(plan_id),
+                    project_id=project.id,
+                    status="COMPLETED",
+                    dispatched_at=timestamp,
+                    completed_at=completed_at,
+                    assignee_id=assignee_id,
+                    created_by=world["admin_user"].id,
+                    updated_by=world["admin_user"].id,
+                    name="示範已完成任務",
+                )
+                for task_id, completed_at, assignee_id in completed_specs
+            ]
         )
         db_session.commit()
+        recent = field.get(
+            prefix,
+            params={
+                "assigned_to_me": "false",
+                "status": "COMPLETED",
+                "completed_within_days": 14,
+                "limit": 2,
+            },
+        )
+        assert recent.status_code == 200, recent.text
+        expected_recent = sorted(
+            completed_ids[:3],
+            key=lambda task_id: (
+                db_session.get(InspectionTask, task_id).completed_at,
+                task_id,
+            ),
+            reverse=True,
+        )
+        assert [row["id"] for row in recent.json()["items"]] == [
+            str(task_id) for task_id in expected_recent[:2]
+        ]
+        for row in recent.json()["items"]:
+            _assert_api_timestamp(row["completed_at"])
+        assert recent.json()["total_count"] == 3
+        assert recent.json()["next_cursor"]
+        second_recent = field.get(
+            prefix,
+            params={
+                "assigned_to_me": "false",
+                "status": "COMPLETED",
+                "completed_within_days": 14,
+                "limit": 2,
+                "cursor": recent.json()["next_cursor"],
+            },
+        )
+        assert [row["id"] for row in second_recent.json()["items"]] == [
+            str(task_id) for task_id in expected_recent[2:]
+        ]
+        assert second_recent.json()["next_cursor"] is None
+        mine_recent = field.get(
+            prefix,
+            params={"status": "COMPLETED", "completed_within_days": 14},
+        )
+        assert mine_recent.json()["total_count"] == 2
+        _assert_api_timestamp(mine_recent.json()["items"][0]["completed_at"])
+        assert (
+            field.get(
+                prefix,
+                params={
+                    "project_id": str(foreign_project.id),
+                    "status": "COMPLETED",
+                },
+            ).status_code
+            == 403
+        )
+        for days in (0, 91):
+            assert (
+                field.get(
+                    prefix,
+                    params={
+                        "status": "COMPLETED",
+                        "completed_within_days": days,
+                    },
+                ).status_code
+                == 422
+            )
         after_completed = field.get(prefix, params={"assigned_to_me": "false"})
-        assert str(completed_id) not in {
+        assert all(
+            "completed_at" not in row
+            for row in after_completed.json()["items"]
+        )
+        assert not set(map(str, completed_ids)) & {
             row["id"] for row in after_completed.json()["items"]
         }
 

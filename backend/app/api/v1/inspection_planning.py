@@ -10,6 +10,7 @@ import base64
 import binascii
 import json
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import Any, Literal
 from uuid import UUID
 
@@ -41,6 +42,7 @@ from app.auth.access import (
     require_project_permission,
 )
 from app.auth.dependencies import get_db, require_login
+from app.db.clock import utc_now
 from app.models import (
     InspectionPlan,
     InspectionTask,
@@ -1192,13 +1194,14 @@ _inspect_any_task = require_admin_or_any_project_permission(
 def field_inspection_tasks(
     assigned_to_me: bool = True,
     project_id: UUID | None = None,
-    status: Literal["PENDING", "IN_PROGRESS"] | None = None,
+    status: Literal["PENDING", "IN_PROGRESS", "COMPLETED"] | None = None,
+    completed_within_days: int = Query(default=14, ge=1, le=90),
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = _db_dependency,
     user: User = Depends(require_login, scope="function"),  # noqa
 ):
-    """列出現場可見的已派 Task；無可查核專案時拒絕。"""
+    """依 FUI-R05 列出有權限的未完成或近期已完成 Task。"""
     try:
         filters = field_inspection_task_filters(
             db,
@@ -1215,21 +1218,43 @@ def field_inspection_tasks(
         raise APIError(response[0], response[1]) from exc
     key = page_cursor_key(cursor)
     statement = select(InspectionTask).where(*filters)
+    completed = status == "COMPLETED"
+    total_count = None
+    if completed:
+        completed_cutoff = utc_now() - timedelta(days=completed_within_days)
+        statement = statement.where(
+            InspectionTask.completed_at >= completed_cutoff
+        )
+        total_count = db.scalar(
+            select(func.count())
+            .select_from(InspectionTask)
+            .where(*filters, InspectionTask.completed_at >= completed_cutoff)
+        )
     if key is not None:
+        sort_time = (
+            InspectionTask.completed_at
+            if completed
+            else InspectionTask.dispatched_at
+        )
         statement = statement.where(
             or_(
-                InspectionTask.dispatched_at < key[0],
-                and_(
-                    InspectionTask.dispatched_at == key[0],
-                    InspectionTask.id < key[1],
-                ),
+                sort_time < key[0],
+                and_(sort_time == key[0], InspectionTask.id < key[1]),
             )
         )
-    page_rows = db.scalars(
-        statement.order_by(
+    sort_time = (
+        InspectionTask.completed_at
+        if completed
+        else InspectionTask.dispatched_at
+    )
+    ordering = (sort_time.desc(), InspectionTask.id.desc())
+    if not completed:
+        ordering = (
             InspectionTask.dispatched_at.desc().nulls_last(),
             InspectionTask.id.desc(),
-        ).limit(limit + 1)
+        )
+    page_rows = db.scalars(
+        statement.order_by(*ordering).limit(limit + 1)
     ).all()
     items = page_rows[:limit]
     # 整頁期間保留引用列，避免序列化時逐筆重查資料庫（#462）。
@@ -1288,13 +1313,20 @@ def field_inspection_tasks(
     next_cursor = None
     if len(page_rows) > limit:
         last = items[-1]
-        if last.dispatched_at is None:
+        cursor_time = last.completed_at if completed else last.dispatched_at
+        if cursor_time is None:
             raise APIError(ErrorCode.SERVER_INTERNAL_ERROR, 500)
-        next_cursor = encode_page_cursor(last.dispatched_at, last.id)
-    return {
+        next_cursor = encode_page_cursor(cursor_time, last.id)
+    result = {
         "items": [
             {
                 **_field_task_summary(db, task, detail=False),
+                # FUI-R05：只有完成清單包含完成時間，未完成回應維持既有欄位。
+                **(
+                    {"completed_at": format_utc(task.completed_at)}
+                    if completed and task.completed_at is not None
+                    else {}
+                ),
                 "item_summary": {
                     "first_title": summaries.get(task.id, (None, 0))[0],
                     "item_count": summaries.get(task.id, (None, 0))[1],
@@ -1304,6 +1336,9 @@ def field_inspection_tasks(
         ],
         "next_cursor": next_cursor,
     }
+    if completed:
+        result["total_count"] = total_count or 0
+    return result
 
 
 @router.get(
