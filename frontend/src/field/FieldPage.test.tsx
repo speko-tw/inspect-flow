@@ -46,6 +46,13 @@ function LocationProbe() {
   return <div data-testid="location">{JSON.stringify(location)}</div>
 }
 
+function fieldTaskCalls(fetcher: ReturnType<typeof vi.fn>) {
+  return fetcher.mock.calls.filter(([input]) => {
+    const url = new URL(String(input), 'https://testserver')
+    return url.searchParams.get('status') !== 'COMPLETED'
+  })
+}
+
 function renderPage(
   options: { user?: Partial<CurrentUser>; state?: unknown } = {},
 ) {
@@ -102,7 +109,7 @@ describe('今日任務首頁', () => {
     renderPage()
 
     expect(await screen.findByRole('heading', { name: '任務' })).toBeVisible()
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(fieldTaskCalls(fetcher)).toHaveLength(1))
     expect(
       screen.queryByRole('heading', { name: '我的任務' }),
     ).not.toBeInTheDocument()
@@ -110,7 +117,7 @@ describe('今日任務首頁', () => {
     await act(async () => {
       resolveTasks[0](Response.json({ items: [], next_cursor: null }))
     })
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(fieldTaskCalls(fetcher)).toHaveLength(2))
     expect(screen.getByRole('heading', { name: '全部任務' })).toBeVisible()
     expect(
       screen.queryByRole('heading', { name: '我的任務' }),
@@ -235,13 +242,17 @@ describe('今日任務首頁', () => {
     expect(await screen.findByText('外牆查核任務')).toBeInTheDocument()
     expect(screen.getByText('外牆鋼筋查核等 2 項')).toBeInTheDocument()
     expect(screen.getByText('分區：一樓')).toBeInTheDocument()
-    expect(String(fetcher.mock.calls[0][0])).toContain('assigned_to_me=true')
+    expect(String(fieldTaskCalls(fetcher)[0][0])).toContain(
+      'assigned_to_me=true',
+    )
     fireEvent.click(screen.getByRole('button', { name: '全部' }))
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
-    expect(String(fetcher.mock.calls[1][0])).toContain('assigned_to_me=false')
+    await waitFor(() => expect(fieldTaskCalls(fetcher)).toHaveLength(2))
+    expect(String(fieldTaskCalls(fetcher)[1][0])).toContain(
+      'assigned_to_me=false',
+    )
     fireEvent.click(screen.getByRole('button', { name: '待開始' }))
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
-    expect(String(fetcher.mock.calls[2][0])).toContain('status=PENDING')
+    await waitFor(() => expect(fieldTaskCalls(fetcher)).toHaveLength(3))
+    expect(String(fieldTaskCalls(fetcher)[2][0])).toContain('status=PENDING')
   })
 
   it('載入更多使用 cursor，返回保留篩選、頁數與卡片', async () => {
@@ -273,14 +284,14 @@ describe('今日任務首頁', () => {
     renderPage()
     await screen.findByText('外牆查核任務')
     fireEvent.click(screen.getByRole('button', { name: '全部' }))
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(fieldTaskCalls(fetcher)).toHaveLength(2))
     fireEvent.click(screen.getByRole('button', { name: '待開始' }))
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(fieldTaskCalls(fetcher)).toHaveLength(3))
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     expect(
       await screen.findByRole('link', { name: /第二查核項目/ }),
     ).toBeInTheDocument()
-    expect(String(fetcher.mock.calls[3][0])).toContain('cursor=next')
+    expect(String(fieldTaskCalls(fetcher)[3][0])).toContain('cursor=next')
     fireEvent.click(screen.getAllByRole('link', { name: /查看任務/ })[0])
     expect(await screen.findByText('依圖面查核')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: /返回任務/ }))
@@ -296,7 +307,7 @@ describe('今日任務首頁', () => {
       'true',
     )
     await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 240))
-    expect(fetcher).toHaveBeenCalledTimes(5)
+    expect(fieldTaskCalls(fetcher)).toHaveLength(5)
   })
 
   it('切回曾看過的篩選組合會重抓第一頁', async () => {
@@ -315,19 +326,19 @@ describe('今日任務首頁', () => {
     renderPage()
     await screen.findByText('外牆查核任務')
     fireEvent.click(screen.getByRole('button', { name: '待開始' }))
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(fieldTaskCalls(fetcher)).toHaveLength(2))
     currentStatus = 'IN_PROGRESS'
     fireEvent.click(screen.getByRole('button', { name: '所有狀態' }))
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(fieldTaskCalls(fetcher)).toHaveLength(3))
     expect(screen.getByText('外牆查核任務').closest('a')).toHaveClass(
       'progress',
     )
     fireEvent.click(screen.getByRole('button', { name: '待開始' }))
     expect(await screen.findByText('目前沒有符合的任務')).toBeInTheDocument()
     expect(screen.queryByText('外牆查核任務')).not.toBeInTheDocument()
-    expect(fetcher).toHaveBeenCalledTimes(4)
-    expect(String(fetcher.mock.calls[3][0])).toContain('status=PENDING')
-    expect(String(fetcher.mock.calls[3][0])).not.toContain('cursor=')
+    expect(fieldTaskCalls(fetcher)).toHaveLength(4)
+    expect(String(fieldTaskCalls(fetcher)[3][0])).toContain('status=PENDING')
+    expect(String(fieldTaskCalls(fetcher)[3][0])).not.toContain('cursor=')
   })
 
   it('下一頁失敗只重試該 cursor，保留已載入卡片', async () => {
@@ -362,9 +373,9 @@ describe('今日任務首頁', () => {
       await screen.findByRole('link', { name: /第二項目/ }),
     ).toBeInTheDocument()
     expect(screen.getByText('外牆查核任務')).toBeInTheDocument()
-    expect(fetcher).toHaveBeenCalledTimes(3)
-    expect(String(fetcher.mock.calls[1][0])).toContain('cursor=next')
-    expect(String(fetcher.mock.calls[2][0])).toContain('cursor=next')
+    expect(fieldTaskCalls(fetcher)).toHaveLength(3)
+    expect(String(fieldTaskCalls(fetcher)[1][0])).toContain('cursor=next')
+    expect(String(fieldTaskCalls(fetcher)[2][0])).toContain('cursor=next')
   })
 
   it('卡片正確處理空標題、單項、無分區與進行中', async () => {
@@ -602,6 +613,9 @@ describe('開始查核後返回清單', () => {
     return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (init?.method === 'POST') return onStart()
+      if (url.includes('status=COMPLETED')) {
+        return Response.json({ items: [], next_cursor: null, total_count: 0 })
+      }
       if (url.includes('/field/inspection-tasks/task-1')) {
         const next = details[Math.min(detailCalls, details.length - 1)]
         detailCalls += 1
@@ -660,7 +674,9 @@ describe('開始查核後返回清單', () => {
     // 列表來自記憶，沒有重抓：只有兩次列表請求。
     const listCalls = fetcher.mock.calls.filter(
       ([input, init]) =>
-        !init?.method && !String(input).includes('inspection-tasks/task-1'),
+        !init?.method &&
+        !String(input).includes('status=COMPLETED') &&
+        !String(input).includes('inspection-tasks/task-1'),
     )
     expect(listCalls).toHaveLength(2)
   })
@@ -760,7 +776,7 @@ it('管理者沒有指派任務時預設全部，仍有共用管理選單與 Adm
     'href',
     '/accounts',
   )
-  expect(fetcher.mock.calls.map(([input]) => String(input))).toEqual([
+  expect(fieldTaskCalls(fetcher).map(([input]) => String(input))).toEqual([
     expect.stringContaining('assigned_to_me=true'),
     expect.stringContaining('assigned_to_me=false'),
   ])
@@ -783,15 +799,15 @@ it('有指派的人維持預設我的任務，明確切換不被自動覆蓋', a
   expect(
     within(scope).getByRole('button', { name: '我的任務' }),
   ).toHaveAttribute('aria-pressed', 'true')
-  expect(fetcher).toHaveBeenCalledOnce()
+  expect(fieldTaskCalls(fetcher)).toHaveLength(1)
   fireEvent.click(within(scope).getByRole('button', { name: '全部' }))
-  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(fieldTaskCalls(fetcher)).toHaveLength(2))
   fireEvent.click(
     within(screen.getByLabelText('任務範圍')).getByRole('button', {
       name: '我的任務',
     }),
   )
-  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
+  await waitFor(() => expect(fieldTaskCalls(fetcher)).toHaveLength(3))
   expect(screen.getByTestId('location')).toHaveTextContent('scope=mine')
 })
 
@@ -838,4 +854,235 @@ it('現場清單的停用建議人顯示改派提醒', async () => {
   )
   renderPage()
   expect(await screen.findByText('（已停用，請改派）')).toBeVisible()
+})
+
+it('近期已完成預設收合時仍載入未完成清單及完成筆數', async () => {
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'https://testserver')
+    if (url.searchParams.get('status') === 'COMPLETED') {
+      return Response.json({ items: [], next_cursor: null, total_count: 2 })
+    }
+    return Response.json({ items: [TASK], next_cursor: null })
+  })
+  vi.stubGlobal('fetch', fetcher)
+  renderPage()
+
+  expect(await screen.findByText(TASK.name)).toBeVisible()
+  expect(
+    await screen.findByRole('button', { name: '近期已完成 (2)' }),
+  ).toHaveAttribute('aria-expanded', 'false')
+  expect(fieldTaskCalls(fetcher)).toHaveLength(1)
+  const completedRequest = fetcher.mock.calls.find(([input]) =>
+    String(input).includes('status=COMPLETED'),
+  )
+  expect(completedRequest?.[0]).toContain('assigned_to_me=true')
+})
+
+it('切換我的任務與全部會同步篩選近期已完成', async () => {
+  const completedCalls: string[] = []
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'https://testserver')
+    if (url.searchParams.get('status') === 'COMPLETED') {
+      completedCalls.push(url.search)
+      return Response.json({ items: [], next_cursor: null, total_count: 0 })
+    }
+    return Response.json({ items: [TASK], next_cursor: null })
+  })
+  vi.stubGlobal('fetch', fetcher)
+  renderPage()
+  await screen.findByRole('button', { name: '近期已完成 (0)' })
+  expect(completedCalls).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', { name: /近期已完成/ }))
+  await screen.findByText('最近 14 天沒有已完成的任務。')
+  expect(completedCalls).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', { name: '全部' }))
+  await waitFor(() => expect(completedCalls).toHaveLength(2))
+  expect(completedCalls[0]).toContain('assigned_to_me=true')
+  expect(completedCalls[1]).toContain('assigned_to_me=false')
+})
+
+it('近期已完成展開時顯示載入中', async () => {
+  const fetcher = vi.fn((input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'https://testserver')
+    if (url.searchParams.get('status') === 'COMPLETED') {
+      return new Promise<Response>(() => {})
+    }
+    return Promise.resolve(Response.json({ items: [TASK], next_cursor: null }))
+  })
+  vi.stubGlobal('fetch', fetcher)
+  renderPage()
+  fireEvent.click(screen.getByRole('button', { name: /近期已完成/ }))
+  expect(await screen.findByText('載入近期已完成任務中')).toBeVisible()
+})
+
+it('近期已完成預設收合，展開顯示筆數與綠色標籤並可唯讀返回', async () => {
+  const completed = {
+    ...TASK,
+    id: 'completed-1',
+    name: '設備間試壓紀錄',
+    status: 'COMPLETED',
+    completed_at: '2026-10-10T08:00:00Z',
+  }
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'https://testserver')
+    if (url.pathname.endsWith('/evidence')) {
+      return Response.json({ all_points_satisfied: true, items: [] })
+    }
+    if (url.pathname.endsWith('/photos')) {
+      return Response.json({ items: [], next_cursor: null })
+    }
+    if (url.pathname.endsWith('/completed-1')) {
+      return Response.json({
+        ...DETAIL,
+        ...completed,
+        suggested_assignee: { name_zh: '示範查核員', is_me: true },
+        started_by: null,
+        cancellation_reason: null,
+        items: [],
+      })
+    }
+    if (url.searchParams.get('status') === 'COMPLETED') {
+      return Response.json({
+        items: [completed],
+        next_cursor: null,
+        total_count: 1,
+      })
+    }
+    return Response.json({ items: [TASK], next_cursor: null })
+  })
+  vi.stubGlobal('fetch', fetcher)
+  const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+  Object.defineProperty(window, 'scrollY', { value: 321, configurable: true })
+  renderPage()
+
+  const toggle = screen.getByRole('button', { name: /近期已完成/ })
+  expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  fireEvent.click(toggle)
+  const card = await screen.findByRole('link', {
+    name: /設備間試壓紀錄.*已完成/,
+  })
+  expect(
+    screen.getByRole('button', { name: /近期已完成 \(1\)/ }),
+  ).toHaveAttribute('aria-expanded', 'true')
+  expect(card.querySelector('.badge-success')).toHaveTextContent('已完成')
+  fireEvent.click(card)
+
+  expect(
+    await screen.findByRole('heading', { name: '設備間試壓紀錄' }),
+  ).toBeVisible()
+  expect(screen.queryByRole('button', { name: '開始查核' })).toBeNull()
+  expect(await screen.findByText(/照片只能查看/)).toBeVisible()
+  fireEvent.click(screen.getByRole('link', { name: '返回任務' }))
+  expect(
+    await screen.findByRole('button', { name: /近期已完成 \(1\)/ }),
+  ).toHaveAttribute('aria-expanded', 'true')
+  await waitFor(() => expect(scroll).toHaveBeenCalledWith(0, 321))
+})
+
+it('近期已完成第二頁詳情返回時保留項目、展開與捲動位置', async () => {
+  const first = {
+    ...TASK,
+    id: 'completed-page-1',
+    name: '第一頁已完成任務',
+    status: 'COMPLETED',
+    completed_at: '2026-10-10T08:00:00Z',
+  }
+  const second = {
+    ...TASK,
+    id: 'completed-page-2',
+    name: '第二頁已完成任務',
+    status: 'COMPLETED',
+    completed_at: '2026-10-09T08:00:00Z',
+  }
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'https://testserver')
+    if (url.pathname.endsWith('/evidence')) {
+      return Response.json({ all_points_satisfied: true, items: [] })
+    }
+    if (url.pathname.endsWith('/photos')) {
+      return Response.json({ items: [], next_cursor: null })
+    }
+    if (url.pathname.endsWith('/completed-page-2')) {
+      return Response.json({
+        ...DETAIL,
+        ...second,
+        suggested_assignee: { name_zh: '示範查核員', is_me: true },
+        started_by: null,
+        cancellation_reason: null,
+        items: [],
+      })
+    }
+    if (url.searchParams.get('status') === 'COMPLETED') {
+      return Response.json(
+        url.searchParams.get('cursor') === 'completed-next'
+          ? { items: [second], next_cursor: null, total_count: 2 }
+          : {
+              items: [first],
+              next_cursor: 'completed-next',
+              total_count: 2,
+            },
+      )
+    }
+    return Response.json({ items: [TASK], next_cursor: null })
+  })
+  vi.stubGlobal('fetch', fetcher)
+  const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+  Object.defineProperty(window, 'scrollY', { value: 777, configurable: true })
+  renderPage()
+
+  fireEvent.click(screen.getByRole('button', { name: /近期已完成/ }))
+  await screen.findByRole('link', { name: /第一頁已完成任務/ })
+  fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+  const secondPageCard = await screen.findByRole('link', {
+    name: /第二頁已完成任務/,
+  })
+  expect(secondPageCard.querySelector('.badge-success')).toHaveTextContent(
+    '已完成',
+  )
+  fireEvent.click(secondPageCard)
+
+  expect(
+    await screen.findByRole('heading', { name: '第二頁已完成任務' }),
+  ).toBeVisible()
+  expect(screen.queryByRole('button', { name: '開始查核' })).toBeNull()
+  fireEvent.click(screen.getByRole('link', { name: '返回任務' }))
+
+  expect(
+    await screen.findByRole('link', { name: /第二頁已完成任務/ }),
+  ).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: /近期已完成 \(2\)/ }),
+  ).toHaveAttribute('aria-expanded', 'true')
+  await waitFor(() => expect(scroll).toHaveBeenCalledWith(0, 777))
+  expect(
+    fetcher.mock.calls.filter(([input]) =>
+      String(input).includes('status=COMPLETED'),
+    ),
+  ).toHaveLength(2)
+})
+
+it('近期已完成顯示空狀態與載入錯誤重試', async () => {
+  let failCompleted = true
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'https://testserver')
+    if (url.searchParams.get('status') === 'COMPLETED') {
+      if (failCompleted) {
+        return Response.json(
+          { error: { code: 'server.error' } },
+          { status: 500 },
+        )
+      }
+      return Response.json({ items: [], next_cursor: null, total_count: 0 })
+    }
+    return Response.json({ items: [TASK], next_cursor: null })
+  })
+  vi.stubGlobal('fetch', fetcher)
+  renderPage()
+  fireEvent.click(screen.getByRole('button', { name: /近期已完成/ }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '無法載入近期已完成任務',
+  )
+  failCompleted = false
+  fireEvent.click(screen.getByRole('button', { name: '重試' }))
+  expect(await screen.findByText('最近 14 天沒有已完成的任務。')).toBeVisible()
 })
