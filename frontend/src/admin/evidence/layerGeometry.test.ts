@@ -80,4 +80,39 @@ describe('layerGeometry', () => {
   it('hides a label that the renderer cannot fit in the photo', () => {
     expect(getLayerBox({ width: 100, height: 100 }, layer).fits).toBe(false)
   })
+
+  it('matches the recorded backend scan for small and medium layers', () => {
+    // FEV-R23：保留後端向量，避免判定分歧。
+    const scan = [
+      [215, false],
+      [216, false],
+      [217, false],
+      [218, true],
+      [219, true],
+      [220, true],
+      [221, true],
+      [222, true],
+      [223, true],
+      [224, true],
+      [225, false],
+      [226, false],
+      [227, false],
+      [228, false],
+      [229, false],
+      [230, true],
+      [231, true],
+      [232, true],
+    ] as const
+
+    for (const size of ['small', 'medium'] as const) {
+      for (const [shortEdge, expected] of scan) {
+        expect(
+          getLayerBox(
+            { width: shortEdge, height: shortEdge },
+            { ...layer, size },
+          ).fits,
+        ).toBe(expected)
+      }
+    }
+  })
 })

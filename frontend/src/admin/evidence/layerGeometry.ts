@@ -9,6 +9,12 @@ export type LayerBox = LayerImageSize & {
   top: number
   fontSize: number
   inner: number
+  lineHeight: number
+  rowHeight: number
+  titleColumnWidth: number
+  radius: number
+  lineWidth: number
+  outlineWidth: number
   fits: boolean
 }
 export type LayerPreviewRect = {
@@ -81,9 +87,17 @@ export function getLayerBox(
   const margin = Math.max(2, Math.floor(0.02 * shortEdge + 0.5))
   const inner = Math.max(2, Math.floor(0.006 * shortEdge + 0.5))
   const width = Math.floor(shortEdge * SIZE_FACTORS[layer.size] + 0.5)
-  const rowHeight = Math.ceil(fontSize * 1.2) * 2 + inner * 2
+  const lineHeight = Math.ceil(fontSize * 1.2)
+  const rowHeight = lineHeight * 2 + inner * 2
+  const leftWidth = Math.floor((width - 2 * inner) * 0.25 + 0.5)
+  const titleColumnWidth = leftWidth - inner
+  const radius = Math.max(2, Math.floor(margin / 2))
+  const lineWidth = 1
+  const outlineWidth = 3
+  // FEV-R23：容納判斷沿用後端 _can_fit 的 padding，而非繪圖 inner。
+  const fitRowHeight = Math.ceil(fontSize * 1.2 * 2 + margin * 2)
   const height = rowHeight * 5 + inner * 2
-  const fits = width >= 100 && rowHeight * 5 <= shortEdge - margin * 2
+  const fits = width >= 100 && fitRowHeight * 5 <= shortEdge - margin * 2
   const baseLeft = layer.corner.includes('left')
     ? margin
     : image.width - width - margin
@@ -104,7 +118,21 @@ export function getLayerBox(
         image.height - height,
       )
     : 0
-  return { left, top, width, height, fontSize, inner, fits }
+  return {
+    left,
+    top,
+    width,
+    height,
+    fontSize,
+    inner,
+    lineHeight,
+    rowHeight,
+    titleColumnWidth,
+    radius,
+    lineWidth,
+    outlineWidth,
+    fits,
+  }
 }
 
 /** 以像素差換算後端使用的水平／垂直 offset，並限制框在照片內。 */

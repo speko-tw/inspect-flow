@@ -12,6 +12,7 @@ import { ConfirmBox } from '../../ui/ConfirmBox'
 import { useUnsavedNavigationGuard } from '../../ui/navigation'
 import { ManagementApiError } from '../api'
 import type { HttpFieldError } from '../../http'
+import { planningClient } from '../planning/api'
 import {
   deletePhoto,
   editOfficePhoto,
@@ -108,10 +109,27 @@ export function OfficeEvidencePage({
   canDelete,
 }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
+  const [taskStatus, setTaskStatus] = useState<{
+    taskId: string
+    status: string
+    archived: boolean
+  } | null>(null)
   const [photos, setPhotos] = useState<OfficePhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
-  const [historyPhoto, setHistoryPhoto] = useState<OfficePhoto | null>(null)
+  const [historyByPhoto, setHistoryByPhoto] = useState<
+    Record<
+      string,
+      {
+        photo?: OfficePhoto
+        loading: boolean
+        error: boolean
+        moreLoading: boolean
+        moreError: boolean
+      }
+    >
+  >({})
+  const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([])
   const [viewingPhoto, setViewingPhoto] = useState<OfficePhoto | null>(null)
   const [editing, setEditing] = useState<OfficePhoto | null>(null)
   const [editorDirty, setEditorDirty] = useState(false)
@@ -128,6 +146,9 @@ export function OfficeEvidencePage({
   const [deleteError, setDeleteError] = useState('')
   const pageHeading = useRef<HTMLHeadingElement | null>(null)
   const viewerTrigger = useRef<HTMLButtonElement | null>(null)
+  const historyTriggers = useRef<Record<string, HTMLButtonElement | null>>({})
+  const historyHeadings = useRef<Record<string, HTMLHeadingElement | null>>({})
+  const pendingHistoryFocus = useRef<string | null>(null)
   const errorRef = useRef<HTMLParagraphElement | null>(null)
   const operationRef = useRef(false)
   const leaveGuard = useUnsavedNavigationGuard(
@@ -158,6 +179,35 @@ export function OfficeEvidencePage({
     const timer = window.setTimeout(() => void reload(), 0)
     return () => window.clearTimeout(timer)
   }, [reload])
+
+  useEffect(() => {
+    let active = true
+    void planningClient
+      .getTask(taskId)
+      .then((task) => {
+        if (active)
+          setTaskStatus({
+            taskId,
+            status: task.status,
+            archived: task.plan.archived,
+          })
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [taskId])
+
+  const currentTaskStatus = taskStatus?.taskId === taskId ? taskStatus : null
+
+  useEffect(() => {
+    const photoId = pendingHistoryFocus.current
+    if (!photoId || !expandedHistoryIds.includes(photoId)) return
+    pendingHistoryFocus.current = null
+    const heading = historyHeadings.current[photoId]
+    heading?.scrollIntoView?.({ block: 'nearest' })
+    heading?.focus({ preventScroll: true })
+  }, [expandedHistoryIds])
 
   useEffect(() => {
     if (error) {
@@ -228,32 +278,109 @@ export function OfficeEvidencePage({
   }
 
   async function openHistory(photo: OfficePhoto): Promise<void> {
-    setError('')
+    if (expandedHistoryIds.includes(photo.id)) {
+      setExpandedHistoryIds((ids) => ids.filter((id) => id !== photo.id))
+      window.setTimeout(() => historyTriggers.current[photo.id]?.focus(), 0)
+      return
+    }
+    pendingHistoryFocus.current = photo.id
+    setExpandedHistoryIds((ids) => [...ids, photo.id])
+    setHistoryByPhoto((current) => ({
+      ...current,
+      [photo.id]: {
+        photo: current[photo.id]?.photo,
+        loading: true,
+        error: false,
+        moreLoading: false,
+        moreError: false,
+      },
+    }))
     try {
-      setHistoryPhoto(await getOfficePhoto(taskId, photo.id))
+      const detail = await getOfficePhoto(taskId, photo.id)
+      setHistoryByPhoto((current) => ({
+        ...current,
+        [photo.id]: {
+          photo: detail,
+          loading: false,
+          error: false,
+          moreLoading: false,
+          moreError: false,
+        },
+      }))
     } catch {
-      setError('照片歷程載入失敗，請重新載入。')
+      setHistoryByPhoto((current) => ({
+        ...current,
+        [photo.id]: {
+          loading: false,
+          error: true,
+          moreLoading: false,
+          moreError: false,
+        },
+      }))
     }
   }
 
-  async function loadMoreHistory(): Promise<void> {
-    const current = historyPhoto
+  async function retryHistory(photoId: string): Promise<void> {
+    setHistoryByPhoto((current) => ({
+      ...current,
+      [photoId]: {
+        ...current[photoId],
+        loading: true,
+        error: false,
+      },
+    }))
+    try {
+      const detail = await getOfficePhoto(taskId, photoId)
+      setHistoryByPhoto((current) => ({
+        ...current,
+        [photoId]: {
+          photo: detail,
+          loading: false,
+          error: false,
+          moreLoading: false,
+          moreError: false,
+        },
+      }))
+    } catch {
+      setHistoryByPhoto((current) => ({
+        ...current,
+        [photoId]: { ...current[photoId], loading: false, error: true },
+      }))
+    }
+  }
+
+  async function loadMoreHistory(photoId: string): Promise<void> {
+    const current = historyByPhoto[photoId]?.photo
     const cursor = current?.layer_history?.next_cursor
     if (!current || !cursor) return
+    setHistoryByPhoto((state) => ({
+      ...state,
+      [photoId]: { ...state[photoId], moreLoading: true, moreError: false },
+    }))
     try {
       const detail = await getOfficePhoto(taskId, current.id, cursor)
-      setHistoryPhoto({
-        ...current,
-        layer_history: {
-          ...detail.layer_history!,
-          items: [
-            ...(current.layer_history?.items ?? []),
-            ...(detail.layer_history?.items ?? []),
-          ],
+      setHistoryByPhoto((state) => ({
+        ...state,
+        [photoId]: {
+          ...state[photoId],
+          photo: {
+            ...current,
+            layer_history: {
+              ...detail.layer_history!,
+              items: [
+                ...(current.layer_history?.items ?? []),
+                ...(detail.layer_history?.items ?? []),
+              ],
+            },
+          },
+          moreLoading: false,
         },
-      })
+      }))
     } catch {
-      setError('更多圖層歷程載入失敗，請重新載入。')
+      setHistoryByPhoto((state) => ({
+        ...state,
+        [photoId]: { ...state[photoId], moreLoading: false, moreError: true },
+      }))
     }
   }
 
@@ -315,7 +442,39 @@ export function OfficeEvidencePage({
                   photo.id === editing.id ? detail : photo,
                 ),
               )
-              setHistoryPhoto(detail)
+              const refreshedHistory = await Promise.all(
+                expandedHistoryIds.map(async (photoId) => {
+                  try {
+                    return [
+                      photoId,
+                      await getOfficePhoto(taskId, photoId),
+                    ] as const
+                  } catch {
+                    return [photoId, null] as const
+                  }
+                }),
+              )
+              setHistoryByPhoto((current) => {
+                const next = { ...current }
+                for (const [photoId, updated] of refreshedHistory) {
+                  if (updated) {
+                    next[photoId] = {
+                      photo: updated,
+                      loading: false,
+                      error: false,
+                      moreLoading: false,
+                      moreError: false,
+                    }
+                  } else {
+                    next[photoId] = {
+                      ...next[photoId],
+                      loading: false,
+                      error: true,
+                    }
+                  }
+                }
+                return next
+              })
             } catch {
               setError('內業版已更新，但詳情讀回失敗，請重新載入。')
             }
@@ -341,7 +500,17 @@ export function OfficeEvidencePage({
         <h2 ref={pageHeading} tabIndex={-1}>
           {taskName}｜照片
         </h2>
-        <p>依查核項目查看現場版與內業版；編修後直接更新內業版。</p>
+        <p>
+          {currentTaskStatus?.archived
+            ? '計畫已封存，照片只能查看。'
+            : currentTaskStatus?.status === 'CANCELLED'
+              ? '任務已取消，照片只能查看。'
+              : currentTaskStatus?.status === 'COMPLETED'
+                ? '任務已完成：可以編修內業版，不能刪除照片。'
+                : canEdit && canDelete
+                  ? '依查核項目查看現場版與內業版；編修後直接更新內業版。'
+                  : '照片只能查看。'}
+        </p>
       </header>
 
       <div className="office-evidence-toolbar">
@@ -400,20 +569,45 @@ export function OfficeEvidencePage({
                     <article
                       aria-label={photoIdentity(photo)}
                       className="office-photo-card"
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === 'Escape' &&
+                          expandedHistoryIds.includes(photo.id)
+                        ) {
+                          event.preventDefault()
+                          setExpandedHistoryIds((ids) =>
+                            ids.filter((id) => id !== photo.id),
+                          )
+                          window.setTimeout(
+                            () => historyTriggers.current[photo.id]?.focus(),
+                            0,
+                          )
+                        }
+                      }}
                     >
                       {photo.is_overview && <h4>總覽照片</h4>}
                       <div className="office-comparison">
                         <figure>
                           <img
                             alt={`現場版，${photoIdentity(photo)}`}
-                            src={officeImageUrl(taskId, photo.id, 'field')}
+                            src={officeImageUrl(
+                              taskId,
+                              photo.id,
+                              'field',
+                              photo.variants.field.sha256,
+                            )}
                           />
                           <figcaption>現場版</figcaption>
                         </figure>
                         <figure>
                           <img
                             alt={`內業版，${photoIdentity(photo)}`}
-                            src={officeImageUrl(taskId, photo.id, 'office')}
+                            src={officeImageUrl(
+                              taskId,
+                              photo.id,
+                              'office',
+                              photo.variants.office.sha256,
+                            )}
                           />
                           <figcaption>內業版</figcaption>
                         </figure>
@@ -464,7 +658,7 @@ export function OfficeEvidencePage({
                         )}
                         {photo.has_layer_overrides && (
                           <span className="office-photo-badge">
-                            有內業覆寫
+                            已修改工程標示文字
                           </span>
                         )}
                       </div>
@@ -480,11 +674,23 @@ export function OfficeEvidencePage({
                           查看大圖
                         </button>
                         <button
-                          aria-label={`查看歷程，${photoIdentity(photo)}`}
+                          aria-controls={`history-${photo.id}`}
+                          aria-expanded={expandedHistoryIds.includes(photo.id)}
+                          aria-label={[
+                            expandedHistoryIds.includes(photo.id)
+                              ? '收起歷程'
+                              : '查看歷程',
+                            photoIdentity(photo),
+                          ].join('，')}
                           onClick={() => void openHistory(photo)}
+                          ref={(node) => {
+                            historyTriggers.current[photo.id] = node
+                          }}
                           type="button"
                         >
-                          查看歷程
+                          {expandedHistoryIds.includes(photo.id)
+                            ? '收起歷程'
+                            : '查看歷程'}
                         </button>
                         {canEdit && !photo.deleted_at && !photo.voided_at && (
                           <button
@@ -513,11 +719,35 @@ export function OfficeEvidencePage({
                         <a
                           className="btn"
                           download
-                          href={officeImageUrl(taskId, photo.id, 'office')}
+                          href={officeImageUrl(
+                            taskId,
+                            photo.id,
+                            'office',
+                            photo.variants.office.sha256,
+                          )}
                         >
                           下載內業版
                         </a>
                       </div>
+                      {expandedHistoryIds.includes(photo.id) && (
+                        <OfficePhotoHistory
+                          error={historyByPhoto[photo.id]?.error ?? false}
+                          headingRef={(node) => {
+                            historyHeadings.current[photo.id] = node
+                          }}
+                          id={`history-${photo.id}`}
+                          loading={historyByPhoto[photo.id]?.loading ?? true}
+                          moreError={
+                            historyByPhoto[photo.id]?.moreError ?? false
+                          }
+                          moreLoading={
+                            historyByPhoto[photo.id]?.moreLoading ?? false
+                          }
+                          onMore={() => void loadMoreHistory(photo.id)}
+                          onRetry={() => void retryHistory(photo.id)}
+                          photo={historyByPhoto[photo.id]?.photo ?? photo}
+                        />
+                      )}
                       {deleting?.id === photo.id && (
                         <ConfirmBox
                           busy={busy}
@@ -547,9 +777,6 @@ export function OfficeEvidencePage({
           )
         })}
       </div>
-      {historyPhoto && (
-        <OfficePhotoHistory photo={historyPhoto} onMore={loadMoreHistory} />
-      )}
       {viewingPhoto && (
         <OfficePhotoViewer
           identity={photoIdentity(viewingPhoto)}
@@ -578,16 +805,45 @@ export function OfficeEvidencePage({
 function OfficePhotoHistory({
   photo,
   onMore,
+  onRetry,
+  loading,
+  error,
+  moreLoading,
+  moreError,
+  id,
+  headingRef,
 }: {
   photo: OfficePhoto
   onMore: () => void
+  onRetry: () => void
+  loading: boolean
+  error: boolean
+  moreLoading: boolean
+  moreError: boolean
+  id: string
+  headingRef: (node: HTMLHeadingElement | null) => void
 }) {
   const history = photo.layer_history?.items ?? []
   return (
-    <section aria-label="圖層修改歷程" className="office-history">
-      <h3>圖層修改歷程</h3>
-      {history.length === 0 ? (
-        <p>目前沒有圖層修改紀錄。</p>
+    <section
+      aria-label={`圖層修改歷程｜${photoIdentity(photo)}`}
+      className="office-history"
+      id={id}
+    >
+      <h3 ref={headingRef} tabIndex={-1}>
+        圖層修改歷程｜{photoIdentity(photo)}
+      </h3>
+      {loading ? (
+        <p role="status">正在讀取歷程…</p>
+      ) : error ? (
+        <div role="alert">
+          <p>歷程讀取失敗，請再試一次。</p>
+          <button onClick={onRetry} type="button">
+            重試
+          </button>
+        </div>
+      ) : history.length === 0 ? (
+        <p>這張照片還沒有修改過工程標示。</p>
       ) : (
         <ol className="office-history-list">
           {history.map((entry) => {
@@ -608,9 +864,12 @@ function OfficePhotoHistory({
         </ol>
       )}
       {photo.layer_history?.next_cursor && (
-        <button onClick={() => void onMore()} type="button">
-          載入更多歷程
-        </button>
+        <>
+          {moreError && <p role="alert">更多歷程讀取失敗，請再試一次。</p>}
+          <button disabled={moreLoading} onClick={onMore} type="button">
+            {moreLoading ? '正在讀取更多歷程…' : '載入更多歷程'}
+          </button>
+        </>
       )}
     </section>
   )
@@ -629,9 +888,11 @@ function HistoryValues({
     top_left: '左上',
     top_right: '右上',
   }[value.layer.corner]
-  const style = { dark: '深色', outline: '描邊', paper: '紙色' }[
-    value.layer.style
-  ]
+  const style = {
+    dark: '深色底',
+    outline: '白字加描邊',
+    paper: '白底黑字',
+  }[value.layer.style]
   const size = { small: '小', medium: '中', large: '大' }[value.layer.size]
   const overrides = [
     ['工程名稱', 'project_name', value.labels.project_name],
@@ -661,7 +922,7 @@ function HistoryValues({
           const description = hasOverride
             ? override === ''
               ? '明示空字串'
-              : `覆寫：${override}`
+              : `自訂文字：${override}`
             : `沿用來源：${source ?? '未記錄'}`
           return (
             <Fragment key={key}>

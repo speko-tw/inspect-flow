@@ -17,6 +17,7 @@ import {
 } from './api'
 import type { OfficePhoto } from './api'
 import { OfficeEvidencePage } from './OfficeEvidencePage'
+import { planningClient } from '../planning/api'
 
 vi.mock('./api', () => ({
   deletePhoto: vi.fn(),
@@ -26,6 +27,9 @@ vi.mock('./api', () => ({
   officeImageUrl: (task: string, photo: string, version: string) =>
     `/api/v1/inspection-tasks/${task}/photos/${photo}` +
     `/image?variant=${version}`,
+}))
+vi.mock('../planning/api', () => ({
+  planningClient: { getTask: vi.fn() },
 }))
 
 const photo: OfficePhoto = {
@@ -93,8 +97,8 @@ const deletedPhoto = {
   capture_source: null,
 }
 
-function renderPage(canEdit: boolean, canDelete = canEdit) {
-  render(
+function renderPage(canEdit: boolean, canDelete = canEdit, taskId = 'task-1') {
+  return render(
     <DataMemoryRouter
       initialEntries={[
         '/projects/project-1/planning/plan-1/tasks/task-1?tab=photos',
@@ -106,7 +110,7 @@ function renderPage(canEdit: boolean, canDelete = canEdit) {
         items={items}
         planId="plan-1"
         projectId="project-1"
-        taskId="task-1"
+        taskId={taskId}
         taskName="現場檢查"
       />
     </DataMemoryRouter>,
@@ -139,6 +143,10 @@ describe('OfficeEvidencePage', () => {
       },
     })
     vi.mocked(deletePhoto).mockResolvedValue(undefined)
+    vi.mocked(planningClient.getTask).mockResolvedValue({
+      status: 'IN_PROGRESS',
+      plan: { archived: false },
+    } as never)
   })
 
   it('compares variants and shows badges to read-only staff', async () => {
@@ -199,6 +207,33 @@ describe('OfficeEvidencePage', () => {
       }
     },
   )
+
+  it.each([
+    [
+      'in progress',
+      'IN_PROGRESS',
+      false,
+      '依查核項目查看現場版與內業版；編修後直接更新內業版。',
+    ],
+    [
+      'completed',
+      'COMPLETED',
+      false,
+      '任務已完成：可以編修內業版，不能刪除照片。',
+    ],
+    ['cancelled', 'CANCELLED', false, '任務已取消，照片只能查看。'],
+    ['archived', 'IN_PROGRESS', true, '計畫已封存，照片只能查看。'],
+  ])('shows %s task photo instructions', async (_, status, archived, text) => {
+    vi.mocked(planningClient.getTask).mockResolvedValue({
+      status,
+      plan: { archived },
+    } as never)
+    renderPage(
+      status === 'IN_PROGRESS' || status === 'COMPLETED',
+      status === 'IN_PROGRESS',
+    )
+    expect(await screen.findByText(text)).toBeVisible()
+  })
 
   it('opens saved variants for deleted photos without mutations', async () => {
     vi.mocked(listOfficePhotos).mockResolvedValue({
@@ -283,12 +318,201 @@ describe('OfficeEvidencePage', () => {
     const card = (await screen.findAllByRole('article'))[0]
     fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
     expect(
-      await screen.findByRole('region', { name: '圖層修改歷程' }),
+      await screen.findByRole('region', { name: /圖層修改歷程｜/ }),
     ).toBeInTheDocument()
     expect(getOfficePhoto).toHaveBeenCalledWith('task-1', 'photo-1')
     expect(
       screen.getByText('林檢查員．示範公司・2026/10/02 11:00'),
     ).toBeInTheDocument()
+  })
+
+  it('keeps histories independent and restores focus on Escape', async () => {
+    vi.mocked(listOfficePhotos).mockResolvedValue({
+      items: [photo, voidedPhoto],
+      next_cursor: null,
+    })
+    vi.mocked(getOfficePhoto).mockImplementation(async (_taskId, photoId) => ({
+      ...photo,
+      id: photoId,
+      layer_history: {
+        items: [
+          {
+            id: `event-${photoId}`,
+            actor: { id: null, snapshot: `actor-${photoId}` },
+            occurred_at: '2026-10-02T03:00:00Z',
+            before: { layer: photo.layer, labels: photo.labels },
+            after: { layer: photo.layer, labels: photo.labels },
+          },
+        ],
+        next_cursor: null,
+      },
+    }))
+    renderPage(false)
+    const cards = await screen.findAllByRole('article')
+    const firstTrigger = within(cards[0]).getByRole('button', {
+      name: /^查看歷程，/,
+    })
+    fireEvent.click(firstTrigger)
+    const firstHistory = await within(cards[0]).findByRole('region', {
+      name: /圖層修改歷程｜/,
+    })
+    await waitFor(() => expect(firstHistory.querySelector('h3')).toHaveFocus())
+    expect(firstTrigger).toHaveAttribute('aria-expanded', 'true')
+    expect(firstTrigger).toHaveAttribute('aria-controls', 'history-photo-1')
+
+    fireEvent.click(
+      within(cards[1]).getByRole('button', { name: /^查看歷程，/ }),
+    )
+    const secondHistory = await within(cards[1]).findByRole('region', {
+      name: /圖層修改歷程｜/,
+    })
+    expect(
+      within(firstHistory).getByText('actor-photo-1・2026/10/02 11:00'),
+    ).toBeVisible()
+    expect(
+      within(secondHistory).getByText('actor-photo-voided・2026/10/02 11:00'),
+    ).toBeVisible()
+    fireEvent.keyDown(firstHistory.querySelector('h3')!, { key: 'Escape' })
+    await waitFor(() => expect(firstHistory).not.toBeInTheDocument())
+    await waitFor(() => expect(firstTrigger).toHaveFocus())
+    expect(secondHistory).toBeInTheDocument()
+  })
+
+  it('shows per-photo loading, empty, failure and retry states', async () => {
+    let finish!: (value: OfficePhoto) => void
+    vi.mocked(getOfficePhoto).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    vi.mocked(listOfficePhotos).mockResolvedValue({
+      items: [photo],
+      next_cursor: null,
+    })
+    renderPage(false)
+    const card = await screen.findByRole('article')
+    fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
+    expect(await screen.findByText('正在讀取歷程…')).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: /圖層修改歷程｜/ }),
+    ).toHaveFocus()
+    finish({ ...photo, layer_history: { items: [], next_cursor: null } })
+    expect(
+      await screen.findByText('這張照片還沒有修改過工程標示。'),
+    ).toBeVisible()
+
+    vi.mocked(getOfficePhoto).mockRejectedValueOnce(new Error('offline'))
+    fireEvent.click(within(card).getByRole('button', { name: /^收起歷程，/ }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('region', { name: /圖層修改歷程｜/ }),
+      ).not.toBeInTheDocument(),
+    )
+    fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
+    expect(await screen.findByText('歷程讀取失敗，請再試一次。')).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: /圖層修改歷程｜/ }),
+    ).toHaveFocus()
+    vi.mocked(getOfficePhoto).mockResolvedValueOnce({
+      ...photo,
+      layer_history: { items: [], next_cursor: null },
+    })
+    fireEvent.click(within(card).getByRole('button', { name: '重試' }))
+    expect(
+      await screen.findByText('這張照片還沒有修改過工程標示。'),
+    ).toBeVisible()
+  })
+
+  it('uses a neutral fallback when the next task lookup fails', async () => {
+    vi.mocked(planningClient.getTask).mockResolvedValueOnce({
+      status: 'CANCELLED',
+      plan: { archived: false },
+    } as never)
+    const view = renderPage(false, false, 'task-1')
+    expect(await screen.findByText('任務已取消，照片只能查看。')).toBeVisible()
+
+    vi.mocked(planningClient.getTask).mockRejectedValueOnce(
+      new Error('offline'),
+    )
+    view.rerender(
+      <DataMemoryRouter
+        initialEntries={[
+          '/projects/project-1/planning/plan-1/tasks/task-1?tab=photos',
+        ]}
+      >
+        <OfficeEvidencePage
+          canDelete={false}
+          canEdit={false}
+          items={items}
+          planId="plan-1"
+          projectId="project-1"
+          taskId="task-2"
+          taskName="現場檢查"
+        />
+      </DataMemoryRouter>,
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByText('任務已取消，照片只能查看。'),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.getByText('照片只能查看。')).toBeVisible()
+  })
+
+  it('keeps apply refresh errors scoped to each photo', async () => {
+    const calls: Record<string, number> = {}
+    vi.mocked(listOfficePhotos).mockResolvedValue({
+      items: [photo, voidedPhoto],
+      next_cursor: null,
+    })
+    vi.mocked(getOfficePhoto).mockImplementation(async (_taskId, photoId) => {
+      calls[photoId] = (calls[photoId] ?? 0) + 1
+      if (photoId === photo.id && calls[photoId] === 4)
+        throw new Error('history refresh unavailable')
+      return {
+        ...photo,
+        id: photoId,
+        layer_history: {
+          items: [
+            {
+              id: `event-${photoId}`,
+              actor: { id: null, snapshot: `actor-${photoId}` },
+              occurred_at: '2026-10-02T03:00:00Z',
+              before: { layer: photo.layer, labels: photo.labels },
+              after: { layer: photo.layer, labels: photo.labels },
+            },
+          ],
+          next_cursor: null,
+        },
+      }
+    })
+    vi.mocked(editOfficePhoto).mockResolvedValue(photo)
+    renderPage(true)
+    const cards = await screen.findAllByRole('article')
+    fireEvent.click(
+      within(cards[0]).getByRole('button', { name: /^查看歷程，/ }),
+    )
+    fireEvent.click(
+      within(cards[1]).getByRole('button', { name: /^查看歷程，/ }),
+    )
+    await within(cards[1]).findByText('actor-photo-voided・2026/10/02 11:00')
+    fireEvent.click(
+      within(cards[0]).getByRole('button', { name: /^編修內業版，/ }),
+    )
+    await screen.findByRole('heading', { name: '編修內業版' })
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認套用' }))
+
+    const updatedCards = await screen.findAllByRole('article')
+    expect(
+      await within(updatedCards[0]).findByText('歷程讀取失敗，請再試一次。'),
+    ).toBeVisible()
+    expect(
+      within(updatedCards[1]).getByText(
+        'actor-photo-voided・2026/10/02 11:00',
+      ),
+    ).toBeVisible()
+    expect(within(updatedCards[1]).queryByRole('alert')).toBeNull()
   })
 
   it.each([
@@ -326,7 +550,7 @@ describe('OfficeEvidencePage', () => {
         within(card).getByRole('button', { name: /^查看歷程，/ }),
       )
       const history = await screen.findByRole('region', {
-        name: '圖層修改歷程',
+        name: /圖層修改歷程｜/,
       })
       expect(
         within(history).getByText(`${expected}・2026/11/07 00:04`),
@@ -358,7 +582,7 @@ describe('OfficeEvidencePage', () => {
     const card = (await screen.findAllByRole('article'))[0]
     fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
     const history = await screen.findByRole('region', {
-      name: '圖層修改歷程',
+      name: /圖層修改歷程｜/,
     })
     fireEvent.click(within(history).getByText('查看修改前後'))
     const values = history.querySelectorAll('.office-history-values')
@@ -423,7 +647,7 @@ describe('OfficeEvidencePage', () => {
     const card = (await screen.findAllByRole('article'))[0]
     fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
     const history = await screen.findByRole('region', {
-      name: '圖層修改歷程',
+      name: /圖層修改歷程｜/,
     })
     const records = within(history).getAllByRole('listitem')
     expect(records).toHaveLength(2)
@@ -448,17 +672,17 @@ describe('OfficeEvidencePage', () => {
     expect(addedBefore.getByText('沿用來源：表面')).toBeVisible()
     expect(addedBefore.getByText('沿用來源：一樓')).toBeVisible()
     expect(addedAfter.getByText('明示空字串')).toBeVisible()
-    expect(addedAfter.getByText('覆寫：自訂項目')).toBeVisible()
-    expect(addedAfter.getByText('覆寫：北側')).toBeVisible()
+    expect(addedAfter.getByText('自訂文字：自訂項目')).toBeVisible()
+    expect(addedAfter.getByText('自訂文字：北側')).toBeVisible()
 
     expectRecord(records[1], '2026/10/03 11:00')
     const removedBefore = valuesIn(records[1], '修改前')
     const removedAfter = valuesIn(records[1], '修改後')
     expect(removedBefore.getByText('明示空字串')).toBeVisible()
-    expect(removedBefore.getByText('覆寫：自訂項目')).toBeVisible()
-    expect(removedBefore.getByText('覆寫：北側')).toBeVisible()
+    expect(removedBefore.getByText('自訂文字：自訂項目')).toBeVisible()
+    expect(removedBefore.getByText('自訂文字：北側')).toBeVisible()
     expect(removedAfter.getByText('沿用來源：工程')).toBeVisible()
-    expect(removedAfter.getByText('覆寫：自訂項目')).toBeVisible()
+    expect(removedAfter.getByText('自訂文字：自訂項目')).toBeVisible()
     expect(removedAfter.getByText('明示空字串')).toBeVisible()
   })
 
@@ -535,7 +759,7 @@ describe('OfficeEvidencePage', () => {
     expect(alert.textContent).toBe('裁切寬度：輸入內容太短。')
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: '裁切框e控制點' }),
+        screen.getByRole('button', { name: '裁切框右側中點控制點' }),
       ).toHaveFocus(),
     )
   })

@@ -141,6 +141,113 @@ describe('OfficePhotoEditor', () => {
     )
   })
 
+  it('renders a scaled hidden 5×2 preview table', () => {
+    renderEditor()
+    const preview = document.querySelector('.office-layer-overlay')
+    expect(preview).toHaveAttribute('aria-hidden', 'true')
+    expect(preview).toHaveClass(
+      'office-layer-table',
+      'office-layer-table--dark',
+    )
+    expect(preview?.querySelectorAll('span')).toHaveLength(10)
+    expect(
+      screen.getByText(/工程標示預覽。工程名稱：專案；檢驗項目：項目/),
+    ).toBeInTheDocument()
+    expect(
+      (preview as HTMLElement).style.getPropertyValue('--office-font-ratio'),
+    ).toBe('0.02')
+    const styles = readFileSync(
+      'src/admin/evidence/evidence-office.css',
+      'utf8',
+    )
+    expect(styles).toMatch(
+      new RegExp(
+        [
+          String.raw`\.office-layer-table__value\s*\{[^}]*`,
+          String.raw`padding-inline-end:\s*calc\(\s*2 \* `,
+          String.raw`min\(100cqi, 100cqb\) \* `,
+          String.raw`var\(--office-inner-ratio\)\s*\);`,
+        ].join(''),
+        's',
+      ),
+    )
+    expect(styles).toMatch(
+      /\.office-layer-table__title\s*\{[^}]*box-shadow:\s*inset\s+calc\(/s,
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    fireEvent.change(screen.getByLabelText('樣式'), {
+      target: { value: 'paper' },
+    })
+    expect(document.querySelector('.office-layer-overlay')).toHaveClass(
+      'office-layer-table--paper',
+    )
+    fireEvent.change(screen.getByLabelText('樣式'), {
+      target: { value: 'outline' },
+    })
+    expect(document.querySelector('.office-layer-overlay')).toHaveClass(
+      'office-layer-table--outline',
+    )
+  })
+
+  it('omits an undersized label and explains why it will not be saved', () => {
+    renderEditor(undefined, {
+      variants: {
+        ...photo.variants,
+        field: { ...photo.variants.field, width: 227, height: 227 },
+      },
+      layer: { ...photo.layer, size: 'small' },
+    })
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    expect(document.querySelector('.office-layer-overlay')).toBeNull()
+    expect(
+      screen.getByText('這張照片太小，儲存後不會加上工程標示。'),
+    ).toBeVisible()
+  })
+
+  it('explains crop selection and nudge steps', () => {
+    renderEditor()
+    fireEvent.click(screen.getByRole('tab', { name: '裁切' }))
+    const handle = screen.getByRole('button', { name: '移動裁切框' })
+    fireEvent.focus(handle)
+    expect(screen.getByRole('status')).toHaveTextContent('已選取：裁切框中央')
+    expect(screen.getByText(/按.*微調/)).toBeVisible()
+    fireEvent.blur(handle, { relatedTarget: null })
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    fireEvent.focus(handle)
+    fireEvent.click(screen.getByRole('button', { name: '小（0.5%）' }))
+    fireEvent.click(screen.getByRole('button', { name: '← 左' }))
+    expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+      left: '7.5%',
+    })
+    fireEvent.click(screen.getByRole('button', { name: '大（2%）' }))
+    fireEvent.click(screen.getByRole('button', { name: '← 左' }))
+    expect(
+      Number.parseFloat(
+        (document.querySelector('.office-crop-frame') as HTMLElement).style
+          .left,
+      ),
+    ).toBeCloseTo(5.5, 2)
+  })
+
+  it('applies 0.5 and 2 percent layer nudges without a keyboard', () => {
+    renderEditor()
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    const overlay = document.querySelector(
+      '.office-layer-overlay',
+    ) as HTMLElement
+    fireEvent.focus(overlay)
+    expect(screen.getByRole('status')).toHaveTextContent('已選取：工程標示')
+    fireEvent.click(screen.getByText('進階位置（X、Y）'))
+    const xPosition = screen.getByLabelText('X 位置（%）')
+    fireEvent.click(screen.getByRole('button', { name: '小（0.5%）' }))
+    fireEvent.click(screen.getByRole('button', { name: '圖層右移' }))
+    expect(xPosition).toHaveValue('0.5')
+    fireEvent.click(screen.getByRole('button', { name: '大（2%）' }))
+    fireEvent.click(screen.getByRole('button', { name: '圖層右移' }))
+    expect(xPosition).toHaveValue('2.5')
+  })
+
   it('saves image edits without writing the fallback layer', async () => {
     const save = renderEditor()
     fireEvent.click(screen.getByRole('button', { name: '確認' }))
@@ -200,10 +307,9 @@ describe('OfficePhotoEditor', () => {
 
   it('exposes eight handles and keyboard crop controls', () => {
     renderEditor()
-    for (const handle of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'])
-      expect(
-        screen.getByRole('button', { name: `裁切框${handle}控制點` }),
-      ).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('button', { name: /裁切框.*控制點/ }),
+    ).toHaveLength(8)
     const move = screen.getByRole('button', { name: '移動裁切框' })
     fireEvent.keyDown(move, { key: 'ArrowRight' })
     expect(document.querySelector('.office-crop-frame')).toHaveStyle({
@@ -310,7 +416,13 @@ describe('OfficePhotoEditor', () => {
     const offset = screen.getByLabelText('水平位移')
     const previousOffset = Number((offset as HTMLInputElement).value)
     await user.keyboard('{ArrowRight}')
-    expect(Number((offset as HTMLInputElement).value)).toBe(previousOffset + 1)
+    expect(Number((offset as HTMLInputElement).value)).toBe(
+      previousOffset + 0.5,
+    )
+    await user.keyboard('{Shift>}{ArrowRight}{/Shift}')
+    expect(Number((offset as HTMLInputElement).value)).toBe(
+      previousOffset + 2.5,
+    )
 
     const moveRight = screen.getByRole('button', { name: '圖層右移' })
     for (let index = 0; index < 30; index += 1) {
@@ -319,7 +431,7 @@ describe('OfficePhotoEditor', () => {
     }
     expect(moveRight).toHaveFocus()
     await user.keyboard('{Enter}')
-    expect(Number((offset as HTMLInputElement).value)).toBe(previousOffset + 2)
+    expect(Number((offset as HTMLInputElement).value)).toBe(previousOffset + 3)
   })
 
   it('submits the apply confirmation with Enter', async () => {
@@ -365,7 +477,9 @@ describe('OfficePhotoEditor', () => {
 
   it('hides and restores the layer during comparison', () => {
     renderEditor()
-    const compare = screen.getByRole('button', { name: '按住比較' })
+    const compare = screen.getByRole('button', {
+      name: '按住不放可看修改前',
+    })
     expect(document.querySelector('.office-layer-overlay')).toBeInTheDocument()
 
     fireEvent.pointerDown(compare)
@@ -427,7 +541,9 @@ describe('OfficePhotoEditor', () => {
     fireEvent.pointerUp(stage, { pointerId: 1, pointerType: 'touch' })
     expect(stage.style.transform).toMatch(/translate\(24px, 0px\) scale\(/)
     const zoomedTransform = stage.style.transform
-    const compare = screen.getByRole('button', { name: '按住比較' })
+    const compare = screen.getByRole('button', {
+      name: '按住不放可看修改前',
+    })
     const image = screen.getByAltText('內業版照片預覽')
     fireEvent.pointerDown(compare, { pointerId: 3 })
     expect(stage.style.transform).toBe('none')
@@ -456,7 +572,9 @@ describe('OfficePhotoEditor', () => {
     const image = screen.getByAltText('內業版照片預覽')
     expect(stage).toHaveStyle({ aspectRatio: '800 / 1200' })
 
-    const compare = screen.getByRole('button', { name: '按住比較' })
+    const compare = screen.getByRole('button', {
+      name: '按住不放可看修改前',
+    })
     fireEvent.pointerDown(compare, { pointerId: 1 })
     expect(stage).toHaveStyle({
       aspectRatio: '1200 / 800',
@@ -489,8 +607,8 @@ describe('OfficePhotoEditor', () => {
       expect(save).toHaveBeenCalledWith(
         expect.objectContaining({
           layer: expect.objectContaining({
-            offset_x: expect.closeTo(0.01, 2),
-            offset_y: expect.closeTo(0.01, 2),
+            offset_x: expect.closeTo(0.005, 3),
+            offset_y: expect.closeTo(0.005, 3),
           }),
         }),
       ),

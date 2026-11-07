@@ -110,11 +110,12 @@ export function officeImageUrl(
   taskId: string,
   photoId: string,
   variant: 'field' | 'office',
+  sha256?: string,
 ): string {
-  return (
+  const url =
     `/api/v1/inspection-tasks/${taskId}/photos/${photoId}` +
     `/image?variant=${variant}`
-  )
+  return sha256 ? `${url}&v=${sha256.slice(0, 8)}` : url
 }
 
 /** 軟刪除照片；刪除結果以後續清單讀回為準。 */

@@ -77,14 +77,24 @@ export function OfficePhotoViewer({
           <figure>
             <img
               alt={`現場版原尺寸，${identity}`}
-              src={officeImageUrl(taskId, photo.id, 'field')}
+              src={officeImageUrl(
+                taskId,
+                photo.id,
+                'field',
+                photo.variants.field.sha256,
+              )}
             />
             <figcaption>保存的現場版本</figcaption>
           </figure>
           <a
             className="btn"
             download
-            href={officeImageUrl(taskId, photo.id, 'field')}
+            href={officeImageUrl(
+              taskId,
+              photo.id,
+              'field',
+              photo.variants.field.sha256,
+            )}
           >
             下載現場版原尺寸
           </a>
@@ -98,14 +108,24 @@ export function OfficePhotoViewer({
           <figure>
             <img
               alt={`內業版原尺寸，${identity}`}
-              src={officeImageUrl(taskId, photo.id, 'office')}
+              src={officeImageUrl(
+                taskId,
+                photo.id,
+                'office',
+                photo.variants.office.sha256,
+              )}
             />
             <figcaption>保存的內業版本</figcaption>
           </figure>
           <a
             className="btn"
             download
-            href={officeImageUrl(taskId, photo.id, 'office')}
+            href={officeImageUrl(
+              taskId,
+              photo.id,
+              'office',
+              photo.variants.office.sha256,
+            )}
           >
             下載內業版原尺寸
           </a>
