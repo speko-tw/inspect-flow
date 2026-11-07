@@ -264,6 +264,20 @@ describe('OfficePhotoEditor', () => {
     expect(selectionStatus).not.toHaveTextContent('已選取')
   })
 
+  it('clears crop selection when the photo image is clicked', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    const status = document.querySelector('.office-selection-status')
+    await user.click(screen.getByRole('button', { name: '移動裁切框' }))
+    expect(status).toHaveTextContent('已選取：裁切框中央')
+
+    await user.click(screen.getByRole('img', { name: '內業版照片預覽' }))
+
+    expect(status).not.toHaveTextContent('已選取')
+    expect(status).toHaveTextContent('微調對象：整個裁切框')
+    expect(screen.getByRole('main', { name: '編修內業版' })).toBeVisible()
+  })
+
   it('keeps advanced crop limits, ratio and undo', () => {
     renderEditor()
     fireEvent.change(screen.getByLabelText('比例'), {

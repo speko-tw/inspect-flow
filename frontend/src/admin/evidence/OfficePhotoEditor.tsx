@@ -835,6 +835,28 @@ export function OfficePhotoEditor({
           <div
             className="office-canvas"
             ref={frame}
+            onClick={(event) => {
+              const target = event.target
+              if (!(target instanceof Element)) return
+              // FEV-R16：照片是背景 target；先排除互動控制，避免氣泡事件清除新選取。
+              if (
+                target.closest(
+                  '.office-crop-frame, .office-crop-handle, ' +
+                    '.office-crop-move, .office-layer-anchor, ' +
+                    '.office-layer-table',
+                )
+              ) {
+                return
+              }
+              if (
+                target === event.currentTarget ||
+                target === imageStage.current ||
+                target === imageStage.current?.querySelector('img')
+              ) {
+                setSelectedCropHandle(null)
+                setSelectedControl('')
+              }
+            }}
             onPointerMove={moveDrag}
             onPointerUp={() => {
               drag.current = null
@@ -846,12 +868,6 @@ export function OfficePhotoEditor({
               tabIndex={0}
               role="group"
               aria-label="照片畫面，可用方向鍵平移"
-              onClick={(event) => {
-                if (event.target === event.currentTarget) {
-                  setSelectedCropHandle(null)
-                  setSelectedControl('')
-                }
-              }}
               onKeyDown={(event) => {
                 if (event.target !== event.currentTarget || zoom <= 1) return
                 const delta = event.shiftKey ? 48 : 24
