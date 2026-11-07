@@ -190,20 +190,25 @@ describe('OfficePhotoEditor', () => {
     )
   })
 
-  it('omits an undersized label and explains why it will not be saved', () => {
-    renderEditor(undefined, {
-      variants: {
-        ...photo.variants,
-        field: { ...photo.variants.field, width: 227, height: 227 },
-      },
-      layer: { ...photo.layer, size: 'small' },
-    })
-    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
-    expect(document.querySelector('.office-layer-overlay')).toBeNull()
-    expect(
-      screen.getByText('這張照片太小，儲存後不會加上工程標示。'),
-    ).toBeVisible()
-  })
+  it.each(['medium', 'small'] as const)(
+    'shows accurate fit guidance for 227px photos at %s size',
+    (size) => {
+      renderEditor(undefined, {
+        variants: {
+          ...photo.variants,
+          field: { ...photo.variants.field, width: 227, height: 227 },
+        },
+        layer: { ...photo.layer, size },
+        layer_render: { ...photo.layer_render, effective_size: size },
+      })
+      fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+      expect(document.querySelector('.office-layer-overlay')).toBeNull()
+      expect(screen.getByRole('status')).toHaveTextContent(
+        '這張照片太小，儲存後不會加上工程標示。',
+      )
+      expect(screen.queryByText(/請改選「小」/)).toBeNull()
+    },
+  )
 
   it('explains crop selection and nudge steps', () => {
     renderEditor()

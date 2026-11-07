@@ -238,6 +238,10 @@ export function OfficePhotoEditor({
     { rotation: edit.rotation, crop },
   )
   const layerBox = getLayerBox(layerImageSize, layer)
+  const smallLayerBox = getLayerBox(layerImageSize, {
+    ...layer,
+    size: 'small',
+  })
   const layerPreview = getLayerPreviewRect(
     photo.variants.field.width,
     photo.variants.field.height,
@@ -1395,6 +1399,13 @@ export function OfficePhotoEditor({
           )}
           {activeTab === 'layer' && (
             <div role="tabpanel" className="office-tool-controls">
+              {layer.enabled && !layerBox.fits && (
+                <p className="office-size-note" role="status">
+                  {smallLayerBox.fits
+                    ? '標示放不進這張照片，請改選「小」。'
+                    : '這張照片太小，儲存後不會加上工程標示。'}
+                </p>
+              )}
               <label>
                 <input
                   ref={layerEnabledControl}
@@ -1434,13 +1445,6 @@ export function OfficePhotoEditor({
                     圖層設定無法放入這張照片，請調整工程標示。
                   </p>
                 )}
-              {layer.enabled && !layerBox.fits && (
-                <p className="office-size-note" role="status">
-                  {layer.size === 'small'
-                    ? '這張照片太小，儲存後不會加上工程標示。'
-                    : '標示放不進這張照片，請改選「小」。'}
-                </p>
-              )}
               <div aria-label="圖層位置微調" className="office-layer-nudge">
                 <button
                   aria-label="圖層左移"
