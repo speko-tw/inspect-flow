@@ -1,10 +1,11 @@
 import { SuggestedAssignee } from '../ui/SuggestedAssignee'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Link,
   matchPath,
   useLocation,
   useNavigate,
+  useNavigationType,
   useSearchParams,
 } from 'react-router'
 
@@ -19,7 +20,13 @@ import { PAGE_TITLES } from '../layout/navigationLabels'
 import { canAccessRoute, ROUTES } from '../routes'
 import RouteNotFound from '../RouteNotFound'
 import { StatusBadge } from '../ui/Badge'
-import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
+import {
+  fetchFieldTasks,
+  fetchRecentCompletedTasks,
+  FieldApiError,
+  type CompletedFieldTask,
+  type FieldTask,
+} from './api'
 import type { TaskListChange } from './StartAction'
 import TaskDetail from './TaskDetail'
 import './field-redesign.css'
@@ -30,6 +37,12 @@ type ListState = {
   items: FieldTask[]
   nextCursor: string | null
   pages: number
+  scrollY: number
+}
+type CompletedListState = {
+  items: CompletedFieldTask[]
+  nextCursor: string | null
+  totalCount: number
   scrollY: number
 }
 
@@ -79,7 +92,13 @@ export default function FieldPage() {
   const { user } = useCurrentUser()
   const [listMemory] = useState(() => new Map<string, ListState>())
   const [returnKeys] = useState(() => new Set<string>())
+  const [completedMemory] = useState(
+    () => new Map<string, CompletedListState>(),
+  )
+  const [completedReturnKeys] = useState(() => new Set<string>())
   const location = useLocation()
+  const taskListKey = new URLSearchParams(location.search)
+  taskListKey.delete('recent')
   const detailPattern = new RegExp(
     `^${ROUTES.fieldTask.path.replace(':id', '([^/]+)')}/?$`,
   )
@@ -118,10 +137,12 @@ export default function FieldPage() {
             <RouteNotFound />
           ) : (
             <TaskList
-              key={`${user.id}:${location.search}`}
+              key={`${user.id}:${taskListKey.toString()}`}
               userId={user.id}
               memory={listMemory}
               returnKeys={returnKeys}
+              completedMemory={completedMemory}
+              completedReturnKeys={completedReturnKeys}
             />
           )}
         </main>
@@ -134,14 +155,32 @@ function TaskList({
   userId,
   memory,
   returnKeys,
+  completedMemory,
+  completedReturnKeys,
 }: {
   userId: string
   memory: Map<string, ListState>
   returnKeys: Set<string>
+  completedMemory: Map<string, CompletedListState>
+  completedReturnKeys: Set<string>
 }) {
   const [params, setParams] = useSearchParams()
+  // 查詢更新會更換 setter；避免展開／收合讓 active 清單重抓並覆寫分頁。
+  const setParamsRef = useRef(setParams)
   const navigate = useNavigate()
   const location = useLocation()
+  const navigationType = useNavigationType()
+  const locationStateRef = useRef(location.state)
+  useEffect(() => {
+    setParamsRef.current = setParams
+  }, [setParams])
+  useEffect(() => {
+    locationStateRef.current = location.state
+  }, [location.state])
+  const locationRef = useRef(location.pathname + location.search)
+  useEffect(() => {
+    locationRef.current = location.pathname + location.search
+  }, [location.pathname, location.search])
   const scope: Scope = params.get('scope') === 'all' ? 'all' : 'mine'
   const allowAutoScope = !params.has('scope') && !params.has('status')
   const noAssignedTasks =
@@ -151,6 +190,7 @@ function TaskList({
   const status: Status =
     rawStatus === 'PENDING' || rawStatus === 'IN_PROGRESS' ? rawStatus : 'all'
   const key = `${userId}:${scope}:${status}`
+  const completedKey = `${userId}:${scope}`
   const [restore] = useState(
     () =>
       returnKeys.has(key) ||
@@ -163,6 +203,26 @@ function TaskList({
   const [loading, setLoading] = useState(() => !restore || !memory.has(key))
   const [error, setError] = useState<'forbidden' | 'other' | null>(null)
   const [retry, setRetry] = useState(0)
+  const recentExpanded = params.get('recent') === '1'
+  // 瀏覽器上一頁是 POP，沒有詳情返回 state 時仍以 user/scope 記憶還原。
+  const [restoreCompleted] = useState(
+    () =>
+      completedReturnKeys.has(completedKey) &&
+      (navigationType === 'POP' ||
+        (location.state as { restoreTaskList?: unknown } | null)
+          ?.restoreTaskList === true),
+  )
+  const [completedState, setCompletedState] =
+    useState<CompletedListState | null>(() =>
+      restoreCompleted ? (completedMemory.get(completedKey) ?? null) : null,
+    )
+  const recentTasks = completedState?.items ?? []
+  const recentCount = completedState?.totalCount ?? null
+  const recentCursor = completedState?.nextCursor ?? null
+  const [recentLoading, setRecentLoading] = useState(() => !completedState)
+  const [recentError, setRecentError] = useState(false)
+  const [recentRetry, setRecentRetry] = useState(0)
+  const recentRequest = useRef(0)
   // FUI-R02：預設範圍要等指派查詢完成才知道；決定前標題中性為「任務」，
   // 避免先出現「我的任務」再改成「全部任務」。
   const pendingDefaultScope = allowAutoScope && !state
@@ -186,11 +246,17 @@ function TaskList({
         if (!active) return
         // T16：先以真實指派查詢決定預設，不從管理者身分猜有沒有任務。
         if (allowAutoScope && scope === 'mine' && page.items.length === 0) {
-          setParams(
+          setParamsRef.current(
             { scope: 'all' },
             {
               replace: true,
-              state: { ...location.state, defaultedToAll: true },
+              state: {
+                ...(locationStateRef.current as Record<
+                  string,
+                  unknown
+                > | null),
+                defaultedToAll: true,
+              },
             },
           )
           return
@@ -208,7 +274,7 @@ function TaskList({
         if (!active) return
         if (cause instanceof FieldApiError && cause.status === 401) {
           navigate(ROUTES.login.path, {
-            state: { from: location.pathname + location.search },
+            state: { from: locationRef.current },
           })
         } else {
           setError(isForbidden(cause) ? 'forbidden' : 'other')
@@ -223,8 +289,6 @@ function TaskList({
   }, [
     key,
     location.pathname,
-    location.search,
-    location.state,
     memory,
     navigate,
     retry,
@@ -233,14 +297,120 @@ function TaskList({
     scope,
     status,
     allowAutoScope,
-    setParams,
+    noAssignedTasks,
+  ])
+
+  useEffect(() => {
+    let active = true
+    const requestId = ++recentRequest.current
+    if (restoreCompleted) {
+      completedReturnKeys.delete(completedKey)
+      const saved = completedMemory.get(completedKey)
+      if (saved) {
+        requestAnimationFrame(() => window.scrollTo(0, saved.scrollY))
+        return () => {
+          active = false
+          recentRequest.current += 1
+        }
+      }
+    } else {
+      completedReturnKeys.delete(completedKey)
+    }
+    fetchRecentCompletedTasks({
+      assignedToMe: scope === 'mine',
+      limit: PAGE_SIZE,
+    })
+      .then((page) => {
+        if (!active || requestId !== recentRequest.current) return
+        const next = {
+          items: page.items,
+          nextCursor: page.next_cursor,
+          totalCount: page.total_count,
+          scrollY: window.scrollY,
+        }
+        completedMemory.set(completedKey, next)
+        setCompletedState(next)
+      })
+      .catch((cause: unknown) => {
+        if (active && requestId === recentRequest.current) {
+          if (cause instanceof FieldApiError && cause.status === 401) {
+            navigate(ROUTES.login.path, {
+              state: { from: locationRef.current },
+            })
+          } else {
+            setRecentError(true)
+          }
+        }
+      })
+      .finally(() => {
+        if (active && requestId === recentRequest.current) {
+          setRecentLoading(false)
+        }
+      })
+    return () => {
+      active = false
+      recentRequest.current += 1
+    }
+  }, [
+    completedKey,
+    completedMemory,
+    completedReturnKeys,
+    location.pathname,
+    navigate,
+    recentRetry,
+    restoreCompleted,
+    scope,
   ])
 
   function updateFilter(nextScope: Scope, nextStatus: Status) {
     const next = new URLSearchParams()
     next.set('scope', nextScope)
     if (nextStatus !== 'all') next.set('status', nextStatus)
+    if (recentExpanded) next.set('recent', '1')
     setParams(next, { state: { defaultedToAll: noAssignedTasks } })
+  }
+
+  function toggleRecent() {
+    const next = new URLSearchParams(params)
+    if (recentExpanded) next.delete('recent')
+    else next.set('recent', '1')
+    setParams(next, { state: location.state })
+  }
+
+  function retryRecent() {
+    setRecentLoading(true)
+    setRecentError(false)
+    setCompletedState(null)
+    completedMemory.delete(completedKey)
+    setRecentRetry((value) => value + 1)
+  }
+
+  async function loadMoreRecent() {
+    if (!recentCursor || recentLoading) return
+    const requestId = recentRequest.current
+    setRecentLoading(true)
+    setRecentError(false)
+    try {
+      const page = await fetchRecentCompletedTasks({
+        assignedToMe: scope === 'mine',
+        completedWithinDays: 14,
+        cursor: recentCursor,
+        limit: PAGE_SIZE,
+      })
+      if (requestId !== recentRequest.current) return
+      const next = {
+        items: [...recentTasks, ...page.items],
+        nextCursor: page.next_cursor,
+        totalCount: page.total_count,
+        scrollY: window.scrollY,
+      }
+      completedMemory.set(completedKey, next)
+      setCompletedState(next)
+    } catch {
+      if (requestId === recentRequest.current) setRecentError(true)
+    } finally {
+      if (requestId === recentRequest.current) setRecentLoading(false)
+    }
   }
 
   async function loadMore() {
@@ -466,6 +636,125 @@ function TaskList({
             </>
           )}
         </>
+      )}
+      {error !== 'forbidden' && (
+        <section className="field-recent-completed">
+          <h2>
+            <Button
+              variant="secondary"
+              type="button"
+              aria-expanded={recentExpanded}
+              aria-controls="recent-completed-list"
+              onClick={toggleRecent}
+            >
+              <span aria-hidden="true">{recentExpanded ? '▾' : '▸'}</span>{' '}
+              近期已完成 ({recentCount ?? '…'})
+            </Button>
+          </h2>
+          {recentExpanded && (
+            <div id="recent-completed-list">
+              {recentLoading && recentTasks.length === 0 && (
+                <ResourceState
+                  state="loading"
+                  title="載入近期已完成任務中"
+                  message="正在取得最近 14 天完成的任務。"
+                />
+              )}
+              {recentError && (
+                <section
+                  className="field-notice field-notice-error"
+                  role="alert"
+                >
+                  <h3>無法載入近期已完成任務</h3>
+                  <p>請稍後再試。</p>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={retryRecent}
+                  >
+                    重試
+                  </Button>
+                </section>
+              )}
+              {!recentLoading && !recentError && recentTasks.length === 0 && (
+                <section className="field-notice">
+                  <p>最近 14 天沒有已完成的任務。</p>
+                </section>
+              )}
+              {recentTasks.length > 0 && (
+                <div className="field-task-list">
+                  {recentTasks.map((task) => (
+                    <Link
+                      className="field-task-card"
+                      key={task.id}
+                      to={`${ROUTES.fieldTask.path.replace(
+                        ':id',
+                        task.id,
+                      )}${location.search}`}
+                      onClick={() => {
+                        returnKeys.add(key)
+                        const saved = memory.get(key)
+                        if (saved) {
+                          memory.set(key, {
+                            ...saved,
+                            scrollY: window.scrollY,
+                          })
+                        }
+                        completedReturnKeys.add(completedKey)
+                        const completedSaved =
+                          completedMemory.get(completedKey)
+                        if (completedSaved) {
+                          completedMemory.set(completedKey, {
+                            ...completedSaved,
+                            scrollY: window.scrollY,
+                          })
+                        }
+                      }}
+                    >
+                      <span className="field-card-top">
+                        <strong>{task.name}</strong>
+                        <StatusBadge status="COMPLETED" />
+                      </span>
+                      {task.item_summary.first_title && (
+                        <span className="field-card-item-summary">
+                          {task.item_summary.first_title}
+                          {task.item_summary.item_count > 1 &&
+                            `等 ${task.item_summary.item_count} 項`}
+                        </span>
+                      )}
+                      <span className="field-card-project">
+                        {task.project_name}
+                      </span>
+                      <span className="field-card-meta">
+                        {task.location.zone_name && (
+                          <span>分區：{task.location.zone_name}</span>
+                        )}
+                        {task.location.location_text && (
+                          <span>補充地點：{task.location.location_text}</span>
+                        )}
+                      </span>
+                      <span className="field-card-foot">
+                        <span>完成 {displayTime(task.completed_at)}</span>
+                        <strong>查看任務</strong>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {recentCursor && (
+                <Button
+                  variant="secondary"
+                  type="button"
+                  className="field-more"
+                  disabled={recentLoading}
+                  onClick={loadMoreRecent}
+                >
+                  {recentLoading ? '載入中…' : '載入更多'}
+                </Button>
+              )}
+            </div>
+          )}
+        </section>
       )}
     </>
   )

@@ -27,9 +27,22 @@ export interface FieldTask {
   item_summary: { first_title: string | null; item_count: number }
 }
 
+/** FUI-R05 的近期已完成列項，和未完成清單使用獨立狀態型別。 */
+export interface CompletedFieldTask extends Omit<FieldTask, 'status'> {
+  status: 'COMPLETED'
+  completed_at: string
+}
+
 export interface FieldTaskPage {
   items: FieldTask[]
   next_cursor: string | null
+}
+
+/** FUI-R05 的已完成分頁，包含供區塊標題顯示的總筆數。 */
+export interface CompletedFieldTaskPage {
+  items: CompletedFieldTask[]
+  next_cursor: string | null
+  total_count: number
 }
 
 /** 詳情只給顯示名稱、啟用狀態與「是否為本人」，不給 ID 或帳號。 */
@@ -124,6 +137,16 @@ function isFieldTask(value: unknown): value is FieldTask {
     optionalText(summary.first_title) &&
     Number.isInteger(summary.item_count) &&
     Number(summary.item_count) >= 0
+  )
+}
+
+function isCompletedFieldTask(value: unknown): value is CompletedFieldTask {
+  // FUI-R05：只在專用查詢驗證 COMPLETED，未完成清單仍拒絕此狀態。
+  return (
+    isRecord(value) &&
+    value.status === 'COMPLETED' &&
+    typeof value.completed_at === 'string' &&
+    isFieldTask({ ...value, status: 'IN_PROGRESS' })
   )
 }
 
@@ -285,4 +308,36 @@ export async function fetchFieldTasks(params: {
     throw new Error('Field task list response has an unexpected shape')
   }
   return { items: body.items, next_cursor: body.next_cursor }
+}
+
+/** 讀取相同權限範圍內最近 N 天完成的 Field Task（FUI-R05）。 */
+export async function fetchRecentCompletedTasks(params: {
+  assignedToMe: boolean
+  completedWithinDays?: number
+  cursor?: string | null
+  limit?: number
+}): Promise<CompletedFieldTaskPage> {
+  const query = new URLSearchParams({
+    assigned_to_me: String(params.assignedToMe),
+    status: 'COMPLETED',
+    completed_within_days: String(params.completedWithinDays ?? 14),
+    limit: String(params.limit ?? 10),
+  })
+  if (params.cursor) query.set('cursor', params.cursor)
+  const body = await getJson<unknown>(`/field/inspection-tasks?${query}`)
+  if (
+    !isRecord(body) ||
+    !Array.isArray(body.items) ||
+    !body.items.every(isCompletedFieldTask) ||
+    !optionalText(body.next_cursor) ||
+    !Number.isInteger(body.total_count) ||
+    Number(body.total_count) < 0
+  ) {
+    throw new Error('Completed field task response has an unexpected shape')
+  }
+  return {
+    items: body.items,
+    next_cursor: body.next_cursor,
+    total_count: Number(body.total_count),
+  }
 }
