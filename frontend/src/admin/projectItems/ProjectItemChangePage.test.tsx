@@ -312,35 +312,34 @@ describe('ProjectItemChangePage', () => {
     expect(api.loadPreview).toHaveBeenCalledTimes(2)
   })
 
-  it('explains kept old results when a Task already has one (#491)', async () => {
-    const withResult = structuredClone(preview)
-    withResult.affectedTasks[1].hasResult = true
-    const api = apiWith({ loadPreview: vi.fn(async () => withResult) })
-    renderPage(api)
-    await confirm('yes')
-    expect(
-      await screen.findByText(
-        '舊結果與照片會保留可查，標示「標準變更作廢」，任務需要重新查核。',
-      ),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/二樓東側.*舊結果與照片保留可查，標示「標準變更作廢」/),
-    ).toBeInTheDocument()
-    expect(screen.queryByText(/已標記作廢/)).toBeNull()
-  })
+  const retainedResultText = [
+    '舊結果與照片會保留可查，標示「標準變更作廢」，',
+    '任務需要重新查核。',
+  ].join('')
 
-  it('FEV-AC26: explains reinspection with only photos', async () => {
-    const photoOnly = structuredClone(preview)
-    photoOnly.affectedTasks[1].hasResult = true
-    const api = apiWith({ loadPreview: vi.fn(async () => photoOnly) })
-    renderPage(api)
-    await confirm('yes')
-    expect(
-      await screen.findByText(
-        '舊結果與照片會保留可查，標示「標準變更作廢」，任務需要重新查核。',
-      ),
-    ).toBeInTheDocument()
-  })
+  it.each([
+    ['無照片也無結果', false, '任務尚未填寫結果，直接改用新標準。'],
+    ['只有照片', true, retainedResultText],
+    ['已有結果與照片', true, retainedResultText],
+  ] as const)(
+    'FEV-AC26：%s 依預覽 hasResult 顯示重查說明',
+    async (_scenario, hasResult, expectedText) => {
+      const scenario = structuredClone(preview)
+      scenario.affectedTasks[1].hasResult = hasResult
+      const api = apiWith({
+        loadPreview: vi.fn(async () => scenario),
+      })
+      renderPage(api)
+      await confirm('yes')
+      expect(await screen.findByText(expectedText)).toBeInTheDocument()
+      if (hasResult) {
+        const affectedTask = screen.getByText(/二樓東側/).closest('li')
+        expect(affectedTask).toHaveTextContent('舊結果與照片保留可查')
+        expect(affectedTask).toHaveTextContent('標準變更作廢')
+        expect(screen.queryByText(/已標記作廢/)).toBeNull()
+      }
+    },
+  )
 
   it('names both kinds when Tasks with and without results mix (#491)', async () => {
     const mixed = structuredClone(preview)
