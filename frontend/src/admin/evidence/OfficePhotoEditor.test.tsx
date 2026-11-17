@@ -82,7 +82,129 @@ function renderEditor(
   return onSave
 }
 
+/** 既存裁切仍須能平移，與無裁切時的整張起始情境分開驗證。 */
+function renderCroppedEditor() {
+  return renderEditor(undefined, {
+    variants: {
+      ...photo.variants,
+      office: {
+        ...photo.variants.office,
+        edit_params: {
+          crop: { x: 0.08, y: 0.08, width: 0.84, height: 0.84 },
+        },
+      },
+    },
+  })
+}
+
 describe('OfficePhotoEditor', () => {
+  it('starts uncropped photos at full size without outside shading', () => {
+    renderEditor()
+    const frame = document.querySelector('.office-crop-frame')
+    expect(frame).toHaveStyle({
+      left: '0%',
+      top: '0%',
+      width: '100%',
+      height: '100%',
+    })
+    expect(frame).toHaveClass('office-crop-frame--full')
+    const styles = readFileSync(
+      'src/admin/evidence/evidence-office.css',
+      'utf8',
+    )
+    expect(styles).toMatch(
+      /\.office-crop-frame--full\s*\{[^}]*box-shadow:\s*none;/s,
+    )
+    fireEvent.click(screen.getByText('進階裁切數值（X、Y、寬、高）'))
+    expect(screen.getByLabelText('X（%）')).toHaveValue('0')
+    expect(screen.getByLabelText('Y（%）')).toHaveValue('0')
+    expect(screen.getByLabelText('寬（%）')).toHaveValue('100')
+    expect(screen.getByLabelText('高（%）')).toHaveValue('100')
+  })
+
+  it.each([
+    ['original', 1.5],
+    ['4:3', 4 / 3],
+    ['16:9', 16 / 9],
+  ])('fits %s within the full photo', (choice, expectedRatio) => {
+    renderEditor()
+    fireEvent.change(screen.getByLabelText('比例'), {
+      target: { value: choice },
+    })
+    const frame = document.querySelector('.office-crop-frame') as HTMLElement
+    const width = Number.parseFloat(frame.style.width) / 100
+    const height = Number.parseFloat(frame.style.height) / 100
+    expect((width * 1200) / (height * 800)).toBeCloseTo(expectedRatio)
+    expect(Math.max(width, height)).toBeCloseTo(1)
+    expect(Number.parseFloat(frame.style.left) / 100).toBeCloseTo(
+      (1 - width) / 2,
+    )
+    expect(Number.parseFloat(frame.style.top) / 100).toBeCloseTo(
+      (1 - height) / 2,
+    )
+  })
+
+  it('only crops the right edge after selecting its midpoint', async () => {
+    const save = renderEditor()
+    fireEvent.pointerDown(
+      screen.getByRole('button', {
+        name: '裁切框右側中點控制點',
+      }),
+    )
+    fireEvent.keyDown(document.body, { key: 'ArrowLeft' })
+    expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+      left: '0%',
+      top: '0%',
+      width: '99.5%',
+      height: '100%',
+    })
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認套用' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          crop: { x: 0, y: 0, width: 0.995, height: 1 },
+        }),
+      ),
+    )
+  })
+
+  it('resets a locked crop to the full photo and saves null', async () => {
+    const save = renderEditor(undefined, {
+      variants: {
+        ...photo.variants,
+        office: {
+          ...photo.variants.office,
+          edit_params: { crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 } },
+        },
+      },
+    })
+    fireEvent.change(screen.getByLabelText('比例'), {
+      target: { value: '1:1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '重設裁切框' }))
+    expect(screen.getByLabelText('比例')).toHaveValue('free')
+    expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+      left: '0%',
+      top: '0%',
+      width: '100%',
+      height: '100%',
+    })
+    fireEvent.click(screen.getByRole('button', { name: '復原上一步' }))
+    expect(screen.getByLabelText('比例')).toHaveValue('1:1')
+    expect(document.querySelector('.office-crop-frame')).not.toHaveClass(
+      'office-crop-frame--full',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '重設裁切框' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    fireEvent.click(await screen.findByRole('button', { name: '確認套用' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({ crop: null }),
+      ),
+    )
+  })
+
   it('uses rendered label names and the locked inspection notice', () => {
     renderEditor()
     fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
@@ -258,7 +380,7 @@ describe('OfficePhotoEditor', () => {
 
   it('keeps crop selection through arrows and clears explicitly', async () => {
     const user = userEvent.setup()
-    renderEditor()
+    renderCroppedEditor()
     const handle = screen.getByRole('button', { name: '移動裁切框' })
     const selectionStatus = document.querySelector('.office-selection-status')
     await user.click(handle)
@@ -311,11 +433,13 @@ describe('OfficePhotoEditor', () => {
       screen.getByRole('button', { name: '裁切框右側中點控制點' }),
     )
 
-    await user.click(screen.getByRole('button', { name: '→ 右' }))
+    await user.click(screen.getByRole('button', { name: '← 左' }))
 
     expect(document.querySelector('.office-crop-frame')).toHaveStyle({
-      left: '8%',
-      width: '84.5%',
+      left: '0%',
+      top: '0%',
+      height: '100%',
+      width: '99.5%',
     })
   })
 
@@ -355,13 +479,14 @@ describe('OfficePhotoEditor', () => {
       fireEvent(receiver, event)
       expect(event.defaultPrevented).toBe(true)
       expect(document.querySelector('.office-crop-frame')).toHaveStyle({
-        left: '8%',
-        width: '83.5%',
-        height: '84%',
+        left: '0%',
+        top: '0%',
+        width: '99.5%',
+        height: '100%',
       })
       fireEvent.keyDown(receiver, { key: 'ArrowLeft', shiftKey: true })
       expect(document.querySelector('.office-crop-frame')).toHaveStyle({
-        width: '81.5%',
+        width: '97.5%',
       })
     },
   )
@@ -384,9 +509,12 @@ describe('OfficePhotoEditor', () => {
       expect(event.defaultPrevented).toBe(false)
     }
     expect(screen.getByRole('button', { name: '復原上一步' })).toBeDisabled()
-    expect(document.querySelector('.office-crop-frame')).not.toHaveAttribute(
-      'style',
-    )
+    expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+      left: '0%',
+      top: '0%',
+      width: '100%',
+      height: '100%',
+    })
   })
 
   it('preserves side handle limits and uses the chosen step', () => {
@@ -404,9 +532,10 @@ describe('OfficePhotoEditor', () => {
     fireEvent.click(large)
     fireEvent.keyDown(large, { key: 'ArrowLeft' })
     expect(document.querySelector('.office-crop-frame')).toHaveStyle({
-      left: '8%',
-      width: '82%',
-      height: '84%',
+      left: '0%',
+      top: '0%',
+      width: '98%',
+      height: '100%',
     })
   })
 
@@ -429,18 +558,26 @@ describe('OfficePhotoEditor', () => {
     })
     const undo = screen.getByRole('button', { name: '復原上一步' })
     fireEvent.pointerDown(corner, { clientX: 100, clientY: 50 })
+    fireEvent.pointerMove(corner, { clientX: 110, clientY: 60 })
+    expect(undo).toBeDisabled()
+    expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+      left: '0%',
+      top: '0%',
+      width: '100%',
+      height: '100%',
+    })
     fireEvent.pointerMove(corner, { clientX: 100, clientY: 50 })
     expect(undo).toBeDisabled()
     fireEvent.pointerMove(corner, { clientX: 99, clientY: 50 })
     fireEvent.pointerMove(corner, { clientX: 98, clientY: 50 })
     fireEvent.pointerUp(corner)
     expect(document.querySelector('.office-crop-frame')).toHaveStyle({
-      width: '83%',
+      width: '99%',
     })
     fireEvent.click(undo)
     expect(undo).toBeDisabled()
     const frame = document.querySelector('.office-crop-frame') as HTMLElement
-    expect(frame.style.width).toBe('')
+    expect(frame.style.width).toBe('100%')
   })
 
   it('moves the pointer-selected layer from body and button focus', () => {
@@ -634,7 +771,7 @@ describe('OfficePhotoEditor', () => {
   })
 
   it('exposes eight handles and keyboard crop controls', () => {
-    renderEditor()
+    renderCroppedEditor()
     expect(
       screen.getAllByRole('button', { name: /裁切框.*控制點/ }),
     ).toHaveLength(8)
@@ -692,7 +829,7 @@ describe('OfficePhotoEditor', () => {
 
   it('uses Tab and arrow keys for crop and preview movement', async () => {
     const user = userEvent.setup()
-    renderEditor()
+    renderCroppedEditor()
     const moveCrop = screen.getByRole('button', { name: '移動裁切框' })
 
     for (let index = 0; index < 20; index += 1) {
@@ -800,12 +937,15 @@ describe('OfficePhotoEditor', () => {
       target: { value: '1:1' },
     })
     const frame = document.querySelector('.office-crop-frame')
-    expect(frame).toHaveStyle({ width: '55.99999999999999%', height: '84%' })
+    expect(Number.parseFloat((frame as HTMLElement).style.width)).toBeCloseTo(
+      (100 * 2) / 3,
+    )
+    expect(frame).toHaveStyle({ height: '100%' })
     fireEvent.click(screen.getByRole('button', { name: '復原上一步' }))
     expect(
       (document.querySelector('.office-crop-frame') as HTMLElement).style
         .width,
-    ).toBe('')
+    ).toBe('100%')
   })
 
   it('hides and restores the layer during comparison', () => {

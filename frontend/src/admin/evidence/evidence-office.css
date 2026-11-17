@@ -301,15 +301,16 @@
   height: 100%;
   object-fit: fill;
 }
-.office-image-stage .office-crop-frame {
-  inset: 8%;
-}
 .office-crop-frame {
   position: absolute;
-  inset: 8%;
+  inset: 0;
   border: 2px solid #fff;
   box-shadow: 0 0 0 9999px rgb(0 0 0 / 44%);
   touch-action: none;
+}
+/* FEV-R25：完整照片沒有裁掉的區域，預設框不應讓畫面變暗。 */
+.office-crop-frame--full {
+  box-shadow: none;
 }
 .office-crop-handle,
 .office-crop-move {

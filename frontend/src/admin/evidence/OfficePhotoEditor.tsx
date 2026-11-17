@@ -95,7 +95,7 @@ const FIELD_ERROR_IDS: Record<OfficeFieldKey, string> = {
   item_name: 'office-error-item-name',
   inspection_location: 'office-error-inspection-location',
 }
-const INITIAL_CROP: Crop = { x: 0.08, y: 0.08, width: 0.84, height: 0.84 }
+const INITIAL_CROP: Crop = { x: 0, y: 0, width: 1, height: 1 }
 const CROP_HANDLE_LABELS: Record<CropHandle, string> = {
   move: '整個裁切框',
   nw: '左上角',
@@ -294,7 +294,7 @@ export function OfficePhotoEditor({
     overrides: { ...photo.layer.overrides },
   }))
   const [layerChanged, setLayerChanged] = useState(false)
-  const imageCrop = crop ?? { x: 0, y: 0, width: 1, height: 1 }
+  const imageCrop = crop ?? INITIAL_CROP
   const layerImageSize = getEditedImageSize(
     photo.variants.field.width,
     photo.variants.field.height,
@@ -749,7 +749,11 @@ export function OfficePhotoEditor({
     if (comparePinned) return
     setFieldError('')
     onErrorClear()
-    const params = { ...edit, crop: crop ?? edit.crop }
+    // FEV-R25：未裁切與整張範圍統一送 null，重設後不得回填舊裁切。
+    const params = {
+      ...edit,
+      crop: crop && !sameCrop(crop, INITIAL_CROP) ? crop : null,
+    }
     const targetCrop = params.crop
     const sourceSize = orientedSize(
       photo.variants.field.width,
@@ -1049,17 +1053,17 @@ export function OfficePhotoEditor({
               })()}
               {!showBefore && (
                 <div
-                  className="office-crop-frame"
-                  style={
-                    crop
-                      ? {
-                          left: `${crop.x * 100}%`,
-                          top: `${crop.y * 100}%`,
-                          width: `${crop.width * 100}%`,
-                          height: `${crop.height * 100}%`,
-                        }
-                      : undefined
+                  className={
+                    sameCrop(imageCrop, INITIAL_CROP)
+                      ? 'office-crop-frame office-crop-frame--full'
+                      : 'office-crop-frame'
                   }
+                  style={{
+                    left: `${imageCrop.x * 100}%`,
+                    top: `${imageCrop.y * 100}%`,
+                    width: `${imageCrop.width * 100}%`,
+                    height: `${imageCrop.height * 100}%`,
+                  }}
                   onPointerDown={(event) => startDrag('move', event)}
                 >
                   <button
@@ -1385,17 +1389,10 @@ export function OfficePhotoEditor({
               <button
                 onClick={() => {
                   saveSnapshot()
-                  const full = { x: 0, y: 0, width: 1, height: 1 }
-                  const size = orientedSize(
-                    photo.variants.field.width,
-                    photo.variants.field.height,
-                    edit.rotation,
-                  )
-                  setCropValue(
-                    ratio
-                      ? fitCropRatio(full, ratio, size.width, size.height)
-                      : full,
-                  )
+                  // FEV-R25：重設回整張，必須一併解除比例限制。
+                  setRatio(null)
+                  setRatioChoice('free')
+                  setCropValue(INITIAL_CROP)
                 }}
                 type="button"
               >

@@ -761,6 +761,56 @@ describe('OfficeEvidencePage', () => {
     }
   })
 
+  it.each([
+    [0.19937694704049844, 0.125, '往右 19.9%', '往下 12.5%'],
+    [-0.19937694704049844, -0.125, '往左 19.9%', '往上 12.5%'],
+    [0.1995, -0.1995, '往右 20.0%', '往上 20.0%'],
+    [-0.0005, 0.0005, '往左 0.1%', '往下 0.1%'],
+    [0, 0, '水平不變', '垂直不變'],
+    [0.00049, -0.00049, '水平不變', '垂直不變'],
+  ])(
+    'formats history offsets %s / %s in both columns',
+    async (x, y, horizontal, vertical) => {
+      const value = {
+        layer: { ...photo.layer, offset_x: x, offset_y: y },
+        labels: photo.labels,
+      }
+      vi.mocked(getOfficePhoto).mockResolvedValue({
+        ...photo,
+        layer_history: {
+          items: [
+            {
+              id: 'offset-history',
+              actor: { id: null, snapshot: '林檢查員' },
+              occurred_at: '2026-11-17T04:00:00Z',
+              before: value,
+              after: value,
+            },
+          ],
+          next_cursor: null,
+        },
+      })
+      renderPage(false)
+      const card = (await screen.findAllByRole('article'))[0]
+      fireEvent.click(
+        within(card).getByRole('button', { name: /^查看歷程，/ }),
+      )
+      const history = await screen.findByRole('region', {
+        name: /圖層修改歷程｜/,
+      })
+      fireEvent.click(within(history).getByText('查看修改前後'))
+      const columns = history.querySelectorAll('.office-history-values')
+      expect(columns).toHaveLength(2)
+      for (const column of columns) {
+        expect(
+          within(column as HTMLElement).getByText(
+            `左下・${horizontal}・${vertical}`,
+          ),
+        ).toBeVisible()
+      }
+    },
+  )
+
   it('shows label override states across history', async () => {
     const inherited = { ...photo.layer, overrides: {} }
     const explicit = {

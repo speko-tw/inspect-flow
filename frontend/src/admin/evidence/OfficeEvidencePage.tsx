@@ -897,6 +897,26 @@ function OfficePhotoHistory({
   )
 }
 
+/** FEV-R24：偏移以影像百分比描述，避免顯示浮點雜訊與負零方向。 */
+function formatLayerOffset(
+  offset: number,
+  axis: 'horizontal' | 'vertical',
+): string {
+  const tenths = Math.round(Math.abs(offset) * 1000)
+  if (tenths === 0) {
+    return axis === 'horizontal' ? '水平不變' : '垂直不變'
+  }
+  const direction =
+    axis === 'horizontal'
+      ? offset < 0
+        ? '往左'
+        : '往右'
+      : offset < 0
+        ? '往上'
+        : '往下'
+  return `${direction} ${(tenths / 10).toFixed(1)}%`
+}
+
 function HistoryValues({
   title,
   value,
@@ -929,7 +949,8 @@ function HistoryValues({
         <dd>{value.layer.enabled ? '顯示' : '隱藏'}</dd>
         <dt>位置與偏移</dt>
         <dd>
-          {corner}・水平 {value.layer.offset_x}・垂直 {value.layer.offset_y}
+          {corner}・{formatLayerOffset(value.layer.offset_x, 'horizontal')}・
+          {formatLayerOffset(value.layer.offset_y, 'vertical')}
         </dd>
         <dt>尺寸與樣式</dt>
         <dd>
