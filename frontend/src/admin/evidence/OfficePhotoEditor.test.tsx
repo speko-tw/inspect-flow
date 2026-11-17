@@ -1,5 +1,11 @@
 import { readFileSync } from 'node:fs'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -330,6 +336,140 @@ describe('OfficePhotoEditor', () => {
     expect(screen.getByRole('status')).toHaveTextContent('微調對象：工程標示')
   })
 
+  it.each(['button', 'body', 'handle'])(
+    'nudges a pointer-selected corner once from %s focus',
+    (target) => {
+      renderEditor()
+      const corner = screen.getByRole('button', {
+        name: '裁切框右下角控制點',
+      })
+      fireEvent.pointerDown(corner)
+      fireEvent.pointerUp(corner)
+      expect(corner).toHaveFocus()
+      const left = screen.getByRole('button', { name: '← 左' })
+      if (target === 'button') left.focus()
+      if (target === 'body') corner.blur()
+      const receiver =
+        target === 'body' ? document.body : target === 'button' ? left : corner
+      const event = createEvent.keyDown(receiver, { key: 'ArrowLeft' })
+      fireEvent(receiver, event)
+      expect(event.defaultPrevented).toBe(true)
+      expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+        left: '8%',
+        width: '83.5%',
+        height: '84%',
+      })
+      fireEvent.keyDown(receiver, { key: 'ArrowLeft', shiftKey: true })
+      expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+        width: '81.5%',
+      })
+    },
+  )
+
+  it('ignores no-op clicks and leaves native control arrow keys alone', () => {
+    renderEditor()
+    const corner = screen.getByRole('button', {
+      name: '裁切框右下角控制點',
+    })
+    fireEvent.pointerDown(corner)
+    fireEvent.pointerUp(corner)
+    expect(screen.getByRole('button', { name: '復原上一步' })).toBeDisabled()
+    for (const control of [
+      screen.getByLabelText(/拉直/),
+      screen.getByLabelText('比例'),
+    ]) {
+      control.focus()
+      const event = createEvent.keyDown(control, { key: 'ArrowLeft' })
+      fireEvent(control, event)
+      expect(event.defaultPrevented).toBe(false)
+    }
+    expect(screen.getByRole('button', { name: '復原上一步' })).toBeDisabled()
+    expect(document.querySelector('.office-crop-frame')).not.toHaveAttribute(
+      'style',
+    )
+  })
+
+  it('preserves side handle limits and uses the chosen step', () => {
+    renderEditor()
+    fireEvent.pointerDown(
+      screen.getByRole('button', {
+        name: '裁切框右側中點控制點',
+      }),
+    )
+    const event = createEvent.keyDown(document.body, { key: 'ArrowUp' })
+    fireEvent(document.body, event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(screen.getByRole('button', { name: '復原上一步' })).toBeDisabled()
+    const large = screen.getByRole('button', { name: '大（2%）' })
+    fireEvent.click(large)
+    fireEvent.keyDown(large, { key: 'ArrowLeft' })
+    expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+      left: '8%',
+      width: '82%',
+      height: '84%',
+    })
+  })
+
+  it('snapshots a crop drag only once after actual movement', () => {
+    renderEditor()
+    const stage = document.querySelector('.office-image-stage')!
+    vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 100,
+      width: 200,
+      height: 100,
+      toJSON: () => ({}),
+    })
+    const corner = screen.getByRole('button', {
+      name: '裁切框右下角控制點',
+    })
+    const undo = screen.getByRole('button', { name: '復原上一步' })
+    fireEvent.pointerDown(corner, { clientX: 100, clientY: 50 })
+    fireEvent.pointerMove(corner, { clientX: 100, clientY: 50 })
+    expect(undo).toBeDisabled()
+    fireEvent.pointerMove(corner, { clientX: 99, clientY: 50 })
+    fireEvent.pointerMove(corner, { clientX: 98, clientY: 50 })
+    fireEvent.pointerUp(corner)
+    expect(document.querySelector('.office-crop-frame')).toHaveStyle({
+      width: '83%',
+    })
+    fireEvent.click(undo)
+    expect(undo).toBeDisabled()
+    const frame = document.querySelector('.office-crop-frame') as HTMLElement
+    expect(frame.style.width).toBe('')
+  })
+
+  it('moves the pointer-selected layer from body and button focus', () => {
+    renderEditor()
+    fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+    const overlay = screen.getByRole('group', {
+      name: '圖層位置，方向鍵微調',
+    })
+    fireEvent.pointerDown(overlay)
+    fireEvent.pointerUp(overlay)
+    expect(overlay).toHaveFocus()
+    overlay.blur()
+    const event = createEvent.keyDown(document.body, { key: 'ArrowRight' })
+    fireEvent(document.body, event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(screen.getByLabelText('X 位置（%）')).toHaveValue('0.5')
+    const button = screen.getByRole('button', { name: '圖層右移' })
+    fireEvent.click(button)
+    button.focus()
+    fireEvent.keyDown(button, { key: 'ArrowRight', shiftKey: true })
+    expect(screen.getByLabelText('X 位置（%）')).toHaveValue('3')
+    const input = screen.getByLabelText('工程名稱')
+    input.focus()
+    const typing = createEvent.keyDown(input, { key: 'ArrowRight' })
+    fireEvent(input, typing)
+    expect(typing.defaultPrevented).toBe(false)
+    expect(screen.getByLabelText('X 位置（%）')).toHaveValue('3')
+  })
+
   it('keeps advanced crop limits, ratio and undo', () => {
     renderEditor()
     fireEvent.change(screen.getByLabelText('比例'), {
@@ -499,6 +639,7 @@ describe('OfficePhotoEditor', () => {
       screen.getAllByRole('button', { name: /裁切框.*控制點/ }),
     ).toHaveLength(8)
     const move = screen.getByRole('button', { name: '移動裁切框' })
+    fireEvent.focus(move)
     fireEvent.keyDown(move, { key: 'ArrowRight' })
     expect(document.querySelector('.office-crop-frame')).toHaveStyle({
       left: '8.5%',
@@ -573,6 +714,7 @@ describe('OfficePhotoEditor', () => {
       await user.tab()
     }
     expect(stage).toHaveFocus()
+    await user.keyboard('{Escape}')
     await user.keyboard('{ArrowRight}')
     expect(stage).toHaveStyle({
       transform: 'translate(24px, 0px) scale(1.25)',
@@ -790,6 +932,7 @@ describe('OfficePhotoEditor', () => {
     const overlay = screen.getByRole('group', {
       name: '圖層位置，方向鍵微調',
     })
+    fireEvent.focus(overlay)
     fireEvent.keyDown(overlay, { key: 'ArrowRight' })
     fireEvent.click(screen.getByRole('button', { name: '圖層下移' }))
     fireEvent.click(screen.getByRole('button', { name: '確認' }))

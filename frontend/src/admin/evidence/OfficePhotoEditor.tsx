@@ -108,6 +108,16 @@ const CROP_HANDLE_LABELS: Record<CropHandle, string> = {
   w: '左側中點',
 }
 
+/** 比較裁切幾何，避免無變更的操作污染復原紀錄。 */
+function sameCrop(left: Crop, right: Crop): boolean {
+  return (
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  )
+}
+
 function straightenScale(
   width: number,
   height: number,
@@ -135,6 +145,7 @@ export function OfficePhotoEditor({
   onErrorClear,
   onSave,
 }: Props) {
+  const editor = useRef<HTMLElement>(null)
   const frame = useRef<HTMLDivElement>(null)
   const imageStage = useRef<HTMLDivElement>(null)
   const ratioSelect = useRef<HTMLSelectElement>(null)
@@ -160,6 +171,7 @@ export function OfficePhotoEditor({
   >({})
   const layerDrag = useRef<LayerDrag | null>(null)
   const drag = useRef<{
+    snapshotted: boolean
     kind: CropHandle
     x: number
     y: number
@@ -561,6 +573,7 @@ export function OfficePhotoEditor({
     }
     if (event.pointerType === 'touch' && zoomRef.current > 1) return
     event.preventDefault()
+    event.currentTarget.focus({ preventScroll: true })
     event.currentTarget.setPointerCapture?.(event.pointerId)
     layerDrag.current = {
       pointerId: event.pointerId,
@@ -584,18 +597,6 @@ export function OfficePhotoEditor({
     if (next.offset_x !== layer.offset_x || next.offset_y !== layer.offset_y) {
       changeLayer((value) => ({ ...value, ...next }))
     }
-  }
-  function handleLayerKey(event: React.KeyboardEvent<HTMLDivElement>): void {
-    const directions = {
-      ArrowLeft: 'left',
-      ArrowRight: 'right',
-      ArrowUp: 'up',
-      ArrowDown: 'down',
-    } as const
-    const direction = directions[event.key as keyof typeof directions]
-    if (!direction) return
-    event.preventDefault()
-    nudgeLayer(direction, event.shiftKey)
   }
   function setCropValue(next: Crop) {
     onErrorClear()
@@ -631,45 +632,12 @@ export function OfficePhotoEditor({
         : resizeCrop(current, 's', 0, delta, ratio, size.width, size.height),
     )
   }
-  function handleKey(
-    kind: CropHandle,
-    event: React.KeyboardEvent<HTMLButtonElement>,
-  ) {
-    if (activeTab !== 'crop') return
-    if (
-      !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
-    )
-      return
-    event.preventDefault()
-    saveSnapshot()
-    const size = orientedSize(
-      photo.variants.field.width,
-      photo.variants.field.height,
-      edit.rotation,
-    )
-    const amount = event.shiftKey ? 0.02 : cropStep
-    const current = crop ?? INITIAL_CROP
-    const dx =
-      event.key === 'ArrowLeft'
-        ? -amount
-        : event.key === 'ArrowRight'
-          ? amount
-          : 0
-    const dy =
-      event.key === 'ArrowUp'
-        ? -amount
-        : event.key === 'ArrowDown'
-          ? amount
-          : 0
-    const next =
-      kind === 'move'
-        ? moveCrop(current, dx, dy)
-        : resizeCrop(current, kind, dx, dy, ratio, size.width, size.height)
-    setCropValue(next)
-  }
-  function nudgeCrop(direction: 'left' | 'right' | 'up' | 'down'): void {
+  function nudgeCrop(
+    direction: 'left' | 'right' | 'up' | 'down',
+    fast = false,
+  ): void {
     const kind = activeTab === 'crop' ? (selectedCropHandle ?? 'move') : 'move'
-    const amount = cropStep
+    const amount = fast ? 0.02 : cropStep
     const size = orientedSize(
       photo.variants.field.width,
       photo.variants.field.height,
@@ -683,6 +651,7 @@ export function OfficePhotoEditor({
       kind === 'move'
         ? moveCrop(current, dx, dy)
         : resizeCrop(current, kind, dx, dy, ratio, size.width, size.height)
+    if (sameCrop(current, next)) return
     saveSnapshot()
     setCropValue(next)
   }
@@ -704,9 +673,16 @@ export function OfficePhotoEditor({
     }
     if (event.pointerType === 'touch' && zoomRef.current > 1) return
     event.preventDefault()
+    if (event.currentTarget instanceof HTMLElement) {
+      event.currentTarget.focus({ preventScroll: true })
+    }
+    setSelectedCropHandle(kind)
+    setSelectedControl(
+      kind === 'move' ? '整個裁切框' : `裁切框${CROP_HANDLE_LABELS[kind]}`,
+    )
     event.currentTarget.setPointerCapture?.(event.pointerId)
-    saveSnapshot()
     drag.current = {
+      snapshotted: false,
       kind,
       x: event.clientX,
       y: event.clientY,
@@ -718,8 +694,10 @@ export function OfficePhotoEditor({
     const start = drag.current
     if (!start || !imageStage.current) return
     const bounds = imageStage.current.getBoundingClientRect()
+    if (bounds.width <= 0 || bounds.height <= 0) return
     const dx = (event.clientX - start.x) / bounds.width
     const dy = (event.clientY - start.y) / bounds.height
+    if (dx === 0 && dy === 0) return
     const c = start.crop
     const size = orientedSize(
       photo.variants.field.width,
@@ -738,6 +716,12 @@ export function OfficePhotoEditor({
             size.width,
             size.height,
           )
+    if (sameCrop(crop ?? INITIAL_CROP, next)) return
+    // FEV-R16：拖曳首次真正改變裁切時才保存，單純選取不消耗復原。
+    if (!start.snapshotted) {
+      saveSnapshot()
+      start.snapshotted = true
+    }
     setCropValue(next)
   }
   function applyRatio(value: RatioChoice) {
@@ -865,8 +849,53 @@ export function OfficePhotoEditor({
     zoomRef.current = zoom
   }, [zoom])
 
+  // FEV-R16：選取獨立於焦點；body 也接收方向鍵，輸入元件保留原生操作。
+  // 每次 render 更新 listener，避免沿用上一次的選取、步幅或裁切資料。
+  useEffect(() => {
+    function handleSelectedKey(event: KeyboardEvent): void {
+      const target = event.target
+      if (
+        event.defaultPrevented ||
+        busy ||
+        submitting ||
+        pendingApply ||
+        leaveConfirm ||
+        leaveGuard.pending ||
+        showBefore ||
+        !(target instanceof HTMLElement) ||
+        (target !== document.body && !editor.current?.contains(target)) ||
+        target.closest('input, textarea, select, [contenteditable]')
+      )
+        return
+      const directions = {
+        ArrowLeft: 'left',
+        ArrowRight: 'right',
+        ArrowUp: 'up',
+        ArrowDown: 'down',
+      } as const
+      const direction = directions[event.key as keyof typeof directions]
+      if (!direction) return
+      if (activeTab === 'crop' && selectedCropHandle) {
+        event.preventDefault()
+        if (canNudge(direction)) nudgeCrop(direction, event.shiftKey)
+      } else if (
+        activeTab === 'layer' &&
+        selectedControl === '工程標示' &&
+        layer.enabled &&
+        layerBox.fits
+      ) {
+        event.preventDefault()
+        nudgeLayer(direction, event.shiftKey)
+      }
+    }
+    document.addEventListener('keydown', handleSelectedKey, true)
+    return () =>
+      document.removeEventListener('keydown', handleSelectedKey, true)
+  })
+
   return (
     <main
+      ref={editor}
       className="office-editor"
       aria-labelledby="office-editor-title"
       onKeyDownCapture={(event) => {
@@ -942,7 +971,12 @@ export function OfficePhotoEditor({
               role="group"
               aria-label="照片畫面，可用方向鍵平移"
               onKeyDown={(event) => {
-                if (event.target !== event.currentTarget || zoom <= 1) return
+                if (
+                  event.defaultPrevented ||
+                  event.target !== event.currentTarget ||
+                  zoom <= 1
+                )
+                  return
                 const delta = event.shiftKey ? 48 : 24
                 if (event.key === 'ArrowLeft')
                   setPan((value) => ({ ...value, x: value.x - delta }))
@@ -1044,7 +1078,6 @@ export function OfficePhotoEditor({
                       setSelectedCropHandle('move')
                       setSelectedControl('整個裁切框')
                     }}
-                    onKeyDown={(event) => handleKey('move', event)}
                     onPointerDown={(event) => {
                       event.stopPropagation()
                       if (activeTab !== 'crop') {
@@ -1094,7 +1127,6 @@ export function OfficePhotoEditor({
                             `裁切框${CROP_HANDLE_LABELS[handle]}`,
                           )
                         }}
-                        onKeyDown={(event) => handleKey(handle, event)}
                         onPointerDown={(event) => {
                           event.stopPropagation()
                           if (activeTab !== 'crop') {
@@ -1129,9 +1161,6 @@ export function OfficePhotoEditor({
                     setSelectedCropHandle(null)
                     setSelectedControl('工程標示')
                   }}
-                  onKeyDown={
-                    activeTab === 'layer' ? handleLayerKey : undefined
-                  }
                   onPointerCancel={() => {
                     layerDrag.current = null
                   }}
