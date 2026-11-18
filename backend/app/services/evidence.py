@@ -37,6 +37,7 @@ from app.services.evidence_images import (
 )
 from app.services.evidence_labels import build_label_source
 from app.storage import LocalStorage, get_storage_settings
+from app.storage.settings import MAX_FIELD_EDGE
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -310,7 +311,9 @@ def upload_evidence(
     if len(content) > settings.max_file_bytes:
         raise _api_error(ErrorCode.EVIDENCE_FILE_TOO_LARGE, 413)
     try:
-        image_info = inspect_jpeg(content, settings.max_decode_pixels)
+        image_info = inspect_jpeg(
+            content, settings.max_decode_pixels, max_edge=MAX_FIELD_EDGE
+        )
     except InvalidEvidenceImageError as exc:
         raise _api_error(
             ErrorCode.EVIDENCE_INVALID_IMAGE, 422, str(exc)

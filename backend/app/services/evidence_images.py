@@ -54,14 +54,19 @@ class ImageInfo:
     sha256: str
 
 
-def inspect_jpeg(data: bytes, max_pixels: int) -> ImageInfo:
-    """拒絕格式偽裝、毀損內容與解碼像素超限的 JPEG。"""
+def inspect_jpeg(
+    data: bytes, max_pixels: int, *, max_edge: int | None = None
+) -> ImageInfo:
+    """驗證 JPEG；上傳另限長邊，既存內業編修只沿用像素限制。"""
     try:
         with Image.open(io.BytesIO(data)) as image:
             if image.format != "JPEG":
                 raise InvalidEvidenceImageError("format")
             width, height = image.size
             if width <= 0 or height <= 0 or width * height > max_pixels:
+                raise InvalidEvidenceImageError("pixels")
+            # FEV-D2／AC07：檔頭足以拒絕超長新 FIELD，避免先完整解碼。
+            if max_edge is not None and max(width, height) > max_edge:
                 raise InvalidEvidenceImageError("pixels")
             image.verify()
         with Image.open(io.BytesIO(data)) as image:
