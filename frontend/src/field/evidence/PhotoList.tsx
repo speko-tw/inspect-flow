@@ -119,8 +119,14 @@ export function PhotoList({
                       alt={photo.caption || '現場照片'}
                       labels={photo.labels}
                       layer={photo.layer}
+                      render={photo.layer_render}
+                      timezone={photo.label_timezone}
                       src={photoImageUrl(taskId, photo.id, 640)}
                     />
+                    {photo.layer_render.render_state ===
+                      'omitted_too_small' && (
+                      <p className="evidence-hint">照片太小，標示未合成</p>
+                    )}
                     <h5>{photo.caption || '未填註記'}</h5>
                     <p>{target}</p>
                     <small>{photoIdentity(photo)}</small>

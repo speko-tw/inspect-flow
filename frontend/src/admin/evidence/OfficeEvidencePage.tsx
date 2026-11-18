@@ -24,6 +24,7 @@ import {
 import { OfficePhotoEditor } from './OfficePhotoEditor'
 import { OfficePhotoViewer } from './OfficePhotoViewer'
 import { formatRecordedTime } from './labelTime'
+import { labelText } from '../../field/evidence/labelText'
 import './evidence-office.css'
 
 type TaskItem = {
@@ -873,12 +874,21 @@ function OfficePhotoHistory({
             return (
               <li key={entry.id}>
                 <p>
-                  {name}・{formatRecordedTime(entry.occurred_at)}
+                  {name}・
+                  {formatRecordedTime(entry.occurred_at, photo.label_timezone)}
                 </p>
                 <details>
                   <summary>查看修改前後</summary>
-                  <HistoryValues title="修改前" value={entry.before} />
-                  <HistoryValues title="修改後" value={entry.after} />
+                  <HistoryValues
+                    title="修改前"
+                    value={entry.before}
+                    timezone={photo.label_timezone}
+                  />
+                  <HistoryValues
+                    title="修改後"
+                    value={entry.after}
+                    timezone={photo.label_timezone}
+                  />
                 </details>
               </li>
             )
@@ -920,7 +930,9 @@ function formatLayerOffset(
 function HistoryValues({
   title,
   value,
+  timezone,
 }: {
+  timezone: string
   title: string
   value: NonNullable<OfficePhoto['layer_history']>['items'][number]['before']
 }) {
@@ -954,7 +966,7 @@ function HistoryValues({
         </dd>
         <dt>尺寸與樣式</dt>
         <dd>
-          {size}・{style}
+          {size}・{style}・{value.layer.border !== false ? '有外框' : '無外框'}
         </dd>
         {overrides.map(([label, key, source]) => {
           const hasOverride = Object.prototype.hasOwnProperty.call(
@@ -966,7 +978,7 @@ function HistoryValues({
             ? override === ''
               ? '明示空字串'
               : `自訂文字：${override}`
-            : `沿用來源：${source ?? '未記錄'}`
+            : `沿用來源：${labelText(source, key === 'inspection_location')}`
           return (
             <Fragment key={key}>
               <dt>{label}</dt>
@@ -975,9 +987,9 @@ function HistoryValues({
           )
         })}
         <dt>檢驗人員</dt>
-        <dd>{value.labels.uploader_name ?? '未記錄'}</dd>
+        <dd>{labelText(value.labels.uploader_name)}</dd>
         <dt>檢驗時間</dt>
-        <dd>{formatRecordedTime(value.labels.uploaded_at)}</dd>
+        <dd>{formatRecordedTime(value.labels.uploaded_at, timezone)}</dd>
       </dl>
     </div>
   )

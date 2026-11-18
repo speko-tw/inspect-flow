@@ -187,3 +187,12 @@
 - T5 API 測試共用每例隔離的 read_world fixture；PG 僅建立／刪除自己的隨機 schema，不重設 public。
 
 - T5 全 gate 發現錯誤碼掃描將 `evidence.photo_deleted` 稽核呼叫／事件目錄誤判為錯誤碼表；補尾逗號與 CSV 值辨識、只排除具名事件列，並以同檔真錯誤表反例保留攔截能力，不加入整檔豁免。
+
+### 標示一致性合併修正（#834、#829、#837）
+
+- 負責人指示三項合併一張 PR；#837 外框選項屬直接指示的範圍變更，與規格同步落地。
+- 現場與內業共用幾何及缺值／時間 helper，讀取 API 回傳目前後端設定的標示時區。
+- 圖層新增完整 `border` 設定，一支 migration 回填舊照片 true；沿用 `evidence.layer_updated`，不改寫歷史圖片與不可變事件。
+- 以元件、合成、真 API、完整 gate 及 SQLite + Vite 桌面／360px 截圖驗收。
+
+- 本輪改動範圍：`backend/app/models/evidence.py`、`backend/app/services/evidence{,_images,_office,_queries}.py`、`backend/alembic/versions/f834a1b2c3d4_add_evidence_label_border.py`、`backend/tests/{api,db,services}/test_evidence*.py`；`frontend/src/field/evidence/` 的預覽／卡片／文字 helper、型別與測試，`frontend/src/evidence/layerGeometry.ts` 共用幾何，以及 `frontend/src/admin/evidence/` 的編修器／歷程／API 型別／樣式與測試。

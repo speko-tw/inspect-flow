@@ -33,6 +33,7 @@ from app.models import (
 from app.services.evidence_images import (
     InvalidEvidenceImageError,
     inspect_jpeg,
+    label_timezone,
     render_office,
 )
 from app.services.evidence_labels import build_label_source
@@ -118,6 +119,7 @@ def _response(session: Session, evidence: Evidence) -> dict:
         "capture_source": evidence.capture_source,
         "layer": evidence.label_layer,
         "labels": evidence.label_source,
+        "label_timezone": label_timezone(),
         "layer_render": {
             key: rule.get(key) for key in ("render_state", "effective_size")
         },

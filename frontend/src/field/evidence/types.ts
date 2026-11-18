@@ -20,6 +20,7 @@ export interface StoredLayer extends FieldLayerChoice {
   offset_y: number
   size: 'small' | 'medium' | 'large'
   style: 'dark' | 'outline' | 'paper'
+  border: boolean
   overrides: Record<string, string>
 }
 
@@ -67,6 +68,7 @@ export interface FieldPhoto {
   byte_size: number
   layer_render: LayerRender
   layer: StoredLayer
+  label_timezone: string
   labels: LayerLabels
 }
 

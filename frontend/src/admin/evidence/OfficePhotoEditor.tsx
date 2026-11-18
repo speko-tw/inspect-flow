@@ -18,6 +18,7 @@ import {
   moveLayerOffset,
 } from './layerGeometry'
 import { formatRecordedTime } from './labelTime'
+import { labelText } from '../../field/evidence/labelText'
 import {
   officeImageUrl,
   type OfficeEdit,
@@ -66,6 +67,7 @@ const OFFICE_FIELD_BINDINGS = [
   { path: '/layer/offset_y', key: 'layer_offset_y' },
   { path: '/layer/size', key: 'layer_size' },
   { path: '/layer/style', key: 'layer_style' },
+  { path: '/layer/border', key: 'layer_border' },
   { path: '/layer/overrides/project_name', key: 'project_name' },
   { path: '/layer/overrides/item_name', key: 'item_name' },
   {
@@ -91,6 +93,7 @@ const FIELD_ERROR_IDS: Record<OfficeFieldKey, string> = {
   layer_offset_y: 'office-error-layer-offset-y',
   layer_size: 'office-error-layer-size',
   layer_style: 'office-error-layer-style',
+  layer_border: 'office-error-layer-border',
   project_name: 'office-error-project-name',
   item_name: 'office-error-item-name',
   inspection_location: 'office-error-inspection-location',
@@ -160,6 +163,7 @@ export function OfficePhotoEditor({
   const layerOffsetXControl = useRef<HTMLInputElement>(null)
   const layerOffsetYControl = useRef<HTMLInputElement>(null)
   const layerSizeControl = useRef<HTMLSelectElement>(null)
+  const layerBorderControl = useRef<HTMLInputElement>(null)
   const layerStyleControl = useRef<HTMLSelectElement>(null)
   const overrideControls = useRef<
     Partial<
@@ -353,10 +357,13 @@ export function OfficePhotoEditor({
     ['檢驗項目', layer.overrides.item_name ?? photo.labels.item_title],
     ['檢驗位置', layer.overrides.inspection_location ?? photo.labels.location],
     ['檢驗人員', photo.labels.uploader_name],
-    ['檢驗時間', formatRecordedTime(photo.labels.uploaded_at)],
+    [
+      '檢驗時間',
+      formatRecordedTime(photo.labels.uploaded_at, photo.label_timezone),
+    ],
   ] as const
   const layerValue = (title: string, value: string | null | undefined) =>
-    value || (title === '檢驗位置' ? '未填寫' : '未記錄')
+    labelText(value, title === '檢驗位置')
   const layerSummary = layerFields
     .map(([title, value]) => `${title}：${layerValue(title, value)}`)
     .join('；')
@@ -364,6 +371,7 @@ export function OfficePhotoEditor({
     'office-layer-overlay',
     'office-layer-table',
     `office-layer-table--${layer.style}`,
+    layer.border ? 'office-layer-table--border' : '',
   ].join(' ')
 
   function renderFieldError(key: OfficeFieldKey, label: string) {
@@ -439,6 +447,9 @@ export function OfficePhotoEditor({
         break
       case 'layer_size':
         target = layerSizeControl.current
+        break
+      case 'layer_border':
+        target = layerBorderControl.current
         break
       case 'layer_style':
         target = layerStyleControl.current
@@ -1835,6 +1846,21 @@ export function OfficePhotoEditor({
                 </select>
               </label>
               {renderFieldError('layer_style', '工程標示樣式')}
+              <label>
+                <input
+                  ref={layerBorderControl}
+                  aria-describedby={fieldErrorId('layer_border')}
+                  checked={layer.border}
+                  disabled={!layer.enabled}
+                  onChange={(event) =>
+                    setLayerValue('border', event.target.checked)
+                  }
+                  type="checkbox"
+                />
+                顯示外框
+              </label>
+              {renderFieldError('layer_border', '工程標示外框')}
+
               {photo.layer_render.effective_size &&
                 photo.layer_render.effective_size !== photo.layer.size && (
                   <p className="office-size-note">
@@ -1885,14 +1911,17 @@ export function OfficePhotoEditor({
                 檢驗人員
                 <input
                   disabled
-                  value={photo.labels.uploader_name ?? '未記錄'}
+                  value={labelText(photo.labels.uploader_name)}
                 />
               </label>
               <label>
                 檢驗時間
                 <input
                   disabled
-                  value={formatRecordedTime(photo.labels.uploaded_at)}
+                  value={formatRecordedTime(
+                    photo.labels.uploaded_at,
+                    photo.label_timezone,
+                  )}
                 />
               </label>
             </fieldset>

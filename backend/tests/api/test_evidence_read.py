@@ -1068,3 +1068,28 @@ def test_missing_image_retries_only_once_and_logs_no_storage_key(
     assert calls == [key, key]
     assert photo["id"] in caplog.text
     assert str(key) not in caplog.text
+
+
+def test_label_timezone_uses_backend_configuration_in_all_views(
+    read_world,
+    monkeypatch,
+):
+    w = read_world
+    monkeypatch.setenv(
+        "INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "America/New_York"
+    )
+    photo = _add_photo(w)
+    assert photo["label_timezone"] == "America/New_York"
+    # API 直接提供目前設定；變更時區後的像素重產沿用既有維運流程。
+    monkeypatch.setenv("INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "UTC")
+    office, field, detail = _paths(w, photo)
+    for client, path in (
+        (w["reader"], office),
+        (w["field"], field + "/photos"),
+    ):
+        response = client.get(path)
+        assert response.status_code == 200, response.text
+        assert response.json()["items"][0]["label_timezone"] == "UTC"
+    response = w["reader"].get(detail)
+    assert response.status_code == 200
+    assert response.json()["label_timezone"] == "UTC"
