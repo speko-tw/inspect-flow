@@ -64,6 +64,11 @@ def _request_fingerprint(
     layer: dict,
     capture_source: str,
 ) -> str:
+    # FEV-R07：預設值不進請求指紋，避免新增 border=true 後，
+    # 升級前已保存但回應遺失的同一請求無法重送。
+    fingerprint_layer = dict(layer)
+    if fingerprint_layer.get("border") is True:
+        del fingerprint_layer["border"]
     payload = {
         "sha256": sha256,
         "item_id": str(item_id),
@@ -72,7 +77,7 @@ def _request_fingerprint(
         "caption": caption,
         "captured_at": captured_at.isoformat() if captured_at else None,
         "field_edit": field_edit,
-        "layer": layer,
+        "layer": fingerprint_layer,
         "capture_source": capture_source,
     }
     encoded = json.dumps(
