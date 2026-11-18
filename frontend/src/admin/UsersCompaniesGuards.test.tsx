@@ -394,6 +394,32 @@ describe('UsersPage 帳號詳情', () => {
     expect(backend.count('GET', '/api/v1/users/user-1')).toBe(2)
   })
 
+  it('空清單晚到不清除詳情錯誤，按重新載入才重試', async () => {
+    const listGate = deferred<void>()
+    let attempts = 0
+    const backend = stubBackend({
+      users: [],
+      detailUser: regularUser,
+      hold: (call) => (call.path === '/api/v1/users' ? listGate : undefined),
+      fail: (call) => call.path === '/api/v1/users/user-1' && ++attempts === 1,
+    })
+    renderUsers({ detailUserId: 'user-1' })
+    const alert = await screen.findByRole('alert')
+    expect(alert).toBeVisible()
+
+    // 詳情先失敗、空清單後完成；背景回應不能代替使用者按重試。
+    await act(async () => listGate.resolve())
+    expect(backend.count('GET', '/api/v1/users/user-1')).toBe(1)
+    expect(alert).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '重新載入' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '鄧安娜' }),
+    ).toBeVisible()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(backend.count('GET', '/api/v1/users/user-1')).toBe(2)
+  })
+
   it('列表使用 User.company_name 且不載入全公司清單', async () => {
     const backend = stubBackend()
     renderUsers({
