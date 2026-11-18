@@ -5,9 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _BACKEND = Path(__file__).resolve().parents[2]
-# FEV-D2、#820：新 FIELD 的固定長邊，不追溯既存檔案的讀取／編修。
-MAX_FIELD_EDGE = 2560
-_DEFAULT_MAX_DECODE_PIXELS = 50_000_000
 
 
 @dataclass(frozen=True)
@@ -46,7 +43,6 @@ def get_storage_settings() -> StorageSettings:
             "INSPECTFLOW_EVIDENCE_MAX_CONCURRENT_UPLOADS", 2
         ),
         max_decode_pixels=_positive_integer(
-            "INSPECTFLOW_EVIDENCE_MAX_DECODE_PIXELS",
-            _DEFAULT_MAX_DECODE_PIXELS,
+            "INSPECTFLOW_EVIDENCE_MAX_DECODE_PIXELS", 50_000_000
         ),
     )
