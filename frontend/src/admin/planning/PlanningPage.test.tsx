@@ -1277,6 +1277,11 @@ describe('planning management page', () => {
           level: 2,
         }),
       ).toBeVisible()
+      if (name === '已完成任務') {
+        expect(screen.getByText('已完成').closest('.badge')).toHaveClass(
+          'badge-success',
+        )
+      }
       for (const action of ['修改地點', '修改名稱', '修改建議指派']) {
         expect(screen.queryByRole('button', { name: action })).toBeNull()
       }
