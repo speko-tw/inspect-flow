@@ -11,7 +11,7 @@ from anyio import CapacityLimiter, to_thread
 from anyio.lowlevel import RunVar
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response, StreamingResponse
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -38,6 +38,12 @@ _limit: Any = Query(default=50, ge=1, le=100)
 # Query 會保存參數 alias；歷程使用不同名稱，不能共用同一實例。
 _history_limit: Any = Query(default=50, ge=1, le=100)
 _edge: Any = Query(default=None, ge=64, le=4096)
+
+
+def _storage_error(photo_id: UUID) -> APIError:
+    """FEV-AC40：只記照片識別，避免儲存細節及檔案內容外洩。"""
+    logger.warning("Evidence image read failed: evidence_id=%s", photo_id)
+    return APIError(ErrorCode.SERVER_INTERNAL_ERROR, 500)
 
 
 def _not_found() -> APIError:
@@ -255,11 +261,18 @@ def _prepare_image(
                 "Evidence image unavailable: evidence_id=%s", photo_id
             )
             raise _not_found() from None
+        except OSError as exc:
+            raise _storage_error(photo_id) from exc
     raise AssertionError("unreachable image retry")
 
 
-def _thumbnail(image: _PreparedImage, max_edge: int, max_pixels: int) -> bytes:
-    """FEV-R01、R17：解碼前覆核像素，縮圖只留記憶體且不改原檔。"""
+def _checked_image(
+    image: _PreparedImage,
+    max_edge: int | None,
+    max_pixels: int,
+    photo_id: UUID,
+) -> bytes | None:
+    """FEV-AC40：兩條路徑同樣檢查實際像素及完整解碼，不改保存影像。"""
     try:
         with Image.open(image.source) as decoded:
             if decoded.width * decoded.height > max_pixels:
@@ -267,9 +280,11 @@ def _thumbnail(image: _PreparedImage, max_edge: int, max_pixels: int) -> bytes:
                     ErrorCode.EVIDENCE_INVALID_IMAGE, 422, details=["pixels"]
                 )
             if decoded.format != "JPEG":
-                raise APIError(
-                    ErrorCode.EVIDENCE_INVALID_IMAGE, 422, details=["format"]
-                )
+                raise _storage_error(photo_id)
+            decoded.load()
+            if max_edge is None:
+                image.source.seek(0)
+                return None
             decoded.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
             output = BytesIO()
             decoded.convert("RGB").save(output, "JPEG", quality=90)
@@ -278,10 +293,8 @@ def _thumbnail(image: _PreparedImage, max_edge: int, max_pixels: int) -> bytes:
         raise APIError(
             ErrorCode.EVIDENCE_INVALID_IMAGE, 422, details=["pixels"]
         ) from exc
-    except (OSError, UnidentifiedImageError) as exc:
-        raise APIError(
-            ErrorCode.EVIDENCE_INVALID_IMAGE, 422, details=["decode"]
-        ) from exc
+    except OSError as exc:
+        raise _storage_error(photo_id) from exc
 
 
 @router.get("/inspection-tasks/{task_id}/photos/{photo_id}/image")
@@ -302,25 +315,38 @@ async def get_photo_image(
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
     }
-    if max_edge is not None and max_edge < max(image.width, image.height):
-        try:
-            content = await to_thread.run_sync(
-                _thumbnail,
-                image,
-                max_edge,
-                settings.max_decode_pixels,
-                limiter=_thumbnail_limiter(settings.max_concurrent_uploads),
-            )
-            return Response(content, media_type="image/jpeg", headers=headers)
-        finally:
-            image.source.close()
+    edge = (
+        max_edge
+        if max_edge is not None and max_edge < max(image.width, image.height)
+        else None
+    )
+    try:
+        content = await to_thread.run_sync(
+            _checked_image,
+            image,
+            edge,
+            settings.max_decode_pixels,
+            photo_id,
+            limiter=_thumbnail_limiter(settings.max_concurrent_uploads),
+        )
+    except BaseException:
+        image.source.close()
+        raise
+    if content is not None:
+        image.source.close()
+        return Response(content, media_type="image/jpeg", headers=headers)
     headers["Content-Length"] = str(image.byte_size)
 
     def chunks() -> Iterator[bytes]:
         # FEV-R13、R17：串流只持有檔案，登入交易已在準備階段提交。
         with image.source:
-            while chunk := image.source.read(65536):
-                yield chunk
+            try:
+                while chunk := image.source.read(65536):
+                    yield chunk
+            except OSError:
+                # 標頭送出後無法改狀態；中止串流並留下同樣的告警識別。
+                _storage_error(photo_id)
+                raise
 
     return StreamingResponse(
         chunks(), media_type="image/jpeg", headers=headers

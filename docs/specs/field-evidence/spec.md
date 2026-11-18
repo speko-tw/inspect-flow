@@ -177,7 +177,7 @@
 **錯誤**（遵守 [API-R07](../api-conventions/spec.md#需求)；以條列呈現，不另設錯誤碼對照表，錯誤碼的唯一清單是程式內的 `ErrorCode`）：
 
 - 413 `evidence.file_too_large`：超過單檔上限
-- 422 `evidence.invalid_image`：不是可解碼的 JPEG、超過解碼像素上限，`error.details` 為字串陣列，第一項 `error.details[0]` 以 `format`／`pixels`／`decode` 區分
+- 422 `evidence.invalid_image`：上傳不是可解碼的 JPEG，或上傳／讀取超過目前解碼像素上限，`error.details` 為字串陣列，第一項 `error.details[0]` 以 `format`／`pixels`／`decode` 區分
 - 422 `evidence.sha256_mismatch`：請求雜湊與收到的內容不符（常見於傳輸中斷）
 - 422 `evidence.invalid_target`：項目不屬於該 Task、項次不屬於該項目、非總覽未帶項次、總覽帶了項次
 - 422 `evidence.invalid_edit`：編修參數超出範圍
@@ -191,6 +191,12 @@
 - 409 `evidence.photo_locked`：照片本身不允許刪除或編修：已作廢、已被核發報告引用或已刪除，`error.details[0]` 為 `voided`、`referenced_by_report`、`deleted`；Task 已完成、已取消或封存 Plan 不用此碼（見檢查順序）
 - 403 `permission.denied`：缺少所需專案權限或不是拍照者
 - 404 `resource.not_found`：Task 或照片不存在、`DRAFT` 對現場隱藏、照片不屬於該 Task
+
+讀取縮圖與原尺寸圖片均先檢查實際 JPEG 格式、目前像素上限與完整解碼；即使上傳後調低設定，兩者也同樣回 422 `evidence.invalid_image`（`error.details[0]` 為 `pixels`）。
+
+儲存檔毀損、截斷、格式異常或磁碟 I/O 錯誤，在回應開始前回 500 `server.internal_error`，沿用共用錯誤格式，並記錄含 evidence id 的 warning log，不含檔案內容或儲存鍵。既有遺失檔案的 404 行為不變。
+
+原尺寸檢查成功後仍串流保存的原位元組，不重編碼；若串流開始後才發生 I/O 錯誤，記錄同樣告警並中止串流（HTTP 標頭已送出，無法改為 500）。完整解碼增加 CPU、記憶體與首位元組延遲，以與縮圖共用的並行名額限制資源，且排隊／解碼前已釋放資料庫交易。
 
 <a id="檢查順序"></a>
 **檢查順序**（規格設計）：同一請求有多個條件不成立時，後端依下列順序回應第一個不成立者，每個情境只有一個錯誤碼：
@@ -276,6 +282,7 @@
 | FEV-AC37 | 內業完整編修器；同一 FIELD位元組、影像參數、圖層／來源／覆寫及尺寸基準、規則／字型／時區與固定編碼環境 | 走八把手、雙指、比例鎖、旋轉、±15度拉直、亮度端點、重設／復原／比較與鍵盤；後端以相同輸入在同版影像函式庫重產兩次 | UI 三分頁與 44px 控制、各拖曳鍵盤替代成立；前端狀態不增版。後端依度轉弧度、雙線性插值、固定 Q 四捨五入裁切、1+v/200亮度及合成順序，兩次 JPEG逐位元相同（完整位元組／SHA-256比對）；不以與前端預覽視覺相同或像素比對驗收。FIELD不變、始終兩版 | FEV-R16、R25 |
 | FEV-AC38 | 現場兩個入口與合法 JPEG；同一冪等鍵 | 分別用 camera／library 上傳，壓縮前讀有效／缺少／不可解析 EXIF 時間；另只改來源重送、缺少或偽造來源值 | 兩來源皆可接受，讀到的拍攝時間轉 UTC、讀不到為空且 EXIF 不保存；來源存入 metadata 與指紋，同鍵只改來源回冪等衝突（409），不新增照片；來源缺少／非法列舉／型別錯誤回欄位驗證錯誤（422） | FEV-R02、R07、R26 |
 | FEV-AC39 | library 且時間接近、camera 且時間空、camera 且時間差 >600 秒，另有 camera／有時間／差 <=600 秒對照 | 上傳後讀內業清單／詳情與現場視圖，含前後時間差、恰 600 秒及超過一秒；檢視標示板 | 三個真值條件各自觸發 is_non_realtime_capture；相簿顯示相簿匯入，其他真值顯示非即時拍攝；對照為 false，恰 600 秒不因差距觸發。現場 JSON 無衍生 key、畫面無 badge。合法時間差不擋上傳，標示板檢驗時間仍為伺服器上傳時間，不以 EXIF 取代 | FEV-R22、R26、R27 |
+| FEV-AC40 | 已合法上傳的 FIELD／OFFICE；分別破壞儲存檔、截斷 JPEG、模擬 open／read I/O 錯誤，另在上傳後調低像素上限 | 讀縮圖與原尺寸（含不放大的 max_edge） | 毀損、截斷與回應前 I/O 錯誤均回 500 `server.internal_error` 共用格式，warning 含 evidence id、不含檔案內容與儲存鍵；像素超限均回 422 `evidence.invalid_image`、`details` 為 `["pixels"]`；失敗關閉檔案，正常原尺寸位元組不變且不留第三檔 | FEV-R06、R17 |
 
 ## 規格設計清單
 
@@ -384,3 +391,5 @@
 - 規格澄清（#791）：錯誤原因沿用 APIError 的字串陣列 details，原因位於 `error.details[0]`，不另設 reason 物件；不改錯誤碼、HTTP 狀態或檢查順序。
 
 - 規格澄清（負責人裁定，#791）：工程標示改用上游未修改的 Noto Sans TC 繁中區域版 Regular（Sans2.004），取代完整 CJK TC 字庫；字型與 OFL、來源／SHA-256 一起打包。罕用姓名字及簡體／日文專有字形若不在字庫內，仍以 `?` 替代並記缺字 Unicode 碼位警示，不阻斷上傳，完整來源文字保留；不啟用系統 fallback，不改既有缺字／隱私規則。
+
+- 規格澄清（#820）：補讀取端儲存錯誤與目前像素上限的分界；新增 FEV-AC40，縮圖及原尺寸共用完整解碼檢查與並行名額，原尺寸檢查後仍串流保存位元組。
