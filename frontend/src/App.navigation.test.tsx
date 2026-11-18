@@ -278,6 +278,14 @@ function stubBackend(
             { status: 403 },
           )
         }
+        const search = new URL(url, 'http://testserver').searchParams
+        if (search.get('status') === 'COMPLETED') {
+          return Response.json({
+            items: [],
+            next_cursor: null,
+            total_count: 0,
+          })
+        }
         return Response.json({
           items: backend.assignedTasks,
           next_cursor: null,
@@ -1045,6 +1053,7 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
       .slice(after)
       .map(([input]) => new URL(String(input), 'http://testserver'))
       .filter((url) => url.pathname === '/api/v1/field/inspection-tasks')
+      .filter((url) => url.searchParams.get('status') !== 'COMPLETED')
       .map((url) => url.searchParams.get('assigned_to_me'))
   }
 
@@ -1054,13 +1063,18 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     backend.assignedTasks = tasks
     const gate = deferred()
     const requestedUsers: Array<string | null> = []
+    const requestedCompletedUsers: Array<string | null> = []
     const original = backend.fetchMock.getMockImplementation()!
     backend.fetchMock.mockImplementation(async (input, init) => {
       const url = new URL(String(input), 'http://testserver')
       if (url.pathname === '/api/v1/field/inspection-tasks') {
-        requestedUsers.push(backend.me?.id ?? null)
-        if (delayed && url.searchParams.get('assigned_to_me') === 'true') {
-          await gate.promise
+        if (url.searchParams.get('status') === 'COMPLETED') {
+          requestedCompletedUsers.push(backend.me?.id ?? null)
+        } else {
+          requestedUsers.push(backend.me?.id ?? null)
+          if (delayed && url.searchParams.get('assigned_to_me') === 'true') {
+            await gate.promise
+          }
         }
       }
       return original(input, init)
@@ -1078,21 +1092,23 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     gate.resolve()
     if (tasks.length > 0) await expectMyTasksLanding()
     else await screen.findByRole('heading', { name: '全部任務' })
-    return { backend, requestedUsers }
+    return { backend, requestedUsers, requestedCompletedUsers }
   }
 
   it.each(['立即', '延後'])(
     '逾時後換了另一個人登入，即使原頁面看得到也不帶過去（有指派，%s回應）',
     async (timing) => {
       // 等待任務資料完成；標題只代表外殼已掛載，不代表預設範圍已決定。
-      const { backend, requestedUsers } = await switchFieldAccount(
-        [ASSIGNED_FIELD_TASK],
-        timing === '延後',
-      )
+      const { backend, requestedUsers, requestedCompletedUsers } =
+        await switchFieldAccount([ASSIGNED_FIELD_TASK], timing === '延後')
       await screen.findByText(ASSIGNED_FIELD_TASK.name)
       expect(scopeAll()).toHaveAttribute('aria-pressed', 'false')
       expect(fieldScopes(backend)).toEqual(['true'])
       expect(requestedUsers).toEqual([MEMBER.id])
+      expect(requestedCompletedUsers.length).toBeGreaterThan(0)
+      expect(requestedCompletedUsers).toEqual(
+        requestedCompletedUsers.map(() => MEMBER.id),
+      )
       expect(screen.queryByRole('region', { name: '我的任務提醒' })).toBeNull()
     },
   )
@@ -1100,14 +1116,16 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
   it.each(['立即', '延後'])(
     '逾時換人且新帳號無指派時，依新查詢切全部而非沿用前人篩選（%s回應）',
     async (timing) => {
-      const { backend, requestedUsers } = await switchFieldAccount(
-        [],
-        timing === '延後',
-      )
+      const { backend, requestedUsers, requestedCompletedUsers } =
+        await switchFieldAccount([], timing === '延後')
       await screen.findByRole('heading', { name: '目前沒有符合的任務' })
       expect(scopeAll()).toHaveAttribute('aria-pressed', 'true')
       expect(fieldScopes(backend)).toEqual(['true', 'false'])
       expect(requestedUsers).toEqual([MEMBER.id, MEMBER.id])
+      expect(requestedCompletedUsers.length).toBeGreaterThan(0)
+      expect(requestedCompletedUsers).toEqual(
+        requestedCompletedUsers.map(() => MEMBER.id),
+      )
       expect(screen.queryByRole('region', { name: '我的任務提醒' })).toBeNull()
       expect(screen.getByRole('heading', { name: '全部任務' })).toBeVisible()
     },

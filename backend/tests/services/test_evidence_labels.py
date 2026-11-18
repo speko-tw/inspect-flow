@@ -55,7 +55,9 @@ def test_label_render_is_stable_and_keeps_photo_dimensions():
     assert first != original
 
 
-def test_fit_fallback_and_tiny_upload_preserve_both_versions(monkeypatch):
+def test_defensive_fit_fallback_and_tiny_upload_preserve_both_versions(
+    monkeypatch,
+):
     layer = default_layer()
 
     original_fit = evidence_images._can_fit
@@ -95,6 +97,43 @@ def test_fit_fallback_and_tiny_upload_preserve_both_versions(monkeypatch):
     assert office == image
     assert rule["render_state"] == "omitted_too_small"
     assert rule["base_size"] == "small"
+
+
+def test_fit_short_edge_scan_records_current_non_expected_behavior():
+    """FEV-AC33：記錄現狀，非期望規則；邊界有非單調變化。"""
+    expected = {
+        215: False,
+        216: False,
+        217: False,
+        218: True,
+        219: True,
+        220: True,
+        221: True,
+        222: True,
+        223: True,
+        224: True,
+        225: False,
+        226: False,
+        227: False,
+        228: False,
+        229: False,
+        230: True,
+        231: True,
+        232: True,
+    }
+    for size, fits in expected.items():
+        assert (
+            evidence_images._can_fit(
+                size, size, {**default_layer(), "size": "small"}
+            )
+            is fits
+        )
+        assert (
+            evidence_images._can_fit(
+                size, size, {**default_layer(), "size": "medium"}
+            )
+            is fits
+        )
 
 
 def test_jpeg_verification_rejects_format_and_pixel_limit():

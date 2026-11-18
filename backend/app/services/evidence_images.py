@@ -190,6 +190,8 @@ def fit_office_layer(
     if _can_fit(width, height, layer):
         return layer, "applied", requested
     if requested != "small":
+        # FEV-AC33：保留規則調整後才可能觸發的防禦性退讓；現行字級
+        # 下限與 padding 使 small／medium 的最小短邊相同。
         fallback = {**layer, "size": "small"}
         if _can_fit(width, height, fallback):
             return fallback, "fallback_small", "small"
