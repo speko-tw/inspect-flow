@@ -359,15 +359,17 @@ export default function UsersPage({
     }
   }, [initialQuery, search])
 
+  // 只追蹤目前帳號；無關清單更新不能清除錯誤並自動重試（#839）。
+  const listedDetailUser = users.find((user) => user.id === detailUserId)
+
   useEffect(() => {
     if (!detailUserId) {
       setDetailUser(null)
       setDetailError('')
       return
     }
-    const listed = users.find((user) => user.id === detailUserId)
-    if (listed) {
-      setDetailUser(listed)
+    if (listedDetailUser) {
+      setDetailUser(listedDetailUser)
       setDetailError('')
       return
     }
@@ -377,7 +379,7 @@ export default function UsersPage({
     setDetailNotFound(false)
     setDetailUser((current) => (current?.id === detailUserId ? current : null))
     setDetailError('')
-    // 清單初次清空亦會更新 users；同一筆在途詳情可由新 effect 接手。
+    // 同一筆在途詳情可由新 effect 接手，避免重複請求。
     if (detailRequest.current?.id !== detailUserId) {
       const promise = request<UserDetail>(
         `/users/${encodeURIComponent(detailUserId)}`,
@@ -399,7 +401,7 @@ export default function UsersPage({
     return () => {
       active = false
     }
-  }, [detailUserId, detailReloadKey, onNotFound, users])
+  }, [detailUserId, detailReloadKey, onNotFound, listedDetailUser])
 
   useEffect(() => {
     // 到期日捷徑只消費網址；replace 不得重載詳情或重掛表單（#741）。
