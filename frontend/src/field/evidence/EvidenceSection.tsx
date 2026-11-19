@@ -3,6 +3,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -146,6 +147,15 @@ export default function EvidenceSection({
   const [reloadKey, setReloadKey] = useState(0)
   // FEV-R04：初次載入與上傳後重讀共用序號，保留最新的覆蓋與照片。
   const photoReadSeq = useRef(0)
+  const currentTask = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    currentTask.current = taskId
+    return () => {
+      // FEV-R04：舊任務的異動完成後，不得啟動過時重讀或污染新回饋。
+      currentTask.current = null
+      photoReadSeq.current += 1
+    }
+  }, [taskId])
   const [view, setView] = useState<View>({ kind: 'home' })
   const [message, setMessage] = useState<Message | null>(null)
   const [abandoning, setAbandoning] = useState(false)
@@ -164,6 +174,7 @@ export default function EvidenceSection({
   const visible = status !== 'PENDING'
 
   const refresh = useCallback(async () => {
+    if (currentTask.current !== taskId) return false
     const requestId = ++photoReadSeq.current
     try {
       const [nextCoverage, nextPhotos] = await Promise.all([
@@ -189,9 +200,10 @@ export default function EvidenceSection({
   const queue = useUploadQueue(
     taskId,
     useCallback(() => {
+      if (currentTask.current !== taskId) return
       setMessage({ variant: 'success', text: '照片已上傳。' })
       void refresh()
-    }, [refresh]),
+    }, [refresh, taskId]),
   )
 
   useEffect(() => {
@@ -362,6 +374,7 @@ export default function EvidenceSection({
 
   async function showStalePhoto(photo: FieldPhoto, error: unknown) {
     const updated = await refresh()
+    if (currentTask.current !== taskId) return
     setPhotoFeedback({
       itemId: photo.item_id,
       photoId: null,
@@ -388,11 +401,13 @@ export default function EvidenceSection({
           ...(photo.is_overview ? {} : { point_ids: values.pointIds }),
         })
       } catch (error) {
+        if (currentTask.current !== taskId) return
         if (!(error instanceof PhotoMutationResponseError)) throw error
         uncertainResponse = true
         setMessage({ variant: 'info', text: '已送出，正在重新整理。' })
       }
       const updated = await refresh()
+      if (currentTask.current !== taskId) return
       setPhotoFeedback({
         itemId: photo.item_id,
         photoId: photo.id,
@@ -407,6 +422,7 @@ export default function EvidenceSection({
       })
       goHome(null, updated)
     } catch (error) {
+      if (currentTask.current !== taskId) return
       if (shouldRefreshPhoto(error)) await showStalePhoto(photo, error)
       else
         setView({
@@ -428,6 +444,7 @@ export default function EvidenceSection({
     try {
       await deletePhoto(taskId, photo.id)
       const updated = await refresh()
+      if (currentTask.current !== taskId) return
       setPhotoFeedback({
         itemId: photo.item_id,
         photoId: null,
@@ -441,8 +458,10 @@ export default function EvidenceSection({
       if (updated) setFocusPhotos((value) => value + 1)
       setMessage(null)
     } catch (error) {
+      if (currentTask.current !== taskId) return
       if (shouldRefreshPhoto(error)) {
         await showStalePhoto(photo, error)
+        if (currentTask.current !== taskId) return
         setDeleting(null)
       } else
         setDeleting({

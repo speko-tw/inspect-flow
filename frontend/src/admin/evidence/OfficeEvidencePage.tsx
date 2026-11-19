@@ -2,6 +2,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -154,12 +155,24 @@ export function OfficeEvidencePage({
   const operationRef = useRef(false)
   // FEV-R16：篩選或異動後的重讀不能被較早的清單／錯誤覆蓋。
   const listRequestSeq = useRef(0)
+  const listScope = useRef<{ taskId: string; filter: Filter } | null>(null)
+  useLayoutEffect(() => {
+    // FEV-R16：異動完成時可能仍持有舊閉包，重讀須用已提交的新條件。
+    listScope.current = { taskId, filter }
+    return () => {
+      listScope.current = null
+      listRequestSeq.current += 1
+    }
+  }, [filter, taskId])
   const leaveGuard = useUnsavedNavigationGuard(
     editorDirty,
     '放棄這次編修，已存內業版不受影響。要離開嗎？',
   )
 
   const reload = useCallback(async () => {
+    const scope = listScope.current
+    if (!scope) return
+    const { taskId, filter } = scope
     const requestId = ++listRequestSeq.current
     setLoading(true)
     setLoadError('')
@@ -180,16 +193,12 @@ export function OfficeEvidencePage({
     } finally {
       if (requestId === listRequestSeq.current) setLoading(false)
     }
-  }, [filter, taskId])
+  }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => void reload(), 0)
-    return () => {
-      window.clearTimeout(timer)
-      // 條件改變到新 timer 啟動間、以及卸載後，舊請求都不可寫回。
-      listRequestSeq.current += 1
-    }
-  }, [reload])
+    return () => window.clearTimeout(timer)
+  }, [filter, reload, taskId])
 
   function beginHistoryRequest(photoId: string): number {
     const next = (historyRequestSeq.current[photoId] ?? 0) + 1

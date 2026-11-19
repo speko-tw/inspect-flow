@@ -1748,3 +1748,63 @@ describe('照片重讀競態', () => {
     },
   )
 })
+
+describe('舊任務異動的閉包', () => {
+  it.each(['PATCH', 'DELETE'] as const)(
+    '%s 完成時已切換任務，不啟動舊任務重讀或寫回回饋',
+    async (method) => {
+      stubCanvas()
+      const { state, fetcher } = mutationApi()
+      const mutation = deferred<Response>()
+      if (method === 'PATCH') state.patch = () => mutation.promise
+      else state.remove = () => mutation.promise
+      const page = renderSection()
+      const box =
+        method === 'PATCH'
+          ? await openModifyConfirmation()
+          : await openDeleteConfirmation()
+      fireEvent.click(
+        within(box).getByRole('button', {
+          name: method === 'PATCH' ? '確認儲存' : '刪除照片',
+        }),
+      )
+      await waitFor(() =>
+        expect(
+          fetcher.mock.calls.some(([, init]) => init?.method === method),
+        ).toBe(true),
+      )
+      state.photos = [photo({ caption: '新任務的照片' })]
+      page.rerender(
+        <CurrentUserProvider
+          value={{
+            user: currentUserFixture({ has_field_access: true }),
+            clear: vi.fn(),
+          }}
+        >
+          <MemoryRouter>
+            <EvidenceSection
+              location={{ zone_name: '一樓', location_text: '東側' }}
+              projectName="另一工程"
+              status="COMPLETED"
+              taskId="task-2"
+            />
+          </MemoryRouter>
+        </CurrentUserProvider>,
+      )
+      expect(await screen.findByText('新任務的照片')).toBeVisible()
+      const readsBeforeCompletion = { ...state.reads }
+      await act(async () => {
+        mutation.resolve(
+          method === 'PATCH'
+            ? Response.json(photo())
+            : new Response(null, { status: 204 }),
+        )
+      })
+      expect(state.reads).toEqual(readsBeforeCompletion)
+      expect(screen.getByText('新任務的照片')).toBeVisible()
+      expect(
+        screen.queryByText(/已刪除照片。|已儲存照片說明與項次。/),
+      ).not.toBeInTheDocument()
+    },
+  )
+})

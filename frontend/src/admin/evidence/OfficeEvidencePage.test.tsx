@@ -979,6 +979,78 @@ describe('OfficeEvidencePage', () => {
     )
   })
 
+  it.each(['success', 'error'] as const)(
+    'reloads the current filter when a pending deletion ends with %s',
+    async (ending) => {
+      let resolve!: () => void
+      let reject!: (error: Error) => void
+      vi.mocked(deletePhoto).mockReturnValueOnce(
+        new Promise<void>((done, fail) => {
+          resolve = done
+          reject = fail
+        }),
+      )
+      vi.mocked(listOfficePhotos).mockImplementation(async (_, filters) => ({
+        items: filters.voided === false ? [photo] : [photo, voidedPhoto],
+        next_cursor: null,
+      }))
+      renderPage(true)
+      const cards = await screen.findAllByRole('article')
+      fireEvent.click(
+        within(cards[0]).getByRole('button', {
+          name: /^刪除照片，/,
+        }),
+      )
+      fireEvent.click(await screen.findByRole('button', { name: '確認刪除' }))
+      await waitFor(() => expect(deletePhoto).toHaveBeenCalledTimes(1))
+      fireEvent.change(screen.getByLabelText('照片狀態'), {
+        target: { value: 'active' },
+      })
+      await waitFor(() =>
+        expect(screen.getAllByRole('article')).toHaveLength(1),
+      )
+      await act(async () => {
+        if (ending === 'success') resolve()
+        else reject(new Error('delete failed'))
+      })
+      await waitFor(() => expect(listOfficePhotos).toHaveBeenCalledTimes(3))
+      expect(listOfficePhotos).toHaveBeenLastCalledWith(
+        'task-1',
+        { voided: false, deleted: false },
+        undefined,
+      )
+      expect(screen.getByLabelText('照片狀態')).toHaveValue('active')
+      expect(screen.getAllByRole('article')).toHaveLength(1)
+    },
+  )
+
+  it(
+    'does not reload after a pending deletion finishes ' +
+      'on an unmounted page',
+    async () => {
+      let resolve!: () => void
+      vi.mocked(deletePhoto).mockReturnValueOnce(
+        new Promise<void>((done) => {
+          resolve = done
+        }),
+      )
+      vi.mocked(listOfficePhotos).mockResolvedValue({
+        items: [photo],
+        next_cursor: null,
+      })
+      const page = renderPage(true)
+      const card = await screen.findByRole('article')
+      fireEvent.click(
+        within(card).getByRole('button', { name: /^刪除照片，/ }),
+      )
+      fireEvent.click(await screen.findByRole('button', { name: '確認刪除' }))
+      await waitFor(() => expect(deletePhoto).toHaveBeenCalledTimes(1))
+      page.unmount()
+      await act(async () => resolve())
+      expect(listOfficePhotos).toHaveBeenCalledTimes(1)
+    },
+  )
+
   it('confirms one soft-delete and reloads the list', async () => {
     vi.mocked(listOfficePhotos).mockResolvedValue({
       items: [photo],
