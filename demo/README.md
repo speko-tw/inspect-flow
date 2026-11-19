@@ -36,7 +36,7 @@ DEMO_WORK_DIR=/private/tmp/inspectflow-demo-2 \
 BACKEND_PORT=8301 FRONTEND_PORT=5301 demo/scripts/start.sh
 ```
 
-`DEMO_WORK_DIR` 同時決定 `demo.db`、log、結果檔與 PID 檔的位置。腳本先
+`DEMO_WORK_DIR` 同時決定 `demo.db`、`evidence-*` 照片儲存、log、結果檔與 PID 檔的位置。每輪新建照片目錄，保留前輪照片，避免刪除不屬於本輪的檔案。腳本先
 確認 PID 的命令列符合預期才停止程序。停止服務時，使用啟動時相同的設定：
 
 ```bash
@@ -112,6 +112,45 @@ HTTPS 網址。iPhone 首次使用時，依 iOS「設定 → 一般 → 關於�
 現場頁目前只支援開始任務。「總覽」因此同時有進行中、完成、待開始與取消
 資料，方便示範計數與工作量的差異。`walkthrough` 草稿保留給下方真實點擊
 流程。
+
+## 照片示範與真後端走查
+
+每次 seed 會用程式繪製兩張 1200×800 JPEG 管線／閥件示意圖，圖上只有
+`DEMO`，沒有真實照片、公司或人名。以 `demo-field-a` 呼叫正式 multipart
+上傳 API，後端各自建立現場版與內業版，再以 `demo-office` 呼叫內業編修
+API。沒有直接寫入資料庫或照片儲存。
+
+| 專案／任務 | 登入帳號 | 預建照片 |
+|---|---|---|
+| `DEMO-B`／泵房止水閥標示 | `demo-field-a`、`demo-office` | 2 張；「DEMO 已做內業編修」已旋轉 90°、亮度 +15，「DEMO 尚未內業編修」保留初版內業版 |
+| `DEMO-A`／大樓機房排水檢查 | `demo-field-a` | 0 張；待開始，保留給下次試用從頭拍 |
+| `DEMO-B`／擴建廠機房派工示範 | `demo-field-a`、`demo-office` | 0 張；保留既有草稿派出流程 |
+
+登入現場帳號後點「泵房止水閥標示」即可看到兩張照片；內業從專案、
+計畫與任務進入同一任務，再點「照片與內業編修」。`seed-result.json`
+的 `photos` 記錄照片及乾淨任務識別，供本機驗證使用，畫面不顯示識別。
+
+已完成 `make setup`，另執行 `npm ci --prefix demo` 並安裝 Google Chrome 後，
+可重跑專用照片走查：
+
+```bash
+DEMO_WORK_DIR=/private/tmp/inspectflow-evidence-demo \
+EVIDENCE_DIR=/private/tmp/inspectflow-evidence-proof \
+demo/scripts/run-evidence-e2e.sh
+```
+
+此腳本重建獨立 SQLite，啟動真後端與 Vite，從登入開始只靠畫面點擊完成
+「拍照入口選合成圖 → 現場確認上傳 → 內業編修 → 修改標準選要重查 → 補拍」。
+切換角色也走個人選單登出，沒有直接輸入任務網址。合成圖透過瀏覽器檔案
+選擇器提供，不代表已驗證實體相機。每階段保存 1280px 與 360px 淺色截圖，
+另檢查 390／768px 現場編修寬度；成功輸出 `walkthrough.json`，其中 `findings`
+另列預覽內容超出圖層邊界的畫面問題，流程成功不代表所有 AC 通過。失敗留下
+`blocked.png`／`blocked.txt`。截圖與 log 全在 `EVIDENCE_DIR`，不提交。
+結束只停止自己啟動的服務；重新執行會重建示範狀態。
+
+這條照片主線與原本 `run-e2e.sh` 分開執行，避免互相改動任務狀態。
+iPhone 實機、完整鍵盤操作、PostgreSQL 與 0.7.x 更正／改善真流程需另外
+驗收；不能用此無頭結果代替。
 
 ## 真實點擊走查
 

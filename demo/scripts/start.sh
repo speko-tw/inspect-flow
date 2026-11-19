@@ -38,6 +38,10 @@ rm -f "$DEMO_WORK_DIR/init.log" "$DEMO_WORK_DIR/migrate.log"
 rm -f "$DEMO_WORK_DIR/backend.pid" "$DEMO_WORK_DIR/frontend.pid"
 rm -f "$DEMO_WORK_DIR/seed-result.json"
 export INSPECTFLOW_DATABASE_URL="$DB_URL"
+# 重建資料庫時另開儲存目錄，避免上一輪照片變成本輪的孤兒檔。
+export INSPECTFLOW_EVIDENCE_STORAGE_ROOT
+INSPECTFLOW_EVIDENCE_STORAGE_ROOT="$(mktemp -d \
+  "$DEMO_WORK_DIR/evidence-XXXXXX")"
 
 make -C "$REPO" migrate >"$DEMO_WORK_DIR/migrate.log" 2>&1 \
   || { cat "$DEMO_WORK_DIR/migrate.log"; die "migration 失敗"; }
