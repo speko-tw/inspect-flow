@@ -152,12 +152,15 @@ export function OfficeEvidencePage({
   const historyRequestSeq = useRef<Record<string, number>>({})
   const errorRef = useRef<HTMLParagraphElement | null>(null)
   const operationRef = useRef(false)
+  // FEV-R16：篩選或異動後的重讀不能被較早的清單／錯誤覆蓋。
+  const listRequestSeq = useRef(0)
   const leaveGuard = useUnsavedNavigationGuard(
     editorDirty,
     '放棄這次編修，已存內業版不受影響。要離開嗎？',
   )
 
   const reload = useCallback(async () => {
+    const requestId = ++listRequestSeq.current
     setLoading(true)
     setLoadError('')
     try {
@@ -165,20 +168,27 @@ export function OfficeEvidencePage({
       let cursor: string | undefined
       do {
         const page = await listOfficePhotos(taskId, filtersFor(filter), cursor)
+        if (requestId !== listRequestSeq.current) return
         found.push(...page.items)
         cursor = page.next_cursor ?? undefined
       } while (cursor)
       setPhotos(found)
     } catch {
-      setLoadError('照片清單載入失敗，請重新載入。')
+      if (requestId === listRequestSeq.current) {
+        setLoadError('照片清單載入失敗，請重新載入。')
+      }
     } finally {
-      setLoading(false)
+      if (requestId === listRequestSeq.current) setLoading(false)
     }
   }, [filter, taskId])
 
   useEffect(() => {
     const timer = window.setTimeout(() => void reload(), 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      // 條件改變到新 timer 啟動間、以及卸載後，舊請求都不可寫回。
+      listRequestSeq.current += 1
+    }
   }, [reload])
 
   function beginHistoryRequest(photoId: string): number {

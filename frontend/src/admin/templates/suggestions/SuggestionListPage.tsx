@@ -53,7 +53,8 @@ export default function SuggestionListPage({
   const [queryDraft, setQueryDraft] = useState('')
   const [query, setQuery] = useState('')
   // 讀到的件綁定篩選條件；條件一換，舊件立即視為未載入，不混進新條件。
-  const key = `${mode}|${projectId ?? ''}|${status}|${mode === 'review' ? query : ''}`
+  const searchKey = mode === 'review' ? query : ''
+  const key = `${mode}|${projectId ?? ''}|${status}|${searchKey}`
   const [loaded, setLoaded] = useState<{
     key: string
     items: SuggestionSummary[]

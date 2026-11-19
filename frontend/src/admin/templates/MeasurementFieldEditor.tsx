@@ -137,13 +137,14 @@ export function MeasurementFieldEditor({
                       fieldIndex + direction >= point.measurement_fields.length
                     }
                     onClick={() => {
-                      moveField(pointIndex, fieldIndex, fieldIndex + direction)
+                      const targetIndex = fieldIndex + direction
+                      moveField(pointIndex, fieldIndex, targetIndex)
                       setConfirmField('')
                       window.setTimeout(
                         () =>
                           document
                             .getElementById(
-                              `field-${pointIndex}-${fieldIndex + direction}-name`,
+                              `field-${pointIndex}-${targetIndex}-name`,
                             )
                             ?.focus(),
                         0,

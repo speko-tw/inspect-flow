@@ -89,6 +89,8 @@ function stubCanvas(): CanvasCalls {
 interface Server {
   coverage: Coverage
   photos: FieldPhoto[]
+  /** 控制重讀回應順序，驗證並行上傳後不會退回舊覆蓋狀態。 */
+  read?: (resource: 'coverage' | 'photos') => Response | Promise<Response>
   /** 回傳 Response 或丟錯；第 n 次（從 0 起）POST 呼叫。 */
   post: (attempt: number) => Response | Promise<Response>
 }
@@ -111,6 +113,9 @@ function stubApi(server: Server) {
       }
       if (method === 'PATCH') return Response.json(photo())
       if (method === 'DELETE') return new Response(null, { status: 204 })
+      if (server.read) {
+        return server.read(url.includes('/evidence') ? 'coverage' : 'photos')
+      }
       if (url.includes('/evidence')) return Response.json(server.coverage)
       return Response.json({ items: server.photos, next_cursor: null })
     },
@@ -1015,10 +1020,12 @@ function mutationApi() {
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => {
+  let reject!: (error: Error) => void
+  const promise = new Promise<T>((done, fail) => {
     resolve = done
+    reject = fail
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 async function openModifyConfirmation() {
@@ -1658,4 +1665,86 @@ describe('過時照片操作的回饋', () => {
       '已上傳照片（0 張）',
     )
   })
+})
+
+describe('照片重讀競態', () => {
+  it.each(['success', 'error'] as const)(
+    '連續上傳後，舊重讀以 %s 結束不覆蓋最新照片與覆蓋數',
+    async (ending) => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      stubCanvas()
+      const old = {
+        coverage: deferred<Response>(),
+        photos: deferred<Response>(),
+      }
+      const current = {
+        coverage: deferred<Response>(),
+        photos: deferred<Response>(),
+      }
+      let pending = false
+      let reads = 0
+      stubApi(
+        defaultServer({
+          read: (resource) => {
+            if (!pending) {
+              return resource === 'coverage'
+                ? Response.json(COVERAGE)
+                : Response.json({ items: [], next_cursor: null })
+            }
+            const round = reads++ < 2 ? old : current
+            return round[resource].promise
+          },
+        }),
+      )
+      renderSection()
+      await screen.findByRole('group', { name: '1. 鋼筋間距' })
+      pending = true
+      for (const count of [2, 4]) {
+        await choose('拍照，1. 鋼筋間距')
+        await confirmEdit()
+        fireEvent.click(
+          screen.getByRole('button', {
+            name: '上傳現場照片',
+          }),
+        )
+        await waitFor(() => expect(reads).toBe(count))
+      }
+      const coverage = structuredClone(COVERAGE)
+      Object.assign(coverage.items[0].points[0], {
+        photo_count: 2,
+        missing_count: 0,
+        satisfied: true,
+      })
+      await act(async () => {
+        current.coverage.resolve(Response.json(coverage))
+        current.photos.resolve(
+          Response.json({
+            items: [photo({ caption: '最新上傳的照片' })],
+            next_cursor: null,
+          }),
+        )
+      })
+      expect(await screen.findByText('最新上傳的照片')).toBeVisible()
+      await act(async () => {
+        if (ending === 'error') {
+          old.coverage.reject(new Error('old coverage failed'))
+          old.photos.reject(new Error('old photos failed'))
+        } else {
+          old.coverage.resolve(Response.json(COVERAGE))
+          old.photos.resolve(Response.json({ items: [], next_cursor: null }))
+        }
+      })
+      expect(screen.getByText('最新上傳的照片')).toBeVisible()
+      expect(
+        screen.getByRole('group', {
+          name: '1. 鋼筋間距',
+        }),
+      ).toHaveTextContent('已有 2／需要 1 張')
+      expect(
+        screen.queryByText(
+          '照片資料暫時無法更新，畫面上的內容可能不是最新的。',
+        ),
+      ).not.toBeInTheDocument()
+    },
+  )
 })

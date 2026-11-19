@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -120,6 +121,17 @@ function renderPage(
       />
     </DataMemoryRouter>,
   )
+}
+
+function deferredList() {
+  type Page = Awaited<ReturnType<typeof listOfficePhotos>>
+  let resolve!: (page: Page) => void
+  let reject!: (error: Error) => void
+  const promise = new Promise<Page>((done, fail) => {
+    resolve = done
+    reject = fail
+  })
+  return { promise, resolve, reject }
 }
 
 describe('OfficeEvidencePage', () => {
@@ -889,6 +901,68 @@ describe('OfficeEvidencePage', () => {
     expect(removedAfter.getByText('自訂文字：自訂項目')).toBeVisible()
     expect(removedAfter.getByText('明示空字串')).toBeVisible()
   })
+
+  it.each(['success', 'error'] as const)(
+    'keeps the new filter when the old list finishes with %s',
+    async (ending) => {
+      const old = deferredList()
+      const current = deferredList()
+      vi.mocked(listOfficePhotos)
+        .mockReturnValueOnce(old.promise)
+        .mockReturnValueOnce(current.promise)
+      renderPage(false)
+      await waitFor(() => expect(listOfficePhotos).toHaveBeenCalledTimes(1))
+      fireEvent.change(screen.getByLabelText('照片狀態'), {
+        target: { value: 'active' },
+      })
+      await waitFor(() => expect(listOfficePhotos).toHaveBeenCalledTimes(2))
+      await act(async () => {
+        current.resolve({ items: [photo], next_cursor: null })
+      })
+      expect(await screen.findByRole('article')).toBeVisible()
+      await act(async () => {
+        if (ending === 'error') old.reject(new Error('old list failed'))
+        else old.resolve({ items: [voidedPhoto], next_cursor: 'old-next' })
+      })
+      expect(screen.getByLabelText('照片狀態')).toHaveValue('active')
+      expect(screen.getAllByRole('article')).toHaveLength(1)
+      expect(screen.getByAltText(/^現場版，/)).toHaveAttribute(
+        'src',
+        expect.stringContaining('/photo-1/image'),
+      )
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(listOfficePhotos).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it.each(['success', 'error'] as const)(
+    'keeps the new list loading when the old list finishes with %s',
+    async (ending) => {
+      const old = deferredList()
+      const current = deferredList()
+      vi.mocked(listOfficePhotos)
+        .mockReturnValueOnce(old.promise)
+        .mockReturnValueOnce(current.promise)
+      renderPage(false)
+      await waitFor(() => expect(listOfficePhotos).toHaveBeenCalledTimes(1))
+      fireEvent.change(screen.getByLabelText('照片狀態'), {
+        target: { value: 'active' },
+      })
+      await waitFor(() => expect(listOfficePhotos).toHaveBeenCalledTimes(2))
+      await act(async () => {
+        if (ending === 'error') old.reject(new Error('old list failed'))
+        else old.resolve({ items: [voidedPhoto], next_cursor: null })
+      })
+      expect(screen.getByText('正在載入照片…')).toBeVisible()
+      expect(screen.getByRole('button', { name: '重新載入' })).toBeDisabled()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      await act(async () => {
+        current.resolve({ items: [photo], next_cursor: null })
+      })
+      expect(await screen.findByRole('article')).toBeVisible()
+      expect(screen.getByRole('button', { name: '重新載入' })).toBeEnabled()
+    },
+  )
 
   it('reloads with explicit voided filters', async () => {
     renderPage(false)

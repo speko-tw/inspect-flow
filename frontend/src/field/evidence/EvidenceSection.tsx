@@ -144,6 +144,8 @@ export default function EvidenceSection({
     'loading',
   )
   const [reloadKey, setReloadKey] = useState(0)
+  // FEV-R04：初次載入與上傳後重讀共用序號，保留最新的覆蓋與照片。
+  const photoReadSeq = useRef(0)
   const [view, setView] = useState<View>({ kind: 'home' })
   const [message, setMessage] = useState<Message | null>(null)
   const [abandoning, setAbandoning] = useState(false)
@@ -162,16 +164,19 @@ export default function EvidenceSection({
   const visible = status !== 'PENDING'
 
   const refresh = useCallback(async () => {
+    const requestId = ++photoReadSeq.current
     try {
       const [nextCoverage, nextPhotos] = await Promise.all([
         fetchCoverage(taskId),
         fetchFieldPhotos(taskId),
       ])
+      if (requestId !== photoReadSeq.current) return false
       setCoverage(nextCoverage)
       setPhotos(nextPhotos)
       setLoadState('ready')
       return true
     } catch (error) {
+      if (requestId !== photoReadSeq.current) return false
       console.error('Evidence refresh failed:', error)
       setMessage({
         variant: 'error',
@@ -191,20 +196,21 @@ export default function EvidenceSection({
 
   useEffect(() => {
     if (!visible) return
-    let active = true
+    const requestId = ++photoReadSeq.current
     Promise.all([fetchCoverage(taskId), fetchFieldPhotos(taskId)])
       .then(([nextCoverage, nextPhotos]) => {
-        if (!active) return
+        if (requestId !== photoReadSeq.current) return
         setCoverage(nextCoverage)
         setPhotos(nextPhotos)
         setLoadState('ready')
       })
       .catch((error: unknown) => {
+        if (requestId !== photoReadSeq.current) return
         console.error('Evidence load failed:', error)
-        if (active) setLoadState('error')
+        setLoadState('error')
       })
     return () => {
-      active = false
+      photoReadSeq.current += 1
     }
   }, [reloadKey, taskId, visible])
 
