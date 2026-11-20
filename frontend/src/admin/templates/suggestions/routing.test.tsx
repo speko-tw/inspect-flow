@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { Route, Routes } from 'react-router'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -138,11 +138,12 @@ describe('管理外殼註冊', () => {
   }
 
   it('管理者可開審核清單', async () => {
-    renderAt('/templates/suggestions', admin)
-    // 外殼第一次渲染較重，負載高時超過預設的 1 秒。
-    expect(
-      await screen.findByRole('heading', { name: '範本建議審核' }),
-    ).toBeVisible()
+    // 匯入模組只會暖快取；lazy 元件首次提交仍須等 React 完成載入。
+    await act(async () => {
+      renderAt('/templates/suggestions', admin)
+    })
+    // 等待 act 收完 lazy 與 effect 工作後，才同步檢查可見標題。
+    expect(screen.getByRole('heading', { name: '範本建議審核' })).toBeVisible()
   })
 
   it('非管理者但有 template.manage 也可開審核清單', async () => {
