@@ -148,6 +148,16 @@ demo/scripts/run-evidence-e2e.sh
 `blocked.png`／`blocked.txt`。截圖與 log 全在 `EVIDENCE_DIR`，不提交。
 結束只停止自己啟動的服務；重新執行會重建示範狀態。
 
+同一支腳本在主線後接著走 AC35～AC39 的擴充段：現場「從相簿選」與「拍照」兩個入口、
+圖層開關與四角即時預覽、清單縮圖合成；內業裁切、拉直、旋轉、亮度、位置、樣式與三欄覆寫，
+關閉圖層後下載，並重開編修器讀回同值、改回原參數逐位元重現。每條斷言都帶 AC 編號，
+結果寫進 `walkthrough.json` 的 `acChecks`；讀回走真 API 與下載檔，像素比對用瀏覽器內的畫布。
+
+負向控制：`EVIDENCE_PHASE=extended` 只跑擴充段；`EVIDENCE_FAULT` 改寫送往後端的請求
+來模擬產品壞掉，走查必須在對應斷言失敗（`upload-corner`、`upload-source`、
+`office-straighten`、`office-layer-off`、`office-override`、`download-wrong`）。
+AC40（儲存讀取錯誤）屬後端行為，由 `pytest tests/api/test_evidence_read.py -k ac40` 驗證。
+
 這條照片主線與原本 `run-e2e.sh` 分開執行，避免互相改動任務狀態。
 iPhone 實機、完整鍵盤操作、PostgreSQL 與 0.7.x 更正／改善真流程需另外
 驗收；不能用此無頭結果代替。
