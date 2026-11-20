@@ -86,6 +86,7 @@ def default_layer() -> dict:
         "offset_y": 0.0,
         "size": "medium",
         "style": "dark",
+        "border": True,
         "overrides": {},
     }
 
@@ -198,6 +199,11 @@ def fit_office_layer(
     return layer, "omitted_too_small", None
 
 
+def label_timezone() -> str:
+    """FEV-R22：讀取合成與 API 共用的標示時區設定。"""
+    return os.environ.get("INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "Asia/Taipei")
+
+
 def render_office(
     data: bytes,
     source: dict,
@@ -214,9 +220,7 @@ def render_office(
             image = opened.convert("RGB")
     else:
         image = image.copy()
-    timezone_name = os.environ.get(
-        "INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "Asia/Taipei"
-    )
+    timezone_name = label_timezone()
     try:
         ZoneInfo(timezone_name)
     except ZoneInfoNotFoundError as exc:
@@ -225,7 +229,7 @@ def render_office(
         image.width, image.height, layer
     )
     rule = {
-        "rule_version": "field-evidence-label-v1",
+        "rule_version": "field-evidence-label-v2",
         "font_version": _font_version(),
         "timezone": timezone_name,
         "render_state": state,
@@ -314,7 +318,7 @@ def render_office(
         (left, top, right, bottom),
         radius=max(2, margin // 2),
         fill=background,
-        outline=(255, 255, 255, 255) if outline else None,
+        outline=foreground if effective_layer["border"] else None,
         width=3 if outline else 1,
     )
     for index, ((title, _), value) in enumerate(

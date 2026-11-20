@@ -8,6 +8,7 @@ export type OfficeLayer = {
   offset_y: number
   size: 'small' | 'medium' | 'large'
   style: 'dark' | 'outline' | 'paper'
+  border: boolean
   overrides: Partial<
     Record<'project_name' | 'item_name' | 'inspection_location', string>
   >
@@ -34,6 +35,7 @@ export type OfficePhoto = {
   uploaded_by: { name_zh: string | null; is_me: boolean }
   capture_source: 'camera' | 'library' | null
   layer: OfficeLayer
+  label_timezone: string
   labels: OfficeLabels
   layer_render: { render_state: string | null; effective_size: string | null }
   voided_at: string | null

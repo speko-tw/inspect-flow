@@ -48,8 +48,10 @@ const photo: OfficePhoto = {
     offset_y: 0,
     size: 'small',
     style: 'dark',
+    border: true,
     overrides: {},
   },
+  label_timezone: 'Asia/Taipei',
   labels: {
     project_name: '工程',
     item_title: '表面',
@@ -326,6 +328,7 @@ describe('OfficeEvidencePage', () => {
         {
           ...photo,
           item_id: 'task-item-association-id',
+          label_timezone: 'Asia/Taipei',
           labels: { ...photo.labels, item_title: '表面檢查' },
         },
         {
@@ -333,6 +336,7 @@ describe('OfficeEvidencePage', () => {
           id: 'overview-first',
           item_id: 'task-item-association-id',
           is_overview: true,
+          label_timezone: 'Asia/Taipei',
           labels: { ...photo.labels, item_title: '表面檢查' },
         },
       ],
@@ -1228,5 +1232,51 @@ describe('OfficeEvidencePage', () => {
       screen.getByRole('heading', { name: '編修內業版' }),
     ).toBeInTheDocument()
     await waitFor(() => expect(cancelButton).toHaveFocus())
+  })
+  it('歷程缺值、API 時區與外框前後值對齊保存結果', async () => {
+    const missing = {
+      ...photo.labels,
+      location: '',
+      uploader_name: '',
+      uploaded_at: null,
+    }
+    vi.mocked(getOfficePhoto).mockResolvedValue({
+      ...photo,
+      label_timezone: 'UTC',
+      layer_history: {
+        items: [
+          {
+            id: 'missing',
+            actor: { id: null, snapshot: '測試人員' },
+            occurred_at: '2026-10-02T03:00:00Z',
+            before: { layer: photo.layer, labels: missing },
+            after: {
+              layer: { ...photo.layer, border: false },
+              labels: missing,
+            },
+          },
+        ],
+        next_cursor: null,
+      },
+    })
+    renderPage(false)
+    fireEvent.click(
+      (
+        await screen.findAllByRole('button', {
+          name: /^查看歷程，/,
+        })
+      )[0],
+    )
+    const region = await screen.findByRole('region', {
+      name: /圖層修改歷程｜/,
+    })
+    expect(
+      await within(region).findByText('測試人員・2026/10/02 03:00'),
+    ).toBeInTheDocument()
+    fireEvent.click(within(region).getByText('查看修改前後'))
+    expect(within(region).getAllByText('沿用來源：未填寫')).toHaveLength(2)
+    expect(within(region).getAllByText('未記錄')).toHaveLength(4)
+    expect(within(region).getByText('小・深色底・有外框')).toBeVisible()
+    expect(within(region).getByText('小・深色底・無外框')).toBeVisible()
   })
 })

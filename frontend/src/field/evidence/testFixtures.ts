@@ -60,8 +60,10 @@ export function photo(overrides: Partial<FieldPhoto> = {}): FieldPhoto {
       offset_y: 0,
       size: 'medium',
       style: 'dark',
+      border: true,
       overrides: {},
     },
+    label_timezone: 'Asia/Taipei',
     labels: {
       project_name: '示範工程甲',
       item_title: '鋼筋工程',
@@ -89,6 +91,7 @@ export function uploadedPhoto(
     uploaded_at: p.uploaded_at,
     capture_source: p.capture_source,
     layer: p.layer,
+    label_timezone: p.label_timezone,
     labels: p.labels,
     layer_render: p.layer_render,
     variants: {

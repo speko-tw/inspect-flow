@@ -126,6 +126,8 @@ export function TargetForm({
           height={existingPhoto.photo.height}
           layer={existingPhoto.photo.layer}
           labels={existingPhoto.photo.labels}
+          render={existingPhoto.photo.layer_render}
+          timezone={existingPhoto.photo.label_timezone}
         />
       )}
       <p>查核項目：{item.title}</p>

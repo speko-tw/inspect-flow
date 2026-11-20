@@ -60,6 +60,11 @@ function stubCanvas(): CanvasCalls {
     restore: vi.fn(),
     translate: vi.fn(),
     rotate: vi.fn(),
+    scale: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
     getImageData: () => ({
       data: new Uint8ClampedArray([100, 100, 100, 255]),
     }),
