@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from app.api.errors import APIError, ErrorCode
 from app.api.v1.evidence import _upload_limiter
 from app.auth.access import permission_gaps, require_login_access
-from app.auth.dependencies import get_db
+from app.auth.dependencies import get_db, get_request_effective_access_cache
 from app.models import InspectionTask, User
 from app.services.evidence_office import (
     edit_office,
@@ -46,7 +46,7 @@ def _authorize(
         module_codes=("inspection.use",),
         project_codes=("evidence.manage",),
     )
-    if module or project:
+    if not access.is_active or module or project:
         if task.status == "DRAFT":
             raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
@@ -68,6 +68,11 @@ def _apply(
     user: User,
     raw: object,
 ) -> dict:
+    # FEV-R12：commit 不會清請求快取；讀完本文及取得名額才重查。
+    cache = get_request_effective_access_cache()
+    if cache is not None:
+        cache.clear()
+    session.expire_all()
     can_read = _authorize(session, task_id, photo_id, user)
     photo = edit_office(
         session,
