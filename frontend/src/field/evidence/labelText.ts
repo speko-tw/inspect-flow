@@ -27,8 +27,5 @@ export function formatRecordedTime(
       .formatToParts(date)
       .map((part) => [part.type, part.value]),
   )
-  return (
-    `${parts.year}/${parts.month}/${parts.day} ${parts.hour}:` +
-    `${parts.minute}`
-  )
+  return `${parts.year}/${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`
 }
