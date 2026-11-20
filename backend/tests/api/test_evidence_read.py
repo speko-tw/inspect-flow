@@ -853,8 +853,9 @@ def test_tampered_inner_cursor_is_validation_error(
     assert response.json()["error"]["code"] == "request.validation_failed"
 
 
-def test_thumbnail_releases_login_transaction_before_decoding(
-    read_world, monkeypatch
+@pytest.mark.parametrize("query", ["", "?max_edge=600"])
+def test_image_releases_login_transaction_before_decoding(
+    read_world, monkeypatch, query
 ):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
@@ -885,7 +886,7 @@ def test_thumbnail_releases_login_transaction_before_decoding(
     try:
         with ThreadPoolExecutor(max_workers=2) as executor:
             pending = executor.submit(
-                w["reader"].get, _paths(w, photo)[2] + "/image?max_edge=600"
+                w["reader"].get, _paths(w, photo)[2] + "/image" + query
             )
             try:
                 assert ready.wait(5)
@@ -902,8 +903,9 @@ def test_thumbnail_releases_login_transaction_before_decoding(
 
 
 @pytest.mark.parametrize("capacity", [1, 2])
-def test_thumbnail_concurrency_uses_bounded_dedicated_workers(
-    read_world, monkeypatch, capacity
+@pytest.mark.parametrize("query", ["", "?max_edge=600"])
+def test_image_concurrency_uses_bounded_dedicated_workers(
+    read_world, monkeypatch, capacity, query
 ):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event, Lock
@@ -921,7 +923,7 @@ def test_thumbnail_concurrency_uses_bounded_dedicated_workers(
     lock = Lock()
     active, peak = 0, 0
     committed = set()
-    original = Image.Image.thumbnail
+    original = Image.open
 
     def after_commit(db):
         with lock:
@@ -929,7 +931,7 @@ def test_thumbnail_concurrency_uses_bounded_dedicated_workers(
             if len(committed) == 4:
                 prepared.set()
 
-    def paused_thumbnail(image, *args, **kwargs):
+    def paused_open(*args, **kwargs):
         nonlocal active, peak
         with lock:
             active += 1
@@ -938,12 +940,12 @@ def test_thumbnail_concurrency_uses_bounded_dedicated_workers(
                 entered.set()
         try:
             assert release.wait(10)
-            return original(image, *args, **kwargs)
+            return original(*args, **kwargs)
         finally:
             with lock:
                 active -= 1
 
-    monkeypatch.setattr(Image.Image, "thumbnail", paused_thumbnail)
+    monkeypatch.setattr(Image, "open", paused_open)
     event.listen(Session, "after_commit", after_commit)
     try:
         with TestClient(
@@ -953,7 +955,7 @@ def test_thumbnail_concurrency_uses_bounded_dedicated_workers(
                 pending = [
                     executor.submit(
                         shared.get,
-                        _paths(w, photo)[2] + "/image?max_edge=600",
+                        _paths(w, photo)[2] + "/image" + query,
                         headers={
                             "Cookie": (
                                 f"{SESSION_COOKIE_NAME}="
@@ -983,11 +985,18 @@ def test_thumbnail_concurrency_uses_bounded_dedicated_workers(
         event.remove(Session, "after_commit", after_commit)
 
 
-def test_thumbnail_checks_actual_decode_pixel_limit(read_world, monkeypatch):
+@pytest.mark.parametrize("variant", ["field", "office"])
+@pytest.mark.parametrize("edge", [None, 64, 4096])
+def test_ac40_checks_actual_decode_pixel_limit(
+    read_world, monkeypatch, variant, edge
+):
     w = read_world
     photo = _add_photo(w)
     monkeypatch.setenv("INSPECTFLOW_EVIDENCE_MAX_DECODE_PIXELS", "1000")
-    response = w["reader"].get(_paths(w, photo)[2] + "/image?max_edge=64")
+    response = w["reader"].get(
+        _paths(w, photo)[2] + "/image",
+        params={"variant": variant, **({"max_edge": edge} if edge else {})},
+    )
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "evidence.invalid_image"
     assert response.json()["error"]["details"] == ["pixels"]
@@ -1093,3 +1102,59 @@ def test_label_timezone_uses_backend_configuration_in_all_views(
     response = w["reader"].get(detail)
     assert response.status_code == 200
     assert response.json()["label_timezone"] == "UTC"
+
+
+@pytest.mark.parametrize("variant", ["field", "office"])
+@pytest.mark.parametrize("edge", [None, 64, 4096])
+@pytest.mark.parametrize("failure", ["corrupt", "truncated", "open", "read"])
+def test_ac40_storage_failures_are_server_errors(
+    read_world, monkeypatch, caplog, variant, edge, failure
+):
+    """儲存損壞不是使用者輸入錯誤；所有分支應保留安全告警與關檔。"""
+    w = read_world
+    photo = _add_photo(w)
+    version = w["db"].scalar(
+        select(EvidenceVariant).where(
+            EvidenceVariant.evidence_id == UUID(photo["id"]),
+            EvidenceVariant.variant_type == variant.upper(),
+        )
+    )
+    key = version.storage_key
+    path = w["root"] / str(key)
+    original = LocalStorage.open
+    opened = []
+    secret = "private-file-content"
+    if failure in {"corrupt", "truncated"}:
+        data = path.read_bytes()
+        path.write_bytes(
+            secret.encode() if failure == "corrupt" else data[: len(data) // 2]
+        )
+
+    class Unreadable(io.BytesIO):
+        def read(self, *args):
+            raise OSError(secret)
+
+    def failing_open(store, requested_key):
+        if failure == "open":
+            raise OSError(secret)
+        stream = (
+            Unreadable(b"unused")
+            if failure == "read"
+            else original(store, requested_key)
+        )
+        opened.append(stream)
+        return stream
+
+    monkeypatch.setattr(LocalStorage, "open", failing_open)
+    response = w["reader"].get(
+        _paths(w, photo)[2] + "/image",
+        params={"variant": variant, **({"max_edge": edge} if edge else {})},
+    )
+    assert response.status_code == 500, response.text
+    error = response.json()["error"]
+    assert error["code"] == "server.internal_error"
+    assert photo["id"] in caplog.text
+    assert "WARNING" in caplog.text
+    assert str(key) not in caplog.text
+    assert secret not in caplog.text + response.text
+    assert all(stream.closed for stream in opened)
