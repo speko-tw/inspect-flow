@@ -54,6 +54,52 @@ class ImageInfo:
     sha256: str
 
 
+def validate_field_metadata(data: bytes) -> None:
+    """FEV-R26：新 FIELD 拒收 APP1、APP13、COM，原位元組不變。"""
+    # Chrome 157 的 canvas 帶 JFIF／ICC；Safari 尚未實測，採拒收清單，
+    # 只擋已知會保存 EXIF／XMP／IPTC 的段，避免誤擋其他正常 APPn。
+    pos = 2
+    while pos < len(data):
+        if data[pos] != 0xFF:
+            raise InvalidEvidenceImageError("decode")
+        while pos < len(data) and data[pos] == 0xFF:
+            pos += 1
+        if pos >= len(data):
+            raise InvalidEvidenceImageError("decode")
+        marker = data[pos]
+        pos += 1
+        if marker == 0xD9:
+            return
+        if marker == 0x01 or 0xD0 <= marker <= 0xD7:
+            continue
+        if pos + 2 > len(data):
+            raise InvalidEvidenceImageError("decode")
+        size = int.from_bytes(data[pos : pos + 2], "big")
+        end = pos + size
+        if size < 2 or end > len(data):
+            raise InvalidEvidenceImageError("decode")
+        if marker in {0xE1, 0xED, 0xFE}:
+            raise InvalidEvidenceImageError("metadata")
+        pos = end
+        if marker == 0xDA:
+            # 壓縮資料的 FF00 與 restart 不是段落；仍掃描後續 scan，
+            # 避免 progressive 或 EOI 前的 APP1 繞過 metadata 守門。
+            while pos < len(data):
+                pos = data.find(b"\xff", pos)
+                if pos < 0 or pos + 1 >= len(data):
+                    raise InvalidEvidenceImageError("decode")
+                next_byte = pos + 1
+                while next_byte < len(data) and data[next_byte] == 0xFF:
+                    next_byte += 1
+                if next_byte >= len(data):
+                    raise InvalidEvidenceImageError("decode")
+                if data[next_byte] == 0 or 0xD0 <= data[next_byte] <= 0xD7:
+                    pos = next_byte + 1
+                else:
+                    break
+    raise InvalidEvidenceImageError("decode")
+
+
 def inspect_jpeg(
     data: bytes, max_pixels: int, *, max_edge: int | None = None
 ) -> ImageInfo:

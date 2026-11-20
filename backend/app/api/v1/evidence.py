@@ -78,7 +78,7 @@ def _check_upload_access(
         module_codes=("inspection.use",),
         project_codes=("inspection_task.inspect",),
     )
-    if missing_module or missing_project:
+    if not access.is_active or missing_module or missing_project:
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
 
 
@@ -375,8 +375,18 @@ def _process_upload(
     prepared: _PreparedUpload,
 ) -> JSONResponse:
     """只有持有專用名額的 worker 才讀圖片、解碼、產圖與存檔。"""
+    # FEV-R12：本文與 limiter 等候期間可能撤權，須重查有效權限。
+    cache = get_request_effective_access_cache()
+    if cache is not None:
+        cache.clear()
+    session.expire_all()
     user = session.get(User, user_id)
-    assert user is not None
+    if user is None:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    task = session.get(InspectionTask, task_id)
+    if task is None:
+        raise APIError(ErrorCode.INSPECTION_TASK_NOT_FOUND, 404)
+    _check_upload_access(session, task, user)
     settings = get_storage_settings()
     content = prepared.file.file.read(settings.max_file_bytes + 1)
     if len(content) > settings.max_file_bytes:

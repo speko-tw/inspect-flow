@@ -115,13 +115,13 @@
 | FEV-AC04 | `backend/tests/api/test_evidence_read.py`：逐步上傳並讀覆蓋狀態，涵蓋 `min_count` 為 2、跨項次共用、總覽不計、一百張以上 |
 | FEV-AC05 | `test_evidence_upload.py`：四種不合法對應皆 422 且無記錄與檔案 |
 | FEV-AC06 | `test_evidence_upload.py`、`test_evidence_read.py`、`test_evidence_office.py`：註記經兩種視圖一致、編修內業版後不變、超長 422 |
-| FEV-AC07 | `test_evidence_upload.py`：上限內外、非 JPEG、毀損、超過像素上限、調整設定值；逐一檢查無記錄與孤兒檔，413 在串流中拒收。`test_evidence_upload_limits.py`：2560／2561 px 橫直拍邊界、超長於完整解碼前拒絕且無記錄／孤兒檔，既存大圖仍可讀兩版／縮圖與編修 |
+| FEV-AC07 | `test_evidence_upload.py`、`test_evidence_metadata.py`：上限內外、非 JPEG、毀損、超過像素上限、調整設定值；逐一檢查無記錄與孤兒檔，413 在串流中拒收。`test_evidence_upload_limits.py`：2560／2561 px 橫直拍邊界、超長於完整解碼前拒絕且無記錄／孤兒檔，既存大圖仍可讀兩版／縮圖與編修；另驗 APP1／APP13／COM 拒收、其他所有 APPn（含 APP0 JFIF／APP2 ICC）通過，SHA 優先、冪等與圖層關閉位元組不變。 |
 | FEV-AC08 | `test_evidence_upload.py`：雜湊不符 422，相符時資料庫雜湊正確 |
 | FEV-AC09 | `test_evidence_upload.py`：重複、不同內容、只改註記或項次、他人同鍵、並行請求、刪除後重放、任務狀態改變後重放；SQLite 與 PostgreSQL 各跑一次（`make check-postgres`） 另以同一冪等鍵只改 layer 開關／角落回 409，原圖層與兩版不變。 |
 | FEV-AC10 | 前端測試以可控的失敗回應驗證自動重試次數、退避間隔與手動重送沿用同一鍵；真後端以故障注入代理驗證只有一筆照片；4xx 不重試 |
 | FEV-AC11 | 檢查 production build 沒有 Service Worker 註冊；測試待上傳照片不寫入 IndexedDB、localStorage 與 Cache API；離線情境失敗訊息與照片保留；上傳中與失敗待重送兩情境分別觸發站內導覽的頁內確認，驗證提示原文「照片尚未上傳，請勿關閉頁面」及取消保留畫面，另驗 beforeunload 已註冊；關閉分頁／重新整理使用瀏覽器內建提示，文字不可自訂，行動端不保證觸發；下一版離線另案 #811，不以網路恢復自動排隊冒充本版功能。 |
 | FEV-AC12 | `test_evidence_upload.py` 與 `test_evidence_mutations.py`：各 Task 狀態、封存 Plan 與封存加完成組合的狀態矩陣，確認檢查順序（封存優先於 Task 狀態、`COMPLETED` 刪除回 `evidence.task_locked`）且不回 `evidence.photo_locked`；被拒絕時資料不變 |
-| FEV-AC13 | `test_evidence_upload.py`、`test_evidence_read.py`、`test_evidence_office.py`、`test_evidence_mutations.py`：U1～U5、U7（未開通查核模組）與 Admin 矩陣；`test_route_access.py` 驗證存取層級宣告；回應不含儲存鍵、圖片需登入 |
+| FEV-AC13 | `test_evidence_upload.py`、`test_evidence_read.py`、`test_evidence_office.py`、`test_evidence_mutations.py`、`test_evidence_reauthorization.py`：U1～U5、U7（未開通查核模組）與 Admin 矩陣；`test_route_access.py` 驗證存取層級宣告；回應不含儲存鍵、圖片需登入；上傳及 OFFICE 各覆蓋本文／limiter 等待後撤模組、撤角色、停用帳號，403 且業務資料／稽核／檔案不變，並有未撤權成功對照。 |
 | FEV-AC14 | `test_evidence_mutations.py`：非拍照者 403、拍照者與內業刪除成功，檢查軟刪除、檔案保留、稽核、覆蓋數與清單 |
 | FEV-AC15 | `test_evidence_mutations.py`：已作廢、報告引用（測試替身註冊檢查）、已刪除三種鎖定與 `reason`；已完成 Task 的刪除屬 AC12 的 `evidence.task_locked` |
 | FEV-AC16 | `test_inspection_planning_api.py` 與 `test_evidence_mutations.py`：同交易作廢被修改項目的照片（含只有照片、尚無結果的項目）、標待重查、其他項目不變、內業可查、中途失敗回滾；確認作廢對象是項目而非整個 Task |
@@ -193,3 +193,10 @@
 - T2 依 D2 在 settings 保存固定 `MAX_FIELD_EDGE=2560`，上傳才傳給共用 JPEG 檢查函式；從檔頭判斷並在完整解碼前拒絕，錯誤沿用像素尺寸分類 `pixels`，不新增錯誤碼。
 - T3／T4 對既存大圖不追溯套用此上傳限制，仍受原本可調解碼像素上限約束；不改內業編修的 SQLite 鎖範圍。
 - 改動範圍：`backend/app/storage/settings.py`、`backend/app/services/evidence_images.py`、`backend/app/services/evidence.py`、`backend/tests/api/test_evidence_upload_limits.py`，以及本計畫與 `spec.md`。既有測試及 demo seed 盤點後沒有超長上傳樣本需要修改；demo seed 僅建立照片需求，沒有上傳影像。
+
+### #844 發版前後端補強
+
+- 依[負責人指示](https://github.com/speko-tw/inspect-flow/issues/844#issuecomment-6997749486)，恢復新 FIELD 長邊守門，不追溯既存照片；沿用 `ad10ed1` 的 `storage/settings.py`、`services/evidence.py`、`services/evidence_images.py` 與 `test_evidence_upload_limits.py`。
+- #845 F01：`api/v1/evidence.py` 與 `api/v1/evidence_office.py` 在本文／limiter 等待後清除請求快取及過期 ORM 狀態，重新查有效權限與帳號狀態；`test_evidence_reauthorization.py` 以真實 API 與另一 DB Session 提交撤權，覆蓋上傳／OFFICE、兩種等待點與三種撤權，另保留未撤權成功對照。
+- #845 F02：`services/evidence_images.py` 以段落守門只拒收 APP1／APP13／COM，其他 APPn 一律放行，`services/evidence.py` 在驗 SHA 後呼叫，不重編碼。`test_evidence_metadata.py` 驗證拒收無記錄／孤兒檔、JFIF／ICC 的一般及 progressive JPEG、SHA 優先與冪等／圖層關閉位元組不變。真瀏覽器 canvas 輸出另存當次驗收證據，不提交二進位產物。
+- #845 F07 與小修：本規格 FEV-Q3 引用既有 R09 的定案狀態；`api/limits.py` 註解改繁中。

@@ -34,6 +34,7 @@ from app.services.evidence_images import (
     InvalidEvidenceImageError,
     inspect_jpeg,
     render_office,
+    validate_field_metadata,
 )
 from app.services.evidence_labels import build_label_source
 from app.storage import LocalStorage, get_storage_settings
@@ -320,6 +321,12 @@ def upload_evidence(
         ) from exc
     if image_info.sha256 != sha256:
         raise _api_error(ErrorCode.EVIDENCE_SHA256_MISMATCH, 422)
+    try:
+        validate_field_metadata(content)
+    except InvalidEvidenceImageError as exc:
+        raise _api_error(
+            ErrorCode.EVIDENCE_INVALID_IMAGE, 422, str(exc)
+        ) from exc
 
     task = session.get(InspectionTask, task_id)
     item = session.get(TaskInspectionItem, item_id)

@@ -26,7 +26,7 @@ TEMPLATES_MAX = 200
 POINTS_MAX = 200
 MEASUREMENT_FIELDS_MAX = 50
 
-# Evidence multipart requests: binary limit plus bounded headers/form overhead.
+# 照片 multipart 除二進位上限外，另限制標頭與表單的額外用量。
 EVIDENCE_MULTIPART_OVERHEAD_MAX = 64 * 1024
 EVIDENCE_MULTIPART_FIELD_MAX = 8 * 1024
 # 二進位 file 由 max_files 管理；項次以重複表單欄位傳入。
