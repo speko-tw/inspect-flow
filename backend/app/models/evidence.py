@@ -77,6 +77,7 @@ class Evidence(AuditMixin, TimestampedBase):
             "offset_y": 0,
             "size": "medium",
             "style": "dark",
+            "border": True,
             "overrides": {},
         },
     )

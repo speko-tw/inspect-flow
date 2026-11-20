@@ -203,6 +203,7 @@ def test_label_layer_upgrade_keeps_unrecorded_capture_source_null(world):
         ).one()
     assert capture_source is None
     assert label_layer is not None
+    assert label_layer["border"] is True
     engine.dispose()
 
 
@@ -468,3 +469,31 @@ def test_orphan_cli_does_not_create_missing_database(tmp_path, monkeypatch):
         main()
     assert not missing.parent.exists()
     assert not (tmp_path / "photos").exists()
+
+
+def test_border_migration_keeps_existing_layer_choices(world):
+    """#837：只補外框預設，保留既有角落、樣式、開關與文字覆寫。"""
+    session, *_ = world
+    photo = _photo(world)
+    photo.label_layer = {
+        **photo.label_layer,
+        "enabled": False,
+        "corner": "top_right",
+        "style": "paper",
+        "overrides": {"project_name": "保留來源"},
+    }
+    session.commit()
+    identifier, expected = photo.id, dict(photo.label_layer)
+    engine = session.get_bind()
+    session.close()
+    config = Config(str(_CONFIG))
+    command.downgrade(config, "f791a2b3c4d5")
+    with Session(engine) as check:
+        saved = check.get(Evidence, identifier)
+        assert saved is not None and "border" not in saved.label_layer
+    command.upgrade(config, "head")
+    with Session(engine) as check:
+        saved = check.get(Evidence, identifier)
+        assert saved is not None
+        assert saved.label_layer == {**expected, "border": True}
+    engine.dispose()

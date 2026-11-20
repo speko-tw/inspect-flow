@@ -31,8 +31,10 @@ const photo: OfficePhoto = {
     offset_y: 0,
     size: 'large',
     style: 'dark',
+    border: true,
     overrides: {},
   },
+  label_timezone: 'Asia/Taipei',
   labels: {
     project_name: '專案',
     item_title: '項目',
@@ -225,6 +227,7 @@ describe('OfficePhotoEditor', () => {
     renderEditor(undefined, {
       captured_at: '2000-01-01T00:00:00Z',
       uploaded_at: '2026-01-01T00:00:00Z',
+      label_timezone: 'Asia/Taipei',
       labels: { ...photo.labels, uploaded_at: value },
     })
     fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
@@ -233,6 +236,7 @@ describe('OfficePhotoEditor', () => {
 
   it('does not invent a missing recorded inspection time', () => {
     renderEditor(undefined, {
+      label_timezone: 'Asia/Taipei',
       labels: { ...photo.labels, uploaded_at: undefined },
     })
     fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
@@ -331,6 +335,7 @@ describe('OfficePhotoEditor', () => {
   it('uses backend label fallbacks for empty preview fields', () => {
     renderEditor(undefined, {
       uploaded_by: { name_zh: 'snapshot-only-name', is_me: false },
+      label_timezone: 'Asia/Taipei',
       labels: {
         project_name: '',
         item_title: null,
@@ -349,6 +354,7 @@ describe('OfficePhotoEditor', () => {
 
   it('shows the fallback for an empty location override', () => {
     renderEditor(undefined, {
+      label_timezone: 'Asia/Taipei',
       labels: { ...photo.labels, location: '來源位置' },
       layer: {
         ...photo.layer,
@@ -1133,4 +1139,36 @@ describe('OfficePhotoEditor', () => {
       ),
     )
   })
+})
+
+it.each(['dark', 'paper'] as const)('%s 預覽的外框可獨立關閉', (style) => {
+  renderEditor(undefined, { layer: { ...photo.layer, style } })
+  fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+  const border = screen.getByRole('checkbox', { name: '顯示外框' })
+  expect(border).toBeChecked()
+  const overlay = document.querySelector('.office-layer-table')!
+  expect(overlay).toHaveClass('office-layer-table--border')
+  const rectangle = overlay.parentElement!.getAttribute('style')
+  fireEvent.click(border)
+  expect(border).not.toBeChecked()
+  expect(overlay).not.toHaveClass('office-layer-table--border')
+  expect(overlay.parentElement!.getAttribute('style')).toBe(rectangle)
+})
+
+it('空字串人員顯示後端缺值字樣，時間採 API 時區', () => {
+  renderEditor(undefined, {
+    label_timezone: 'America/New_York',
+    labels: {
+      ...photo.labels,
+      location: '',
+      uploader_name: '',
+      uploaded_at: '2026-11-01T01:30:59Z',
+    },
+  })
+  fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+  expect(screen.getByLabelText('檢驗人員')).toHaveValue('未記錄')
+  expect(screen.getByLabelText('檢驗時間')).toHaveValue('2026/10/31 21:30')
+  expect(
+    screen.getByText(/工程標示預覽。.*檢驗位置：未填寫/),
+  ).toBeInTheDocument()
 })

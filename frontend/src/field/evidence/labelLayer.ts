@@ -5,6 +5,8 @@
 // 尺寸比例、字級與兩行省略沿用規格「工程標示內容與版面」；字型用瀏覽器
 // 字型，與後端隨附字型允許有視覺差異，內業版才是下載與報告用的影像。
 
+import { getLayerBox } from '../../evidence/layerGeometry'
+import { formatRecordedTime, labelText } from './labelText'
 import type { LayerLabels, StoredLayer } from './types'
 
 /** 五欄的顯示順序與標題（FEV-R22）。 */
@@ -30,17 +32,15 @@ export const DEFAULT_LAYER: StoredLayer = {
   offset_y: 0,
   size: 'medium',
   style: 'dark',
+  border: true,
   overrides: {},
 }
 
-const WIDTH_RATIO = { small: 0.6, medium: 0.78, large: 0.96 } as const
-const FONT_SCALE = { small: 0.9, medium: 1, large: 1.2 } as const
-const SIZE_ORDER = ['large', 'medium', 'small'] as const
 const FONT_FAMILY =
   '"Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", sans-serif'
 const MAX_LINES = 2
 
-type LayerSize = keyof typeof WIDTH_RATIO
+type LayerSize = StoredLayer['size']
 
 /** 一格文字排版後的結果。 */
 export interface LayoutRow {
@@ -105,55 +105,31 @@ function layoutAtSize(
   values: Record<string, string>,
   measure: Measure,
 ): LayerLayout | null {
-  const shortSide = Math.min(width, height)
-  const fontSize = Math.max(
-    14,
-    Math.round(0.022 * shortSide * FONT_SCALE[size]),
-  )
-  const margin = Math.max(2, Math.round(0.02 * shortSide))
-  const padding = Math.max(2, Math.round(0.006 * shortSide))
-  const layerWidth = Math.round(WIDTH_RATIO[size] * shortSide)
-  const titleWidth = Math.round(layerWidth * 0.25)
-  const lineHeight = Math.round(fontSize * 1.2)
-  const rows = LABEL_ROWS.map((row) => {
-    const titleLines = wrapText(
+  const box = getLayerBox({ width, height }, { ...layer, size })
+  if (!box.fits) return null
+  const { fontSize, inner: padding, lineHeight } = box
+  const titleWidth = box.titleColumnWidth + padding
+  const rows = LABEL_ROWS.map((row) => ({
+    titleLines: wrapText(
       row.title,
       titleWidth - 2 * padding,
       fontSize,
       measure,
-    )
-    const valueLines = wrapText(
+    ),
+    valueLines: wrapText(
       values[row.key] ?? '',
-      layerWidth - titleWidth - 2 * padding,
+      box.width - titleWidth - 2 * padding,
       fontSize,
       measure,
-    )
-    const lines = Math.max(titleLines.length, valueLines.length)
-    return {
-      titleLines,
-      valueLines,
-      height: lines * lineHeight + 2 * padding,
-    }
-  })
-  const layerHeight = rows.reduce((sum, row) => sum + row.height, 0)
-  if (layerWidth + 2 * margin > width || layerHeight + 2 * margin > height) {
-    return null
-  }
-  const left = layer.corner.endsWith('left')
-  const top = layer.corner.startsWith('top')
-  // FEV-R22：與後端 renderer 的 int 相同，偏移乘照片寬高後向零截斷。
-  const x =
-    (left ? margin : width - margin - layerWidth) +
-    Math.trunc(layer.offset_x * width)
-  const y =
-    (top ? margin : height - margin - layerHeight) +
-    Math.trunc(layer.offset_y * height)
+    ),
+    height: box.rowHeight,
+  }))
   return {
     size,
-    x: Math.min(Math.max(0, x), width - layerWidth),
-    y: Math.min(Math.max(0, y), height - layerHeight),
-    width: layerWidth,
-    height: layerHeight,
+    x: box.left,
+    y: box.top,
+    width: box.width,
+    height: box.height,
     fontSize,
     padding,
     titleWidth,
@@ -174,49 +150,29 @@ export function layoutLayer(
   values: Record<string, string>,
   measure: Measure,
 ): LayerLayout | null {
-  const start = SIZE_ORDER.indexOf(layer.size)
-  for (const size of SIZE_ORDER.slice(start)) {
+  for (const size of [layer.size, 'small'] as const) {
     const layout = layoutAtSize(width, height, layer, size, values, measure)
     if (layout) return layout
   }
   return null
 }
 
-/** UTC 原值轉成顯示用的 `YYYY/MM/DD HH:mm`（預設時區 Asia/Taipei）。 */
-export function formatLabelTime(value: string | null): string {
-  if (!value) return '未記錄'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '未記錄'
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Taipei',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    })
-      .formatToParts(date)
-      .map((part) => [part.type, part.value]),
-  )
-  const day = `${parts.year}/${parts.month}/${parts.day}`
-  return `${day} ${parts.hour}:${parts.minute}`
-}
+export { formatRecordedTime as formatLabelTime } from './labelText'
 
 /** 把五欄內容轉成要印在圖層上的文字（時間格式化、缺值照規格顯示）。 */
 export function labelValues(
   labels: LayerLabels,
   pending = false,
+  timezone = 'Asia/Taipei',
 ): Record<string, string> {
   return {
-    project_name: labels.project_name || '未記錄',
-    item_title: labels.item_title || '未記錄',
-    location: labels.location || '未填寫',
-    uploader_name: labels.uploader_name || '未記錄',
+    project_name: labelText(labels.project_name),
+    item_title: labelText(labels.item_title),
+    location: labelText(labels.location, true),
+    uploader_name: labelText(labels.uploader_name),
     uploaded_at: pending
       ? PENDING_TIME_TEXT
-      : formatLabelTime(labels.uploaded_at),
+      : formatRecordedTime(labels.uploaded_at, timezone),
   }
 }
 
@@ -229,6 +185,8 @@ export function drawLabelLayer(
   layer: StoredLayer,
   labels: LayerLabels,
   pending = false,
+  timezone = 'Asia/Taipei',
+  imageSize = { width: canvas.width, height: canvas.height },
 ): LayerLayout | null {
   const ctx = canvas.getContext('2d')
   if (!ctx || !layer.enabled) return null
@@ -237,14 +195,15 @@ export function drawLabelLayer(
     return ctx.measureText(text).width
   }
   const layout = layoutLayer(
-    canvas.width,
-    canvas.height,
+    imageSize.width,
+    imageSize.height,
     layer,
-    labelValues(labels, pending),
+    labelValues(labels, pending, timezone),
     measure,
   )
   if (!layout) return null
   ctx.save()
+  ctx.scale(canvas.width / imageSize.width, canvas.height / imageSize.height)
   ctx.font = `${layout.fontSize}px ${FONT_FAMILY}`
   ctx.textBaseline = 'top'
   const paper = layer.style === 'paper'
@@ -252,9 +211,13 @@ export function drawLabelLayer(
     ctx.fillStyle = paper ? '#ffffff' : 'rgba(0, 0, 0, 0.66)'
     ctx.fillRect(layout.x, layout.y, layout.width, layout.height)
   }
-  ctx.strokeStyle = paper ? '#000000' : 'rgba(255, 255, 255, 0.6)'
+  ctx.strokeStyle = paper ? '#000000' : '#ffffff'
   ctx.lineWidth = 1
-  let top = layout.y
+  if (layer.border) {
+    ctx.lineWidth = layer.style === 'outline' ? 3 : 1
+    ctx.strokeRect(layout.x, layout.y, layout.width, layout.height)
+  }
+  let top = layout.y + layout.padding
   for (const row of layout.rows) {
     drawCell(ctx, layer, layout, row.titleLines, layout.x, top)
     drawCell(
@@ -265,9 +228,14 @@ export function drawLabelLayer(
       layout.x + layout.titleWidth,
       top,
     )
-    if (layer.style !== 'outline') {
-      ctx.strokeRect(layout.x, top, layout.width, row.height)
-    }
+    ctx.strokeStyle = paper ? '#000000' : '#ffffff'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(layout.x, top + row.height)
+    ctx.lineTo(layout.x + layout.width, top + row.height)
+    ctx.moveTo(layout.x + layout.titleWidth, top)
+    ctx.lineTo(layout.x + layout.titleWidth, top + row.height)
+    ctx.stroke()
     top += row.height
   }
   ctx.restore()
