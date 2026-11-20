@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { drawLabelLayer } from './labelLayer'
-import type { LayerLabels, StoredLayer } from './types'
+import type { LayerLabels, LayerRender, StoredLayer } from './types'
 
 /**
  * 現場清單縮圖：載入乾淨的現場版，再依讀回的圖層設定在前端合成預覽
@@ -16,6 +16,8 @@ export function PhotoThumb({
   labels,
   width,
   height,
+  render,
+  timezone,
 }: {
   src: string
   alt: string
@@ -23,6 +25,8 @@ export function PhotoThumb({
   labels: LayerLabels
   width: number
   height: number
+  render: LayerRender
+  timezone: string
 }) {
   // RG-M25：先保留來源比例，避免縮圖載入後把操作結果推離視窗。
   const geometry = { aspectRatio: `${width} / ${height}` }
@@ -44,7 +48,19 @@ export function PhotoThumb({
       target.width = image.naturalWidth
       target.height = image.naturalHeight
       ctx.drawImage(image, 0, 0)
-      drawLabelLayer(target, layer, labels)
+      if (
+        render.render_state !== 'omitted_too_small' &&
+        render.render_state !== 'disabled'
+      ) {
+        drawLabelLayer(
+          target,
+          { ...layer, size: render.effective_size ?? layer.size },
+          labels,
+          false,
+          timezone,
+          { width, height },
+        )
+      }
     }
     image.onerror = () => {
       if (active) setMode('error')
@@ -55,7 +71,7 @@ export function PhotoThumb({
       image.onload = null
       image.onerror = null
     }
-  }, [labels, layer, src])
+  }, [labels, layer, src, render, timezone, width, height])
 
   if (mode === 'plain') {
     return (

@@ -15,6 +15,7 @@ const layer: OfficeLayer = {
   offset_y: 0,
   size: 'medium',
   style: 'dark',
+  border: true,
   overrides: {},
 }
 

@@ -344,3 +344,49 @@ def test_regional_missing_glyphs_render_question_marks_without_failure(caplog):
         assert f"U+{ord(char):04X}" in caplog.text
     assert "陳𠮷髙桜诶" not in caplog.text
     assert source["uploader_name"] == "陳𠮷髙桜诶"
+
+
+def test_border_changes_only_outer_edge_for_dark_and_paper(monkeypatch):
+    """#837：外框開關不改版面與分隔線；不依 JPEG 誤差斷言單像素。"""
+    from PIL import ImageDraw
+
+    calls = []
+    original = ImageDraw.ImageDraw.rounded_rectangle
+
+    def record(draw, xy, *args, **kwargs):
+        calls.append((xy, kwargs.copy()))
+        return original(draw, xy, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "rounded_rectangle", record)
+    for style, color in (("dark", (255, 255, 255)), ("paper", (0, 0, 0))):
+        images = []
+        for border in (True, False):
+            image, rule = render_office(
+                _jpeg((1200, 800)),
+                {},
+                {**default_layer(), "style": style, "border": border},
+                "id",
+            )
+            images.append(image)
+            assert rule["render_state"] == "applied"
+            assert calls[-1][1]["outline"] == (color if border else None)
+        assert images[0] != images[1]
+        assert calls[-1][0] == calls[-2][0]
+
+
+def test_null_and_empty_values_use_same_fallback_and_configured_timezone():
+    for missing in (None, ""):
+        source = dict.fromkeys(
+            ["project_name", "item_title", "location", "uploader_name"],
+            missing,
+        )
+        source["uploaded_at"] = "2026-11-01T01:30:59Z"
+        assert _resolved_values(
+            source, default_layer(), "America/New_York"
+        ) == [
+            "未記錄",
+            "未記錄",
+            "未填寫",
+            "未記錄",
+            "2026/10/31 21:30",
+        ]

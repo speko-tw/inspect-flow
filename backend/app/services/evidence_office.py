@@ -75,12 +75,13 @@ def normalize_layer(raw: object) -> dict:
         "offset_y",
         "size",
         "style",
+        "border",
         "overrides",
     }
     if not isinstance(raw, dict) or set(raw) != keys:
         raise _invalid()
     layer = dict(raw)
-    if not isinstance(layer["enabled"], bool):
+    if any(not isinstance(layer[key], bool) for key in ("enabled", "border")):
         raise _invalid()
     for key, allowed in {
         "corner": ("bottom_left", "bottom_right", "top_left", "top_right"),

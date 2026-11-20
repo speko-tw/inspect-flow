@@ -200,3 +200,12 @@
 - #845 F01：`api/v1/evidence.py` 與 `api/v1/evidence_office.py` 在本文／limiter 等待後清除請求快取及過期 ORM 狀態，重新查有效權限與帳號狀態；`test_evidence_reauthorization.py` 以真實 API 與另一 DB Session 提交撤權，覆蓋上傳／OFFICE、兩種等待點與三種撤權，另保留未撤權成功對照。
 - #845 F02：`services/evidence_images.py` 以段落守門只拒收 APP1／APP13／COM，其他 APPn 一律放行，`services/evidence.py` 在驗 SHA 後呼叫，不重編碼。`test_evidence_metadata.py` 驗證拒收無記錄／孤兒檔、JFIF／ICC 的一般及 progressive JPEG、SHA 優先與冪等／圖層關閉位元組不變。真瀏覽器 canvas 輸出另存當次驗收證據，不提交二進位產物。
 - #845 F07 與小修：本規格 FEV-Q3 引用既有 R09 的定案狀態；`api/limits.py` 註解改繁中。
+
+### 標示一致性合併修正（#834、#829、#837）
+
+- 負責人指示三項合併一張 PR；#837 外框選項屬直接指示的範圍變更，與規格同步落地。
+- 現場與內業共用幾何及缺值／時間 helper，讀取 API 回傳目前後端設定的標示時區。
+- 圖層新增完整 `border` 設定，一支 migration 回填舊照片 true；沿用 `evidence.layer_updated`，不改寫歷史圖片與不可變事件。
+- 以元件、合成、真 API、完整 gate 及 SQLite + Vite 桌面／360px 截圖驗收。
+
+- 本輪改動範圍：`backend/app/models/evidence.py`、`backend/app/services/evidence{,_images,_office,_queries}.py`、`backend/alembic/versions/f834a1b2c3d4_add_evidence_label_border.py`、`backend/tests/{api,db,services}/test_evidence*.py`；`frontend/src/field/evidence/` 的預覽／卡片／文字 helper、型別與測試，`frontend/src/evidence/layerGeometry.ts` 共用幾何，以及 `frontend/src/admin/evidence/` 的編修器／歷程／API 型別／樣式與測試。
