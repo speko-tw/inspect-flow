@@ -2,6 +2,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -152,12 +153,27 @@ export function OfficeEvidencePage({
   const historyRequestSeq = useRef<Record<string, number>>({})
   const errorRef = useRef<HTMLParagraphElement | null>(null)
   const operationRef = useRef(false)
+  // FEV-R16：篩選或異動後的重讀不能被較早的清單／錯誤覆蓋。
+  const listRequestSeq = useRef(0)
+  const listScope = useRef<{ taskId: string; filter: Filter } | null>(null)
+  useLayoutEffect(() => {
+    // FEV-R16：異動完成時可能仍持有舊閉包，重讀須用已提交的新條件。
+    listScope.current = { taskId, filter }
+    return () => {
+      listScope.current = null
+      listRequestSeq.current += 1
+    }
+  }, [filter, taskId])
   const leaveGuard = useUnsavedNavigationGuard(
     editorDirty,
     '放棄這次編修，已存內業版不受影響。要離開嗎？',
   )
 
   const reload = useCallback(async () => {
+    const scope = listScope.current
+    if (!scope) return
+    const { taskId, filter } = scope
+    const requestId = ++listRequestSeq.current
     setLoading(true)
     setLoadError('')
     try {
@@ -165,21 +181,24 @@ export function OfficeEvidencePage({
       let cursor: string | undefined
       do {
         const page = await listOfficePhotos(taskId, filtersFor(filter), cursor)
+        if (requestId !== listRequestSeq.current) return
         found.push(...page.items)
         cursor = page.next_cursor ?? undefined
       } while (cursor)
       setPhotos(found)
     } catch {
-      setLoadError('照片清單載入失敗，請重新載入。')
+      if (requestId === listRequestSeq.current) {
+        setLoadError('照片清單載入失敗，請重新載入。')
+      }
     } finally {
-      setLoading(false)
+      if (requestId === listRequestSeq.current) setLoading(false)
     }
-  }, [filter, taskId])
+  }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => void reload(), 0)
     return () => window.clearTimeout(timer)
-  }, [reload])
+  }, [filter, reload, taskId])
 
   function beginHistoryRequest(photoId: string): number {
     const next = (historyRequestSeq.current[photoId] ?? 0) + 1
