@@ -735,3 +735,33 @@ def test_kd55_keeps_soft_deleted_photo_deleted_only(read_world):
         assert response.status_code == 409, response.text
         assert response.json()["error"]["code"] == "evidence.photo_locked"
         assert response.json()["error"]["details"] == ["deleted"]
+
+
+def test_border_toggle_records_complete_history_only_on_change(read_world):
+    w = read_world
+    photo = _add_photo(w)
+    _, _, url = _paths(w, photo)
+    for style in ("dark", "paper"):
+        layer = {**default_layer(), "style": style}
+        response = w["admin"].put(
+            f"{url}/office-version",
+            json={"layer": layer},
+        )
+        assert response.status_code == 200, response.text
+        before_count = len(_events(w, photo, "layer_updated"))
+        layer["border"] = False
+        for _ in range(2):
+            response = w["admin"].put(
+                f"{url}/office-version",
+                json={"layer": layer},
+            )
+            assert response.status_code == 200, response.text
+            assert response.json()["layer"]["border"] is False
+            assert (
+                response.json()["variants"]["field"]["sha256"]
+                == (photo["variants"]["field"]["sha256"])
+            )
+        events = _events(w, photo, "layer_updated")
+        assert len(events) == before_count + 1
+        assert events[-1].before["layer"]["border"] is True
+        assert events[-1].after["layer"]["border"] is False

@@ -14,6 +14,7 @@ export const JPEG_QUALITY = 0.85
 /** 編修畫面預覽用的長邊；預覽允許與後端有視覺差異（FEV-R25）。 */
 export const PREVIEW_EDGE = 960
 
+/** FEV-R02：現場只允許每次 90° 旋轉，供預覽與上傳摘要共用。 */
 export type Rotation = FieldEditSummary['rotation']
 
 /** 正規化成 0／90／180／270，供累加旋轉時使用。 */

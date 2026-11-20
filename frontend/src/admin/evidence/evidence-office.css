@@ -446,8 +446,14 @@
 .office-layer-table--outline {
   color: #fff;
   background: transparent;
+}
+.office-layer-table--border {
   box-shadow: inset 0 0 0
-    calc(min(100cqi, 100cqb) * var(--office-outline-width-ratio)) #fff;
+    calc(min(100cqi, 100cqb) * var(--office-line-width-ratio)) currentColor;
+}
+.office-layer-table--outline.office-layer-table--border {
+  box-shadow: inset 0 0 0
+    calc(min(100cqi, 100cqb) * var(--office-outline-width-ratio)) currentColor;
 }
 .office-layer-table > span {
   position: relative;

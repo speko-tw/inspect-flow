@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { getLayerBox } from '../../evidence/layerGeometry'
 import { Button } from '../../components/Button'
 import { FormError } from '../../ui/Form'
 import {
   type ImageSource,
   PREVIEW_EDGE,
+  MAX_EDGE,
+  outputSize,
   normalizeRotation,
   renderBase,
   withBrightness,
@@ -123,7 +126,14 @@ export function PhotoEditor({
       target.height = shown.height
       target.getContext('2d')?.drawImage(shown, 0, 0)
       if (!comparing) {
-        drawLabelLayer(target, { ...DEFAULT_LAYER, ...layer }, labels, true)
+        drawLabelLayer(
+          target,
+          { ...DEFAULT_LAYER, ...layer },
+          labels,
+          true,
+          undefined,
+          outputSize(source.width, source.height, rotation, MAX_EDGE),
+        )
       }
     } catch (cause) {
       console.error('Photo preview failed:', cause)
@@ -136,6 +146,16 @@ export function PhotoEditor({
   useEffect(() => () => clearTimeout(pressTimer.current), [])
 
   const values = labelValues(labels, true)
+  const uploadSize = outputSize(
+    source.width,
+    source.height,
+    rotation,
+    MAX_EDGE,
+  )
+  const tooSmall =
+    layer.enabled &&
+    !getLayerBox(uploadSize, DEFAULT_LAYER).fits &&
+    !getLayerBox(uploadSize, { ...DEFAULT_LAYER, size: 'small' }).fits
   const nothingToReset = rotation === 0 && brightness === 0
 
   // FEV-R02：移出或失去捕捉也要清掉長按計時器，避免比較卡住。
@@ -193,6 +213,11 @@ export function PhotoEditor({
             </p>
           )}
         </div>
+        {tooSmall && (
+          <p className="evidence-hint" role="status">
+            照片太小，標示不會合成
+          </p>
+        )}
         {previewError && (
           <FormError>此裝置無法預覽照片，請改用其他瀏覽器或裝置。</FormError>
         )}

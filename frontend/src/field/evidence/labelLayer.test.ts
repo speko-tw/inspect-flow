@@ -111,7 +111,7 @@ describe('layoutLayer（FEV-R22 比例）', () => {
     expect(moved.y).toBe(base.y - 1)
   })
 
-  it('大尺寸放不下改試中、小；都放不下就回 null，不擋上傳', () => {
+  it('要求的尺寸放不下直接改試小；仍放不下就回 null，不擋上傳', () => {
     const large = { ...DEFAULT_LAYER, size: 'large' as const }
     const fallback = layoutLayer(2000, 1500, large, values, measure)
     expect(fallback).not.toBeNull()
@@ -144,5 +144,42 @@ describe('labelValues', () => {
     expect(formatLabelTime('2026-10-31T17:30:45Z')).toBe('2026/11/01 01:30')
     expect(formatLabelTime(null)).toBe('未記錄')
     expect(formatLabelTime('壞掉')).toBe('未記錄')
+  })
+})
+
+it.each([
+  [215, false],
+  [218, true],
+  [224, true],
+  [225, false],
+  [227, false],
+  [229, false],
+  [230, true],
+  [232, true],
+] as const)('短邊 %i 與後端容納門檻一致', (edge, fits) => {
+  expect(
+    layoutLayer(edge, edge, DEFAULT_LAYER, values, measure) !== null,
+  ).toBe(fits)
+})
+
+it('API 時區跨日與缺值沿用共用格式', () => {
+  expect(
+    labelValues(
+      {
+        project_name: null,
+        item_title: '',
+        location: '',
+        uploader_name: '',
+        uploaded_at: '2026-11-01T01:30:00Z',
+      },
+      false,
+      'America/New_York',
+    ),
+  ).toEqual({
+    project_name: '未記錄',
+    item_title: '未記錄',
+    location: '未填寫',
+    uploader_name: '未記錄',
+    uploaded_at: '2026/10/31 21:30',
   })
 })

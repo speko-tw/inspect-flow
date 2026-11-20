@@ -95,13 +95,14 @@
 - 上述五個來源值（時間保留 UTC 原值）以 `Evidence.label_source` metadata 在接受該次現場版上傳的同一交易固定，與 FIELD／OFFICE 兩版及圖層資料一起成功或回滾；內業編修、維運重產讀此來源與另存覆寫，不回查日後改名的專案、分區、人員或範本。舊資料無來源時依各欄缺值規則，不推測歷史值。實際套用的時區納入標示規則摘要，時區設定改變視同規則變更。這是標示來源快照，不增加第三張圖片或照片版本；下列完成後更正取代則建立新照片來源，不能誤用舊上傳者／時間。
 - 完成後「取代現場版」（[CMV-R11](../completion-validation/spec.md#需求)）：更正上傳時重新固定五欄來源，檢驗人員取**更正上傳者的身分快照**，檢驗時間取**該次伺服器時間**，不沿用原上傳者／時間；工程、項目與位置依同一所屬任務及項目取值，任務關聯不變。**必須沿用更正前的 `label_layer` 顯示設定與三欄覆寫**，不得默默重設或清除；覆寫不改寫新 `label_source`。內業詳情若仍有有效覆寫（含明確空字串，未列出／已移除鍵除外），必須顯示「有內業覆寫」，方便確認是否仍適用。新來源、沿用設定與兩版重產依[通用容納規則](#automatic-office-layer-fit)處理合法圖層放不下的情況，同交易成功或回滾；後續一般編修／維運重產固定使用新來源及保存覆寫，不放寬 CMV-R11 的報告引用或完成後限制。
 - 改善照片（[CMV-R13](../completion-validation/spec.md#需求)）：由改善照片的 `result_id` 取得目前有效的不符合結果，再以該結果的 `task_inspection_item_id` 與 `snapshot_revision` 定位其項目需求快照；工程名稱取該結果所屬 Task 的 Project，檢驗項目取該結果對應快照的查核項目 `title`，檢驗位置取同一結果所屬 Task 的分區／補充 `location_text`，依五欄表的格式組合。改善上傳端點帶 `point_id` 並依 CMV-R13 綁定有效結果；照片不另建項次覆蓋對應，不代表缺少結果的項目關聯。不得因照片未直接填項目識別而改印任務名稱；缺少有效結果關聯不屬於合法改善照片上傳，不以任務名稱補造標示。檢驗人員及時間取該次改善照片上傳者身分快照與伺服器時間；同交易固定來源；OFFICE 依[通用容納規則](#automatic-office-layer-fit)處理，不因合法圖層放不下而拒絕改善上傳。這是來源規格設計，改善照片仍不計入項次覆蓋、不另加檢驗現況欄。
-- **圖層設定契約**（精確比例為規格設計，原型給負責人看後可調）：`label_layer` 保存 `enabled`（預設 true）、`corner`（`bottom_left` 預設，另有 `bottom_right`／`top_left`／`top_right`）、`offset_x`／`offset_y`（照片寬／高的正規化偏移，−1～1，預設 0）、`size`（`small`／`medium` 預設／`large`）、`style`（`dark` 預設／`outline`／`paper`）、`overrides`（只允許 `project_name`／`item_name`／`inspection_location`，值為字串，含明確空字串；回復來源時移除該鍵）。五欄完整來源保留在 `label_source`，覆寫不改原快照；兩個鎖定欄位永遠由來源解析，不接受用戶端覆寫。
+- **圖層設定契約**（精確比例為規格設計，原型給負責人看後可調）：`label_layer` 保存 `enabled`（預設 true）、`corner`（`bottom_left` 預設，另有 `bottom_right`／`top_left`／`top_right`）、`offset_x`／`offset_y`（照片寬／高的正規化偏移，−1～1，預設 0）、`size`（`small`／`medium` 預設／`large`）、`style`（`dark` 預設／`outline`／`paper`）、`border`（boolean，預設 true）、`overrides`（只允許 `project_name`／`item_name`／`inspection_location`，值為字串，含明確空字串；回復來源時移除該鍵）。五欄完整來源保留在 `label_source`，覆寫不改原快照；兩個鎖定欄位永遠由來源解析，不接受用戶端覆寫。
 - 以編修後照片短邊 S 計算圖層寬度：小／中／大為 0.60／0.78／0.96 × S，且限於照片內；字級為 `max(14, round(0.022 × S × m))`，m 為 0.9／1／1.2；邊距 `max(2, round(0.02 × S))`，儲存格內距 `max(2, round(0.006 × S))`，左欄占 25%，行高 1.2 倍，正數四捨五入。每格最多兩行，超出以「…」結尾，完整內容在資料及編修畫面保留。圖層疊在照片內，不延伸畫布或增加輸出尺寸；角落加偏移後將整塊限制於照片邊界。合法設定仍無法在照片內滿足 14px 與版面限制時，依下列通用容納與主動修改圖層分支處理，不縮到不可讀。
 <a id="automatic-office-layer-fit"></a>
 
 - **自動產生內業版的通用容納規則**：適用首次上傳、更正取代、改善照片上傳、內業僅編修／重設影像（省略 `layer` 或未改動圖層設定）及維運重新產生。同一 FIELD 的影像編修／重設與維運先用保存的合成尺寸基準；新 FIELD（首次、改善上傳或更正取代）先用保存的 `label_layer.size`，首次／改善上傳未另設大小時採預設大小，合法圖層放不下時改試「小」；仍放不下也必須保存 FIELD、OFFICE 與原圖層設定，OFFICE 暫不合成，操作成功，不得因此回幾何錯誤或中止流程。圖層關閉時仍保存兩版且不合成。此規則只處理合法圖層的容納不足，既有權限、照片／Task／Plan 鎖定、資料驗證與交易失敗處理不變。
 - **實際尺寸與可重現基準**：`label_layer` 保留原要求；OFFICE 既有 `label_rule` 摘要保存 `render_state`（`applied`／`fallback_small`／`omitted_too_small`／`disabled`）、`effective_size`（實際小中大，未合成為 `null`；實際為 small 而要求大小較大時，即使直接沿用 small 基準仍記 `fallback_small`）及 `base_size`（本 FIELD 與當前圖層設定的穩定合成尺寸基準）。新 FIELD 初版產生後，以實際採用大小初始化 `base_size`；仍放不下時以 `small` 為基準，關閉時以要求大小為基準。所以上傳時 `effective_size=small`，後續省略 `layer` 就從 small 開始，不回到原請求的 medium。僅編修影像而發生的暫時退讓／省略只改實際結果，不改此基準；重設影像在來源、圖層與規則不變時能還原初版相同像素與雜湊。內業主動修改圖層成功時才依該次明示大小更新基準；更正取代是新的 FIELD，與首次上傳相同，從保存的 `label_layer.size` 起算，放不下才退 small；依該次實際結果更新 `base_size`，不得沿用舊照片的尺寸基準。缺少基準的舊資料先取已知有效尺寸，否則依保存設定走通用規則後記錄，不補造歷史初版結果。這些欄位沿用既有 JSON，不新增圖片或 T1 migration。
 - **提示與內業主動修改圖層的錯誤分支**：所有通用容納路徑的 `omitted_too_small` 均在內業詳情顯示「照片太小，標示未合成」；`fallback_small` 顯示實際以小尺寸合成。內業主動送出新的完整 `layer` 設定（正規化後相對保存設定有變動）時才不自動改大小；圖層啟用且各欄型別、列舉、數值範圍均合法，但幾何放不下，才回 422 `evidence.invalid_layer` 並保留原設定與兩版，提示改用小尺寸、放大裁切範圍或關閉圖層。未知鍵、型別錯誤、非法列舉或圖層數值超界一律為 `request.validation_failed`，不是幾何錯誤；此分界適用所有寫入。合法圖層在自動路徑放不下不得使用 `evidence.invalid_layer`。
+- 外框（負責人直接指示的範圍變更，#837）：三種樣式均可切換 `border`，預設有外框；白底黑字配黑框，深色底與白字描邊配白框，粗細沿用樣式固定線寬。關閉只移除外緣，不移除儲存格分隔線。現場沿用預設，不增加樣式控制；內業預覽與保存輸出一致。舊照片設定由 migration 回填 true，不改寫歷史圖片或稽核快照；歷程缺少此鍵表示原預設有外框。
 - 樣式：`dark` 半透明深底白字；`outline` 透明底白字加黑色描邊；`paper` 白底黑字。預設深底 alpha 0.66、線寬 1px、描邊 3px 為規格設計；以淺／深照片驗證可讀性。使用者關閉是每張照片的資料狀態，不限相容／測試用途。維運規則更新沿用每張的開關、位置、大小、樣式與覆寫，不自動重新開啟圖層。
 - 文字覆寫可空白（依原缺值規則顯示），`null`／移除覆寫回到來源；每欄上限 1000 字元，完整值不因影像省略而截斷。人員與時間不可在任何寫入端點修改。更正取代與改善照片仍依上述來源分支重新固定五欄，再套用圖層；普通內業更正前三欄只改覆寫。稽核與讀取的五欄具名為 `project_name`、`item_title`、`location`、`uploader_name`、`uploaded_at`；三個覆寫鍵依序對應前三欄，姓名／時間仍取來源。`uploaded_at` 保留 API-R09 UTC 原值，只有影像顯示時轉時區到分鐘。
 - 字型固定為隨後端打包的 Noto Sans TC（上游繁中區域版）Regular，附上游授權；字型版本與繪製套件在實作時固定並寫入規則摘要。不得以作業系統 fallback 偷換字型；字型缺少字形時，以替代符號 `?`（U+003F）繪製該字，並寫應用程式 WARNING 警示紀錄，至少含 Evidence ID、字型版本及缺字 Unicode 碼位（例如 U+0378），不記整段人名或內容。**不得因缺字讓上傳失敗**；圖片與交易照常完成。替代符號、碼位記錄與不阻斷理由為規格設計：標示字型涵蓋不足不能阻擋現場保存證據；警示供後續補齊字型，不新增業務稽核事件。字型分發來源見[上游專案](https://github.com/notofonts/noto-cjk)，規格不在本單加入字型檔。
@@ -162,7 +163,7 @@
 
 **上傳請求**：標頭 `Idempotency-Key`（UUID，必填）。表單欄位：`file`（JPEG 現場版，必填）、`sha256`（`file` 的十六進位 SHA-256，必填）、`item_id`（Task 項目明細識別，必填）、`is_overview`（布林，預設 `false`）、`point_ids`（項次識別，可重複；非總覽至少一個，總覽不得帶）、`caption`（選填）、`capture_source`（camera／library，必填；未知值、型別錯誤或缺少回 422 `request.validation_failed`）、`captured_at`（選填，可空，UTC ISO 8601；格式錯誤回 422 `request.validation_failed`，合法時間不因早晚差距被拒絕，僅依 FEV-R27 標示）、`field_edit`（選填 JSON 字串，只允許 `rotation` 為 0／90／180／270、`brightness` 為 −100～+100；屬前端回報摘要），`layer`（選填 JSON 字串，只允許 `enabled`、`corner`；省略採預設開啟／左下，其餘大小／樣式／偏移用系統預設）。現場上傳帶裁切、比例、拉直、偏移、大小、樣式、文字覆寫或其他未允許的鍵回 422；不得由前端藏控制項代替後端覆核。冪等指紋納入正規化後的現場圖層設定，改開關／角落屬不同請求。現場使用者取得 `item_id`、`point_ids` 的來源是覆蓋狀態端點；畫面不顯示這些識別。
 
-**回應**：現場清單與內業清單、詳情均必須回 `layer`（保存的 `label_layer` 完整顯示設定及三欄覆寫），以及 `labels`（解析後的五欄完整值）與唯讀 `layer_render`（由 OFFICE 的 `label_rule` 回傳 `render_state`／`effective_size`，舊資料未記錄時為 `null`）；現場編修與縮圖以前端合成，不取得 OFFICE 檔。現場視圖另含 `id`、`item_id`、`is_overview`、`point_ids`、`caption`、`captured_at`、`uploaded_at`、`uploaded_by: {name_zh, is_me}`、圖片寬高與大小；兩種視圖都保留原始 `capture_source`；內業視圖另含衍生 `is_non_realtime_capture`（現場回應不得含此 key），以及兩版雜湊與編修參數、`voided_at`、`void_reason`、`deleted_at` 及 `has_layer_overrides`。時間均用 API-R09 UTC；任何視圖都不含儲存鍵。`PATCH` 本文為 `{"caption": string|null, "point_ids": UUID[]}`，省略欄位不變；總覽帶非空 `point_ids` 回 422 `evidence.invalid_target`。`PATCH` 與 `PUT .../office-version` 回更新後照片，具 `evidence.read` 者回內業視圖，否則回現場視圖。清單排序：Task 項目明細依 `created_at`、`id`，同項目總覽在前、其餘依上傳時間與 UUID；cursor 含這組鍵。
+**回應**：現場清單與內業清單、詳情均必須回 `layer`（保存的 `label_layer` 完整顯示設定及三欄覆寫），以及 `label_timezone`（目前後端標示時區設定；更改設定後依既有維運流程重產照片）、`labels`（解析後的五欄完整值）與唯讀 `layer_render`（由 OFFICE 的 `label_rule` 回傳 `render_state`／`effective_size`，舊資料未記錄時為 `null`）；現場編修與縮圖以前端合成，不取得 OFFICE 檔；時間必須依 `label_timezone` 顯示。現場預覽使用壓縮後照片尺寸與後端 `_can_fit` 相同門檻，不依文字長短判斷容納；不足時不畫標示，提示「照片太小，標示不會合成」且不擋上傳。已上傳卡片遵照 `layer_render`，`omitted_too_small` 不畫標示並顯示「照片太小，標示未合成」。現場視圖另含 `id`、`item_id`、`is_overview`、`point_ids`、`caption`、`captured_at`、`uploaded_at`、`uploaded_by: {name_zh, is_me}`、圖片寬高與大小；兩種視圖都保留原始 `capture_source`；內業視圖另含衍生 `is_non_realtime_capture`（現場回應不得含此 key），以及兩版雜湊與編修參數、`voided_at`、`void_reason`、`deleted_at` 及 `has_layer_overrides`。時間均用 API-R09 UTC；任何視圖都不含儲存鍵。`PATCH` 本文為 `{"caption": string|null, "point_ids": UUID[]}`，省略欄位不變；總覽帶非空 `point_ids` 回 422 `evidence.invalid_target`。`PATCH` 與 `PUT .../office-version` 回更新後照片，具 `evidence.read` 者回內業視圖，否則回現場視圖。清單排序：Task 項目明細依 `created_at`、`id`，同項目總覽在前、其餘依上傳時間與 UUID；cursor 含這組鍵。
 
 **照片詳情的圖層修改歷程**：`GET /api/v1/inspection-tasks/{task_id}/photos/{photo_id}` 必須向具該專案 `evidence.read`（並依 FEV-R12 通過 `inspection.use`）的人回 `layer_history: {items, next_cursor}`，不要求 Admin。每筆含 `id`（事件 UUID）、`actor: {id, snapshot}`（寫入當下的操作者身分快照）、`occurred_at`（事件 UTC 時間）、`before`／`after`（與事件目錄相同的具名 `layer`／`labels` 完整快照）。只讀同一 Task／照片／專案的 `evidence.layer_updated`，不得由 cursor 洩漏別件；沒有事件回空陣列。隨照片詳情分頁，`layer_history_limit` 預設 50、上限 100，`layer_history_cursor` 沿用共用不透明 cursor，依事件 `created_at`、`id` 降冪。這是照片內容的一部分，供一般專案內業顯示誰／何時／改前→改後，不呼叫或放寬 ALG-R22 的 Admin 全域 `/audit-logs`；讀取不寫事件。T3 提供回傳，T4／T5 完成寫入交易後整合驗收。
 
@@ -177,7 +178,7 @@
 **錯誤**（遵守 [API-R07](../api-conventions/spec.md#需求)；以條列呈現，不另設錯誤碼對照表，錯誤碼的唯一清單是程式內的 `ErrorCode`）：
 
 - 413 `evidence.file_too_large`：超過單檔上限
-- 422 `evidence.invalid_image`：不是可解碼的 JPEG、超過解碼像素上限，`error.details` 為字串陣列，第一項 `error.details[0]` 以 `format`／`pixels`／`decode` 區分
+- 422 `evidence.invalid_image`：上傳不是可解碼的 JPEG，或上傳／讀取超過目前解碼像素上限，`error.details` 為字串陣列，第一項 `error.details[0]` 以 `format`／`pixels`／`decode` 區分
 - 422 `evidence.sha256_mismatch`：請求雜湊與收到的內容不符（常見於傳輸中斷）
 - 422 `evidence.invalid_target`：項目不屬於該 Task、項次不屬於該項目、非總覽未帶項次、總覽帶了項次
 - 422 `evidence.invalid_edit`：編修參數超出範圍
@@ -191,6 +192,12 @@
 - 409 `evidence.photo_locked`：照片本身不允許刪除或編修：已作廢、已被核發報告引用或已刪除，`error.details[0]` 為 `voided`、`referenced_by_report`、`deleted`；Task 已完成、已取消或封存 Plan 不用此碼（見檢查順序）
 - 403 `permission.denied`：缺少所需專案權限或不是拍照者
 - 404 `resource.not_found`：Task 或照片不存在、`DRAFT` 對現場隱藏、照片不屬於該 Task
+
+讀取縮圖與原尺寸圖片均先檢查實際 JPEG 格式、目前像素上限與完整解碼；即使上傳後調低設定，兩者也同樣回 422 `evidence.invalid_image`（`error.details[0]` 為 `pixels`）。
+
+儲存檔毀損、截斷、格式異常或磁碟 I/O 錯誤，在回應開始前回 500 `server.internal_error`，沿用共用錯誤格式，並記錄含 evidence id 的 warning log，不含檔案內容或儲存鍵。既有遺失檔案的 404 行為不變。
+
+原尺寸檢查成功後仍串流保存的原位元組，不重編碼；若串流開始後才發生 I/O 錯誤，記錄同樣告警並中止串流（HTTP 標頭已送出，無法改為 500）。完整解碼增加 CPU、記憶體與首位元組延遲，以與縮圖共用的並行名額限制資源，且排隊／解碼前已釋放資料庫交易。
 
 <a id="檢查順序"></a>
 **檢查順序**（規格設計）：同一請求有多個條件不成立時，後端依下列順序回應第一個不成立者，每個情境只有一個錯誤碼：
@@ -224,7 +231,7 @@
 
 三個代碼都屬查核模組：專案內動作要先通過 `inspection.use`，再看專案角色（FEV-R12）。`evidence.read` 是讀取碼，`evidence.manage` 是內業碼（依 [AUT-R08](../authentication/spec.md#需求) 的存取分類，`evidence.manage` 不需新增例外；[#576](https://github.com/speko-tw/inspect-flow/issues/576) 已落地依 `.read` 尾碼分類為唯讀碼，T1 沿用現行分類，不新增暫行例外）。預建角色的初始內容見 FEV-R12 與計畫 T1（規格設計）；既有資料庫的預建角色依 [DOM-R68](../domain-model/spec.md#需求) 不被覆寫，由 Admin 於角色編輯勾選。
 
-**稽核事件**（登記到 `audit-log` 事件目錄，規格設計）：`evidence.photo_deleted`（照片、Task、項目、刪除者、時間）、`evidence.photo_updated`（註記與對應的前後值）、`evidence.office_version_edited`（編修前後參數、編修者、時間）。另有 `evidence.layer_updated`（操作者、UTC 伺服器時間、具名完整 `layer`（含覆寫）與 `labels` 五欄改前／改後、`project_id`；一律記錄，檢驗時間為 UTC 原值，見 [`audit-log` 照片圖層事件](../audit-log/spec.md#field-evidence-事件)），圖層實際改變才寫；普通套用事件仍每次寫。作廢不另寫新事件，沿用 `project_inspection_item.updated`。
+**稽核事件**（登記到 `audit-log` 事件目錄，規格設計）：`evidence.photo_deleted`（照片、Task、項目、刪除者、時間）、`evidence.photo_updated`（註記與對應的前後值）、`evidence.office_version_edited`（編修前後參數、編修者、時間）。另有 `evidence.layer_updated`（操作者、UTC 伺服器時間、具名完整 `layer`（含 `border` 與覆寫）與 `labels` 五欄改前／改後、`project_id`；一律記錄，檢驗時間為 UTC 原值，見 [`audit-log` 照片圖層事件](../audit-log/spec.md#field-evidence-事件)），圖層實際改變才寫；普通套用事件仍每次寫。作廢不另寫新事件，沿用 `project_inspection_item.updated`。
 
 **畫面**（重大新畫面，實作前須先過[原型關卡](../README.md#ui-prototype-gate)；以下為規格設計）：
 
@@ -276,6 +283,7 @@
 | FEV-AC37 | 內業完整編修器；同一 FIELD位元組、影像參數、圖層／來源／覆寫及尺寸基準、規則／字型／時區與固定編碼環境 | 走八把手、雙指、比例鎖、旋轉、±15度拉直、亮度端點、重設／復原／比較與鍵盤；後端以相同輸入在同版影像函式庫重產兩次 | UI 三分頁與 44px 控制、各拖曳鍵盤替代成立；前端狀態不增版。後端依度轉弧度、雙線性插值、固定 Q 四捨五入裁切、1+v/200亮度及合成順序，兩次 JPEG逐位元相同（完整位元組／SHA-256比對）；不以與前端預覽視覺相同或像素比對驗收。FIELD不變、始終兩版 | FEV-R16、R25 |
 | FEV-AC38 | 現場兩個入口與合法 JPEG；同一冪等鍵 | 分別用 camera／library 上傳，壓縮前讀有效／缺少／不可解析 EXIF 時間；另只改來源重送、缺少或偽造來源值 | 兩來源皆可接受，讀到的拍攝時間轉 UTC、讀不到為空且 EXIF 不保存；來源存入 metadata 與指紋，同鍵只改來源回冪等衝突（409），不新增照片；來源缺少／非法列舉／型別錯誤回欄位驗證錯誤（422） | FEV-R02、R07、R26 |
 | FEV-AC39 | library 且時間接近、camera 且時間空、camera 且時間差 >600 秒，另有 camera／有時間／差 <=600 秒對照 | 上傳後讀內業清單／詳情與現場視圖，含前後時間差、恰 600 秒及超過一秒；檢視標示板 | 三個真值條件各自觸發 is_non_realtime_capture；相簿顯示相簿匯入，其他真值顯示非即時拍攝；對照為 false，恰 600 秒不因差距觸發。現場 JSON 無衍生 key、畫面無 badge。合法時間差不擋上傳，標示板檢驗時間仍為伺服器上傳時間，不以 EXIF 取代 | FEV-R22、R26、R27 |
+| FEV-AC40 | 已合法上傳的 FIELD／OFFICE；分別破壞儲存檔、截斷 JPEG、模擬 open／read I/O 錯誤，另在上傳後調低像素上限 | 讀縮圖與原尺寸（含不放大的 max_edge） | 毀損、截斷與回應前 I/O 錯誤均回 500 `server.internal_error` 共用格式，warning 含 evidence id、不含檔案內容與儲存鍵；像素超限均回 422 `evidence.invalid_image`、`details` 為 `["pixels"]`；失敗關閉檔案，正常原尺寸位元組不變且不留第三檔 | FEV-R06、R17 |
 
 ## 規格設計清單
 
@@ -357,6 +365,8 @@
 
 ## 變更紀錄
 
+- 範圍變更（負責人指示，#837）：新增預設開啟、可切換的標示外框，連同合成、預覽、完整圖層快照及歷程在同一 PR 落地。依據：[2026-11-17 指示與同 PR 授權](https://github.com/speko-tw/inspect-flow/issues/837)。
+
 - 規格澄清（#705）：現場照片入口更新為 `/tasks/:taskId`；本規格 API 路徑不變，計畫同步記錄路由基準。
 
 - 建立規格草稿：現場版與內業版、覆蓋規則、上傳契約、刪除與作廢、權限與 UI 驗收；並納入 v0.3.1 走查補充 — [#105](https://github.com/speko-tw/inspect-flow/issues/105)
@@ -384,3 +394,11 @@
 - 規格澄清（#791）：錯誤原因沿用 APIError 的字串陣列 details，原因位於 `error.details[0]`，不另設 reason 物件；不改錯誤碼、HTTP 狀態或檢查順序。
 
 - 規格澄清（負責人裁定，#791）：工程標示改用上游未修改的 Noto Sans TC 繁中區域版 Regular（Sans2.004），取代完整 CJK TC 字庫；字型與 OFL、來源／SHA-256 一起打包。罕用姓名字及簡體／日文專有字形若不在字庫內，仍以 `?` 替代並記缺字 Unicode 碼位警示，不阻斷上傳，完整來源文字保留；不啟用系統 fallback，不改既有缺字／隱私規則。
+
+- 規格澄清（#820）：補讀取端儲存錯誤與目前像素上限的分界；新增 FEV-AC40，縮圖及原尺寸共用完整解碼檢查與並行名額，原尺寸檢查後仍串流保存位元組。
+
+### 標示一致性補充驗收（#834、#829、#837）
+
+- FEV-AC32：空字串與 null 均與後端缺值一致；內業與現場共用 helper。驗證無效時間、歷程時間缺值及非預設時區 API 讀回／畫面顯示。
+- FEV-AC33／AC35：227×227 預覽與已上傳卡片不畫標示且有提示；以 215～232 短邊矩陣對齊後端非單調門檻，並保留一般照片正向案例。
+- FEV-AC30／AC36：深色底、白底黑字各驗外框開／關、預覽與輸出幾何不變、FIELD 不變；歷程含外框前後值，重送相同設定不新增圖層事件。桌面與 360px 真後端截圖。
