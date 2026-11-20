@@ -47,11 +47,22 @@ class Api:
         ok: tuple[int, ...] = (200, 201, 204),
     ) -> dict | None:
         data = None if body is None else json.dumps(body).encode()
+        return self.send(method, path, data, {}, ok)
+
+    def send(
+        self,
+        method: str,
+        path: str,
+        data: bytes | None,
+        headers: dict,
+        ok: tuple[int, ...] = (200, 201, 204),
+    ) -> dict | None:
+        """共用驗證與錯誤處理，讓照片也經正式 multipart API 建立。"""
         request = urllib.request.Request(
             self.base + path,
             data=data,
             method=method,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **headers},
         )
         if self.cookie:
             request.add_header("Cookie", self.cookie)
@@ -249,6 +260,8 @@ def create_task(
 
 def seed(base: str, code: str) -> dict:
     """建立公司、人員、專案、範本及各狀態示範任務。"""
+    from evidence_photos import seed_photos
+
     data = json.loads(DATA_FILE.read_text())
     admin = Api(base)
     admin.call("POST", "/setup/admin-password", {
@@ -317,6 +330,7 @@ def seed(base: str, code: str) -> dict:
                 sessions,
             )
             tasks[f"{project['key']}_{task['key']}"] = task_id
+    photos = seed_photos(sessions, tasks)
     admin_config = data["admin"]
     admin_view = login(
         base, admin_config["username"], admin_config["password"]
@@ -341,6 +355,7 @@ def seed(base: str, code: str) -> dict:
         "users": users,
         "projects": projects,
         "tasks": tasks,
+        "photos": photos,
         "dashboard": summary,
     }
 
