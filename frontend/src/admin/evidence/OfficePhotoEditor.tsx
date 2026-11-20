@@ -1,4 +1,11 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
 import type { HttpFieldError } from '../../http'
@@ -18,6 +25,7 @@ import {
   moveLayerOffset,
 } from './layerGeometry'
 import { formatRecordedTime } from './labelTime'
+import { fitStageSize } from './stageGeometry'
 import { labelText } from '../../field/evidence/labelText'
 import {
   officeImageUrl,
@@ -238,6 +246,30 @@ export function OfficePhotoEditor({
   const rangeGestureActive = useRef(false)
   const rangeGestureSnapshotted = useRef(false)
   const showBefore = compare || comparePinned
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
+
+  useLayoutEffect(() => {
+    const canvas = frame.current
+    if (!canvas) return
+
+    // 畫布高度隨斷點變動，固定 vh 推算會壓扁直式舞台，錯開圖層列高。
+    const updateSize = () => {
+      const width = canvas.clientWidth
+      const height = canvas.clientHeight
+      setCanvasSize((size) =>
+        size.width === width && size.height === height
+          ? size
+          : { width, height },
+      )
+    }
+
+    updateSize()
+    if (typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(canvas)
+    return () => observer.disconnect()
+  }, [])
 
   const clearSelection = useCallback((): void => {
     setSelectedCropHandle(null)
@@ -346,6 +378,10 @@ export function OfficePhotoEditor({
         height: photo.variants.field.height,
       }
     : imageSize
+  const stageSize = fitStageSize(
+    canvasSize,
+    sceneSize.width / sceneSize.height,
+  )
   const fieldErrors = mapFieldErrors(
     validation?.fields ?? [],
     OFFICE_FIELD_BINDINGS,
@@ -1006,9 +1042,8 @@ export function OfficePhotoEditor({
               }}
               style={{
                 aspectRatio: `${sceneSize.width} / ${sceneSize.height}`,
-                width: `min(100%, ${
-                  (sceneSize.width / sceneSize.height) * 65
-                }vh)`,
+                width: stageSize.width ? `${stageSize.width}px` : '100%',
+                height: stageSize.height ? `${stageSize.height}px` : undefined,
                 transform: showBefore
                   ? 'none'
                   : `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
