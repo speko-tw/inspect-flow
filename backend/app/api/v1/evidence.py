@@ -214,6 +214,24 @@ def _authorize_upload(session: Session, task_id: UUID, user: User) -> UUID:
     return user_id
 
 
+def _reauthorize_upload(
+    session: Session, task_id: UUID, user_id: UUID
+) -> User:
+    """FEV-R07／R12：等待後的上傳及重放須查最新權限與帳號狀態。"""
+    cache = get_request_effective_access_cache()
+    if cache is not None:
+        cache.clear()
+    session.expire_all()
+    user = session.get(User, user_id)
+    if user is None:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    task = session.get(InspectionTask, task_id)
+    if task is None:
+        raise APIError(ErrorCode.INSPECTION_TASK_NOT_FOUND, 404)
+    _check_upload_access(session, task, user)
+    return user
+
+
 def _prepare_upload(
     session: Session,
     task_id: UUID,
@@ -222,6 +240,8 @@ def _prepare_upload(
     form: FormData,
 ) -> JSONResponse | _PreparedUpload:
     """便宜的驗證與重放先處理，不需要影像名額。"""
+    # 本文已讀完；所有重放分支（含欄位無效時）之前都必須重驗。
+    _reauthorize_upload(session, task_id, user_id)
     key_error: APIError | None = None
     upload_key: UUID | None = None
     try:
@@ -375,18 +395,8 @@ def _process_upload(
     prepared: _PreparedUpload,
 ) -> JSONResponse:
     """只有持有專用名額的 worker 才讀圖片、解碼、產圖與存檔。"""
-    # FEV-R12：本文與 limiter 等候期間可能撤權，須重查有效權限。
-    cache = get_request_effective_access_cache()
-    if cache is not None:
-        cache.clear()
-    session.expire_all()
-    user = session.get(User, user_id)
-    if user is None:
-        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
-    task = session.get(InspectionTask, task_id)
-    if task is None:
-        raise APIError(ErrorCode.INSPECTION_TASK_NOT_FOUND, 404)
-    _check_upload_access(session, task, user)
+    # 新上傳還可能排隊等影像名額，取得後仍須再驗，不能只驗本文後。
+    user = _reauthorize_upload(session, task_id, user_id)
     settings = get_storage_settings()
     content = prepared.file.file.read(settings.max_file_bytes + 1)
     if len(content) > settings.max_file_bytes:

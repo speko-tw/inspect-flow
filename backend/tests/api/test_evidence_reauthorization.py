@@ -160,3 +160,59 @@ def test_write_rechecks_access_after_wait(
         assert response.status_code == 403, response.text
         assert response.json()["error"]["code"] == "permission.denied"
         assert _state(w) == before
+
+
+@pytest.mark.parametrize("scope", ["module", "project", "inactive", "none"])
+def test_replay_rechecks_access_after_body_wait(
+    read_world, monkeypatch, scope
+):
+    """FEV-R07／R12：同鍵重放在等待本文後也須重驗，不得洩漏照片。"""
+    from app.api.v1 import evidence as api
+
+    w = read_world
+    image, key = _jpeg(), uuid4()
+
+    def upload():
+        return _upload(w, w["task"], w["item_id"], w["point_id"], image, key)
+
+    first = upload()
+    assert first.status_code == 201, first.text
+    photo = first.json()
+    user_id = w["field_user"].id
+    before = _state(w)
+    w["db"].commit()
+    ready, release = Event(), Event()
+    original = api._parse_evidence_form
+
+    async def parse(*args):
+        ready.set()
+        assert await asyncio.to_thread(release.wait, 15)
+        return await original(*args)
+
+    monkeypatch.setattr(api, "_parse_evidence_form", parse)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(upload)
+            try:
+                if not ready.wait(10):
+                    if pending.done():
+                        result = pending.result()
+                        pytest.fail(
+                            f"未進入等待點：{result.status_code} {result.text}"
+                        )
+                    pytest.fail("重放請求必須進入本文等待點")
+                # 撤權交易可提交，亦確認重放等本文時沒有持有寫鎖。
+                _revoke(w, user_id, scope)
+            finally:
+                release.set()
+            response = pending.result(20)
+    finally:
+        release.set()
+    if scope == "none":
+        assert response.status_code == 200, response.text
+        assert response.json() == photo
+    else:
+        assert response.status_code == 403, response.text
+        assert set(response.json()) == {"error"}
+        assert response.json()["error"]["code"] == "permission.denied"
+    assert _state(w) == before
