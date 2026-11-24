@@ -77,11 +77,9 @@ def _read_busy_timeout():
         return connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
 
 
-# The tests below set a 50 ms busy timeout; the default is 5000 ms. A
-# request that returns within this bound waited for the configured short
-# timeout, not the default one. The bound is a loose cap (about 40x the
-# configured value) so CI load cannot trip it, instead of comparing two
-# short wall-clock durations against each other.
+# AUT-R28：量測實際寫入操作的等待，避免把 Argon2id、HTTP 請求處理
+# 與首次請求成本算進 SQLite 的等待預算。保留 2 秒上限，以區分測試
+# 設定的 50 ms 與預設 5000 ms；這不是整個登入請求的效能期限。
 _SHORT_BUSY_TIMEOUT_CAP_SECONDS = 2.0
 # Locked and unknown accounts must wait about the same (AUT-R06). Both
 # paths cost one password check plus the busy timeout, so the gap between
@@ -94,8 +92,31 @@ def _assert_returned_within_short_timeout(durations):
     assert max(durations) < _SHORT_BUSY_TIMEOUT_CAP_SECONDS, durations
 
 
+@pytest.fixture
+def sqlite_write_durations(monkeypatch):
+    """保留真實寫鎖與錯誤處理，只記錄可能等待寫鎖的操作耗時。"""
+    durations = []
+    execute_write = lockout_module._execute_sqlite_write
+
+    def measured_write(db, operation):
+        def measured_operation():
+            started = time.monotonic()
+            try:
+                return operation()
+            finally:
+                # SQLite 逾時會拋例外，仍須把該次等待納入斷言。
+                durations.append(time.monotonic() - started)
+
+        return execute_write(db, measured_operation)
+
+    monkeypatch.setattr(
+        lockout_module, "_execute_sqlite_write", measured_write
+    )
+    return durations
+
+
 def test_sqlite_write_lock_timeout_returns_retryable_error(
-    client, db_session, engine, monkeypatch, caplog
+    client, db_session, engine, monkeypatch, caplog, sqlite_write_durations
 ):
     _admin(db_session)
     user = make_local_user(db_session, "DEMO_LOCK")
@@ -109,18 +130,15 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
         holder.exec_driver_sql("BEGIN IMMEDIATE")
         try:
             responses = []
-            durations = []
             for login, password in (
                 (email, "wrong-password"),
                 (email, P),
                 ("missing-user", "wrong-password"),
             ):
-                started = time.monotonic()
                 response = client.post(
                     "/api/v1/auth/login",
                     json={"login": login, "password": password},
                 )
-                durations.append(time.monotonic() - started)
                 responses.append(response)
                 assert response.status_code == 503
                 assert response.json() == {
@@ -129,7 +147,8 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
                 assert response.headers["retry-after"] == "5"
                 assert "set-cookie" not in response.headers
                 assert _read_busy_timeout() == original_busy_timeout
-            _assert_returned_within_short_timeout(durations)
+            assert len(sqlite_write_durations) == 3
+            _assert_returned_within_short_timeout(sqlite_write_durations)
             assert responses[0].content == responses[1].content
             assert responses[1].content == responses[2].content
             assert not any(
@@ -189,7 +208,13 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
 
 
 def test_locked_account_and_unknown_login_share_sqlite_timeout(
-    client, db_session, engine, now, monkeypatch, caplog
+    client,
+    db_session,
+    engine,
+    now,
+    monkeypatch,
+    caplog,
+    sqlite_write_durations,
 ):
     _admin(db_session)
     user = make_local_user(db_session, "DEMO_LOCKED")
@@ -228,7 +253,8 @@ def test_locked_account_and_unknown_login_share_sqlite_timeout(
                 response.content == responses[0].content
                 for response in responses
             )
-            _assert_returned_within_short_timeout(per_path[0] + per_path[1])
+            assert len(sqlite_write_durations) == 2 * _PATH_TIMING_ROUNDS
+            _assert_returned_within_short_timeout(sqlite_write_durations)
             assert (
                 abs(min(per_path[0]) - min(per_path[1]))
                 < _PATH_FASTEST_GAP_SECONDS
