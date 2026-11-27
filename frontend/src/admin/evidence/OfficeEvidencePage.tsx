@@ -24,6 +24,7 @@ import {
 } from './api'
 import { OfficePhotoEditor } from './OfficePhotoEditor'
 import { OfficePhotoViewer } from './OfficePhotoViewer'
+import { photoDownloadName } from './downloadName'
 import { formatRecordedTime } from './labelTime'
 import { labelText } from '../../field/evidence/labelText'
 import './evidence-office.css'
@@ -760,7 +761,7 @@ export function OfficeEvidencePage({
                           )}
                         <a
                           className="btn"
-                          download
+                          download={photoDownloadName(photo, 'office')}
                           href={officeImageUrl(
                             taskId,
                             photo.id,

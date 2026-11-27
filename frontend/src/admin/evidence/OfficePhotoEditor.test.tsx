@@ -100,6 +100,34 @@ function renderCroppedEditor() {
 }
 
 describe('OfficePhotoEditor', () => {
+  it.each(['dark', 'paper', 'outline'] as const)(
+    'keeps the %s border distinguishable while the layer is selected',
+    (style) => {
+      renderEditor(undefined, { layer: { ...photo.layer, style } })
+      fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
+      const anchor = screen.getByRole('group', {
+        name: '圖層位置，方向鍵微調',
+      })
+      fireEvent.focus(anchor)
+      const table = document.querySelector('.office-layer-overlay')
+      expect(table).toHaveClass(`office-layer-table--${style}`)
+      expect(table).toHaveClass('office-layer-table--border')
+      fireEvent.click(screen.getByLabelText('顯示外框'))
+      expect(table).not.toHaveClass('office-layer-table--border')
+      expect(anchor).toHaveClass('office-layer-draggable')
+      expect(screen.getByRole('status')).toHaveTextContent('已選取：工程標示')
+      fireEvent.click(screen.getByLabelText('顯示外框'))
+      expect(table).toHaveClass('office-layer-table--border')
+      const styles = readFileSync(
+        'src/admin/evidence/evidence-office.css',
+        'utf8',
+      )
+      expect(styles).toMatch(
+        /\.office-layer-draggable\s*\{[^}]*outline-offset:\s*4px/s,
+      )
+    },
+  )
+
   it('starts uncropped photos at full size without outside shading', () => {
     renderEditor()
     const frame = document.querySelector('.office-crop-frame')

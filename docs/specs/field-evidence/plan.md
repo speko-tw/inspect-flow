@@ -209,3 +209,9 @@
 - 以元件、合成、真 API、完整 gate 及 SQLite + Vite 桌面／360px 截圖驗收。
 
 - 本輪改動範圍：`backend/app/models/evidence.py`、`backend/app/services/evidence{,_images,_office,_queries}.py`、`backend/alembic/versions/f834a1b2c3d4_add_evidence_label_border.py`、`backend/tests/{api,db,services}/test_evidence*.py`；`frontend/src/field/evidence/` 的預覽／卡片／文字 helper、型別與測試，`frontend/src/evidence/layerGeometry.ts` 共用幾何，以及 `frontend/src/admin/evidence/` 的編修器／歷程／API 型別／樣式與測試。
+
+### 內業照片小修（#855、#863）
+
+依工作單於同一個 PR 處理內業選取提示與下載命名；規格澄清見 spec 的 FEV-R16／R23 補充。範圍為 `frontend/src/admin/evidence/evidence-office.css`、`downloadName.ts` 與測試、`OfficeEvidencePage.tsx`／`OfficePhotoViewer.tsx` 與測試，以及 `OfficePhotoEditor.test.tsx`。不修改現場上傳／編修模組與後端照片服務。
+
+驗證：三種樣式在選取中切換外框、檔名特殊字元與 UTF-8 長度單元測試、清單／大圖下載檔名整合測試、獨立 demo 的 360／1280 截圖與真實保存影像下載、完整 `make check` 與 PR CI。項次使用照片既有穩定識別，避免用目前快照推測已作廢／更正照片的歷史序號。

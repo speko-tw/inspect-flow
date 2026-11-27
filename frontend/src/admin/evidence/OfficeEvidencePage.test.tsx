@@ -280,6 +280,12 @@ describe('OfficeEvidencePage', () => {
     })
     renderPage(false)
     const card = await screen.findByRole('article')
+    expect(
+      within(card).getByRole('link', { name: '下載內業版' }),
+    ).toHaveAttribute(
+      'download',
+      '工程_表面_未對應項次_照片-photo-deleted_內業版.jpg',
+    )
     fireEvent.click(
       within(card).getByRole('button', {
         name: /^查看大圖，林檢查員/,
