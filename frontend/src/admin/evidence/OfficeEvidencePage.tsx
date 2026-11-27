@@ -54,9 +54,10 @@ function photoTime(photo: OfficePhoto): string {
   const formatted = new Intl.DateTimeFormat('zh-TW', {
     dateStyle: 'medium',
     timeStyle: 'short',
-    timeZone: 'Asia/Taipei',
+    timeZone: photo.label_timezone,
   }).format(new Date(value))
-  return photo.captured_at ? formatted : `上傳時間 ${formatted}`
+  const marked = `${formatted}（${photo.label_timezone}）`
+  return photo.captured_at ? marked : `上傳時間 ${marked}`
 }
 
 function photoIdentity(photo: OfficePhoto): string {

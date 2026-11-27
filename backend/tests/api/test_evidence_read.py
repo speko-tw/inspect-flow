@@ -1079,29 +1079,49 @@ def test_missing_image_retries_only_once_and_logs_no_storage_key(
     assert str(key) not in caplog.text
 
 
-def test_label_timezone_uses_backend_configuration_in_all_views(
-    read_world,
-    monkeypatch,
+@pytest.mark.parametrize("deployment_timezone", ["UTC", "Asia/Taipei"])
+def test_label_timezone_follows_saved_office_rule_and_falls_back_to_setting(
+    read_world, monkeypatch, deployment_timezone
 ):
     w = read_world
     monkeypatch.setenv(
-        "INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "America/New_York"
+        "INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", deployment_timezone
     )
     photo = _add_photo(w)
-    assert photo["label_timezone"] == "America/New_York"
-    # API 直接提供目前設定；變更時區後的像素重產沿用既有維運流程。
-    monkeypatch.setenv("INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "UTC")
+    assert photo["label_timezone"] == deployment_timezone
+    fallback_timezone = (
+        "Asia/Taipei" if deployment_timezone == "UTC" else "UTC"
+    )
+    monkeypatch.setenv(
+        "INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", fallback_timezone
+    )
     office, field, detail = _paths(w, photo)
-    for client, path in (
-        (w["reader"], office),
-        (w["field"], field + "/photos"),
-    ):
-        response = client.get(path)
-        assert response.status_code == 200, response.text
-        assert response.json()["items"][0]["label_timezone"] == "UTC"
+    response = w["reader"].get(office)
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["label_timezone"] == deployment_timezone
     response = w["reader"].get(detail)
     assert response.status_code == 200
-    assert response.json()["label_timezone"] == "UTC"
+    assert response.json()["label_timezone"] == deployment_timezone
+
+    response = w["field"].get(field + "/photos")
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["label_timezone"] == fallback_timezone
+
+    # 舊或缺少保存時區的規則沿用部署設定。
+    version = w["db"].scalar(
+        select(EvidenceVariant).where(
+            EvidenceVariant.evidence_id == UUID(photo["id"]),
+            EvidenceVariant.variant_type == "OFFICE",
+        )
+    )
+    version.label_rule = {}
+    w["db"].commit()
+    response = w["reader"].get(office)
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["label_timezone"] == fallback_timezone
+    response = w["reader"].get(detail)
+    assert response.status_code == 200
+    assert response.json()["label_timezone"] == fallback_timezone
 
 
 @pytest.mark.parametrize("variant", ["field", "office"])

@@ -218,7 +218,11 @@ def serialize_photos(
             "capture_source": photo.capture_source,
             "layer": photo.label_layer,
             "labels": _resolved_labels(photo),
-            "label_timezone": label_timezone(),
+            "label_timezone": (
+                rule.get("timezone") or label_timezone()
+                if office
+                else label_timezone()
+            ),
             "layer_render": {
                 key: rule.get(key)
                 for key in ("render_state", "effective_size")

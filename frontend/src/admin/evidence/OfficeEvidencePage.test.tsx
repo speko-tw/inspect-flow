@@ -164,6 +164,19 @@ describe('OfficeEvidencePage', () => {
     vi.mocked(deletePhoto).mockResolvedValue(undefined)
   })
 
+  it.each([
+    ['UTC', '凌晨2:00（UTC）'],
+    ['Asia/Taipei', '上午10:00（Asia/Taipei）'],
+  ])('清單時間採用照片保存的 %s 時區', async (timezone, expected) => {
+    vi.mocked(listOfficePhotos).mockResolvedValue({
+      items: [{ ...photo, label_timezone: timezone }],
+      next_cursor: null,
+    })
+    renderPage(false)
+    const card = (await screen.findAllByRole('article'))[0]
+    expect(card.getAttribute('aria-label')).toContain(expected)
+  })
+
   it('compares variants and shows badges to read-only staff', async () => {
     renderPage(false)
     const viewerButtons = await screen.findAllByRole('button', {
@@ -362,7 +375,7 @@ describe('OfficeEvidencePage', () => {
     ).toBeInTheDocument()
     expect(getOfficePhoto).toHaveBeenCalledWith('task-1', 'photo-1')
     expect(
-      screen.getByText('林檢查員．示範公司・2026/10/02 11:00'),
+      screen.getByText('林檢查員．示範公司・2026/10/02 11:00（Asia/Taipei）'),
     ).toBeInTheDocument()
   })
 
@@ -407,10 +420,14 @@ describe('OfficeEvidencePage', () => {
       name: /圖層修改歷程｜/,
     })
     expect(
-      within(firstHistory).getByText('actor-photo-1・2026/10/02 11:00'),
+      within(firstHistory).getByText(
+        'actor-photo-1・2026/10/02 11:00（Asia/Taipei）',
+      ),
     ).toBeVisible()
     expect(
-      within(secondHistory).getByText('actor-photo-voided・2026/10/02 11:00'),
+      within(secondHistory).getByText(
+        'actor-photo-voided・2026/10/02 11:00（Asia/Taipei）',
+      ),
     ).toBeVisible()
     fireEvent.keyDown(firstHistory.querySelector('h3')!, { key: 'Escape' })
     await waitFor(() => expect(firstHistory).not.toBeInTheDocument())
@@ -665,7 +682,9 @@ describe('OfficeEvidencePage', () => {
     fireEvent.click(
       within(cards[1]).getByRole('button', { name: /^查看歷程，/ }),
     )
-    await within(cards[1]).findByText('actor-photo-voided・2026/10/02 11:00')
+    await within(cards[1]).findByText(
+      'actor-photo-voided・2026/10/02 11:00（Asia/Taipei）',
+    )
     fireEvent.click(
       within(cards[0]).getByRole('button', { name: /^編修內業版，/ }),
     )
@@ -679,7 +698,7 @@ describe('OfficeEvidencePage', () => {
     ).toBeVisible()
     expect(
       within(updatedCards[1]).getByText(
-        'actor-photo-voided・2026/10/02 11:00',
+        'actor-photo-voided・2026/10/02 11:00（Asia/Taipei）',
       ),
     ).toBeVisible()
     expect(within(updatedCards[1]).queryByRole('alert')).toBeNull()
@@ -723,59 +742,75 @@ describe('OfficeEvidencePage', () => {
         name: /圖層修改歷程｜/,
       })
       expect(
-        within(history).getByText(`${expected}・2026/11/07 00:04`),
+        within(history).getByText(
+          `${expected}・2026/11/07 00:04（Asia/Taipei）`,
+        ),
       ).toBeVisible()
     },
   )
 
-  it('uses rendered labels and Taipei upload time in history', async () => {
-    const labels = {
-      ...photo.labels,
-      uploaded_at: '2026-11-06T18:43:37.141490Z',
-    }
-    vi.mocked(getOfficePhoto).mockResolvedValue({
-      ...photo,
-      layer_history: {
-        items: [
-          {
-            id: 'label-time',
-            actor: { id: null, snapshot: '林檢查員．示範公司' },
-            occurred_at: '2026-11-07T04:00:00Z',
-            before: { layer: photo.layer, labels },
-            after: { layer: photo.layer, labels },
-          },
-        ],
-        next_cursor: null,
-      },
-    })
-    renderPage(false)
-    const card = (await screen.findAllByRole('article'))[0]
-    fireEvent.click(within(card).getByRole('button', { name: /^查看歷程，/ }))
-    const history = await screen.findByRole('region', {
-      name: /圖層修改歷程｜/,
-    })
-    fireEvent.click(within(history).getByText('查看修改前後'))
-    const values = history.querySelectorAll('.office-history-values')
-    expect(values).toHaveLength(2)
-    for (const value of values) {
-      for (const label of [
-        '工程名稱',
-        '檢驗項目',
-        '檢驗位置',
-        '檢驗人員',
-        '檢驗時間',
-      ]) {
-        expect(
-          within(value as HTMLElement).getByText(label, {
-            selector: 'dt',
-          }),
-        ).toBeVisible()
+  it.each([
+    ['UTC', '2026/11/06 18:43（UTC）', '2026/11/07 04:00（UTC）'],
+    [
+      'Asia/Taipei',
+      '2026/11/07 02:43（Asia/Taipei）',
+      '2026/11/07 12:00（Asia/Taipei）',
+    ],
+  ])(
+    'uses rendered labels and %s time in detail history',
+    async (timezone, labelTime, historyTime) => {
+      const labels = {
+        ...photo.labels,
+        uploaded_at: '2026-11-06T18:43:37.141490Z',
+      }
+      vi.mocked(getOfficePhoto).mockResolvedValue({
+        ...photo,
+        label_timezone: timezone,
+        layer_history: {
+          items: [
+            {
+              id: 'label-time',
+              actor: { id: null, snapshot: '林檢查員．示範公司' },
+              occurred_at: '2026-11-07T04:00:00Z',
+              before: { layer: photo.layer, labels },
+              after: { layer: photo.layer, labels },
+            },
+          ],
+          next_cursor: null,
+        },
+      })
+      renderPage(false)
+      const card = (await screen.findAllByRole('article'))[0]
+      fireEvent.click(
+        within(card).getByRole('button', { name: /^查看歷程，/ }),
+      )
+      const history = await screen.findByRole('region', {
+        name: /圖層修改歷程｜/,
+      })
+      fireEvent.click(within(history).getByText('查看修改前後'))
+      const values = history.querySelectorAll('.office-history-values')
+      expect(values).toHaveLength(2)
+      for (const value of values) {
+        for (const label of [
+          '工程名稱',
+          '檢驗項目',
+          '檢驗位置',
+          '檢驗人員',
+          '檢驗時間',
+        ]) {
+          expect(
+            within(value as HTMLElement).getByText(label, {
+              selector: 'dt',
+            }),
+          ).toBeVisible()
+        }
+        expect(within(value as HTMLElement).getByText(labelTime)).toBeVisible()
       }
       expect(
-        within(value as HTMLElement).getByText('2026/11/07 02:43'),
+        within(history).getByText(`林檢查員．示範公司・${historyTime}`),
       ).toBeVisible()
-    }
-  })
+    },
+  )
 
   it.each([
     [0.19937694704049844, 0.125, '往右 19.9%', '往下 12.5%'],
@@ -885,7 +920,7 @@ describe('OfficeEvidencePage', () => {
       return within(values as HTMLElement)
     }
 
-    expectRecord(records[0], '2026/10/02 11:00')
+    expectRecord(records[0], '2026/10/02 11:00（Asia/Taipei）')
     const addedBefore = valuesIn(records[0], '修改前')
     const addedAfter = valuesIn(records[0], '修改後')
     expect(addedBefore.getByText('沿用來源：工程')).toBeVisible()
@@ -895,7 +930,7 @@ describe('OfficeEvidencePage', () => {
     expect(addedAfter.getByText('自訂文字：自訂項目')).toBeVisible()
     expect(addedAfter.getByText('自訂文字：北側')).toBeVisible()
 
-    expectRecord(records[1], '2026/10/03 11:00')
+    expectRecord(records[1], '2026/10/03 11:00（Asia/Taipei）')
     const removedBefore = valuesIn(records[1], '修改前')
     const removedAfter = valuesIn(records[1], '修改後')
     expect(removedBefore.getByText('明示空字串')).toBeVisible()
@@ -1271,7 +1306,7 @@ describe('OfficeEvidencePage', () => {
       name: /圖層修改歷程｜/,
     })
     expect(
-      await within(region).findByText('測試人員・2026/10/02 03:00'),
+      await within(region).findByText('測試人員・2026/10/02 03:00（UTC）'),
     ).toBeInTheDocument()
     fireEvent.click(within(region).getByText('查看修改前後'))
     expect(within(region).getAllByText('沿用來源：未填寫')).toHaveLength(2)
