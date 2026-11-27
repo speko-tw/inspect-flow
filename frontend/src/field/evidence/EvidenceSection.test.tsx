@@ -28,7 +28,9 @@ import {
 import type { Coverage, FieldPhoto } from './types'
 
 const webkitCanvasJpeg = new Uint8Array(
-  readFileSync(resolve('src/field/evidence/fixtures/webkit-canvas-metadata.jpg')),
+  readFileSync(
+    resolve('src/field/evidence/fixtures/webkit-canvas-metadata.jpg'),
+  ),
 )
 const cleanWebkitCanvasJpeg = new Uint8Array(
   readFileSync(resolve('src/field/evidence/fixtures/webkit-canvas-clean.jpg')),
@@ -671,7 +673,9 @@ describe('自動重試與手動重送（FEV-AC10、FEV-AC11）', () => {
       defaultServer({
         post: () =>
           Response.json(
-            { error: { code: 'evidence.invalid_image', details: ['metadata'] } },
+            {
+              error: { code: 'evidence.invalid_image', details: ['metadata'] },
+            },
             { status: 422 },
           ),
       }),
