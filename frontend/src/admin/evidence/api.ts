@@ -29,6 +29,8 @@ export type OfficePhoto = {
   item_id: string
   is_overview: boolean
   point_ids: string[]
+  /** FEV-R16：後端依照片保存快照解析，不從目前項目推測序號。 */
+  point_sequences: number[]
   caption: string | null
   captured_at: string | null
   uploaded_at: string

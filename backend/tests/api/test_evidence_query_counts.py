@@ -67,6 +67,7 @@ def test_batched_reads_have_constant_select_count(read_world):
     small_detail = _detail_count(w["reader"], detail, layer_history_limit=100)
     assert small_detail[0] > 0
     assert len(small_detail[1]["point_ids"]) == 1
+    assert small_detail[1]["point_sequences"] == [1]
     assert len(small_detail[1]["layer_history"]["items"]) == 1
     _clone_photos(w, 99)
     db = w["db"]
@@ -117,6 +118,7 @@ def test_batched_reads_have_constant_select_count(read_world):
     large_detail = _detail_count(w["reader"], detail, layer_history_limit=100)
     assert large_detail[0] == small_detail[0]
     assert len(large_detail[1]["point_ids"]) == 100
+    assert large_detail[1]["point_sequences"] == list(range(1, 101))
     assert len(large_detail[1]["layer_history"]["items"]) == 100
     first_count, first = _detail_count(
         w["reader"], detail, layer_history_limit=1

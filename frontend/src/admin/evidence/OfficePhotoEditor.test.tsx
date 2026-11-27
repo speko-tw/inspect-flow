@@ -19,6 +19,7 @@ const photo: OfficePhoto = {
   item_id: 'item-1',
   is_overview: false,
   point_ids: [],
+  point_sequences: [],
   caption: null,
   captured_at: '2026-10-01T02:00:00Z',
   uploaded_at: '2026-10-01T02:00:00Z',
