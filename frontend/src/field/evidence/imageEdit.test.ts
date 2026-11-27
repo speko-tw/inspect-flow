@@ -152,16 +152,40 @@ describe('JPEG metadata 剝除（FEV-R02、FEV-R06）', () => {
     expect(new Uint8Array(await result.arrayBuffer())).toEqual(expected)
   })
 
-  it('拒絕非 JPEG、截斷段落與缺少 EOI 的輸入', async () => {
-    for (const bytes of [
-      new Uint8Array([1, 2, 3]),
-      new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0, 8, 1]),
-      cleanWebkitJpeg.subarray(0, cleanWebkitJpeg.length - 2),
-      new Uint8Array([...cleanWebkitJpeg, 0x01]),
-    ]) {
-      await expect(stripJpegMetadata(new Blob([bytes]))).rejects.toThrow(
-        'Invalid JPEG data',
-      )
-    }
+  it('舊瀏覽器沒有 Blob.arrayBuffer 時仍剝除 metadata', async () => {
+    const input = new Blob([webkitJpeg], { type: 'image/jpeg' })
+    Object.defineProperty(input, 'arrayBuffer', { value: undefined })
+    const result = await stripJpegMetadata(input)
+    expect(new Uint8Array(await result.arrayBuffer())).toEqual(cleanWebkitJpeg)
+  })
+
+  it('在 EOI 截斷並捨棄尾端資料，SHA 只包含清理後位元組', async () => {
+    const input = new Blob([
+      webkitJpeg,
+      new Uint8Array([0xff, 0xe1, 0, 4, 0x20, 0x21, 0xff, 0xd9]),
+    ])
+    const result = await stripJpegMetadata(input)
+    expect(new Uint8Array(await result.arrayBuffer())).toEqual(cleanWebkitJpeg)
+    expect(await sha256Hex(result)).toBe(
+      createHash('sha256').update(cleanWebkitJpeg).digest('hex'),
+    )
+  })
+
+  it.each([
+    [[1, 2, 3], 'invalid-soi'],
+    [[0xff, 0xd8, 0xff, 0xda, 0, 2, 1], 'missing-eoi'],
+    [[0xff, 0xd8, 0xff, 0xda, 0, 2, 0xff], 'truncated-marker'],
+    [[0xff, 0xd8, 1, 2], 'expected-marker'],
+    [[0xff, 0xd8, 0xff, 0xff], 'truncated-marker'],
+    [[0xff, 0xd8, 0xff, 0xd8], 'unexpected-marker'],
+    [[0xff, 0xd8, 0xff, 0x00], 'unexpected-marker'],
+    [[0xff, 0xd8, 0xff, 0xe1, 0], 'truncated-length'],
+    [[0xff, 0xd8, 0xff, 0xe1, 0, 1], 'invalid-length'],
+    [[0xff, 0xd8, 0xff, 0xe1, 0, 8, 1], 'truncated-segment'],
+    [[0xff, 0xd8, 0xff, 0xe0, 0, 2], 'missing-eoi'],
+  ])('拒絕損毀輸入 %j，僅回報固定原因碼 %s', async (bytes, reason) => {
+    await expect(
+      stripJpegMetadata(new Blob([new Uint8Array(bytes)])),
+    ).rejects.toThrow(`Invalid JPEG data: ${reason}`)
   })
 })

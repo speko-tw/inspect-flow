@@ -98,6 +98,7 @@ export function useUploadQueue(taskId: string, onUploaded: () => void) {
           Array.isArray(result.error.details) &&
           result.error.details.every((detail) => typeof detail === 'string')
         ) {
+          // API 的 details 只含固定原因碼，不含照片位元組或個資。
           console.info('Photo upload rejected:', result.error.details)
         }
         const resendable = canResend(result.error, result.retryable)

@@ -333,6 +333,7 @@ def upload_evidence(
     try:
         validate_field_metadata(content)
     except InvalidEvidenceImageError as exc:
+        # metadata 檢查只拋固定原因碼，details 不含照片內容或個資。
         logger.warning(
             "Evidence upload rejected: code=%s details=%s",
             ErrorCode.EVIDENCE_INVALID_IMAGE.value,

@@ -168,11 +168,17 @@ export function renderFieldVersion(
   )
 }
 
-/** 移除 JPEG metadata 段，保留其他位元組，避免 Safari 畫布輸出被拒。 */
+/**
+ * 移除 JPEG metadata 段與 EOI 後的資料，避免 Safari 畫布輸出被拒。
+ * 保留其餘位元組，讓上傳與 SHA 使用相同成品（FEV-AC03）。
+ *
+ * @throws 讀取失敗、非 JPEG、段落損毀或缺少 EOI 時拋錯；
+ * JPEG 解析錯誤只含固定原因碼，不含照片內容。
+ */
 export async function stripJpegMetadata(blob: Blob): Promise<Blob> {
-  const bytes = new Uint8Array(await blob.arrayBuffer())
+  const bytes = new Uint8Array(await readBytes(blob))
   if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
-    throw new Error('Invalid JPEG data')
+    throw new Error('Invalid JPEG data: invalid-soi')
   }
 
   const output = [bytes.subarray(0, 2)]
@@ -181,12 +187,16 @@ export async function stripJpegMetadata(blob: Blob): Promise<Blob> {
   let ended = false
   while (position < bytes.length) {
     if (inScan) {
+      // SOS 後仍掃描 marker，以移除多 scan JPEG 夾帶的 metadata；
+      // stuffed byte 與 restart marker 屬影像資料，必須原樣保留。
       const markerStart = bytes.indexOf(0xff, position)
-      if (markerStart < 0) throw new Error('Invalid JPEG data')
+      if (markerStart < 0) throw new Error('Invalid JPEG data: missing-eoi')
       output.push(bytes.subarray(position, markerStart))
       let markerEnd = markerStart + 1
       while (bytes[markerEnd] === 0xff) markerEnd += 1
-      if (markerEnd >= bytes.length) throw new Error('Invalid JPEG data')
+      if (markerEnd >= bytes.length) {
+        throw new Error('Invalid JPEG data: truncated-marker')
+      }
       const marker = bytes[markerEnd]
       if (marker === 0x00 || (marker >= 0xd0 && marker <= 0xd7)) {
         output.push(bytes.subarray(markerStart, markerEnd + 1))
@@ -198,36 +208,45 @@ export async function stripJpegMetadata(blob: Blob): Promise<Blob> {
       continue
     }
 
-    if (bytes[position] !== 0xff) throw new Error('Invalid JPEG data')
+    if (bytes[position] !== 0xff) {
+      throw new Error('Invalid JPEG data: expected-marker')
+    }
     const markerStart = position
     while (bytes[position] === 0xff) position += 1
-    if (position >= bytes.length) throw new Error('Invalid JPEG data')
+    if (position >= bytes.length) {
+      throw new Error('Invalid JPEG data: truncated-marker')
+    }
     const marker = bytes[position]
     position += 1
     if (marker === 0xd9) {
-      if (position !== bytes.length) throw new Error('Invalid JPEG data')
+      // 與後端一致在第一個 EOI 結束；捨棄尾端資料，避免上傳殘留內容。
       output.push(bytes.subarray(markerStart, position))
       ended = true
       break
     }
     if (marker === 0xd8 || marker === 0x00) {
-      throw new Error('Invalid JPEG data')
+      throw new Error('Invalid JPEG data: unexpected-marker')
     }
     if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
       output.push(bytes.subarray(markerStart, position))
       continue
     }
-    if (position + 2 > bytes.length) throw new Error('Invalid JPEG data')
+    if (position + 2 > bytes.length) {
+      throw new Error('Invalid JPEG data: truncated-length')
+    }
     const length = (bytes[position] << 8) | bytes[position + 1]
     const end = position + length
-    if (length < 2 || end > bytes.length) throw new Error('Invalid JPEG data')
+    if (length < 2) throw new Error('Invalid JPEG data: invalid-length')
+    if (end > bytes.length) {
+      throw new Error('Invalid JPEG data: truncated-segment')
+    }
     if (marker !== 0xe1 && marker !== 0xed && marker !== 0xfe) {
       output.push(bytes.subarray(markerStart, end))
     }
     position = end
     if (marker === 0xda) inScan = true
   }
-  if (!ended) throw new Error('Invalid JPEG data')
+  if (!ended) throw new Error('Invalid JPEG data: missing-eoi')
   const length = output.reduce((total, part) => total + part.length, 0)
   const cleaned = new Uint8Array(length)
   let offset = 0
