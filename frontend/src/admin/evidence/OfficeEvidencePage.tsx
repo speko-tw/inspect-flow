@@ -67,7 +67,7 @@ function photoIdentity(photo: OfficePhoto): string {
 function isOfficeReadback(
   value: unknown,
   photoId: string,
-): value is OfficePhoto {
+): value is Omit<OfficePhoto, 'point_sequences'> {
   if (!value || typeof value !== 'object') return false
   const photo = value as Partial<OfficePhoto>
   return (
