@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { HttpError } from '../../http'
 import { uploadPhoto } from './evidenceApi'
 import { canResend, uploadFailureMessage } from './messages'
 import type { UploadRequest } from './types'
@@ -91,6 +92,13 @@ export function useUploadQueue(taskId: string, onUploaded: () => void) {
           drop(localId)
           callback.current()
           return
+        }
+        if (
+          result.error instanceof HttpError &&
+          Array.isArray(result.error.details) &&
+          result.error.details.every((detail) => typeof detail === 'string')
+        ) {
+          console.info('Photo upload rejected:', result.error.details)
         }
         const resendable = canResend(result.error, result.retryable)
         patch(localId, {

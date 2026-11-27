@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -12,7 +14,15 @@ import {
   outputSize,
   sha256Fallback,
   sha256Hex,
+  stripJpegMetadata,
 } from './imageEdit'
+
+const webkitJpeg = new Uint8Array(
+  readFileSync(resolve('src/field/evidence/fixtures/webkit-canvas-metadata.jpg')),
+)
+const cleanWebkitJpeg = new Uint8Array(
+  readFileSync(resolve('src/field/evidence/fixtures/webkit-canvas-clean.jpg')),
+)
 
 describe('亮度（FEV-R02：倍率 1+v/200）', () => {
   it('−100～+100 對應 0.5～1.5', () => {
@@ -105,5 +115,62 @@ describe('完整性雜湊與冪等鍵', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     )
     expect(newIdempotencyKey()).not.toBe(first)
+  })
+})
+
+describe('JPEG metadata 剝除（FEV-R02、FEV-R06）', () => {
+  it('只移除 WebKit 畫布的 APP1／APP13，保留其他位元組', async () => {
+    const result = await stripJpegMetadata(
+      new Blob([webkitJpeg], { type: 'image/jpeg' }),
+    )
+    expect(new Uint8Array(await result.arrayBuffer())).toEqual(cleanWebkitJpeg)
+    expect(result.type).toBe('image/jpeg')
+  })
+
+  it('乾淨 JPEG 原樣保留', async () => {
+    const clean = new Blob([cleanWebkitJpeg], { type: 'image/jpeg' })
+    const result = await stripJpegMetadata(clean)
+    expect(new Uint8Array(await result.arrayBuffer())).toEqual(cleanWebkitJpeg)
+  })
+
+  it('辨識多個 scan，並保留 stuffed 與 restart bytes', async () => {
+    const input = new Uint8Array([
+      0xff, 0xd8,
+      0xff, 0xe0, 0x00, 0x04, 0x10, 0x11,
+      0xff, 0xe1, 0x00, 0x04, 0x20, 0x21,
+      0xff, 0xda, 0x00, 0x02,
+      0x31, 0xff, 0x00, 0xe1, 0x32, 0xff, 0xd0, 0x33,
+      0xff, 0xfe, 0x00, 0x03, 0x40,
+      0xff, 0xda, 0x00, 0x02,
+      0x41, 0xff, 0x00, 0xed, 0x42,
+      0xff, 0xed, 0x00, 0x03, 0x50,
+      0xff, 0xda, 0x00, 0x02,
+      0x51, 0xff, 0xd9,
+    ])
+    const expected = new Uint8Array([
+      0xff, 0xd8,
+      0xff, 0xe0, 0x00, 0x04, 0x10, 0x11,
+      0xff, 0xda, 0x00, 0x02,
+      0x31, 0xff, 0x00, 0xe1, 0x32, 0xff, 0xd0, 0x33,
+      0xff, 0xda, 0x00, 0x02,
+      0x41, 0xff, 0x00, 0xed, 0x42,
+      0xff, 0xda, 0x00, 0x02,
+      0x51, 0xff, 0xd9,
+    ])
+    const result = await stripJpegMetadata(new Blob([input]))
+    expect(new Uint8Array(await result.arrayBuffer())).toEqual(expected)
+  })
+
+  it('拒絕非 JPEG、截斷段落與缺少 EOI 的輸入', async () => {
+    for (const bytes of [
+      new Uint8Array([1, 2, 3]),
+      new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0, 8, 1]),
+      cleanWebkitJpeg.subarray(0, cleanWebkitJpeg.length - 2),
+      new Uint8Array([...cleanWebkitJpeg, 0x01]),
+    ]) {
+      await expect(stripJpegMetadata(new Blob([bytes]))).rejects.toThrow(
+        'Invalid JPEG data',
+      )
+    }
   })
 })

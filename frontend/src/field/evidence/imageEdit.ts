@@ -2,8 +2,8 @@
 //
 // 依 FEV-R02：現場只有 90° 旋轉與亮度，且由前端直接烘進現場版後
 // 才壓縮上傳；`field_edit` 只是摘要，後端不會再套用一次。
-// 壓縮用畫布輸出，本來就不帶 EXIF（D2）。原檔與處理中的畫布只留在
-// 記憶體，不寫入 IndexedDB、localStorage 或 Cache API（FEV-R08）。
+// 畫布輸出在 Safari 仍可能帶 APP1／APP13；上傳前移除個資段（D2）。
+// 原檔與處理中的畫布只留在記憶體，不寫入持久儲存（FEV-R08）。
 
 import { readBytes } from './captureTime'
 import type { FieldEditSummary } from './types'
@@ -168,15 +168,90 @@ export function renderFieldVersion(
   )
 }
 
-/** 以固定品質輸出 JPEG。 */
+/** 移除 JPEG metadata 段，保留其他位元組，避免 Safari 畫布輸出被拒。 */
+export async function stripJpegMetadata(blob: Blob): Promise<Blob> {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    throw new Error('Invalid JPEG data')
+  }
+
+  const output = [bytes.subarray(0, 2)]
+  let position = 2
+  let inScan = false
+  let ended = false
+  while (position < bytes.length) {
+    if (inScan) {
+      const markerStart = bytes.indexOf(0xff, position)
+      if (markerStart < 0) throw new Error('Invalid JPEG data')
+      output.push(bytes.subarray(position, markerStart))
+      let markerEnd = markerStart + 1
+      while (bytes[markerEnd] === 0xff) markerEnd += 1
+      if (markerEnd >= bytes.length) throw new Error('Invalid JPEG data')
+      const marker = bytes[markerEnd]
+      if (marker === 0x00 || (marker >= 0xd0 && marker <= 0xd7)) {
+        output.push(bytes.subarray(markerStart, markerEnd + 1))
+        position = markerEnd + 1
+        continue
+      }
+      position = markerStart
+      inScan = false
+      continue
+    }
+
+    if (bytes[position] !== 0xff) throw new Error('Invalid JPEG data')
+    const markerStart = position
+    while (bytes[position] === 0xff) position += 1
+    if (position >= bytes.length) throw new Error('Invalid JPEG data')
+    const marker = bytes[position]
+    position += 1
+    if (marker === 0xd9) {
+      if (position !== bytes.length) throw new Error('Invalid JPEG data')
+      output.push(bytes.subarray(markerStart, position))
+      ended = true
+      break
+    }
+    if (marker === 0xd8 || marker === 0x00) {
+      throw new Error('Invalid JPEG data')
+    }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      output.push(bytes.subarray(markerStart, position))
+      continue
+    }
+    if (position + 2 > bytes.length) throw new Error('Invalid JPEG data')
+    const length = (bytes[position] << 8) | bytes[position + 1]
+    const end = position + length
+    if (length < 2 || end > bytes.length) throw new Error('Invalid JPEG data')
+    if (marker !== 0xe1 && marker !== 0xed && marker !== 0xfe) {
+      output.push(bytes.subarray(markerStart, end))
+    }
+    position = end
+    if (marker === 0xda) inScan = true
+  }
+  if (!ended) throw new Error('Invalid JPEG data')
+  const length = output.reduce((total, part) => total + part.length, 0)
+  const cleaned = new Uint8Array(length)
+  let offset = 0
+  for (const part of output) {
+    cleaned.set(part, offset)
+    offset += part.length
+  }
+  return new Blob([cleaned], { type: 'image/jpeg' })
+}
+
+/** 以固定品質輸出 JPEG，並移除 Safari 可能加入的 metadata 段。 */
 export function canvasToJpeg(
   canvas: HTMLCanvasElement,
   quality = JPEG_QUALITY,
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) =>
-        blob ? resolve(blob) : reject(new Error('JPEG encoding failed')),
+      (blob) => {
+        if (!blob) {
+          reject(new Error('JPEG encoding failed'))
+          return
+        }
+        stripJpegMetadata(blob).then(resolve, reject)
+      },
       'image/jpeg',
       quality,
     )
