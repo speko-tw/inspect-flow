@@ -44,8 +44,11 @@ export function photoDownloadName(
 ): string {
   // FEV-R16：序號由後端解析照片保存快照，不使用 UUID 或清單順序。
   const points = pointLabel(photo)
-  // #848 尚未落地，先沿用現有畫面 helper 的台北時區，不冒用部署時區。
-  const recorded = formatRecordedTime(photo.captured_at ?? photo.uploaded_at)
+  // FEV-Q16：檔名時間與內業標示相同，不用裝置回報的 captured_at。
+  const recorded = formatRecordedTime(
+    photo.labels.uploaded_at,
+    photo.label_timezone,
+  ).replace(/（[^（）]*）$/u, '')
   const timestamp = recorded
     .replaceAll('/', '')
     .replace(' ', '-')
