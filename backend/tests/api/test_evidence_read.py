@@ -1083,6 +1083,7 @@ def test_missing_image_retries_only_once_and_logs_no_storage_key(
 def test_label_timezone_follows_saved_office_rule_and_falls_back_to_setting(
     read_world, monkeypatch, deployment_timezone
 ):
+    """FEV-R22：保存時區優先，舊規則缺值沿用部署設定。"""
     w = read_world
     monkeypatch.setenv(
         "INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", deployment_timezone
@@ -1122,6 +1123,79 @@ def test_label_timezone_follows_saved_office_rule_and_falls_back_to_setting(
     response = w["reader"].get(detail)
     assert response.status_code == 200
     assert response.json()["label_timezone"] == fallback_timezone
+
+
+def test_invalid_deployment_timezone_is_sanitized_before_saving_rule(
+    read_world, monkeypatch
+):
+    monkeypatch.setenv(
+        "INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "Not/A-Time-Zone"
+    )
+    w = read_world
+    photo = _add_photo(w)
+    office, _, detail = _paths(w, photo)
+    office_variant = w["db"].scalar(
+        select(EvidenceVariant).where(
+            EvidenceVariant.evidence_id == UUID(photo["id"]),
+            EvidenceVariant.variant_type == "OFFICE",
+        )
+    )
+    assert office_variant.label_rule["timezone"] == "Asia/Taipei"
+    response = w["reader"].get(office)
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["label_timezone"] == "Asia/Taipei"
+    response = w["reader"].get(detail)
+    assert response.status_code == 200, response.text
+    assert response.json()["label_timezone"] == "Asia/Taipei"
+
+
+def test_invalid_saved_zone_uses_taipei_and_valid_saved_zone_is_preserved(
+    read_world, monkeypatch
+):
+    w = read_world
+    monkeypatch.setenv("INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "UTC")
+    photo = _add_photo(w)
+    office, field, detail = _paths(w, photo)
+    office_variant = w["db"].scalar(
+        select(EvidenceVariant).where(
+            EvidenceVariant.evidence_id == UUID(photo["id"]),
+            EvidenceVariant.variant_type == "OFFICE",
+        )
+    )
+
+    office_variant.label_rule = {
+        **office_variant.label_rule,
+        "timezone": "UTC",
+    }
+    w["db"].commit()
+    monkeypatch.setenv(
+        "INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "Not/A-Time-Zone"
+    )
+    response = w["reader"].get(office)
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["label_timezone"] == "UTC"
+    response = w["reader"].get(detail)
+    assert response.status_code == 200, response.text
+    assert response.json()["label_timezone"] == "UTC"
+    response = w["admin"].patch(detail, json={})
+    assert response.status_code == 200, response.text
+    assert response.json()["label_timezone"] == "UTC"
+
+    office_variant.label_rule = {
+        **office_variant.label_rule,
+        "timezone": "Not/A-Time-Zone",
+    }
+    w["db"].commit()
+    w["db"].expire(office_variant)
+    w["db"].refresh(office_variant)
+    assert office_variant.label_rule["timezone"] == "Not/A-Time-Zone"
+    response = w["reader"].get(detail)
+    assert response.status_code == 200, response.text
+    assert response.json()["label_timezone"] == "Asia/Taipei"
+
+    response = w["field"].get(field + "/photos")
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["label_timezone"] == "Asia/Taipei"
 
 
 @pytest.mark.parametrize("variant", ["field", "office"])

@@ -65,6 +65,15 @@ describe('photoDownloadName', () => {
     },
   )
 
+  it('缺少檢驗時間時以未記錄作為檔名時間段', () => {
+    expect(
+      photoDownloadName(
+        { ...photo, labels: { ...photo.labels, uploaded_at: null } },
+        'office',
+      ),
+    ).toContain('_未記錄_')
+  })
+
   it('replaces forbidden characters without exposing paths', () => {
     const value = photoDownloadName(
       {

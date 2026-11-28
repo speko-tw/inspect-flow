@@ -395,7 +395,11 @@ export function OfficePhotoEditor({
     ['檢驗人員', photo.labels.uploader_name],
     [
       '檢驗時間',
-      formatRecordedTime(photo.labels.uploaded_at, photo.label_timezone),
+      formatRecordedTime(
+        photo.labels.uploaded_at,
+        photo.label_timezone,
+        false,
+      ),
     ],
   ] as const
   const layerValue = (title: string, value: string | null | undefined) =>

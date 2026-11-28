@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { formatRecordedTime } from './labelText'
 
 import {
   DEFAULT_LAYER,
@@ -32,6 +33,17 @@ describe('wrapText', () => {
   it('短文字只有一行，空字串也有一行', () => {
     expect(wrapText('甲乙', 100, 10, measure)).toEqual(['甲乙'])
     expect(wrapText('', 100, 10, measure)).toEqual([''])
+  })
+})
+
+describe('formatRecordedTime 時區回退', () => {
+  it('無效時區不會中斷現場標示，並使用台北時區輸出', () => {
+    expect(() =>
+      formatRecordedTime('2026-11-01T01:30:59Z', 'Not/A-Time-Zone'),
+    ).not.toThrow()
+    expect(formatRecordedTime('2026-11-01T01:30:59Z', 'Not/A-Time-Zone')).toBe(
+      '2026/11/01 09:30',
+    )
   })
 })
 

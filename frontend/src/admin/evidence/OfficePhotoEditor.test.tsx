@@ -1208,7 +1208,7 @@ it('空字串人員顯示後端缺值字樣，時間採 API 時區', () => {
   expect(screen.getByLabelText('檢驗時間')).toHaveValue(
     '2026/10/31 21:30（America/New_York）',
   )
-  expect(
-    screen.getByText(/工程標示預覽。.*檢驗位置：未填寫/),
-  ).toBeInTheDocument()
+  const previewSummary = screen.getByText(/工程標示預覽。.*檢驗位置：未填寫/)
+  expect(previewSummary).toHaveTextContent('檢驗時間：2026/10/31 21:30')
+  expect(previewSummary).not.toHaveTextContent('America/New_York')
 })

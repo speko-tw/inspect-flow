@@ -14,6 +14,7 @@ export type OfficeLayer = {
   >
 }
 
+/** FEV-R22：內業標示來源；時間保留 API UTC 原值。 */
 export type OfficeLabels = {
   project_name?: string | null
   item_title?: string | null

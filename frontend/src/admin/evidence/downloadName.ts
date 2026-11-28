@@ -57,7 +57,7 @@ export function photoDownloadName(
     segment(photo.labels.project_name ?? '', '未記錄工程', 48),
     segment(photo.labels.item_title ?? '', '未記錄項目', 48),
     segment(points, '未對應項次', 64),
-    segment(timestamp, '未記錄時間', 24),
+    segment(timestamp, '未記錄', 24),
     segment(photo.id.slice(0, 8), '未記錄', 8),
     variant === 'office' ? '內業版.jpg' : '現場版.jpg',
   ].join('_')
