@@ -51,14 +51,7 @@ type Props = {
 type Filter = 'all' | 'active' | 'voided' | 'deleted'
 
 function photoTime(photo: OfficePhoto): string {
-  const value = photo.captured_at ?? photo.uploaded_at
-  const formatted = new Intl.DateTimeFormat('zh-TW', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: photo.label_timezone,
-  }).format(new Date(value))
-  const marked = `${formatted}（${photo.label_timezone}）`
-  return photo.captured_at ? marked : `上傳時間 ${marked}`
+  return formatRecordedTime(photo.labels.uploaded_at, photo.label_timezone)
 }
 
 function photoIdentity(photo: OfficePhoto): string {

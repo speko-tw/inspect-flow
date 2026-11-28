@@ -166,8 +166,8 @@ describe('OfficeEvidencePage', () => {
   })
 
   it.each([
-    ['UTC', '凌晨2:00（UTC）'],
-    ['Asia/Taipei', '上午10:00（Asia/Taipei）'],
+    ['UTC', '2026/10/01 02:00（UTC）'],
+    ['Asia/Taipei', '2026/10/01 10:00（Asia/Taipei）'],
   ])('清單時間採用照片保存的 %s 時區', async (timezone, expected) => {
     vi.mocked(listOfficePhotos).mockResolvedValue({
       items: [{ ...photo, label_timezone: timezone }],
@@ -181,7 +181,7 @@ describe('OfficeEvidencePage', () => {
   it('compares variants and shows badges to read-only staff', async () => {
     renderPage(false)
     const viewerButtons = await screen.findAllByRole('button', {
-      name: /查看大圖，林檢查員，上傳時間/,
+      name: /查看大圖，林檢查員，2026\/10\/01 10:00/,
     })
     expect(viewerButtons).toHaveLength(3)
     expect(
@@ -306,7 +306,7 @@ describe('OfficeEvidencePage', () => {
       }),
     )
     const viewer = await screen.findByRole('dialog', {
-      name: /大圖檢視｜林檢查員，上傳時間/,
+      name: /大圖檢視｜林檢查員，2026\/10\/01 10:00/,
     })
     expect(within(viewer).getByAltText(/現場版原尺寸/)).toHaveAttribute(
       'src',
@@ -329,15 +329,37 @@ describe('OfficeEvidencePage', () => {
     expect(deletePhoto).not.toHaveBeenCalled()
   })
 
-  it('keeps captured timestamps free of the upload-time prefix', async () => {
+  it('uses the label inspection time when capture time differs', async () => {
+    const labelTime = new Date('2026-10-01T02:00:00Z')
+    const expectedIdentity = '林檢查員，2026/10/01 02:00（UTC）'
     vi.mocked(listOfficePhotos).mockResolvedValue({
-      items: [{ ...photo, captured_at: '2026-10-04T02:00:00Z' }],
+      items: [
+        {
+          ...photo,
+          captured_at: '2026-10-04T02:00:00Z',
+          label_timezone: 'UTC',
+          labels: { ...photo.labels, uploaded_at: labelTime.toISOString() },
+        },
+      ],
       next_cursor: null,
     })
     renderPage(false)
+    const card = await screen.findByRole('article', {
+      name: expectedIdentity,
+    })
     expect(
-      await screen.findByRole('button', {
-        name: /^查看大圖，林檢查員，(?!上傳時間)/,
+      within(card).getByAltText(`現場版，${expectedIdentity}`),
+    ).toBeInTheDocument()
+    expect(
+      within(card).getByAltText(`內業版，${expectedIdentity}`),
+    ).toBeInTheDocument()
+    const viewButton = within(card).getByRole('button', {
+      name: `查看大圖，${expectedIdentity}`,
+    })
+    fireEvent.click(viewButton)
+    expect(
+      await screen.findByRole('dialog', {
+        name: `大圖檢視｜${expectedIdentity}`,
       }),
     ).toBeInTheDocument()
   })
