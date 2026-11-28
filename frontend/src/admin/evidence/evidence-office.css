@@ -560,6 +560,8 @@
 .office-layer-draggable {
   cursor: move;
   outline: 2px dashed #ffc200;
+  /* #855：選取與鍵盤焦點留白，不蓋住三種樣式的實際外框。 */
+  outline-offset: 4px;
   pointer-events: auto;
   touch-action: none;
 }

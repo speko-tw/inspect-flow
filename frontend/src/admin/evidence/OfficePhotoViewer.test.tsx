@@ -7,6 +7,12 @@ import { OfficePhotoViewer } from './OfficePhotoViewer'
 
 const photo = {
   id: 'photo-1',
+  labels: { project_name: '工程', item_title: '項目' },
+  point_ids: ['point-1'],
+  point_sequences: [1],
+  captured_at: null,
+  uploaded_at: '2026-10-01T02:00:00Z',
+  is_overview: false,
   variants: {
     field: {
       sha256: 'a'.repeat(64),
@@ -58,6 +64,16 @@ describe('OfficePhotoViewer', () => {
     expect(screen.getByRole('heading', { name: '現場版' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '內業版' })).toBeInTheDocument()
     expect(screen.getByText('保存的現場版本')).toBeInTheDocument()
+    for (const version of ['現場', '內業']) {
+      expect(
+        screen.getByRole('link', {
+          name: `下載${version}版原尺寸`,
+        }),
+      ).toHaveAttribute(
+        'download',
+        `工程_項目_項次1_20261001-1000_photo-1_${version}版.jpg`,
+      )
+    }
     expect(screen.getByRole('button', { name: '關閉大圖檢視' })).toHaveFocus()
     expect(screen.getByAltText(/現場版原尺寸/)).toHaveAttribute(
       'src',

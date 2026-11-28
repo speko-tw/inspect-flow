@@ -196,6 +196,38 @@ def serialize_photos(
         .order_by(EvidencePointLink.source_point_id)
     ):
         links[photo_id].append(str(point_id))
+    sequences: dict[UUID, list[int]] = defaultdict(list)
+    if office:
+        # FEV-R16：以照片保存的修訂查序號，不以目前快照推測歷史項次。
+        rows = db.execute(
+            select(Evidence.id, TaskSnapshotPoint.sequence)
+            .join(
+                TaskRequirementSnapshot,
+                and_(
+                    TaskRequirementSnapshot.task_inspection_item_id
+                    == Evidence.task_inspection_item_id,
+                    TaskRequirementSnapshot.revision
+                    == Evidence.snapshot_revision,
+                ),
+            )
+            .join(
+                EvidencePointLink,
+                EvidencePointLink.evidence_id == Evidence.id,
+            )
+            .join(
+                TaskSnapshotPoint,
+                and_(
+                    TaskSnapshotPoint.snapshot_id
+                    == TaskRequirementSnapshot.id,
+                    TaskSnapshotPoint.source_point_id
+                    == EvidencePointLink.source_point_id,
+                ),
+            )
+            .where(Evidence.id.in_(identifiers))
+            .order_by(Evidence.id, TaskSnapshotPoint.sequence)
+        )
+        for photo_id, sequence in rows:
+            sequences[photo_id].append(sequence)
     result = []
     for photo in photos:
         versions = variants[photo.id]
@@ -234,6 +266,7 @@ def serialize_photos(
                     "plan_id": str(task.plan_id),
                     "project_id": str(task.project_id),
                     "snapshot_revision": photo.snapshot_revision,
+                    "point_sequences": sequences[photo.id],
                     "uploader_snapshot": photo.uploader_snapshot,
                     "deleted_at": (
                         format_utc(photo.deleted_at)
