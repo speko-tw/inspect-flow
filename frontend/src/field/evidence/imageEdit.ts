@@ -2,8 +2,8 @@
 //
 // 依 FEV-R02：現場只有 90° 旋轉與亮度，且由前端直接烘進現場版後
 // 才壓縮上傳；`field_edit` 只是摘要，後端不會再套用一次。
-// 壓縮用畫布輸出，本來就不帶 EXIF（D2）。原檔與處理中的畫布只留在
-// 記憶體，不寫入 IndexedDB、localStorage 或 Cache API（FEV-R08）。
+// 畫布輸出在 Safari 仍可能帶 APP1／APP13；上傳前移除個資段（D2）。
+// 原檔與處理中的畫布只留在記憶體，不寫入持久儲存（FEV-R08）。
 
 import { readBytes } from './captureTime'
 import type { FieldEditSummary } from './types'
@@ -168,15 +168,109 @@ export function renderFieldVersion(
   )
 }
 
-/** 以固定品質輸出 JPEG。 */
+/**
+ * 移除 JPEG metadata 段與 EOI 後的資料，避免 Safari 畫布輸出被拒。
+ * 保留其餘位元組，讓上傳與 SHA 使用相同成品（FEV-AC03）。
+ *
+ * @throws 讀取失敗、非 JPEG、段落損毀或缺少 EOI 時拋錯；
+ * JPEG 解析錯誤只含固定原因碼，不含照片內容。
+ */
+export async function stripJpegMetadata(blob: Blob): Promise<Blob> {
+  const bytes = new Uint8Array(await readBytes(blob))
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    throw new Error('Invalid JPEG data: invalid-soi')
+  }
+
+  const output = [bytes.subarray(0, 2)]
+  let position = 2
+  let inScan = false
+  let ended = false
+  while (position < bytes.length) {
+    if (inScan) {
+      // SOS 後仍掃描 marker，以移除多 scan JPEG 夾帶的 metadata；
+      // stuffed byte 與 restart marker 屬影像資料，必須原樣保留。
+      const markerStart = bytes.indexOf(0xff, position)
+      if (markerStart < 0) throw new Error('Invalid JPEG data: missing-eoi')
+      output.push(bytes.subarray(position, markerStart))
+      let markerEnd = markerStart + 1
+      while (bytes[markerEnd] === 0xff) markerEnd += 1
+      if (markerEnd >= bytes.length) {
+        throw new Error('Invalid JPEG data: truncated-marker')
+      }
+      const marker = bytes[markerEnd]
+      if (marker === 0x00 || (marker >= 0xd0 && marker <= 0xd7)) {
+        output.push(bytes.subarray(markerStart, markerEnd + 1))
+        position = markerEnd + 1
+        continue
+      }
+      position = markerStart
+      inScan = false
+      continue
+    }
+
+    if (bytes[position] !== 0xff) {
+      throw new Error('Invalid JPEG data: expected-marker')
+    }
+    const markerStart = position
+    while (bytes[position] === 0xff) position += 1
+    if (position >= bytes.length) {
+      throw new Error('Invalid JPEG data: truncated-marker')
+    }
+    const marker = bytes[position]
+    position += 1
+    if (marker === 0xd9) {
+      // 與後端一致在第一個 EOI 結束；捨棄尾端資料，避免上傳殘留內容。
+      output.push(bytes.subarray(markerStart, position))
+      ended = true
+      break
+    }
+    if (marker === 0xd8 || marker === 0x00) {
+      throw new Error('Invalid JPEG data: unexpected-marker')
+    }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      output.push(bytes.subarray(markerStart, position))
+      continue
+    }
+    if (position + 2 > bytes.length) {
+      throw new Error('Invalid JPEG data: truncated-length')
+    }
+    const length = (bytes[position] << 8) | bytes[position + 1]
+    const end = position + length
+    if (length < 2) throw new Error('Invalid JPEG data: invalid-length')
+    if (end > bytes.length) {
+      throw new Error('Invalid JPEG data: truncated-segment')
+    }
+    if (marker !== 0xe1 && marker !== 0xed && marker !== 0xfe) {
+      output.push(bytes.subarray(markerStart, end))
+    }
+    position = end
+    if (marker === 0xda) inScan = true
+  }
+  if (!ended) throw new Error('Invalid JPEG data: missing-eoi')
+  const length = output.reduce((total, part) => total + part.length, 0)
+  const cleaned = new Uint8Array(length)
+  let offset = 0
+  for (const part of output) {
+    cleaned.set(part, offset)
+    offset += part.length
+  }
+  return new Blob([cleaned], { type: 'image/jpeg' })
+}
+
+/** 以固定品質輸出 JPEG，並移除 Safari 可能加入的 metadata 段。 */
 export function canvasToJpeg(
   canvas: HTMLCanvasElement,
   quality = JPEG_QUALITY,
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) =>
-        blob ? resolve(blob) : reject(new Error('JPEG encoding failed')),
+      (blob) => {
+        if (!blob) {
+          reject(new Error('JPEG encoding failed'))
+          return
+        }
+        stripJpegMetadata(blob).then(resolve, reject)
+      },
       'image/jpeg',
       quality,
     )

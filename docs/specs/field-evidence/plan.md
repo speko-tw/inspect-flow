@@ -201,6 +201,12 @@
 - #845 F02：`services/evidence_images.py` 以段落守門只拒收 APP1／APP13／COM，其他 APPn 一律放行，`services/evidence.py` 在驗 SHA 後呼叫，不重編碼。`test_evidence_metadata.py` 驗證拒收無記錄／孤兒檔、JFIF／ICC 的一般及 progressive JPEG、SHA 優先與冪等／圖層關閉位元組不變。真瀏覽器 canvas 輸出另存當次驗收證據，不提交二進位產物。
 - #845 F07 與小修：本規格 FEV-Q3 引用既有 R09 的定案狀態；`api/limits.py` 註解改繁中。
 
+### #862 Safari canvas JPEG metadata
+
+- 依 #862，Safari／WebKit canvas 可能輸出 APP1／APP13；現場端於 SHA-256 前剝除 APP1、APP13、COM，並在第一個 EOI 截斷、捨棄尾端資料，其餘 JPEG 位元組不變；讀取沿用 `readBytes` 的 FileReader fallback，解析失敗沿用照片處理錯誤並帶固定原因碼。後端仍拒絕直接 API 傳入的 metadata，並記錄固定 details；前端 console 記錄固定原因碼 details。
+- 改動範圍：`frontend/src/field/evidence/imageEdit.ts`、`frontend/src/field/evidence/imageEdit.test.ts`、`frontend/src/field/evidence/EvidenceSection.test.tsx`、`frontend/src/field/evidence/useUploadQueue.ts`、`backend/app/services/evidence.py`、`backend/app/services/evidence_images.py`、`backend/tests/api/test_evidence_metadata.py`、前後端 WebKit JPEG fixtures，以及本目錄的 `spec.md` 與本計畫。
+- 對應 FEV-R02／FEV-AC03；`EvidenceSection.tsx` 只確認呼叫路徑，沒有修改。驗證 macOS WebKit 輸出 fixture 的上傳與 SHA、metadata 原樣送達後端時 422、移除 metadata 後 201，以及完整 gate。此 fixture 驗證不代表 iPhone 實機測試。
+
 ### 標示一致性合併修正（#834、#829、#837）
 
 - 負責人指示三項合併一張 PR；#837 外框選項屬直接指示的範圍變更，與規格同步落地。

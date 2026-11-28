@@ -3,6 +3,7 @@
 import hashlib
 import io
 import json
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -13,6 +14,13 @@ from app.models import Evidence, EvidenceVariant
 from app.storage import LocalStorage
 from tests.api.test_evidence_upload import _jpeg, _upload
 from tests.api.test_evidence_upload_review import _ready
+
+_WEBKIT_FIXTURE = (
+    Path(__file__).parents[1] / "fixtures" / "webkit-canvas-metadata.jpg"
+)
+_WEBKIT_CLEAN_FIXTURE = (
+    Path(__file__).parents[1] / "fixtures" / "webkit-canvas-clean.jpg"
+)
 
 
 def _segment(marker, payload):
@@ -148,3 +156,34 @@ def test_sha_is_checked_before_metadata(
     )
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "evidence.sha256_mismatch"
+
+
+def test_webkit_canvas_metadata_is_rejected_but_cleaned_bytes_upload(
+    db_session, make_client, monkeypatch, tmp_path, caplog
+):
+    """WebKit 輸出仍受 API 拒收，剝除後原位元組可成功保存。"""
+    root = tmp_path / "photos"
+    monkeypatch.setenv("INSPECTFLOW_EVIDENCE_STORAGE_ROOT", str(root))
+    world, task, item, point = _ready(db_session, make_client)
+    webkit = _WEBKIT_FIXTURE.read_bytes()
+    rejected = _upload(world, task, item, point, webkit, uuid4())
+    assert rejected.status_code == 422, rejected.text
+    assert rejected.json()["error"]["details"] == ["metadata"]
+    assert "details=['metadata']" in caplog.text
+    assert str(root) not in caplog.text
+    assert webkit.decode("latin-1") not in caplog.text
+    assert db_session.scalar(select(func.count(Evidence.id))) == 0
+    assert not list(LocalStorage(root).iter_keys())
+
+    cleaned = _WEBKIT_CLEAN_FIXTURE.read_bytes()
+    accepted = _upload(world, task, item, point, cleaned, uuid4())
+    assert accepted.status_code == 201, accepted.text
+    variants = list(db_session.scalars(select(EvidenceVariant)))
+    assert len(variants) == 2
+    for variant in variants:
+        with LocalStorage(root).open(variant.storage_key) as stream:
+            stored = stream.read()
+        assert variant.sha256 == hashlib.sha256(stored).hexdigest()
+        if variant.variant_type == "FIELD":
+            assert stored == cleaned
+            assert variant.sha256 == hashlib.sha256(cleaned).hexdigest()

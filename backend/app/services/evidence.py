@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from datetime import datetime
 from io import BytesIO
@@ -42,6 +43,7 @@ from app.storage import LocalStorage, get_storage_settings
 from app.storage.settings import MAX_FIELD_EDGE
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+logger = logging.getLogger(__name__)
 
 
 def _api_error(
@@ -331,6 +333,12 @@ def upload_evidence(
     try:
         validate_field_metadata(content)
     except InvalidEvidenceImageError as exc:
+        # metadata 檢查只拋固定原因碼，details 不含照片內容或個資。
+        logger.warning(
+            "Evidence upload rejected: code=%s details=%s",
+            ErrorCode.EVIDENCE_INVALID_IMAGE.value,
+            [str(exc)],
+        )
         raise _api_error(
             ErrorCode.EVIDENCE_INVALID_IMAGE, 422, str(exc)
         ) from exc
