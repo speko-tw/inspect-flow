@@ -24,6 +24,7 @@ import {
 } from './api'
 import { OfficePhotoEditor } from './OfficePhotoEditor'
 import { OfficePhotoViewer } from './OfficePhotoViewer'
+import { photoDownloadName } from './downloadName'
 import { formatRecordedTime } from './labelTime'
 import { labelText } from '../../field/evidence/labelText'
 import './evidence-office.css'
@@ -67,7 +68,7 @@ function photoIdentity(photo: OfficePhoto): string {
 function isOfficeReadback(
   value: unknown,
   photoId: string,
-): value is OfficePhoto {
+): value is Omit<OfficePhoto, 'point_sequences'> {
   if (!value || typeof value !== 'object') return false
   const photo = value as Partial<OfficePhoto>
   return (
@@ -761,7 +762,7 @@ export function OfficeEvidencePage({
                           )}
                         <a
                           className="btn"
-                          download
+                          download={photoDownloadName(photo, 'office')}
                           href={officeImageUrl(
                             taskId,
                             photo.id,

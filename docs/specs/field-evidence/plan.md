@@ -201,6 +201,12 @@
 - #845 F02：`services/evidence_images.py` 以段落守門只拒收 APP1／APP13／COM，其他 APPn 一律放行，`services/evidence.py` 在驗 SHA 後呼叫，不重編碼。`test_evidence_metadata.py` 驗證拒收無記錄／孤兒檔、JFIF／ICC 的一般及 progressive JPEG、SHA 優先與冪等／圖層關閉位元組不變。真瀏覽器 canvas 輸出另存當次驗收證據，不提交二進位產物。
 - #845 F07 與小修：本規格 FEV-Q3 引用既有 R09 的定案狀態；`api/limits.py` 註解改繁中。
 
+### #862 Safari canvas JPEG metadata
+
+- 依 #862，Safari／WebKit canvas 可能輸出 APP1／APP13；現場端於 SHA-256 前剝除 APP1、APP13、COM，並在第一個 EOI 截斷、捨棄尾端資料，其餘 JPEG 位元組不變；讀取沿用 `readBytes` 的 FileReader fallback，解析失敗沿用照片處理錯誤並帶固定原因碼。後端仍拒絕直接 API 傳入的 metadata，並記錄固定 details；前端 console 記錄固定原因碼 details。
+- 改動範圍：`frontend/src/field/evidence/imageEdit.ts`、`frontend/src/field/evidence/imageEdit.test.ts`、`frontend/src/field/evidence/EvidenceSection.test.tsx`、`frontend/src/field/evidence/useUploadQueue.ts`、`backend/app/services/evidence.py`、`backend/app/services/evidence_images.py`、`backend/tests/api/test_evidence_metadata.py`、前後端 WebKit JPEG fixtures，以及本目錄的 `spec.md` 與本計畫。
+- 對應 FEV-R02／FEV-AC03；`EvidenceSection.tsx` 只確認呼叫路徑，沒有修改。驗證 macOS WebKit 輸出 fixture 的上傳與 SHA、metadata 原樣送達後端時 422、移除 metadata 後 201，以及完整 gate。此 fixture 驗證不代表 iPhone 實機測試。
+
 ### 標示一致性合併修正（#834、#829、#837）
 
 - 負責人指示三項合併一張 PR；#837 外框選項屬直接指示的範圍變更，與規格同步落地。
@@ -209,3 +215,9 @@
 - 以元件、合成、真 API、完整 gate 及 SQLite + Vite 桌面／360px 截圖驗收。
 
 - 本輪改動範圍：`backend/app/models/evidence.py`、`backend/app/services/evidence{,_images,_office,_queries}.py`、`backend/alembic/versions/f834a1b2c3d4_add_evidence_label_border.py`、`backend/tests/{api,db,services}/test_evidence*.py`；`frontend/src/field/evidence/` 的預覽／卡片／文字 helper、型別與測試，`frontend/src/evidence/layerGeometry.ts` 共用幾何，以及 `frontend/src/admin/evidence/` 的編修器／歷程／API 型別／樣式與測試。
+
+### 內業照片小修（#855、#863）
+
+依工作單於同一個 PR 處理內業選取提示與下載命名；規格澄清見 spec 的 FEV-R16／R23 補充。範圍為 `frontend/src/admin/evidence/evidence-office.css`、`downloadName.ts`／`api.ts` 與相關測試、`OfficeEvidencePage.tsx`／`OfficePhotoViewer.tsx` 與測試，以及 `OfficePhotoEditor.test.tsx`。依協調者 #863 驗收意見，另修改 `backend/app/api/v1/evidence_read.py`、新增 `evidence_schemas.py`，於 `backend/app/services/evidence_queries.py` 批次解析保存快照序號；新增 `backend/tests/api/test_evidence_download_metadata.py` 並補 `test_evidence_query_counts.py`。不修改現場上傳／編修模組及 `evidence_images.py` metadata 驗證。
+
+驗證：三種樣式在選取中切換外框、檔名特殊字元與 UTF-8 長度單元測試、清單／大圖下載檔名整合測試、獨立 demo 的 360／1280 截圖與真實保存影像下載、完整 `make check` 與 PR CI。項次使用後端依照片保存修訂解析的序號，驗證多項次、歷史重排、作廢／刪除、總覽與查詢數不隨照片成長；檔名採分鐘時間與 UUID 前 8 碼，時間在 #848 完成前沿用既有畫面 helper 的台北時區。

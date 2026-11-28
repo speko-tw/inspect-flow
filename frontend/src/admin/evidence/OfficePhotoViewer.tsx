@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react'
 
 import { officeImageUrl, type OfficePhoto } from './api'
+import { photoDownloadName } from './downloadName'
 import './office-photo-viewer.css'
 
 type Props = {
@@ -88,7 +89,7 @@ export function OfficePhotoViewer({
           </figure>
           <a
             className="btn"
-            download
+            download={photoDownloadName(photo, 'field')}
             href={officeImageUrl(
               taskId,
               photo.id,
@@ -119,7 +120,7 @@ export function OfficePhotoViewer({
           </figure>
           <a
             className="btn"
-            download
+            download={photoDownloadName(photo, 'office')}
             href={officeImageUrl(
               taskId,
               photo.id,

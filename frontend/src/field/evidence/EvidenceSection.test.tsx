@@ -6,6 +6,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router'
 import { Link } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { currentUserFixture } from '../../testing/contractFixtures'
 import { Notice } from '../../ui/Notice'
+import { sha256Hex } from './imageEdit'
 import EvidenceSection from './EvidenceSection'
 import { LEAVE_MESSAGE, LeaveGuard } from './LeaveGuard'
 import {
@@ -23,6 +26,15 @@ import {
   uploadedPhoto,
 } from './testFixtures'
 import type { Coverage, FieldPhoto } from './types'
+
+const webkitCanvasJpeg = new Uint8Array(
+  readFileSync(
+    resolve('src/field/evidence/fixtures/webkit-canvas-metadata.jpg'),
+  ),
+)
+const cleanWebkitCanvasJpeg = new Uint8Array(
+  readFileSync(resolve('src/field/evidence/fixtures/webkit-canvas-clean.jpg')),
+)
 
 vi.mock('./imageEdit', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./imageEdit')>()),
@@ -86,7 +98,7 @@ function stubCanvas(): CanvasCalls {
       type,
       quality,
     })
-    callback(new Blob(['jpeg-bytes'], { type: 'image/jpeg' }))
+    callback(new Blob([webkitCanvasJpeg], { type: 'image/jpeg' }))
   })
   return calls
 }
@@ -350,7 +362,11 @@ describe('拍照、編修與上傳（FEV-AC03）', () => {
     })
     const file = form.get('file') as File
     expect(file.type).toBe('image/jpeg')
-    expect(file.size).toBe('jpeg-bytes'.length)
+    expect(file.size).toBe(cleanWebkitCanvasJpeg.length)
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(
+      cleanWebkitCanvasJpeg,
+    )
+    expect(form.get('sha256')).toBe(await sha256Hex(file))
   })
 
   it('從相簿選：capture_source 為 library，帶原檔 EXIF 的拍攝時間', async () => {
@@ -648,6 +664,26 @@ describe('自動重試與手動重送（FEV-AC10、FEV-AC11）', () => {
     expect(
       screen.getByRole('button', { name: '放棄這張照片' }),
     ).toBeInTheDocument()
+  })
+
+  it('拒絕上傳時將安全的 details 顯示在 console', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    stubCanvas()
+    stubApi(
+      defaultServer({
+        post: () =>
+          Response.json(
+            {
+              error: { code: 'evidence.invalid_image', details: ['metadata'] },
+            },
+            { status: 422 },
+          ),
+      }),
+    )
+    renderSection()
+    await startUpload()
+    expect(await screen.findByText(/照片格式無法辨識/)).toBeInTheDocument()
+    expect(info).toHaveBeenCalledWith('Photo upload rejected:', ['metadata'])
   })
 
   it('放棄照片先說明對象與後果，確認後從清單移除並停止重試', async () => {

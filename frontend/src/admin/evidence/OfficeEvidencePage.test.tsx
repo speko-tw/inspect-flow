@@ -36,6 +36,7 @@ const photo: OfficePhoto = {
   item_id: 'item-1',
   is_overview: false,
   point_ids: [],
+  point_sequences: [],
   caption: null,
   captured_at: null,
   uploaded_at: '2026-10-01T02:00:00Z',
@@ -293,6 +294,12 @@ describe('OfficeEvidencePage', () => {
     })
     renderPage(false)
     const card = await screen.findByRole('article')
+    expect(
+      within(card).getByRole('link', { name: '下載內業版' }),
+    ).toHaveAttribute(
+      'download',
+      '工程_表面_未對應項次_20261001-1000_photo-de_內業版.jpg',
+    )
     fireEvent.click(
       within(card).getByRole('button', {
         name: /^查看大圖，林檢查員/,
