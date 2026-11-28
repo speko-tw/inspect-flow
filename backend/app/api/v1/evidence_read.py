@@ -17,6 +17,10 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.api.errors import APIError, ErrorCode
+from app.api.v1.evidence_schemas import (
+    OfficePhotoPageResponse,
+    OfficePhotoReadResponse,
+)
 from app.auth.access import require_login_access
 from app.auth.dependencies import get_db
 from app.models import Evidence, EvidenceVariant, InspectionTask, User
@@ -138,7 +142,10 @@ def get_field_photos(
     )
 
 
-@router.get("/inspection-tasks/{task_id}/photos")
+@router.get(
+    "/inspection-tasks/{task_id}/photos",
+    response_model=OfficePhotoPageResponse,
+)
 def get_office_photos(
     task_id: UUID,
     cursor: str | None = None,
@@ -164,7 +171,10 @@ def get_office_photos(
     )
 
 
-@router.get("/inspection-tasks/{task_id}/photos/{photo_id}")
+@router.get(
+    "/inspection-tasks/{task_id}/photos/{photo_id}",
+    response_model=OfficePhotoReadResponse,
+)
 def get_photo_detail(
     task_id: UUID,
     photo_id: UUID,

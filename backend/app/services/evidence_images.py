@@ -56,8 +56,8 @@ class ImageInfo:
 
 def validate_field_metadata(data: bytes) -> None:
     """FEV-R26：新 FIELD 拒收 APP1、APP13、COM，原位元組不變。"""
-    # Chrome 157 的 canvas 帶 JFIF／ICC；Safari 尚未實測，採拒收清單，
-    # 只擋已知會保存 EXIF／XMP／IPTC 的段，避免誤擋其他正常 APPn。
+    # WebKit canvas 可能帶 APP1／APP13；後端仍拒絕直接 API 傳入的段，
+    # 其他 APPn 一律放行，避免誤擋 JFIF／ICC 等正常資料。
     pos = 2
     while pos < len(data):
         if data[pos] != 0xFF:

@@ -29,6 +29,8 @@ export type OfficePhoto = {
   item_id: string
   is_overview: boolean
   point_ids: string[]
+  /** FEV-R16：後端依照片保存快照解析，不從目前項目推測序號。 */
+  point_sequences: number[]
   caption: string | null
   captured_at: string | null
   uploaded_at: string
@@ -130,12 +132,12 @@ export function deletePhoto(taskId: string, photoId: string): Promise<void> {
   })
 }
 
-/** 送出 OFFICE 編修；省略圖層代表只使用影像參數。 */
+/** 送出 OFFICE 編修；下載序號由後續詳情讀取取得。 */
 export function editOfficePhoto(
   taskId: string,
   photoId: string,
   input: OfficeEdit & { layer?: OfficeLayer },
-): Promise<OfficePhoto> {
+): Promise<Omit<OfficePhoto, 'point_sequences'>> {
   return request(
     `/inspection-tasks/${taskId}/photos/${photoId}/office-version`,
     { method: 'PUT', body: JSON.stringify(input) },
