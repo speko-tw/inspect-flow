@@ -7,11 +7,16 @@ import { OfficePhotoViewer } from './OfficePhotoViewer'
 
 const photo = {
   id: 'photo-1',
-  labels: { project_name: '工程', item_title: '項目' },
+  labels: {
+    project_name: '工程',
+    item_title: '項目',
+    uploaded_at: '2026-10-01T02:00:00Z',
+  },
   point_ids: ['point-1'],
   point_sequences: [1],
   captured_at: null,
   uploaded_at: '2026-10-01T02:00:00Z',
+  label_timezone: 'Asia/Taipei',
   is_overview: false,
   variants: {
     field: {

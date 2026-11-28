@@ -250,13 +250,22 @@ describe('OfficePhotoEditor', () => {
   })
 
   it.each([
-    ['2026-11-06T15:43:37.141490Z', '2026/11/06 23:43'],
-    ['2026-11-06T18:43:37.141490Z', '2026/11/07 02:43'],
-  ])('formats the recorded upload time %s in Taipei', (value, expected) => {
+    [
+      'Asia/Taipei',
+      '2026-11-06T15:43:37.141490Z',
+      '2026/11/06 23:43（Asia/Taipei）',
+    ],
+    [
+      'Asia/Taipei',
+      '2026-11-06T18:43:37.141490Z',
+      '2026/11/07 02:43（Asia/Taipei）',
+    ],
+    ['UTC', '2026-11-06T18:43:37.141490Z', '2026/11/06 18:43（UTC）'],
+  ])('formats the recorded upload time in %s', (timezone, value, expected) => {
     renderEditor(undefined, {
       captured_at: '2000-01-01T00:00:00Z',
       uploaded_at: '2026-01-01T00:00:00Z',
-      label_timezone: 'Asia/Taipei',
+      label_timezone: timezone,
       labels: { ...photo.labels, uploaded_at: value },
     })
     fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
@@ -1196,8 +1205,10 @@ it('空字串人員顯示後端缺值字樣，時間採 API 時區', () => {
   })
   fireEvent.click(screen.getByRole('tab', { name: '圖層' }))
   expect(screen.getByLabelText('檢驗人員')).toHaveValue('未記錄')
-  expect(screen.getByLabelText('檢驗時間')).toHaveValue('2026/10/31 21:30')
-  expect(
-    screen.getByText(/工程標示預覽。.*檢驗位置：未填寫/),
-  ).toBeInTheDocument()
+  expect(screen.getByLabelText('檢驗時間')).toHaveValue(
+    '2026/10/31 21:30（America/New_York）',
+  )
+  const previewSummary = screen.getByText(/工程標示預覽。.*檢驗位置：未填寫/)
+  expect(previewSummary).toHaveTextContent('檢驗時間：2026/10/31 21:30')
+  expect(previewSummary).not.toHaveTextContent('America/New_York')
 })

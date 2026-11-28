@@ -29,6 +29,7 @@ from app.services.evidence_images import (
     InvalidEvidenceImageError,
     fit_office_layer,
     inspect_jpeg,
+    office_label_timezone,
     render_office,
 )
 from app.storage import LocalStorage, get_storage_settings
@@ -323,6 +324,13 @@ def photo_response(
             }
         )
         return body
+    office_rule = session.scalar(
+        select(EvidenceVariant.label_rule).where(
+            EvidenceVariant.evidence_id == photo.id,
+            EvidenceVariant.variant_type == "OFFICE",
+        )
+    )
+    body["label_timezone"] = office_label_timezone(office_rule)
     captured = photo.captured_at
     uploaded = photo.created_at
     body["is_non_realtime_capture"] = (

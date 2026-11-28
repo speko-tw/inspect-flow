@@ -25,7 +25,7 @@ from app.models import (
     TaskSnapshotEvidenceRequirement,
     TaskSnapshotPoint,
 )
-from app.services.evidence_images import label_timezone
+from app.services.evidence_images import label_timezone, office_label_timezone
 
 # FEV-R27／D22：10 分鐘是試用後可調的設計門檻。
 NON_REALTIME_CAPTURE_SECONDS = 600
@@ -250,7 +250,9 @@ def serialize_photos(
             "capture_source": photo.capture_source,
             "layer": photo.label_layer,
             "labels": _resolved_labels(photo),
-            "label_timezone": label_timezone(),
+            "label_timezone": (
+                office_label_timezone(rule) if office else label_timezone()
+            ),
             "layer_render": {
                 key: rule.get(key)
                 for key in ("render_state", "effective_size")

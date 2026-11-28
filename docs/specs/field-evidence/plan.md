@@ -220,4 +220,4 @@
 
 依工作單於同一個 PR 處理內業選取提示與下載命名；規格澄清見 spec 的 FEV-R16／R23 補充。範圍為 `frontend/src/admin/evidence/evidence-office.css`、`downloadName.ts`／`api.ts` 與相關測試、`OfficeEvidencePage.tsx`／`OfficePhotoViewer.tsx` 與測試，以及 `OfficePhotoEditor.test.tsx`。依協調者 #863 驗收意見，另修改 `backend/app/api/v1/evidence_read.py`、新增 `evidence_schemas.py`，於 `backend/app/services/evidence_queries.py` 批次解析保存快照序號；新增 `backend/tests/api/test_evidence_download_metadata.py` 並補 `test_evidence_query_counts.py`。不修改現場上傳／編修模組及 `evidence_images.py` metadata 驗證。
 
-驗證：三種樣式在選取中切換外框、檔名特殊字元與 UTF-8 長度單元測試、清單／大圖下載檔名整合測試、獨立 demo 的 360／1280 截圖與真實保存影像下載、完整 `make check` 與 PR CI。項次使用後端依照片保存修訂解析的序號，驗證多項次、歷史重排、作廢／刪除、總覽與查詢數不隨照片成長；檔名採分鐘時間與 UUID 前 8 碼，時間在 #848 完成前沿用既有畫面 helper 的台北時區。
+驗證：三種樣式在選取中切換外框、檔名特殊字元與 UTF-8 長度單元測試、清單／大圖下載檔名整合測試、獨立 demo 的 360／1280 截圖與真實保存影像下載、完整 `make check` 與 PR CI。項次使用後端依照片保存修訂解析的序號，驗證多項次、歷史重排、作廢／刪除、總覽與查詢數不隨照片成長；檔名採分鐘時間與 UUID 前 8 碼，時間依 FEV-Q16 的伺服器上傳標示時間與照片有效時區，格式不變。

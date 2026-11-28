@@ -252,7 +252,39 @@ def fit_office_layer(
 
 def label_timezone() -> str:
     """FEV-R22：讀取合成與 API 共用的標示時區設定。"""
-    return os.environ.get("INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", "Asia/Taipei")
+    configured = os.environ.get("INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE")
+    timezone = _validated_timezone(configured or "Asia/Taipei")
+    if timezone is None:
+        logger.warning(
+            "evidence_label_timezone_invalid source=deployment "
+            "fallback=Asia/Taipei"
+        )
+        return "Asia/Taipei"
+    return timezone
+
+
+def office_label_timezone(rule: object) -> str:
+    """FEV-R22：解析保存時區；舊規則缺值才沿用部署設定。"""
+    if not isinstance(rule, dict) or "timezone" not in rule:
+        return label_timezone()
+    timezone = _validated_timezone(rule.get("timezone"))
+    if timezone is None:
+        logger.warning(
+            "evidence_label_timezone_invalid source=office_rule "
+            "fallback=Asia/Taipei"
+        )
+        return "Asia/Taipei"
+    return timezone
+
+
+def _validated_timezone(value: object) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        ZoneInfo(value)
+    except (ValueError, ZoneInfoNotFoundError):
+        return None
+    return value
 
 
 def render_office(
@@ -272,10 +304,6 @@ def render_office(
     else:
         image = image.copy()
     timezone_name = label_timezone()
-    try:
-        ZoneInfo(timezone_name)
-    except ZoneInfoNotFoundError as exc:
-        raise ValueError("invalid label timezone") from exc
     effective_layer, state, effective_size = fit_office_layer(
         image.width, image.height, layer
     )

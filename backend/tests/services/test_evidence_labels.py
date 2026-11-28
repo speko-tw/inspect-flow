@@ -390,3 +390,17 @@ def test_null_and_empty_values_use_same_fallback_and_configured_timezone():
             "未記錄",
             "2026/10/31 21:30",
         ]
+
+
+def test_label_timezone_falls_back_for_empty_and_invalid_environment(
+    monkeypatch,
+):
+    from app.services.evidence_images import label_timezone
+
+    for value, expected in (
+        ("", "Asia/Taipei"),
+        ("Not/A-Time-Zone", "Asia/Taipei"),
+        ("UTC", "UTC"),
+    ):
+        monkeypatch.setenv("INSPECTFLOW_EVIDENCE_LABEL_TIMEZONE", value)
+        assert label_timezone() == expected
